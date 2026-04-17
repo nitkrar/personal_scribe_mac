@@ -3,7 +3,7 @@ import SeshatCore
 
 public actor FakeAudioCapturing: AudioCapturing {
     private let buffers: [PCMBuffer]
-    private let programmedError: SeshatError?
+    private var programmedError: SeshatError?
     private let delayPerBuffer: Duration?
 
     private var isCapturing = false
@@ -28,6 +28,8 @@ public actor FakeAudioCapturing: AudioCapturing {
 
         isCapturing = true
         didFinishStream = false
+        let errorToEmit = programmedError
+        programmedError = nil
 
         var capturedContinuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?
         let stream = AsyncThrowingStream<PCMBuffer, Error> { continuation in
@@ -45,11 +47,11 @@ public actor FakeAudioCapturing: AudioCapturing {
                     return
                 }
 
-                await self.yield(buffer)
+                self.yield(buffer)
             }
 
-            if let programmedError = self.programmedError {
-                await self.finishStream(throwing: programmedError)
+            if let programmedError = errorToEmit {
+                self.finishStream(throwing: programmedError)
             }
         }
 
@@ -59,7 +61,7 @@ public actor FakeAudioCapturing: AudioCapturing {
     public func stop() async {
         emissionTask?.cancel()
         emissionTask = nil
-        await finishStream()
+        finishStream()
     }
 
     private func yield(_ buffer: PCMBuffer) {
