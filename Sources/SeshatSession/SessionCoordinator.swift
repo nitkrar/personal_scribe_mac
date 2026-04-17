@@ -88,6 +88,12 @@ public actor SessionCoordinator {
         await captureTask?.value
         captureTask = nil
 
+        if case .error = currentState {
+            logger.info("Capture stream failed while stop was in flight; preserving error state")
+            bufferedAudio.removeAll(keepingCapacity: true)
+            return
+        }
+
         let replayBuffers = bufferedAudio
         bufferedAudio.removeAll(keepingCapacity: true)
         publish(.transcribing)

@@ -94,6 +94,44 @@ final class SessionCoordinatorErrorTests: XCTestCase {
         XCTAssertEqual(lastResult?.text, "hello")
     }
 
+    func testStopPathPreservesErrorWhenCaptureFailsMidStop() async throws {
+        let buffer = try PCMBuffer(
+            samples: [Float](repeating: 0, count: 16_000),
+            sampleRate: 16_000,
+            channelCount: 1,
+            timestamp: ContinuousClock().now
+        )
+        let capture = FailingOnStopCapture(buffer: buffer, error: .audioEngineFailure)
+        let transcriber = FakeTranscriber(
+            result: TranscriptionResult(
+                text: "should not appear",
+                audioDuration: .seconds(1),
+                processingDuration: .seconds(0.1)
+            )
+        )
+        let coordinator = SessionCoordinator(
+            capture: capture,
+            transcriber: transcriber,
+            logger: SeshatLogger(category: SeshatLogCategory.session)
+        )
+
+        let stream = await coordinator.stateStream()
+        await coordinator.toggle()
+        await coordinator.toggle()
+
+        var observed: [SessionState] = []
+        for await state in stream.prefix(3) {
+            observed.append(state)
+        }
+
+        let finalState = await coordinator.state()
+        let lastResult = await coordinator.lastResult()
+
+        XCTAssertEqual(observed, [.idle, .recording, .error(.audioEngineFailure)])
+        XCTAssertEqual(finalState, .error(.audioEngineFailure))
+        XCTAssertNil(lastResult, "transcription must not run when capture failed")
+    }
+
     private func withTimeout<T: Sendable>(
         _ duration: Duration,
         operation: @escaping @Sendable () async -> T
@@ -114,4 +152,39 @@ final class SessionCoordinatorErrorTests: XCTestCase {
     }
 
     private struct TimeoutError: Error {}
+
+    private actor FailingOnStopCapture: AudioCapturing {
+        private let buffer: PCMBuffer
+        private let error: SeshatError
+        private var continuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?
+        private var isCapturing = false
+
+        init(buffer: PCMBuffer, error: SeshatError) {
+            self.buffer = buffer
+            self.error = error
+        }
+
+        func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
+            guard !isCapturing else {
+                throw SeshatError.audioEngineFailure
+            }
+
+            isCapturing = true
+            var capturedContinuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?
+            let stream = AsyncThrowingStream<PCMBuffer, Error> { continuation in
+                capturedContinuation = continuation
+            }
+            continuation = capturedContinuation
+            continuation?.yield(buffer)
+
+            return stream
+        }
+
+        func stop() async {
+            guard isCapturing else { return }
+            isCapturing = false
+            continuation?.finish(throwing: error)
+            continuation = nil
+        }
+    }
 }
