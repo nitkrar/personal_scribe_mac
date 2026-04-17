@@ -1,0 +1,22 @@
+VERDICT: NEEDS_REVISION
+
+## Summary Assessment
+Directionally solid, but it still violates Plan 00 on duplicate internal contracts and does not yet prove Swift 6-safe exact-once/error-typing behavior.
+
+## Critical Issues (must fix)
+- Plan 02 introduces a second microphone-permission protocol: `MicrophoneAuthorizationProviding` is proposed in the internal seams and used by test doubles (`PLAN_02_audio_capture.md:95-107`, `PLAN_02_audio_capture.md:200-205`, `PLAN_02_audio_capture.md:761-769`). Plan 00 explicitly forbids a second microphone-permission protocol and assigns prompting ownership outside `PSAudio` (`PLAN_00_common-final.md:560-562`, `PLAN_00_common-final.md:575`, `PLAN_00_common-final.md:861-862`). Keep Plan 02 on direct `AVCaptureDevice.authorizationStatus(for: .audio)` checks or a private non-protocol seam.
+- Plan 02 also introduces a second logging abstraction: `AudioFailureLogging` / `PSAudioFailureLogger` plus dedicated logging tests (`PLAN_02_audio_capture.md:95-107`, `PLAN_02_audio_capture.md:261-271`, `PLAN_02_audio_capture.md:651-692`, `PLAN_02_audio_capture.md:761-769`). That conflicts with the authoritative `PSLogger` facade and the Week 1 rule that production logging uses `PSLogger` with `PSLogCategory` constants (`PLAN_00_common-final.md:359-404`, `PLAN_00_common-final.md:543-549`). The plan is internally inconsistent because it later says “do not add a second logging abstraction” (`PLAN_02_audio_capture.md:692`).
+- Swift 6 sendability is underspecified where it matters most. The plan says the actor owns engine/resampler/continuation and will process tap callbacks (`PLAN_02_audio_capture.md:41-46`, `PLAN_02_audio_capture.md:357-446`), but it never states how non-Sendable `AVAudioPCMBuffer` / `AVAudioTime` safely cross from the tap callback into actor-isolated state. On top of that, the test helpers use `@unchecked Sendable` twice without the inline safety rationale required by Plan 00 (`PLAN_02_audio_capture.md:200-207`; `PLAN_00_common-final.md:509-517`). This needs an explicit concurrency design, not implication.
+- The finish-exactly-once contract is not fully tested for the real race: runtime failure while `stop()` is executing. Current coverage checks double `stop()` and independent resample failure (`PLAN_02_audio_capture.md:488-649`), but nothing proves one terminal event when `stop()` interleaves with a tap-driven failure, even though Plan 00 makes that behavior authoritative (`PLAN_00_common-final.md:293-299`, `PLAN_00_common-final.md:514-517`). Add a race test and specify which path wins while still finishing once.
+- Dynamic stream error typing is only partially proven. Step 11’s fake resampler throws `PSError.resampleFailure` directly (`PLAN_02_audio_capture.md:251-258`, `PLAN_02_audio_capture.md:616-649`), so the test never proves that arbitrary `NSError` / `OSStatus` values are logged and surfaced dynamically as `PSError`, which Plan 00 requires (`PLAN_00_common-final.md:297-299`, `PLAN_00_common-final.md:527-534`).
+
+## Suggestions (nice to have)
+- Strengthen `AudioResampler` verification. The mono test checks frame count, timestamp, and non-zero energy only (`PLAN_02_audio_capture.md:293-312`); it should also assert waveform fidelity with a stated floating-point tolerance.
+- Add an explicit concurrent `start()` test using `async let` or two tasks. Actor isolation probably makes the single-live-stream check safe (`PLAN_02_audio_capture.md:448-486`), but the plan would be stronger if it proved that interleaving.
+
+## Verified Claims
+- Plan 02 does not redefine `PCMBuffer`, `PSError`, `AudioCapturing`, `PSLogger`, or `PSConfig`; its public API imports `PSCore` and consumes those symbols (`PLAN_02_audio_capture.md:63-93`).
+- Permission prompting is not requested anywhere; the plan consistently restricts itself to `AVCaptureDevice.authorizationStatus(for: .audio)` checks (`PLAN_02_audio_capture.md:13-18`, `PLAN_02_audio_capture.md:396-398`).
+- `stop()` idempotency is explicit and tested twice (`PLAN_02_audio_capture.md:488-525`).
+- Stereo-to-mono behavior is pinned to channel averaging and covered by a deterministic test (`PLAN_02_audio_capture.md:49-57`, `PLAN_02_audio_capture.md:320-355`).
+- File scope stays inside `Sources/PSAudio/` and `Tests/PSAudioTests/`, no `SessionCoordinator` logic is added, `testingBaseDirectoryOverride` is not misused, and the handoff guarantees for Plan 99 are clearly listed (`PLAN_02_audio_capture.md:108-118`, `PLAN_02_audio_capture.md:730-745`).
