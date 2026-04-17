@@ -9,6 +9,8 @@ public actor SessionCoordinator {
     private var currentState: SessionState = .idle
     private var mostRecentResult: TranscriptionResult?
     private var stateContinuations: [UUID: AsyncStream<SessionState>.Continuation] = [:]
+    private var bufferedAudio: [PCMBuffer] = []
+    private var captureTask: Task<Void, Never>?
 
     public init(
         capture: any AudioCapturing,
@@ -20,7 +22,19 @@ public actor SessionCoordinator {
         self.logger = logger
     }
 
-    public func toggle() async {}
+    public func toggle() async {
+        switch currentState {
+        case .idle:
+            await startRecording()
+        case .recording:
+            await stopRecordingAndTranscribe()
+        case .transcribing:
+            logger.info("Ignored toggle while transcribing")
+        case .error:
+            publish(.idle)
+            await startRecording()
+        }
+    }
 
     public func state() -> SessionState {
         currentState
@@ -53,5 +67,65 @@ public actor SessionCoordinator {
         for continuation in stateContinuations.values {
             continuation.yield(state)
         }
+    }
+
+    private func startRecording() async {
+        bufferedAudio.removeAll(keepingCapacity: true)
+
+        do {
+            let stream = try await capture.start()
+            publish(.recording)
+            captureTask = Task {
+                await self.consumeCaptureStream(stream)
+            }
+        } catch {
+            publish(.error(map(error, default: .audioEngineFailure)))
+        }
+    }
+
+    private func stopRecordingAndTranscribe() async {
+        await capture.stop()
+        await captureTask?.value
+        captureTask = nil
+
+        let replayBuffers = bufferedAudio
+        bufferedAudio.removeAll(keepingCapacity: true)
+        publish(.transcribing)
+
+        do {
+            let result = try await transcriber.transcribe(stream: makeReplayStream(from: replayBuffers))
+            mostRecentResult = result
+            publish(.idle)
+        } catch {
+            publish(.error(map(error, default: .transcriptionFailure)))
+        }
+    }
+
+    private func consumeCaptureStream(_ stream: AsyncThrowingStream<PCMBuffer, Error>) async {
+        do {
+            for try await buffer in stream {
+                bufferedAudio.append(buffer)
+            }
+        } catch {
+            publish(.error(map(error, default: .audioEngineFailure)))
+        }
+    }
+
+    private func makeReplayStream(from buffers: [PCMBuffer]) -> AsyncThrowingStream<PCMBuffer, Error> {
+        AsyncThrowingStream { continuation in
+            for buffer in buffers {
+                continuation.yield(buffer)
+            }
+            continuation.finish()
+        }
+    }
+
+    private func map(_ error: any Error, default fallback: SeshatError) -> SeshatError {
+        if let seshatError = error as? SeshatError {
+            return seshatError
+        }
+
+        logger.error("Mapped underlying error to shared contract", error: error)
+        return fallback
     }
 }
