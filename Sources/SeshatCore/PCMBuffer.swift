@@ -12,6 +12,10 @@ public struct PCMBuffer: Sendable, Equatable {
         channelCount: Int = SeshatConfig.channelCount,
         timestamp: ContinuousClock.Instant
     ) throws {
+        guard sampleRate > 0, channelCount > 0, samples.count.isMultiple(of: channelCount) else {
+            throw SeshatError.resampleFailure
+        }
+
         self.samples = samples
         self.sampleRate = sampleRate
         self.channelCount = channelCount
@@ -19,10 +23,10 @@ public struct PCMBuffer: Sendable, Equatable {
     }
 
     public var frameCount: Int {
-        samples.count
+        samples.count / channelCount
     }
 
     public var duration: Duration {
-        .zero
+        .seconds(Double(frameCount) / sampleRate)
     }
 }
