@@ -32,4 +32,67 @@ final class FakeSupportTests: XCTestCase {
             XCTAssertEqual(error as? SeshatError, .audioEngineFailure)
         }
     }
+
+    func testFakeCaptureStreamStaysOpenAfterPresetBuffersExhaust() async throws {
+        let buffer = try PCMBuffer(
+            samples: [0.0],
+            sampleRate: 16_000,
+            channelCount: 1,
+            timestamp: ContinuousClock().now
+        )
+        let capture = FakeAudioCapturing(buffers: [buffer])
+        let stream = try await capture.start()
+        var iterator = stream.makeAsyncIterator()
+
+        let first = try await iterator.next()
+        XCTAssertNotNil(first)
+
+        async let next = iterator.next()
+        await capture.stop()
+        let terminated = try await next
+
+        XCTAssertNil(terminated, "stream finishes only after stop(), not preset exhaustion")
+    }
+
+    func testFakeCaptureStopIsIdempotent() async throws {
+        let capture = FakeAudioCapturing()
+
+        _ = try await capture.start()
+        await capture.stop()
+        await capture.stop()
+    }
+
+    func testFakeCaptureThrowsProgrammedErrorAfterPresetBuffers() async throws {
+        let buffer = try PCMBuffer(
+            samples: [0.0],
+            sampleRate: 16_000,
+            channelCount: 1,
+            timestamp: ContinuousClock().now
+        )
+        let capture = FakeAudioCapturing(buffers: [buffer], error: .resampleFailure)
+        let stream = try await capture.start()
+        var caughtError: SeshatError?
+
+        do {
+            for try await _ in stream {}
+        } catch let error as SeshatError {
+            caughtError = error
+        }
+
+        XCTAssertEqual(caughtError, .resampleFailure)
+    }
+
+    func testFakeCaptureStreamFinishesExactlyOnceOnStop() async throws {
+        let capture = FakeAudioCapturing()
+        let stream = try await capture.start()
+        var iterator = stream.makeAsyncIterator()
+
+        await capture.stop()
+
+        let firstTermination = try await iterator.next()
+        let secondTermination = try await iterator.next()
+
+        XCTAssertNil(firstTermination)
+        XCTAssertNil(secondTermination)
+    }
 }
