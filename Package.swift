@@ -33,7 +33,12 @@ let package = Package(
             targets: ["SeshatAppKit"]
         ),
     ],
-    dependencies: [],
+    dependencies: [
+        // TODO(plan-03): After verifying the upstream repository URL, package identity,
+        // product name, and exact version, add the pinned FluidAudio dependency here.
+        // Do not guess or ship an unverified dependency declaration in Plan 01.
+        // .package(url: "<verified-fluid-audio-url>", exact: "<verified-version>"),
+    ],
     targets: [
         .target(
             name: "SeshatCore",
@@ -50,6 +55,8 @@ let package = Package(
             name: "SeshatTranscription",
             dependencies: [
                 "SeshatCore",
+                // TODO(plan-03): After pinning FluidAudio above, add:
+                // .product(name: "<verified-product-name>", package: "<verified-package-name>"),
             ],
             path: "Sources/SeshatTranscription"
         ),
@@ -118,5 +125,8 @@ let package = Package(
             ],
             path: "Tests/SeshatAppKitTests"
         ),
+    ],
+    swiftLanguageModes: [
+        .v6,
     ]
 )
