@@ -38,10 +38,17 @@ let package = Package(
             url: "https://github.com/FluidInference/FluidAudio.git",
             exact: "0.13.6"
         ),
+        .package(
+            url: "https://github.com/groue/GRDB.swift.git",
+            from: "7.10.0"
+        ),
     ],
     targets: [
         .target(
             name: "SeshatCore",
+            dependencies: [
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
             path: "Sources/SeshatCore"
         ),
         .target(
