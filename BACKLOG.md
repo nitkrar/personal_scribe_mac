@@ -44,11 +44,21 @@ Target: **By May 5 2026, using Seshat for daily dictation.**
 
 ### Week 2 next-session starter
 
+**Reshaped priorities after end-of-session retest from /Applications:**
+- Unresponsive-at-launch is **per-launch**, not first-launch-only → model is cached (451MB on disk verified), so the blocker is `FluidAudio.AsrManager.loadModel(from:)` doing CoreML/ANE work that starves the UI each launch, not the download.
+- `aa73013` pill-click fix (`canBecomeKey = true`) did NOT restore clicks — but can't distinguish "fix insufficient" from "clicks don't register because app is frozen at launch" until #1 is solved.
+- Idle rendering shows as a full 220x44 translucent white pill — Material chrome visible, 10pt dot content invisible inside it.
+
 Recommended ordering when you resume:
-1. Commit a revert of prewarm (fixes P0 #1 + P0 #2 in one shot)
-2. Fix model-redownload root cause (P1 #3) — don't destroy final dir on retry
-3. Manually verify pill click (P2 #5) and animation (P2 #6) — decide option C vs B
-4. Smooth out the idle dot or drop it (P1 #4)
+1. **Diagnose launch freeze** — instrument `SessionCoordinator.prepareTranscriber()` / `FluidAudioTranscriber.performPrepare()` / `inference.loadModel(from:)` with `os.signpost` to see where the stall is. Options after diagnosis:
+   - Move FluidAudio load fully off MainActor (if it's reentering MainActor unexpectedly)
+   - Gate prewarm behind a "user has pressed Record before" flag (lazy)
+   - Remove prewarm entirely, show download-or-load progress in pill on first Record
+2. Fix download-priority hijacking the recording pill (P0 #2)
+3. Shrink idle NSPanel to dot-size (or delete idle state entirely) so the translucent pill stops appearing when idle (P1 #4)
+4. Retest pill click + menu bar click now that launch is responsive — confirm `aa73013` works or file a follow-up
+5. Fix model-redownload root cause (P1 #3)
+6. Animation polish (P2 #6) — decide C vs B
 
 **Week 3 — Save and search:**
 - [ ] SQLite note storage via GRDB.swift
