@@ -96,3 +96,28 @@ final class SingleCaptureTests: XCTestCase {
         await service.stop()
     }
 }
+
+final class StopBehaviorTests: XCTestCase {
+    func testStopIsIdempotentAndFinishesStreamNormally() async throws {
+        let box = ThreadSafeEngineBox()
+        let service = AVAudioCaptureService(
+            authorizationStatusProvider: { .authorized },
+            engineDriver: .testStub(box: box),
+            resamplerFactory: { rate, logger in
+                try AudioResampler(inputSampleRate: rate, logger: logger)
+            }
+        )
+
+        let stream = try await service.start()
+        var iterator = stream.makeAsyncIterator()
+
+        await service.stop()
+        XCTAssertNil(try await iterator.next())
+
+        await service.stop()
+
+        XCTAssertEqual(box.removeCount, 1)
+        XCTAssertEqual(box.stopCount, 1)
+        XCTAssertEqual(box.resetCount, 1)
+    }
+}
