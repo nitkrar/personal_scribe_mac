@@ -205,6 +205,12 @@ public struct PillOverlayView: View {
 
 /// Shared rounded-rectangle chrome for every pill variant. Dark navy
 /// fill, soft shadow, no border — per Claude's minimalist spec.
+///
+/// ## Fuzzy-edge fix (2026-04-18)
+/// The system `NSPanel.hasShadow = true` drew a fringe outside the
+/// rounded corners. Fix: NSPanel shadow disabled at the panel layer;
+/// the chrome here applies a hard `.clipShape` BEFORE `.shadow(...)`
+/// so the shadow is composited on a clean pixel boundary.
 private struct PillChrome: ViewModifier {
     let palette: SeshatTheme.Palette
 
@@ -217,7 +223,13 @@ private struct PillChrome: ViewModifier {
                 )
                 .fill(palette.pillBackground.opacity(0.94))
             }
-            .shadow(color: .black.opacity(0.30), radius: 8, y: 4)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: PillOverlayView.cornerRadius,
+                    style: .continuous
+                )
+            )
+            .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
     }
 }
 

@@ -51,7 +51,13 @@ public final class ResponseCard: NSPanel {
         level = .floating
         backgroundColor = .clear
         isOpaque = false
-        hasShadow = true
+        // System shadow off — ResponseCardView applies a SwiftUI shadow
+        // AFTER its rounded-rect clipShape, producing a clean edge. The
+        // system NSPanel shadow was causing the fuzzy fringe artefact
+        // seen on the pill before the 2026-04-18 fix; applying the same
+        // correction here preemptively so the card doesn't ship with
+        // the same bug when Command Mode (Phase 4) consumes it.
+        hasShadow = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isMovableByWindowBackground = false
         contentView = hostingView

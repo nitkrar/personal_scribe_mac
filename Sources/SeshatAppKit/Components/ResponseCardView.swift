@@ -63,6 +63,11 @@ struct ResponseCardView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss")
         }
+        // Hard clip before shadow — same fuzzy-edge fix as the pill
+        // chrome. Rounded-rect clip establishes the pixel boundary,
+        // then the SwiftUI shadow composites cleanly on top.
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
     }
 }
 

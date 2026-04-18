@@ -137,7 +137,12 @@ struct AppKitPillOverlayPanelBuilder: PillOverlayPanelBuilding {
         panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        // System shadow off — the pill's SwiftUI view applies a custom
+        // shadow AFTER clipShape, which gives a clean rounded edge.
+        // Leaving the system shadow on produces the fuzzy fringe around
+        // the rounded corners (2026-04-18 dogfood report: "hairy border
+        // artefact on the pill").
+        panel.hasShadow = false
         panel.hidesOnDeactivate = false
         panel.canHide = false
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
