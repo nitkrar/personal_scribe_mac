@@ -1,4 +1,5 @@
 import Foundation
+import SeshatCore
 
 enum ParakeetArtifact {
     static let repository = "FluidInference/parakeet-tdt-0.6b-v2-coreml"
