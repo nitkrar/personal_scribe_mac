@@ -44,6 +44,7 @@ struct SeshatAppMain: App {
                 }
             )
         )
+        AppComposition.prewarmTranscription()
     }
 
     var body: some Scene {
