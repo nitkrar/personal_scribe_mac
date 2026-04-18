@@ -108,6 +108,8 @@ APP_PATH="$REPO_ROOT/$APP_NAME.app"
 INSTALL_PATH="/Applications/$APP_NAME.app"
 DMG_NAME="$APP_NAME-$VERSION"
 DMG_PATH="$REPO_ROOT/$DMG_NAME.dmg"
+ICON_SOURCE="$REPO_ROOT/plans/seshat_agent_bundle/01_Foundations/assets/logo_dark.png"
+ICNS_PATH="$REPO_ROOT/$APP_NAME.icns"
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo 'unknown')"
 
 # --- [1] Build ---
@@ -137,6 +139,8 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
     <string>${APP_NAME}</string>
     <key>CFBundleExecutable</key>
     <string>${BINARY_NAME}</string>
+    <key>CFBundleIconFile</key>
+    <string>${APP_NAME}</string>
     <key>CFBundleIdentifier</key>
     <string>${BUNDLE_ID}</string>
     <key>CFBundleInfoDictionaryVersion</key>
@@ -179,10 +183,39 @@ PLIST
 
 printf 'APPL????' > "$APP_PATH/Contents/PkgInfo"
 
-# --- [3] Sign ---
+# --- [3] Generate .icns from master logo ---
+# Regenerated every build: cheap (sips is fast on 2048px source) and avoids
+# drift between source logo and installed icon. Output `$APP_NAME.icns` lives
+# at repo root (.gitignored) so it can be inspected; the canonical copy is
+# embedded in `$APP_PATH/Contents/Resources/$APP_NAME.icns` referenced by
+# `CFBundleIconFile` in Info.plist.
+echo "==> Generating $ICNS_PATH from logo_dark.png..."
+if [[ ! -f "$ICON_SOURCE" ]]; then
+    echo "error: icon source not found at $ICON_SOURCE" >&2
+    exit 1
+fi
+ICONSET_DIR="$(mktemp -d -t seshat-iconset)/$APP_NAME.iconset"
+mkdir -p "$ICONSET_DIR"
+# Canonical iconset slots per Apple HIG — iconutil requires these exact names.
+# 1x slots: 16, 32, 128, 256, 512.  @2x slots: same sizes, doubled pixels.
+for size in 16 32 128 256 512; do
+    doubled=$((size * 2))
+    sips -z "$size" "$size" "$ICON_SOURCE" \
+        --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
+    sips -z "$doubled" "$doubled" "$ICON_SOURCE" \
+        --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" >/dev/null
+done
+iconutil -c icns "$ICONSET_DIR" -o "$ICNS_PATH"
+cp "$ICNS_PATH" "$APP_PATH/Contents/Resources/$APP_NAME.icns"
+
+# --- [4] Sign ---
 echo "==> Ad-hoc signing (hardened runtime + mic entitlement)..."
 ENTITLEMENTS_PLIST="$(mktemp -t seshat-entitlements.XXXXXX).plist"
-cleanup() { rm -f "$ENTITLEMENTS_PLIST"; [[ -n "${STAGING_DIR:-}" ]] && rm -rf "$STAGING_DIR"; }
+cleanup() {
+    rm -f "$ENTITLEMENTS_PLIST"
+    [[ -n "${STAGING_DIR:-}" ]] && rm -rf "$STAGING_DIR"
+    [[ -n "${ICONSET_DIR:-}" ]] && rm -rf "$(dirname "$ICONSET_DIR")"
+}
 trap cleanup EXIT
 cat > "$ENTITLEMENTS_PLIST" <<'ENT'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -209,7 +242,7 @@ codesign --verify --verbose "$APP_PATH"
 APP_SIZE="$(du -sh "$APP_PATH" | awk '{print $1}')"
 echo "✓ Built $APP_PATH ($APP_SIZE)"
 
-# --- [4] DMG (optional) ---
+# --- [5] DMG (optional) ---
 if [[ "$DO_DMG" == "1" ]]; then
     echo ""
     echo "==> Packaging DMG..."
@@ -229,7 +262,7 @@ if [[ "$DO_DMG" == "1" ]]; then
     echo "✓ Built $DMG_PATH ($DMG_SIZE)"
 fi
 
-# --- [5] Install (optional) ---
+# --- [6] Install (optional) ---
 if [[ "$DO_INSTALL" == "1" ]]; then
     echo ""
     echo "==> Installing to $INSTALL_PATH..."
@@ -240,7 +273,7 @@ if [[ "$DO_INSTALL" == "1" ]]; then
     echo "✓ Installed $INSTALL_PATH"
 fi
 
-# --- [6] Run (optional) ---
+# --- [7] Run (optional) ---
 if [[ "$DO_RUN" == "1" ]]; then
     echo ""
     echo "==> Launching $INSTALL_PATH..."
