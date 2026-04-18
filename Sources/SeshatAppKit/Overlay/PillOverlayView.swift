@@ -42,6 +42,10 @@ public struct PillOverlayView: View {
             switch model.visibility {
             case .hidden:
                 EmptyView()
+            case .idle:
+                idleDot
+                    .transition(pillTransition)
+                    .onTapGesture { onTap() }
             case .downloading(let fraction):
                 downloadingPill(fraction: fraction)
                     .transition(pillTransition)
@@ -55,6 +59,24 @@ public struct PillOverlayView: View {
             }
         }
         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: model.visibility)
+    }
+
+    private var idleDot: some View {
+        Circle()
+            .fill(.secondary)
+            .frame(width: 10, height: 10)
+            .padding(4)
+            .background {
+                Circle()
+                    .fill(.regularMaterial)
+                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+            }
+            .overlay {
+                Circle()
+                    .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+            }
+            .opacity(0.75)
+            .help("Double-tap ⌥ or click to record")
     }
 
     private var recordingPill: some View {

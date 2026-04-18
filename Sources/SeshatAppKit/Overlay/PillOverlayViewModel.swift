@@ -6,12 +6,13 @@ import SeshatCore
 public final class PillOverlayViewModel: ObservableObject {
     public enum Visibility: Equatable, Sendable {
         case hidden
+        case idle
         case downloading(fractionCompleted: Double)
         case recording
         case transcribing
     }
 
-    @Published public private(set) var visibility: Visibility = .hidden
+    @Published public private(set) var visibility: Visibility = .idle
 
     public init() {}
 
@@ -29,7 +30,7 @@ public final class PillOverlayViewModel: ObservableObject {
 
         switch sessionState {
         case .idle:
-            visibility = .hidden
+            visibility = .idle
         case .recording:
             visibility = .recording
         case .transcribing:

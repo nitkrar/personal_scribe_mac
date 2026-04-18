@@ -5,18 +5,18 @@ import SeshatCore
 
 @MainActor
 final class PillOverlayViewModelTests: XCTestCase {
-    func testInitialVisibilityIsHidden() {
+    func testInitialVisibilityIsIdle() {
         let viewModel = PillOverlayViewModel()
 
-        XCTAssertEqual(viewModel.visibility, .hidden)
+        XCTAssertEqual(viewModel.visibility, .idle)
     }
 
-    func testIdleMapsToHidden() {
+    func testIdleSessionMapsToIdlePill() {
         let viewModel = PillOverlayViewModel()
 
         viewModel.apply(sessionState: .idle, downloadProgress: nil)
 
-        XCTAssertEqual(viewModel.visibility, .hidden)
+        XCTAssertEqual(viewModel.visibility, .idle)
     }
 
     func testRecordingMapsToRecording() {
@@ -43,7 +43,7 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .hidden)
     }
 
-    func testDownloadingProgressOverridesSessionState() {
+    func testDownloadingProgressOverridesIdleState() {
         let viewModel = PillOverlayViewModel()
         let progress = ModelDownloadProgress(
             phase: .downloading,
@@ -52,12 +52,12 @@ final class PillOverlayViewModelTests: XCTestCase {
             expectedBytes: 100
         )
 
-        viewModel.apply(sessionState: .transcribing, downloadProgress: progress)
+        viewModel.apply(sessionState: .idle, downloadProgress: progress)
 
         XCTAssertEqual(viewModel.visibility, .downloading(fractionCompleted: 0.42))
     }
 
-    func testFinishedProgressDoesNotHijackVisibility() {
+    func testFinishedDownloadRestoresIdlePill() {
         let viewModel = PillOverlayViewModel()
         let progress = ModelDownloadProgress(
             phase: .finished,
@@ -66,12 +66,12 @@ final class PillOverlayViewModelTests: XCTestCase {
             expectedBytes: 100
         )
 
-        viewModel.apply(sessionState: .recording, downloadProgress: progress)
+        viewModel.apply(sessionState: .idle, downloadProgress: progress)
 
-        XCTAssertEqual(viewModel.visibility, .recording)
+        XCTAssertEqual(viewModel.visibility, .idle)
     }
 
-    func testTransitionSequenceRecordingTranscribingIdleError() async {
+    func testTransitionSequenceIdleRecordingTranscribingIdleError() async {
         let viewModel = PillOverlayViewModel()
         var emitted: [PillOverlayViewModel.Visibility] = []
         let expectation = expectation(description: "Collect published visibility updates")
@@ -96,6 +96,6 @@ final class PillOverlayViewModelTests: XCTestCase {
         withExtendedLifetime(cancellable) {}
 
         XCTAssertEqual(viewModel.visibility, .hidden)
-        XCTAssertEqual(emitted, [.recording, .transcribing, .hidden, .hidden])
+        XCTAssertEqual(emitted, [.recording, .transcribing, .idle, .hidden])
     }
 }

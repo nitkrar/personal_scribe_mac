@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SeshatCore
 
@@ -10,65 +11,46 @@ struct MenuBarScene: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Seshat")
-                .font(.headline)
+        Text("Seshat — \(Self.stateLabel(for: model.state))")
 
-            Text(Self.stateLabel(for: model.state))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        if let downloadProgress = model.downloadProgress {
+            let percent = Int((downloadProgress.fractionCompleted * 100).rounded())
+            Text("Downloading model… \(percent)%")
+        }
 
-            if let downloadProgress = model.downloadProgress {
-                let percent = Int((downloadProgress.fractionCompleted * 100).rounded())
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Downloading model… \(percent)%")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    ProgressView(value: max(0, min(downloadProgress.fractionCompleted, 1)))
-                        .progressViewStyle(.linear)
+        switch model.permissionState {
+        case .granted:
+            Button(Self.primaryActionTitle(for: .granted)) {
+                Task {
+                    await model.handleRecordButtonTap()
                 }
             }
-
-            switch model.permissionState {
-            case .granted:
-                RecordButtonView(
-                    viewModel: model.recordButton,
-                    action: model.handleRecordButtonTap
-                )
-            case .notYetRequested:
-                Button(Self.primaryActionTitle(for: .notYetRequested)) {
-                    Task {
-                        await model.handleRecordButtonTap()
-                    }
+            .keyboardShortcut("r")
+        case .notYetRequested:
+            Button(Self.primaryActionTitle(for: .notYetRequested)) {
+                Task {
+                    await model.handleRecordButtonTap()
                 }
-
-                Text("Recording starts immediately after access is granted.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            case .denied:
-                Button(Self.primaryActionTitle(for: .denied)) {
-                    model.openMicrophonePrivacySettings()
-                }
-
-                Text("Microphone access is denied. Enable it in Privacy → Microphone.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
-
-            if let lastResultText = model.lastResultText, !lastResultText.isEmpty {
-                Text(lastResultText)
-                    .font(.body)
-
-                Button("Copy Last Transcript") {
-                    model.copyLatestTranscript()
-                }
+        case .denied:
+            Button(Self.primaryActionTitle(for: .denied)) {
+                model.openMicrophonePrivacySettings()
             }
         }
-        .padding(14)
-        .frame(minWidth: 280)
-        .task {
-            model.startObserving()
+
+        if let lastResultText = model.lastResultText, !lastResultText.isEmpty {
+            Button("Copy Last Transcript") {
+                model.copyLatestTranscript()
+            }
+            .keyboardShortcut("c")
         }
+
+        Divider()
+
+        Button("Quit Seshat") {
+            NSApp.terminate(nil)
+        }
+        .keyboardShortcut("q")
     }
 
     static func stateLabel(for state: SessionState) -> String {

@@ -60,16 +60,18 @@ struct SeshatAppMain: App {
 
         AppComposition.prewarmTranscription()
         AppComposition.hotkeyMonitor.start()
+        sceneModel.startObserving()
     }
 
     var body: some Scene {
-        // .window is required — default .menu style renders as NSMenu and
-        // silently drops SwiftUI views like ProgressView / nested VStacks.
+        // Default .menu style — popover renders as AppKit NSMenu. Keep the
+        // popover content simple (Text + Button only); ProgressView / nested
+        // VStacks don't render in NSMenu and caused silent click-breakage.
+        // Rich UI (download progress, recording pulse) lives in the pill overlay.
         MenuBarExtra {
             MenuBarScene(model: sceneModel)
         } label: {
             Image(systemName: sceneModel.statusIcon.systemImageName)
         }
-        .menuBarExtraStyle(.window)
     }
 }
