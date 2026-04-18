@@ -1,4 +1,5 @@
 import Combine
+import Foundation
 import XCTest
 import SeshatCore
 @testable import SeshatAppKit
@@ -81,10 +82,66 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 1.0)
         cancellable.cancel()
     }
+
+    // MARK: - Phase 1 Step 1.3b — menu bar install ordering regression
+
+    /// `SeshatAppMain.init()` schedules `startupCoordinator.start()` through
+    /// `Task { await Task.yield(); ... }` so SwiftUI finishes installing the
+    /// `MenuBarExtra` status item before background startup work (which
+    /// eventually installs `GlobalHotkeyMonitor`) runs on the MainActor. A
+    /// regression that removed the wrapper — calling `start()` synchronously
+    /// in init — would reintroduce the per-launch menu bar click freeze
+    /// diagnosed in `1cb665c`. The hotkey monitor firing synchronously with
+    /// init is the observable proxy for that reordering.
+    func testStartupCoordinatorIsNotInvokedSynchronouslyDuringInit() async {
+        let flag = HotkeyFireFlag()
+        let sessionCoordinator = DevelopmentComposition.makeTestingSessionCoordinator()
+        let startupCoordinator = AppStartupCoordinator(
+            hotkeyDelay: .zero,
+            prepareDelay: .zero,
+            startHotkeyMonitor: { flag.mark() },
+            prepareTranscriber: {},
+            sleep: { _ in }
+        )
+
+        _ = SeshatAppMain(
+            coordinator: sessionCoordinator,
+            permissionRequester: IntegrationPermissionRequester(),
+            startupCoordinator: startupCoordinator
+        )
+
+        XCTAssertFalse(
+            flag.hasFired,
+            "SeshatAppMain.init() appears to invoke startupCoordinator.start() "
+                + "synchronously — Task.yield() wrapper may have been removed."
+        )
+
+        for _ in 0..<500 {
+            if flag.hasFired { break }
+            await Task.yield()
+        }
+        XCTAssertTrue(
+            flag.hasFired,
+            "startupCoordinator.start() was never invoked after SeshatAppMain.init()."
+        )
+    }
 }
 
 private struct IntegrationPermissionRequester: MicrophonePermissionRequesting {
     func requestAccess() async -> Bool {
         true
+    }
+}
+
+private final class HotkeyFireFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var fired = false
+
+    func mark() {
+        lock.withLock { fired = true }
+    }
+
+    var hasFired: Bool {
+        lock.withLock { fired }
     }
 }
