@@ -4,6 +4,7 @@ import XCTest
 
 /// Tests for `ModeCard` — Settings Modes-tab composite showing voice
 /// + AI model preset with an active/inactive status pill.
+@MainActor
 final class ModeCardTests: XCTestCase {
     // MARK: - Initializer / stored state
 

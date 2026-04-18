@@ -5,6 +5,7 @@ import XCTest
 /// Tests for `AudioPlayerThumbnail` — a compact audio-player surface
 /// showing duration + a static waveform pose. Consumed by the Notes
 /// Context Panel (Phase 3).
+@MainActor
 final class AudioPlayerThumbnailTests: XCTestCase {
     // MARK: - Initializer / stored state
 

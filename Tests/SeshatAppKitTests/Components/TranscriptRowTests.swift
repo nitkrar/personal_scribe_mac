@@ -5,6 +5,7 @@ import XCTest
 /// Tests for `TranscriptRow` — a list-row surface showing title,
 /// timestamp, and truncated body preview. Consumed by History Panel
 /// and Notes Sidebar (Phase 3).
+@MainActor
 final class TranscriptRowTests: XCTestCase {
     // MARK: - Initializer / stored state
 
