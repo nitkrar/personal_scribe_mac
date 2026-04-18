@@ -7,8 +7,10 @@ DerivedData/
 *.xcodeproj
 .netrc
 
-# Dev-built app bundle (scripts/package-dev-app.sh output)
+# Dev-built app bundle (scripts/package.sh output)
 /Seshat.app/
+# DMG output of scripts/package.sh -d
+/Seshat-*.dmg
 
 # Claude Code agent-tool worktrees (isolation: "worktree")
 .claude/worktrees/
