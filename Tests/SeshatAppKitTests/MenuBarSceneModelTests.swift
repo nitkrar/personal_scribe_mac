@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 import SeshatCore
 import SeshatSession
@@ -120,6 +121,24 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(requestCount, 0)
     }
 
+    func testStartObservingPublishesRecordingAfterCoordinatorToggle() async throws {
+        let coordinator = try makeCoordinator()
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        model.startObserving()
+        await coordinator.toggle()
+        await waitForState(.recording, on: model)
+
+        XCTAssertEqual(model.state, .recording)
+    }
+
     private func makeCoordinator() throws -> SessionCoordinator {
         SessionCoordinator(
             capture: FakeAudioCapturing(buffers: [try makeBuffer()]),
@@ -138,6 +157,23 @@ final class MenuBarSceneModelTests: XCTestCase {
             audioDuration: .seconds(1),
             processingDuration: .milliseconds(200)
         )
+    }
+
+    private func waitForState(_ expected: SessionState, on model: MenuBarSceneModel) async {
+        if model.state == expected {
+            return
+        }
+
+        let expectation = expectation(description: "Wait for state \(String(describing: expected))")
+        var didFulfill = false
+        let cancellable = model.$state.sink { state in
+            guard !didFulfill, state == expected else { return }
+            didFulfill = true
+            expectation.fulfill()
+        }
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+        cancellable.cancel()
     }
 }
 

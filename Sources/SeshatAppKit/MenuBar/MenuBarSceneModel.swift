@@ -15,6 +15,7 @@ final class MenuBarSceneModel: ObservableObject {
     private let clipboardWriter: @MainActor (String) -> Void
     private let openSettings: @MainActor () -> Void
     private let logger: SeshatLogger
+    private var observationTask: Task<Void, Never>?
 
     init(
         coordinator: SessionCoordinator,
@@ -37,7 +38,21 @@ final class MenuBarSceneModel: ObservableObject {
         RecordButtonViewModel.make(from: state)
     }
 
-    func startObserving() {}
+    func startObserving() {
+        guard observationTask == nil else { return }
+
+        logger.info("Starting coordinator observation")
+        let coordinator = coordinator
+        observationTask = Task { [weak self, coordinator] in
+            guard let self else { return }
+            let stream = await coordinator.stateStream()
+            for await newState in stream {
+                await MainActor.run {
+                    self.state = newState
+                }
+            }
+        }
+    }
 
     func handleRecordButtonTap() async {
         logger.info("Record button tapped")
