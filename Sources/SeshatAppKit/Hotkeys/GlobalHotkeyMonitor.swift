@@ -5,10 +5,13 @@ import SeshatSession
 
 @MainActor
 public final class GlobalHotkeyMonitor {
+    private static let rightOptionKeyCode: UInt16 = 61
+
     private let onTrigger: @MainActor () -> Void
     private let logger: SeshatLogger
 
     private var monitor: Any?
+    private var isRightOptionPressed = false
 
     public init(
         onTrigger: @escaping @MainActor () -> Void,
@@ -28,10 +31,30 @@ public final class GlobalHotkeyMonitor {
             return
         }
 
-        monitor = NSObject()
+        monitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            guard
+                let self,
+                event.keyCode == Self.rightOptionKeyCode
+            else {
+                return
+            }
+
+            let isPressed = event.modifierFlags.contains(.option)
+            if isPressed, self.isRightOptionPressed == false {
+                self.onTrigger()
+            }
+
+            self.isRightOptionPressed = isPressed
+        }
     }
 
     public func stop() {
+        guard let monitor else {
+            return
+        }
+
+        NSEvent.removeMonitor(monitor)
         monitor = nil
+        isRightOptionPressed = false
     }
 }
