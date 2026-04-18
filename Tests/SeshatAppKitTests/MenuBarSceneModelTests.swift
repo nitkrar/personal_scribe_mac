@@ -179,6 +179,27 @@ final class MenuBarSceneModelTests: XCTestCase {
         await fulfillment(of: [cancellationExpectation], timeout: 1.0)
     }
 
+    func testIdleTransitionRefreshesLastResultTextFromCoordinator() async throws {
+        let coordinator = try makeCoordinator()
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        model.startObserving()
+        await coordinator.toggle()
+        await waitForState(.recording, on: model)
+        await coordinator.toggle()
+        await waitForState(.idle, on: model)
+        await waitForTranscriptText("stub transcript", on: model)
+
+        XCTAssertEqual(model.lastResultText, "stub transcript")
+    }
+
     private func makeCoordinator() throws -> SessionCoordinator {
         SessionCoordinator(
             capture: FakeAudioCapturing(buffers: [try makeBuffer()]),
@@ -208,6 +229,23 @@ final class MenuBarSceneModelTests: XCTestCase {
         var didFulfill = false
         let cancellable = model.$state.sink { state in
             guard !didFulfill, state == expected else { return }
+            didFulfill = true
+            expectation.fulfill()
+        }
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+        cancellable.cancel()
+    }
+
+    private func waitForTranscriptText(_ expected: String, on model: MenuBarSceneModel) async {
+        if model.lastResultText == expected {
+            return
+        }
+
+        let expectation = expectation(description: "Wait for transcript text \(expected)")
+        var didFulfill = false
+        let cancellable = model.$lastResultText.sink { text in
+            guard !didFulfill, text == expected else { return }
             didFulfill = true
             expectation.fulfill()
         }

@@ -52,8 +52,18 @@ final class MenuBarSceneModel: ObservableObject {
             guard let self else { return }
             let stream = await coordinator.stateStream()
             for await newState in stream {
+                let lastResultText: String?
+                if case .idle = newState {
+                    lastResultText = await coordinator.lastResult()?.text
+                } else {
+                    lastResultText = nil
+                }
+
                 await MainActor.run {
                     self.state = newState
+                    if case .idle = newState {
+                        self.lastResultText = lastResultText
+                    }
                 }
             }
         }
