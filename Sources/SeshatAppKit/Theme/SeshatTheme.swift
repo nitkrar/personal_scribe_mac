@@ -39,6 +39,22 @@ public enum SeshatTheme {
         // Brand
         public let brandChampagne: Color
 
+        // Pill overlay chrome (Sprint 2 dogfood redesign). The pill
+        // keeps a dark navy fill in both schemes so it reads the same
+        // way over any background — matches the WisprFlow-inspired
+        // mockup.
+        public let pillBackground: Color
+
+        // Stop-button red for the pill recording state. Softer coral
+        // than `statusRecording` (iOS system red) to avoid overpowering
+        // the champagne accent — keeps the stop affordance visible
+        // without screaming.
+        public let pillStopRed: Color
+
+        // Pill foreground text / glyph colour. Warm pale cream; keeps
+        // legibility on the dark navy pill surface in both schemes.
+        public let pillForegroundText: Color
+
         // Text (base + opacities; apply opacity at the callsite so the
         // opacity token stays visible to the design system).
         public let primaryTextBase: Color
@@ -72,6 +88,9 @@ public enum SeshatTheme {
             elevatedSurface: Color(hex: "252525"),
             hoverState: Color(hex: "2A2A2A"),
             brandChampagne: Color(hex: "D4D0C8"),
+            pillBackground: Color(hex: "1A1B2E"),
+            pillStopRed: Color(hex: "EF5350"),
+            pillForegroundText: Color(hex: "E8E6E0"),
             primaryTextBase: Color(hex: "FFFFFF"),
             primaryTextOpacity: 0.60,
             secondaryTextBase: Color(hex: "FFFFFF"),
@@ -92,6 +111,9 @@ public enum SeshatTheme {
             elevatedSurface: Color(hex: "F0EFE9"),
             hoverState: Color(hex: "E8E7E0"),
             brandChampagne: Color(hex: "6B6760"),
+            pillBackground: Color(hex: "1A1B2E"),
+            pillStopRed: Color(hex: "EF5350"),
+            pillForegroundText: Color(hex: "E8E6E0"),
             primaryTextBase: Color(hex: "1A1A1A"),
             primaryTextOpacity: 1.0,
             secondaryTextBase: Color(hex: "1A1A1A"),
