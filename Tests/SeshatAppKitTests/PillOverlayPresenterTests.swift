@@ -99,61 +99,71 @@ final class PillOverlayPresenterTests: XCTestCase {
 
     // MARK: - Sprint 2 Lane B1 — visibility-mode-aware presenter behaviour.
 
-    /// `.hidden` mode + recording session → presenter must not intend to
-    /// show the panel. Lane B1 invariant: hidden overrides everything.
-    ///
-    /// Asserts on `intendsToShow` rather than NSPanel's real `isVisible`;
-    /// real-visibility behaviour requires an AppKit runtime that headless
-    /// XCTest doesn't fully emulate.
-    func testPresenterDoesNotShowPanelWhenVisibilityIsHidden() {
+    /// If the view-model is already `.hidden` when the presenter
+    /// subscribes, the presenter must not build or show a panel.
+    func testPresenterDoesNotBuildPanelWhenCurrentVisibilityIsHidden() {
         let viewModel = PillOverlayViewModel(visibilityMode: .hidden)
-        let presenter = PillOverlayPresenter(model: viewModel)
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
+        let panelBuilder = RecordingPanelBuilder()
 
-        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder
+        )
 
-        // The `@Published` assign is synchronous; the presenter's Combine
-        // sink fires on the current run-loop pass. Give it one spin.
-        RunLoop.main.run(until: Date().addingTimeInterval(0.02))
-
-        XCTAssertFalse(presenter.intendsToShow,
-                       "Hidden visibility must not intend to show the panel")
+        XCTAssertFalse(presenter.intendsToShow)
+        XCTAssertEqual(panelBuilder.makePanelCallCount, 0)
     }
 
     /// `.alwaysOn` mode + idle session → presenter intends to show.
     func testPresenterShowsIdlePillInAlwaysOnMode() {
         let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
-        let presenter = PillOverlayPresenter(model: viewModel)
-
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        let panelBuilder = RecordingPanelBuilder()
+
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder
+        )
 
         XCTAssertTrue(presenter.intendsToShow,
                       "Always-on mode must intend to show the idle pill")
+        XCTAssertEqual(panelBuilder.makePanelCallCount, 1)
+        XCTAssertEqual(panelBuilder.panel.orderFrontCallCount, 1)
     }
 
     /// `.autoShow` mode + idle session → presenter does not intend to
     /// show.
     func testPresenterHidesIdlePillInAutoShowMode() {
         let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
-        let presenter = PillOverlayPresenter(model: viewModel)
-
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        let panelBuilder = RecordingPanelBuilder()
+
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder
+        )
 
         XCTAssertFalse(presenter.intendsToShow,
                        "Auto-show + idle session must not intend to present the pill")
+        XCTAssertEqual(panelBuilder.makePanelCallCount, 0)
     }
 
     /// `.autoShow` mode + active recording → presenter intends to show.
     func testPresenterShowsRecordingPillInAutoShowMode() {
         let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
-        let presenter = PillOverlayPresenter(model: viewModel)
-
         viewModel.apply(sessionState: .recording, preparationProgress: nil)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        let panelBuilder = RecordingPanelBuilder()
+
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder
+        )
 
         XCTAssertTrue(presenter.intendsToShow,
                       "Auto-show + recording must intend to present the pill")
+        XCTAssertEqual(panelBuilder.makePanelCallCount, 1)
+        XCTAssertEqual(panelBuilder.panel.orderFrontCallCount, 1)
     }
 
     private func makeHostingView() -> (NSWindow, ClickThroughHostingView<EmptyView>) {
@@ -188,5 +198,44 @@ final class PillOverlayPresenterTests: XCTestCase {
                 pressure: 1
             )
         )
+    }
+}
+
+@MainActor
+private final class RecordingPanelBuilder: PillOverlayPanelBuilding {
+    let panel = RecordingPanel()
+    private(set) var makePanelCallCount = 0
+
+    func makePanel(
+        model: PillOverlayViewModel,
+        panelSize: NSSize,
+        onTap: @escaping @MainActor () -> Void,
+        onMouseDragged: @escaping @MainActor () -> Void,
+        isTapEnabled: @escaping @MainActor () -> Bool
+    ) -> any PillOverlayPaneling {
+        makePanelCallCount += 1
+        return panel
+    }
+}
+
+@MainActor
+private final class RecordingPanel: PillOverlayPaneling {
+    var isVisible = false
+    var frame = NSRect(x: 0, y: 0, width: 280, height: 60)
+    private(set) var orderFrontCallCount = 0
+    private(set) var orderOutCallCount = 0
+
+    func orderFrontRegardless() {
+        orderFrontCallCount += 1
+        isVisible = true
+    }
+
+    func orderOut(_ sender: Any?) {
+        orderOutCallCount += 1
+        isVisible = false
+    }
+
+    func setFrameOrigin(_ point: NSPoint) {
+        frame.origin = point
     }
 }

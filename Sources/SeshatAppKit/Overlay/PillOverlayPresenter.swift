@@ -97,10 +97,75 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
 }
 
 @MainActor
+protocol PillOverlayPaneling: AnyObject {
+    var isVisible: Bool { get }
+    var frame: NSRect { get }
+    func orderFrontRegardless()
+    func orderOut(_ sender: Any?)
+    func setFrameOrigin(_ point: NSPoint)
+}
+
+extension DraggablePanel: PillOverlayPaneling {}
+
+@MainActor
+protocol PillOverlayPanelBuilding {
+    func makePanel(
+        model: PillOverlayViewModel,
+        panelSize: NSSize,
+        onTap: @escaping @MainActor () -> Void,
+        onMouseDragged: @escaping @MainActor () -> Void,
+        isTapEnabled: @escaping @MainActor () -> Bool
+    ) -> any PillOverlayPaneling
+}
+
+struct AppKitPillOverlayPanelBuilder: PillOverlayPanelBuilding {
+    @MainActor
+    func makePanel(
+        model: PillOverlayViewModel,
+        panelSize: NSSize,
+        onTap: @escaping @MainActor () -> Void,
+        onMouseDragged: @escaping @MainActor () -> Void,
+        isTapEnabled: @escaping @MainActor () -> Bool
+    ) -> any PillOverlayPaneling {
+        let panel = DraggablePanel(
+            contentRect: NSRect(origin: .zero, size: panelSize),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+
+        panel.level = .floating
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = true
+        panel.hidesOnDeactivate = false
+        panel.canHide = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        panel.ignoresMouseEvents = false
+
+        let contentView = panel.contentView ?? NSView(frame: NSRect(origin: .zero, size: panelSize))
+        panel.contentView = contentView
+
+        let hostingView = ClickThroughHostingView(
+            rootView: PillOverlayView(model: model)
+        )
+        hostingView.onMouseDragged = onMouseDragged
+        hostingView.onTap = onTap
+        hostingView.isTapEnabled = isTapEnabled
+        hostingView.frame = contentView.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        contentView.addSubview(hostingView)
+
+        return panel
+    }
+}
+
+@MainActor
 public final class PillOverlayPresenter {
     private let model: PillOverlayViewModel
     private let onTap: @MainActor () -> Void
-    private var panel: DraggablePanel?
+    private let panelBuilder: any PillOverlayPanelBuilding
+    private var panel: (any PillOverlayPaneling)?
     private var visibilityCancellable: AnyCancellable?
     private let diagnosticLogger = SeshatLogger(category: SeshatLogCategory.ui)
 
@@ -115,12 +180,25 @@ public final class PillOverlayPresenter {
     private let panelSize = NSSize(width: 280, height: 60)
     private var hasUserRepositioned = false
 
-    public init(
+    public convenience init(
         model: PillOverlayViewModel,
         onTap: @escaping @MainActor () -> Void = {}
     ) {
+        self.init(
+            model: model,
+            onTap: onTap,
+            panelBuilder: AppKitPillOverlayPanelBuilder()
+        )
+    }
+
+    init(
+        model: PillOverlayViewModel,
+        onTap: @escaping @MainActor () -> Void = {},
+        panelBuilder: any PillOverlayPanelBuilding
+    ) {
         self.model = model
         self.onTap = onTap
+        self.panelBuilder = panelBuilder
         visibilityCancellable = model.$visibility.sink { [weak self] visibility in
             guard let self else {
                 return
@@ -160,7 +238,17 @@ public final class PillOverlayPresenter {
         intendsToShow = true
 
         let panelExisted = panel != nil
-        let panel = panel ?? makePanel()
+        let panel = panel ?? panelBuilder.makePanel(
+            model: model,
+            panelSize: panelSize,
+            onTap: onTap,
+            onMouseDragged: { [weak self] in
+                self?.hasUserRepositioned = true
+            },
+            isTapEnabled: { [weak self] in
+                self?.supportsTap ?? false
+            }
+        )
         self.panel = panel
 
         if !hasUserRepositioned {
@@ -177,46 +265,7 @@ public final class PillOverlayPresenter {
         diagnosticLogger.info("PillOverlayPresenter.hide — panel=\(panel == nil ? "nil" : "exists")")
     }
 
-    private func makePanel() -> DraggablePanel {
-        let panel = DraggablePanel(
-            contentRect: NSRect(origin: .zero, size: panelSize),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-
-        panel.level = .floating
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = true
-        panel.hidesOnDeactivate = false
-        panel.canHide = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-        panel.ignoresMouseEvents = false
-
-        let contentView = panel.contentView ?? NSView(frame: NSRect(origin: .zero, size: panelSize))
-        panel.contentView = contentView
-
-        let hostingView = ClickThroughHostingView(
-            rootView: PillOverlayView(model: model)
-        )
-        hostingView.onMouseDragged = { [weak self] in
-            self?.hasUserRepositioned = true
-        }
-        hostingView.onTap = { [weak self] in
-            self?.onTap()
-        }
-        hostingView.isTapEnabled = { [weak self] in
-            self?.supportsTap ?? false
-        }
-        hostingView.frame = contentView.bounds
-        hostingView.autoresizingMask = [.width, .height]
-        contentView.addSubview(hostingView)
-
-        return panel
-    }
-
-    private func updatePanelPosition(_ panel: NSPanel) {
+    private func updatePanelPosition(_ panel: any PillOverlayPaneling) {
         let screenFrame = NSScreen.main?.visibleFrame ?? .zero
         let x = screenFrame.midX - panel.frame.width / 2
         let y = screenFrame.minY + 64

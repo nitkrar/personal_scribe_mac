@@ -35,22 +35,45 @@ public final class PillOverlayController: ObservableObject {
             preparationProgressPublisher: preparationProgressPublisher,
             audioLevelPublisher: nil,
             visibilityMode: PillVisibilityMode.resolve(),
-            onTap: onTap
+            onTap: onTap,
+            panelBuilder: AppKitPillOverlayPanelBuilder()
         )
     }
 
     /// Full initializer including the audio-level publisher that Sprint 2
     /// Lane B1 threads into the recording pill's waveform.
-    public init(
+    public convenience init(
         statePublisher: AnyPublisher<SessionState, Never>,
         preparationProgressPublisher: AnyPublisher<ModelDownloadProgress?, Never>,
         audioLevelPublisher: AnyPublisher<Double, Never>?,
         visibilityMode: PillVisibilityMode = .autoShow,
         onTap: @escaping @MainActor () -> Void = {}
     ) {
+        self.init(
+            statePublisher: statePublisher,
+            preparationProgressPublisher: preparationProgressPublisher,
+            audioLevelPublisher: audioLevelPublisher,
+            visibilityMode: visibilityMode,
+            onTap: onTap,
+            panelBuilder: AppKitPillOverlayPanelBuilder()
+        )
+    }
+
+    init(
+        statePublisher: AnyPublisher<SessionState, Never>,
+        preparationProgressPublisher: AnyPublisher<ModelDownloadProgress?, Never>,
+        audioLevelPublisher: AnyPublisher<Double, Never>?,
+        visibilityMode: PillVisibilityMode = .autoShow,
+        onTap: @escaping @MainActor () -> Void = {},
+        panelBuilder: any PillOverlayPanelBuilding
+    ) {
         let viewModel = PillOverlayViewModel(visibilityMode: visibilityMode)
         self.viewModel = viewModel
-        self.presenter = PillOverlayPresenter(model: viewModel, onTap: onTap)
+        self.presenter = PillOverlayPresenter(
+            model: viewModel,
+            onTap: onTap,
+            panelBuilder: panelBuilder
+        )
 
         let diagnosticLogger = SeshatLogger(category: SeshatLogCategory.ui)
         diagnosticLogger.info("PillOverlayController init — mode=\(visibilityMode)")
