@@ -6,8 +6,12 @@ import SeshatCore
 fileprivate final class DraggablePanel: NSPanel {
     var onMouseDragged: (() -> Void)?
 
+    // canBecomeKey = true so SwiftUI .onTapGesture receives clicks. Combined
+    // with .nonactivatingPanel in styleMask, the panel becomes key but does
+    // NOT activate the app — so clicking the pill routes to SwiftUI without
+    // stealing focus from other apps or the menu bar.
     override var canBecomeKey: Bool {
-        false
+        true
     }
 
     override func mouseDragged(with event: NSEvent) {
