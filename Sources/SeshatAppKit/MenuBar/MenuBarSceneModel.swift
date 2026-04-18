@@ -16,6 +16,7 @@ final class MenuBarSceneModel: ObservableObject {
     private let openSettings: @MainActor () -> Void
     private let logger: SeshatLogger
     private var observationTask: Task<Void, Never>?
+    private(set) var observationTaskCreationCount = 0
 
     init(
         coordinator: SessionCoordinator,
@@ -42,6 +43,7 @@ final class MenuBarSceneModel: ObservableObject {
         guard observationTask == nil else { return }
 
         logger.info("Starting coordinator observation")
+        observationTaskCreationCount += 1
         let coordinator = coordinator
         observationTask = Task { [weak self, coordinator] in
             guard let self else { return }

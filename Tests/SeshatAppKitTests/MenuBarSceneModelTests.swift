@@ -139,6 +139,23 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(model.state, .recording)
     }
 
+    func testStartObservingIsIdempotent() async throws {
+        let coordinator = try makeCoordinator()
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        model.startObserving()
+        model.startObserving()
+
+        XCTAssertEqual(model.observationTaskCreationCount, 1)
+    }
+
     private func makeCoordinator() throws -> SessionCoordinator {
         SessionCoordinator(
             capture: FakeAudioCapturing(buffers: [try makeBuffer()]),
