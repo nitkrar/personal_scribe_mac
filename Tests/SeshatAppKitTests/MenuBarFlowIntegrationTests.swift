@@ -43,9 +43,9 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
         await model.handleRecordButtonTap()
         await fulfillment(of: [transitionExpectation], timeout: 1.0)
         stateCancellable.cancel()
-        await waitForTranscriptText("development transcript", on: model)
+        await waitForTranscriptText("Development transcript.", on: model)
 
-        XCTAssertEqual(model.lastResultText, "development transcript")
+        XCTAssertEqual(model.lastResultText, "Development transcript.")
     }
 
     private func waitForState(_ expected: SessionState, on model: MenuBarSceneModel) async {

@@ -48,11 +48,11 @@ public final class GlobalHotkeyMonitor {
     }
 
     public func stop() {
-        guard let monitor else {
+        guard let handle = monitor else {
             return
         }
 
-        NSEvent.removeMonitor(monitor)
+        NSEvent.removeMonitor(handle)
         monitor = nil
         isRightOptionPressed = false
         lastTriggerTimestamp = nil

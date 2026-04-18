@@ -195,9 +195,9 @@ final class MenuBarSceneModelTests: XCTestCase {
         await waitForState(.recording, on: model)
         await coordinator.toggle()
         await waitForState(.idle, on: model)
-        await waitForTranscriptText("stub transcript", on: model)
+        await waitForTranscriptText("Stub transcript.", on: model)
 
-        XCTAssertEqual(model.lastResultText, "stub transcript")
+        XCTAssertEqual(model.lastResultText, "Stub transcript.")
     }
 
     func testCopyLatestTranscriptWritesCurrentTranscriptToClipboard() async throws {
@@ -312,7 +312,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
     private func makeResult() -> TranscriptionResult {
         TranscriptionResult(
-            text: "stub transcript",
+            text: "Stub transcript.",
             audioDuration: .seconds(1),
             processingDuration: .milliseconds(200)
         )
