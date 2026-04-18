@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 import SeshatCore
 @testable import SeshatAudio
@@ -119,5 +120,27 @@ final class StopBehaviorTests: XCTestCase {
         XCTAssertEqual(box.removeCount, 1)
         XCTAssertEqual(box.stopCount, 1)
         XCTAssertEqual(box.resetCount, 1)
+    }
+}
+
+final class EngineFailureTests: XCTestCase {
+    func testEngineStartFailureMapsToAudioEngineFailure() async throws {
+        let box = ThreadSafeEngineBox(
+            startError: NSError(domain: "AudioEngineTests", code: 7)
+        )
+        let service = AVAudioCaptureService(
+            authorizationStatusProvider: { .authorized },
+            engineDriver: .testStub(box: box),
+            resamplerFactory: { rate, logger in
+                try AudioResampler(inputSampleRate: rate, logger: logger)
+            }
+        )
+
+        do {
+            _ = try await service.start()
+            XCTFail("Expected audioEngineFailure")
+        } catch let error as SeshatError {
+            XCTAssertEqual(error, .audioEngineFailure)
+        }
     }
 }
