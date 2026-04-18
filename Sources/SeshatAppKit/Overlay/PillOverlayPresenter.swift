@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import SeshatCore
 
@@ -6,10 +7,25 @@ import SeshatCore
 public final class PillOverlayPresenter {
     private let model: PillOverlayViewModel
     private var panel: NSPanel?
+    private var visibilityCancellable: AnyCancellable?
     private let panelSize = NSSize(width: 160, height: 40)
 
     public init(model: PillOverlayViewModel) {
         self.model = model
+        visibilityCancellable = model.$visibility.sink { [weak self] visibility in
+            guard let self else {
+                return
+            }
+
+            switch visibility {
+            case .hidden:
+                hide()
+            case .recording, .transcribing:
+                if !isVisible {
+                    show()
+                }
+            }
+        }
     }
 
     public var isVisible: Bool {
