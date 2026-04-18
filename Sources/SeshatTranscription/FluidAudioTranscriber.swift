@@ -62,12 +62,17 @@ public actor FluidAudioTranscriber: Transcribing {
         let modelDirectory = Self.modelRootDirectory(base: modelsDirectory)
 
         if !Self.modelsExist(in: modelDirectory) {
-            _ = try await downloader.ensureModelAvailable(
-                at: modelDirectory,
-                progress: { snapshot in
-                    Task { await self.recordDownloadProgress(snapshot) }
-                }
-            )
+            do {
+                _ = try await downloader.ensureModelAvailable(
+                    at: modelDirectory,
+                    progress: { snapshot in
+                        Task { await self.recordDownloadProgress(snapshot) }
+                    }
+                )
+            } catch {
+                logError("Model download failed", error: error)
+                throw SeshatError.modelDownloadFailure
+            }
         }
 
         try await inference.loadModel(from: modelDirectory)
@@ -135,6 +140,11 @@ private final class DownloadProgressBroadcaster: @unchecked Sendable {
 }
 
 private extension FluidAudioTranscriber {
+    func logError(_ message: String, error: Error) {
+        logger.error("\(message): \(error.localizedDescription)", error: error)
+        logSink?("error", "\(message): \(error.localizedDescription)")
+    }
+
     func recordDownloadProgress(_ snapshot: ModelDownloadProgress) {
         let current = progressBroadcaster.currentSnapshot
         let normalized = normalizedProgress(snapshot, current: current)
