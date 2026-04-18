@@ -11,15 +11,21 @@ import SwiftUI
 /// signal.
 ///
 /// ## Parameters
-/// * `isAnimating` — when `true`, the wave's phase animates across
-///   a 1.2-second loop. When `false`, the phase eases back to zero
-///   over 300ms (used when transitioning out of the recording state).
+/// * `isAnimating` — when `true`, phase is driven by
+///   `TimelineView(.animation)` at ~30 fps, looping over a 1.2-second
+///   period. When `false`, the canvas renders once at phase 0.
+///
+/// `Canvas` does NOT automatically redraw across implicit
+/// (`withAnimation`) interpolation of a `@State` it reads. An explicit
+/// timeline driver is required to cause per-frame re-execution of the
+/// draw closure; `WaveformView` uses the same pattern for its
+/// audio-driven render.
 @MainActor
 public struct SineWaveView: View {
     public let isAnimating: Bool
     public let tint: Color
 
-    @State private var phase: Double = 0
+    private static let loopPeriod: Double = 1.2
 
     public init(isAnimating: Bool, tint: Color) {
         self.isAnimating = isAnimating
@@ -27,6 +33,17 @@ public struct SineWaveView: View {
     }
 
     public var body: some View {
+        if isAnimating {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                waveCanvas(phase: Self.phase(for: context.date))
+            }
+        } else {
+            waveCanvas(phase: 0)
+        }
+    }
+
+    @ViewBuilder
+    private func waveCanvas(phase: Double) -> some View {
         Canvas { context, size in
             var path = Path()
             let amplitude: CGFloat = 4
@@ -54,27 +71,12 @@ public struct SineWaveView: View {
                 )
             )
         }
-        .onAppear {
-            startAnimationIfNeeded()
-        }
-        .onChange(of: isAnimating) { _, newValue in
-            if newValue {
-                withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
-                    phase = 2 * .pi
-                }
-            } else {
-                withAnimation(.easeOut(duration: 0.3)) {
-                    phase = 0
-                }
-            }
-        }
     }
 
-    private func startAnimationIfNeeded() {
-        guard isAnimating else { return }
-        withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
-            phase = 2 * .pi
-        }
+    private static func phase(for date: Date) -> Double {
+        let t = date.timeIntervalSinceReferenceDate
+            .truncatingRemainder(dividingBy: loopPeriod)
+        return (t / loopPeriod) * 2 * .pi
     }
 }
 
