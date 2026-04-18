@@ -4,6 +4,7 @@ import XCTest
 @testable import SeshatAppKit
 
 /// Tests for `ActionButton` — the champagne "Continue" / "Save" style.
+@MainActor
 final class ActionButtonTests: XCTestCase {
     func testInitializerAcceptsTitleAndAction() {
         var didFire = false
