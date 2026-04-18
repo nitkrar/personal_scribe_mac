@@ -28,15 +28,30 @@ struct AppKitMicrophonePermissionRequester: MicrophonePermissionRequesting {
     }
 
     func requestAccess() async -> Bool {
-        switch statusProvider() {
-        case .authorized:
+        switch currentState() {
+        case .granted:
             true
-        case .denied, .restricted:
+        case .denied:
             false
-        case .notDetermined:
+        case .notYetRequested:
             await accessRequester()
+        }
+    }
+
+    func currentState() -> MicrophonePermissionState {
+        map(statusProvider())
+    }
+
+    private func map(_ status: AVAuthorizationStatus) -> MicrophonePermissionState {
+        switch status {
+        case .notDetermined:
+            .notYetRequested
+        case .authorized:
+            .granted
+        case .denied, .restricted:
+            .denied
         @unknown default:
-            false
+            .denied
         }
     }
 }
