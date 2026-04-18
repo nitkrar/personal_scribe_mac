@@ -3,8 +3,13 @@ import SwiftUI
 import SeshatCore
 import SeshatSession
 
+/// Injectable app shell: Plan 04 defines this struct with a required-parameter init so
+/// tests can construct it with fake dependencies. Plan 99 adds a separate `SeshatAppMain`
+/// type conforming to `App` with a parameterless init that reads from `AppComposition`.
+/// This type intentionally does NOT conform to `SwiftUI.App` — `App`'s `init()` requirement
+/// is incompatible with required-parameter init. Test code calls the init directly.
 @MainActor
-struct SeshatApp: App {
+struct SeshatApp {
     @StateObject private var model: MenuBarSceneModel
 
     init(

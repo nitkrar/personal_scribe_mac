@@ -15,7 +15,7 @@ final class MenuBarSceneModel: ObservableObject {
     private let clipboardWriter: @MainActor (String) -> Void
     private let openSettings: @MainActor () -> Void
     private let logger: SeshatLogger
-    private let onObservationCancelled: (() -> Void)?
+    private let onObservationCancelled: (@Sendable () -> Void)?
     private var observationTask: Task<Void, Never>?
     private(set) var observationTaskCreationCount = 0
 
@@ -25,7 +25,7 @@ final class MenuBarSceneModel: ObservableObject {
         permissionStateProvider: @escaping @MainActor () -> MicrophonePermissionState,
         clipboardWriter: @escaping @MainActor (String) -> Void,
         openSettings: @escaping @MainActor () -> Void,
-        onObservationCancelled: (() -> Void)? = nil,
+        onObservationCancelled: (@Sendable () -> Void)? = nil,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) {
         self.coordinator = coordinator

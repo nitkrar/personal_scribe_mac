@@ -357,9 +357,13 @@ private actor TestPermissionRequester: MicrophonePermissionRequesting {
     let result: Bool
     private var requestCount = 0
 
+    init(result: Bool) {
+        self.result = result
+    }
+
     func requestAccess() async -> Bool {
         requestCount += 1
-        result
+        return result
     }
 
     func callCount() -> Int {
