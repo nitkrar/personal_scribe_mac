@@ -14,6 +14,8 @@ public struct PasteInjector {
     private let pasteboard: NSPasteboard
     private let restoreDelay: TimeInterval
     private let scheduleRestore: RestoreScheduler
+    private let isAccessibilityTrusted: @MainActor () -> Bool
+    private let requestAccessibilityPrompt: @MainActor () -> Void
 
     public init(
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
@@ -25,12 +27,21 @@ public struct PasteInjector {
                     action()
                 }
             }
+        },
+        isAccessibilityTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
+        requestAccessibilityPrompt: @escaping @MainActor () -> Void = {
+            // Raw literal matches kAXTrustedCheckOptionPrompt; the CF-imported
+            // symbol is flagged non-Sendable under Swift 6 strict concurrency.
+            let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
         }
     ) {
         self.logger = logger
         self.pasteboard = pasteboard
         self.restoreDelay = restoreDelay
         self.scheduleRestore = scheduleRestore
+        self.isAccessibilityTrusted = isAccessibilityTrusted
+        self.requestAccessibilityPrompt = requestAccessibilityPrompt
     }
 
     public func paste(_ text: String) {
@@ -42,6 +53,12 @@ public struct PasteInjector {
         guard pasteboard.setString(text, forType: .string) else {
             logger.info("PasteInjector: failed to write transcript to pasteboard; restoring previous clipboard contents")
             restorePasteboard(savedItems)
+            return
+        }
+
+        guard isAccessibilityTrusted() else {
+            logger.info("PasteInjector: Accessibility permission not granted; triggering system prompt and leaving transcript on clipboard for manual Cmd+V")
+            requestAccessibilityPrompt()
             return
         }
 
@@ -73,11 +90,6 @@ public struct PasteInjector {
         up.flags = .maskCommand
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
-
-        if !AXIsProcessTrusted() {
-            logger.info("PasteInjector: Accessibility permission likely denied; synthetic paste may be ignored and transcript remains on the clipboard")
-            return false
-        }
 
         return true
     }
