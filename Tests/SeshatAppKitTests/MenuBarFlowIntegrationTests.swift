@@ -160,7 +160,9 @@ private final class HotkeyFireFlag: @unchecked Sendable {
 
 @MainActor
 private struct SilentPaster: PasteInjecting {
-    func paste(_ text: String) {}
+    func paste(_ text: String) -> PasteRoutingDecision {
+        .pasteAtCursor
+    }
 }
 
 @MainActor

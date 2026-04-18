@@ -4,8 +4,51 @@ import Foundation
 import SeshatCore
 
 @MainActor
+enum PasteRoutingDecision: Equatable, Sendable {
+    enum ClipboardOnlyReason: Equatable, Sendable {
+        case clipboardOnlyMode
+        case frontmostAppIsSeshat
+    }
+
+    case pasteAtCursor
+    case clipboardOnly(reason: ClipboardOnlyReason)
+}
+
+@MainActor
+protocol FrontmostAppProviding {
+    var frontmostApplicationBundleIdentifier: String? { get }
+}
+
+struct WorkspaceFrontmostAppProvider: FrontmostAppProviding {
+    var frontmostApplicationBundleIdentifier: String? {
+        NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    }
+}
+
+@MainActor
+private struct PasteRoutingDecider {
+    let defaults: UserDefaults
+    let frontmostAppProvider: any FrontmostAppProviding
+    let selfBundleIdentifier: String
+
+    func resolve() -> PasteRoutingDecision {
+        let pasteMode = SeshatPasteMode.resolve(from: defaults)
+        if pasteMode == .clipboardOnly {
+            return .clipboardOnly(reason: .clipboardOnlyMode)
+        }
+
+        if frontmostAppProvider.frontmostApplicationBundleIdentifier == selfBundleIdentifier {
+            return .clipboardOnly(reason: .frontmostAppIsSeshat)
+        }
+
+        return .pasteAtCursor
+    }
+}
+
+@MainActor
 protocol PasteInjecting {
-    func paste(_ text: String)
+    @discardableResult
+    func paste(_ text: String) -> PasteRoutingDecision
 }
 
 @MainActor
@@ -18,15 +61,23 @@ public struct PasteInjector: PasteInjecting {
 
     private let logger: SeshatLogger
     private let pasteboard: NSPasteboard
+    private let defaults: UserDefaults
+    private let frontmostAppProvider: any FrontmostAppProviding
+    private let selfBundleIdentifier: String
     private let restoreDelay: TimeInterval
     private let scheduleRestore: RestoreScheduler
     private let isAccessibilityTrusted: @MainActor () -> Bool
     private let requestAccessibilityPrompt: @MainActor () -> Void
     private let pasteShortcutPoster: @MainActor () -> Bool
 
-    public init(
+    private static let seshatBundleIdentifier = "com.nitkrar.seshat"
+
+    init(
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
         pasteboard: NSPasteboard = .general,
+        defaults: UserDefaults = .standard,
+        frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
+        selfBundleIdentifier: String = PasteInjector.seshatBundleIdentifier,
         restoreDelay: TimeInterval = 0.25,
         scheduleRestore: @escaping RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -46,6 +97,9 @@ public struct PasteInjector: PasteInjecting {
     ) {
         self.logger = logger
         self.pasteboard = pasteboard
+        self.defaults = defaults
+        self.frontmostAppProvider = frontmostAppProvider
+        self.selfBundleIdentifier = selfBundleIdentifier
         self.restoreDelay = restoreDelay
         self.scheduleRestore = scheduleRestore
         self.isAccessibilityTrusted = isAccessibilityTrusted
@@ -59,6 +113,9 @@ public struct PasteInjector: PasteInjecting {
     static func live(
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
         pasteboard: NSPasteboard = .general,
+        defaults: UserDefaults = .standard,
+        frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
+        selfBundleIdentifier: String = PasteInjector.seshatBundleIdentifier,
         restoreDelay: TimeInterval = 0.25,
         scheduleRestore: @escaping RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -77,6 +134,9 @@ public struct PasteInjector: PasteInjecting {
         PasteInjector(
             logger: logger,
             pasteboard: pasteboard,
+            defaults: defaults,
+            frontmostAppProvider: frontmostAppProvider,
+            selfBundleIdentifier: selfBundleIdentifier,
             restoreDelay: restoreDelay,
             scheduleRestore: scheduleRestore,
             isAccessibilityTrusted: isAccessibilityTrusted,
@@ -85,8 +145,15 @@ public struct PasteInjector: PasteInjecting {
         )
     }
 
-    public func paste(_ text: String) {
-        guard !text.isEmpty else { return }
+    @discardableResult
+    func paste(_ text: String) -> PasteRoutingDecision {
+        guard !text.isEmpty else { return .pasteAtCursor }
+
+        let route = PasteRoutingDecider(
+            defaults: defaults,
+            frontmostAppProvider: frontmostAppProvider,
+            selfBundleIdentifier: selfBundleIdentifier
+        ).resolve()
 
         let savedItems = savePasteboard()
         pasteboard.clearContents()
@@ -94,16 +161,21 @@ public struct PasteInjector: PasteInjecting {
         guard pasteboard.setString(text, forType: .string) else {
             logger.info("PasteInjector: failed to write transcript to pasteboard; restoring previous clipboard contents")
             restorePasteboard(savedItems)
-            return
+            return route
+        }
+
+        if case .clipboardOnly(let reason) = route {
+            logger.info("PasteInjector: leaving transcript on clipboard (\(reason))")
+            return route
         }
 
         guard isAccessibilityTrusted() else {
             logger.info("PasteInjector: Accessibility permission not granted; triggering system prompt and leaving transcript on clipboard for manual Cmd+V")
             requestAccessibilityPrompt()
-            return
+            return route
         }
 
-        guard pasteShortcutPoster() else { return }
+        guard pasteShortcutPoster() else { return route }
 
         scheduleRestore(restoreDelay) { [pasteboard] in
             pasteboard.clearContents()
@@ -111,6 +183,8 @@ public struct PasteInjector: PasteInjecting {
                 pasteboard.writeObjects(savedItems)
             }
         }
+
+        return route
     }
 
     @usableFromInline

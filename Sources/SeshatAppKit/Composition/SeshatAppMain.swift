@@ -53,7 +53,7 @@ struct SeshatAppMain: App {
             },
             clipboardWriter: clipboardWriter,
             pasteInjector: { text in
-                pasteInjector.paste(text)
+                _ = pasteInjector.paste(text)
             },
             openSettings: openSettings
         )

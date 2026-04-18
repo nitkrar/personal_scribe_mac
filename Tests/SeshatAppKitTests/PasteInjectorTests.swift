@@ -5,8 +5,16 @@ import SeshatCore
 
 @MainActor
 final class PasteInjectorTests: XCTestCase {
+    private let suiteName = "SeshatTestsPasteInjector"
+
     private func makePasteboard() -> NSPasteboard {
         NSPasteboard(name: NSPasteboard.Name(rawValue: "seshat.test.\(UUID().uuidString)"))
+    }
+
+    private func isolatedDefaults() -> UserDefaults {
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
     }
 
     func testPromptsAccessibilityWhenNotTrustedAndLeavesTranscriptOnClipboard() {
@@ -54,6 +62,64 @@ final class PasteInjectorTests: XCTestCase {
 
         XCTAssertEqual(promptCount, 0)
         XCTAssertEqual(shortcutPostCount, 1)
+    }
+
+    func testPasteReturnsClipboardOnlyWhenModeIsClipboardOnly() {
+        let defaults = isolatedDefaults()
+        SeshatPasteMode.clipboardOnly.persist(to: defaults)
+        let pasteboard = makePasteboard()
+        var shortcutPostCount = 0
+        let injector = PasteInjector(
+            logger: SeshatLogger(category: SeshatLogCategory.ui),
+            pasteboard: pasteboard,
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            restoreDelay: 0.01,
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in
+                shortcutPostCount += 1
+                return true
+            }
+        )
+
+        let route = injector.paste("clipboard only")
+
+        XCTAssertEqual(route, .clipboardOnly(reason: .clipboardOnlyMode))
+        XCTAssertEqual(shortcutPostCount, 0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "clipboard only")
+    }
+
+    func testPasteReturnsClipboardOnlyWhenFrontmostAppIsSeshat() {
+        let defaults = isolatedDefaults()
+        SeshatPasteMode.pasteAtCursor.persist(to: defaults)
+        let pasteboard = makePasteboard()
+        var shortcutPostCount = 0
+        let injector = PasteInjector(
+            logger: SeshatLogger(category: SeshatLogCategory.ui),
+            pasteboard: pasteboard,
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.nitkrar.seshat"
+            ),
+            restoreDelay: 0.01,
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in
+                shortcutPostCount += 1
+                return true
+            }
+        )
+
+        let route = injector.paste("self frontmost")
+
+        XCTAssertEqual(route, .clipboardOnly(reason: .frontmostAppIsSeshat))
+        XCTAssertEqual(shortcutPostCount, 0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "self frontmost")
     }
 
     func testEmptyTranscriptIsNoop() {
@@ -112,4 +178,9 @@ final class PasteInjectorTests: XCTestCase {
         scheduledAction?()
         XCTAssertEqual(pasteboard.string(forType: .string), "original")
     }
+}
+
+@MainActor
+private struct FakeFrontmostAppProvider: FrontmostAppProviding {
+    let frontmostApplicationBundleIdentifier: String?
 }
