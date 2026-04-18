@@ -39,6 +39,18 @@ public enum AppComposition {
     @MainActor
     public static let hotkeyMonitor: GlobalHotkeyMonitor = makeGlobalHotkeyMonitor()
 
+    @MainActor
+    public static func prewarmTranscription() {
+        Task.detached(priority: .utility) {
+            let coordinator = await AppComposition.sessionCoordinator
+            do {
+                try await coordinator.prepareTranscriber()
+            } catch {
+                _ = error
+            }
+        }
+    }
+
     public static func makeMicrophonePermissionRequester() -> any MicrophonePermissionRequesting {
         AppKitMicrophonePermissionRequester()
     }
