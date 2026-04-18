@@ -15,50 +15,56 @@ public actor FluidAudioTranscriber: Transcribing {
     private let logger: SeshatLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
     private let progressBroadcaster: DownloadProgressBroadcaster
+    private let descriptor: ModelDescriptor
     private let signposter = OSSignposter(subsystem: SeshatLogger.subsystem, category: "prepare")
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
 
     public init(
+        descriptor: ModelDescriptor = ModelRegistry.parakeetTDT06Bv2,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.transcription)
     ) {
-        self.downloader = PrivateModelDownloader()
+        self.downloader = PrivateModelDownloader(descriptor: descriptor)
         self.inference = PrivateFluidAudioInferenceClient()
         self.logger = logger
         self.logSink = nil
         self.progressBroadcaster = DownloadProgressBroadcaster()
+        self.descriptor = descriptor
     }
 
     init(
         downloader: any ModelDownloading,
         inference: any FluidAudioInferencing,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.transcription),
-        logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
+        logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil,
+        descriptor: ModelDescriptor = ModelRegistry.parakeetTDT06Bv2
     ) {
         self.downloader = downloader
         self.inference = inference
         self.logger = logger
         self.logSink = logSink
         self.progressBroadcaster = DownloadProgressBroadcaster()
+        self.descriptor = descriptor
     }
 
-    static func modelRootDirectory(base: URL) -> URL {
-        base.appendingPathComponent(ParakeetArtifact.modelDirectoryName, isDirectory: true)
+    public var activeModelId: String {
+        descriptor.id
     }
 
-    static func stagingDirectory(base: URL) -> URL {
-        base.appendingPathComponent("\(ParakeetArtifact.modelDirectoryName)-staging", isDirectory: true)
+    static func stagingDirectory(base: URL, descriptor: ModelDescriptor) -> URL {
+        base.appendingPathComponent("\(descriptor.id)-staging", isDirectory: true)
     }
 
-    static func requiredModelPaths(in directory: URL) -> [URL] {
-        ParakeetArtifact.requiredRelativePaths.map {
+    static func requiredModelPaths(in directory: URL, descriptor: ModelDescriptor) -> [URL] {
+        descriptor.requiredRelativePaths.map {
             directory.appendingPathComponent($0, isDirectory: false)
         }
     }
 
-    static func modelsExist(in directory: URL) -> Bool {
+    static func modelsExist(in directory: URL, descriptor: ModelDescriptor) -> Bool {
         let fileManager = FileManager.default
-        return requiredModelPaths(in: directory).allSatisfy { fileManager.fileExists(atPath: $0.path) }
+        return requiredModelPaths(in: directory, descriptor: descriptor)
+            .allSatisfy { fileManager.fileExists(atPath: $0.path) }
     }
 
     public func prepare() async throws {
@@ -93,10 +99,9 @@ public actor FluidAudioTranscriber: Transcribing {
         let prepareState = signposter.beginInterval(prepareInterval)
         defer { signposter.endInterval(prepareInterval, prepareState) }
 
-        let modelsDirectory = try SeshatConfig.modelsDirectory()
-        let modelDirectory = Self.modelRootDirectory(base: modelsDirectory)
+        let modelDirectory = try modelDirectory()
 
-        if !Self.modelArtifactsAreValid(in: modelDirectory) {
+        if !Self.modelArtifactsAreValid(in: modelDirectory, descriptor: descriptor) {
             try await ensureValidDownloadedModel(at: modelDirectory)
         }
 
@@ -232,10 +237,17 @@ private final class DownloadProgressBroadcaster: @unchecked Sendable {
 }
 
 private extension FluidAudioTranscriber {
+    func modelDirectory() throws -> URL {
+        try SeshatConfig.directory(for: descriptor)
+    }
+
     func ensureValidDownloadedModel(at modelDirectory: URL) async throws {
         let fileManager = FileManager.default
         let progressBroadcaster = self.progressBroadcaster
-        let stagingDirectory = Self.stagingDirectory(base: modelDirectory.deletingLastPathComponent())
+        let stagingDirectory = Self.stagingDirectory(
+            base: modelDirectory.deletingLastPathComponent(),
+            descriptor: descriptor
+        )
 
         for attempt in 0..<2 {
             do {
@@ -248,7 +260,7 @@ private extension FluidAudioTranscriber {
                     }
                 )
 
-                guard Self.modelArtifactsAreValid(in: modelDirectory) else {
+                guard Self.modelArtifactsAreValid(in: modelDirectory, descriptor: descriptor) else {
                     throw ModelArtifactValidationError.invalidArtifacts
                 }
 
@@ -287,14 +299,15 @@ private extension FluidAudioTranscriber {
 }
 
 private extension FluidAudioTranscriber {
-    static func modelArtifactsAreValid(in directory: URL) -> Bool {
-        guard modelsExist(in: directory) else {
+    static func modelArtifactsAreValid(in directory: URL, descriptor: ModelDescriptor) -> Bool {
+        guard modelsExist(in: directory, descriptor: descriptor) else {
             return false
         }
 
         let fileManager = FileManager.default
 
-        for path in requiredModelPaths(in: directory) where path.lastPathComponent == "coremldata.bin" {
+        for path in requiredModelPaths(in: directory, descriptor: descriptor)
+        where path.lastPathComponent == "coremldata.bin" {
             guard
                 let attributes = try? fileManager.attributesOfItem(atPath: path.path),
                 let size = attributes[.size] as? NSNumber,

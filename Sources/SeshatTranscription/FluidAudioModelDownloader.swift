@@ -1,28 +1,14 @@
 import Foundation
 import SeshatCore
 
-enum ParakeetArtifact {
-    static let repository = "FluidInference/parakeet-tdt-0.6b-v2-coreml"
-    static let modelDirectoryName = "parakeet-tdt-0.6b-v2"
-    static let modelRevision = "ee09c569f73759e6d44c9bd16766f477b2b36d39"
-    static let requiredRelativePaths: [String] = [
-        "Preprocessor.mlmodelc/coremldata.bin",
-        "Encoder.mlmodelc/coremldata.bin",
-        "Decoder.mlmodelc/coremldata.bin",
-        "JointDecision.mlmodelc/coremldata.bin",
-        "parakeet_vocab.json",
-    ]
-
-    static func resolveURL(for relativePath: String) -> URL {
-        URL(
-            string: "https://huggingface.co/\(repository)/resolve/\(modelRevision)/\(relativePath)"
-        )!
-    }
-}
-
 internal struct PrivateModelDownloader: ModelDownloading {
+    private let descriptor: ModelDescriptor
     private let session: URLSession = .shared
     private let clock = ContinuousClock()
+
+    init(descriptor: ModelDescriptor) {
+        self.descriptor = descriptor
+    }
 
     func ensureModelAvailable(
         at directory: URL,
@@ -30,7 +16,10 @@ internal struct PrivateModelDownloader: ModelDownloading {
     ) async throws -> URL {
         let fileManager = FileManager.default
         let baseDirectory = directory.deletingLastPathComponent()
-        let stagingDirectory = FluidAudioTranscriber.stagingDirectory(base: baseDirectory)
+        let stagingDirectory = FluidAudioTranscriber.stagingDirectory(
+            base: baseDirectory,
+            descriptor: descriptor
+        )
 
         try? fileManager.removeItem(at: stagingDirectory)
         try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
@@ -38,13 +27,13 @@ internal struct PrivateModelDownloader: ModelDownloading {
         do {
             var completedBytes: Int64 = 0
 
-            for (index, relativePath) in ParakeetArtifact.requiredRelativePaths.enumerated() {
+            for (index, relativePath) in descriptor.requiredRelativePaths.enumerated() {
                 let destinationURL = stagingDirectory.appendingPathComponent(relativePath, isDirectory: false)
                 try fileManager.createDirectory(
                     at: destinationURL.deletingLastPathComponent(),
                     withIntermediateDirectories: true
                 )
-                let request = URLRequest(url: ParakeetArtifact.resolveURL(for: relativePath))
+                let request = URLRequest(url: descriptor.resolveURL(for: relativePath))
                 let (bytes, response) = try await session.bytes(for: request)
 
                 guard
@@ -68,7 +57,7 @@ internal struct PrivateModelDownloader: ModelDownloading {
                         min(Double(receivedForFile) / Double($0), 1)
                     } ?? 0
                     let overallFraction = min(
-                        (Double(index) + fileFraction) / Double(ParakeetArtifact.requiredRelativePaths.count),
+                        (Double(index) + fileFraction) / Double(descriptor.requiredRelativePaths.count),
                         1
                     )
 
@@ -90,7 +79,7 @@ internal struct PrivateModelDownloader: ModelDownloading {
                 progress(
                     .init(
                         phase: .downloading,
-                        fractionCompleted: Double(index + 1) / Double(ParakeetArtifact.requiredRelativePaths.count),
+                        fractionCompleted: Double(index + 1) / Double(descriptor.requiredRelativePaths.count),
                         receivedBytes: completedBytes,
                         expectedBytes: expectedBytes
                     )

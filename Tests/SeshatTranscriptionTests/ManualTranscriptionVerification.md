@@ -8,7 +8,7 @@ Verify that `FluidAudioTranscriber` downloads the pinned Parakeet v2 model on fi
 - macOS 14+
 - Working network connection
 - `SeshatConfig.testingBaseDirectoryOverride == nil`
-- `ParakeetArtifact.modelRevision` is a real 40-character SHA
+- `ModelRegistry.parakeetTDT06Bv2.revision` is a real 40-character SHA
 
 ## Procedure
 1. Remove any prior model under `~/Library/Application Support/Seshat/models/parakeet-tdt-0.6b-v2`.
