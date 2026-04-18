@@ -111,6 +111,7 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
             prepareTranscriber: {},
             sleep: { _ in }
         )
+        let defaults = makeCompletedOnboardingDefaults()
 
         _ = SeshatAppMain(
             coordinator: sessionCoordinator,
@@ -119,6 +120,7 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
             pasteInjector: SilentPaster(),
             openSettings: {},
             overlayPanelBuilder: NoOpPanelBuilder(),
+            defaults: defaults,
             startupCoordinator: startupCoordinator
         )
 
@@ -136,6 +138,14 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
             flag.hasFired,
             "startupCoordinator.start() was never invoked after SeshatAppMain.init()."
         )
+    }
+
+    private func makeCompletedOnboardingDefaults() -> UserDefaults {
+        let suiteName = "MenuBarFlowIntegrationTests.\(#function)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        OnboardingState.completed.persist(to: defaults)
+        return defaults
     }
 }
 

@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 import SeshatCore
 import SeshatSession
@@ -13,6 +14,7 @@ struct SeshatAppMain: App {
     @StateObject private var sceneModel: MenuBarSceneModel
     @StateObject private var pillController: PillOverlayController
     @StateObject private var statusItemController: StatusItemControllerHost
+    @StateObject private var onboardingController: OnboardingWindowControllerHost
 
     init() {
         self.init(
@@ -22,6 +24,9 @@ struct SeshatAppMain: App {
             pasteInjector: PasteInjector(),
             openSettings: SeshatAppMain.defaultOpenSettings,
             overlayPanelBuilder: AppKitPillOverlayPanelBuilder(),
+            defaults: .standard,
+            inputMonitoringProbe: IOHIDPermissionProbe(),
+            isAccessibilityTrusted: { AXIsProcessTrusted() },
             startupCoordinator: nil
         )
     }
@@ -33,11 +38,28 @@ struct SeshatAppMain: App {
         pasteInjector: any PasteInjecting = PasteInjector(),
         openSettings: @escaping @MainActor () -> Void = SeshatAppMain.defaultOpenSettings,
         overlayPanelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
+        defaults: UserDefaults = .standard,
+        inputMonitoringProbe: any PermissionProbing = IOHIDPermissionProbe(),
+        isAccessibilityTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
         startupCoordinator: AppStartupCoordinator? = nil
     ) {
         let startupCoordinator = startupCoordinator
             ?? AppComposition.makeStartupCoordinator(coordinator: coordinator)
         var clipboardOnlyNotice: (@MainActor () -> Void)?
+        let microphoneStateProvider: @MainActor () -> MicrophonePermissionState = {
+            if let permissionRequester = permissionRequester as? AppKitMicrophonePermissionRequester {
+                return permissionRequester.currentState()
+            }
+
+            return .notYetRequested
+        }
+        let onboardingControllerHost = OnboardingWindowControllerHost(
+            defaults: defaults,
+            startupCoordinator: startupCoordinator,
+            microphoneStateProvider: microphoneStateProvider,
+            inputMonitoringProbe: inputMonitoringProbe,
+            isAccessibilityTrusted: isAccessibilityTrusted
+        )
 
         self.coordinator = coordinator
         self.permissionRequester = permissionRequester
@@ -45,18 +67,18 @@ struct SeshatAppMain: App {
         let sceneModel = MenuBarSceneModel(
             coordinator: coordinator,
             permissionRequester: permissionRequester,
-            permissionStateProvider: {
-                if let permissionRequester = permissionRequester as? AppKitMicrophonePermissionRequester {
-                    return permissionRequester.currentState()
-                }
-
-                return .notYetRequested
-            },
+            permissionStateProvider: microphoneStateProvider,
             clipboardWriter: clipboardWriter,
             pasteInjector: { text in
                 pasteInjector.paste(text)
             },
             openSettings: openSettings,
+            areCriticalPermissionsGranted: {
+                onboardingControllerHost.areCriticalPermissionsGranted
+            },
+            openOnboardingRequested: {
+                onboardingControllerHost.presentPermissionsFallback()
+            },
             onClipboardOnlyCopy: {
                 clipboardOnlyNotice?()
             }
@@ -67,6 +89,10 @@ struct SeshatAppMain: App {
             audioLevelPublisher: nil,
             visibilityMode: PillVisibilityMode.resolve(),
             onTap: {
+                guard onboardingControllerHost.requestInteractionAccess() else {
+                    return
+                }
+
                 Task { await coordinator.toggle() }
             },
             panelBuilder: overlayPanelBuilder
@@ -81,9 +107,12 @@ struct SeshatAppMain: App {
         _statusItemController = StateObject(
             wrappedValue: StatusItemControllerHost(sceneModel: sceneModel)
         )
+        _onboardingController = StateObject(
+            wrappedValue: onboardingControllerHost
+        )
 
         sceneModel.startObserving()
-        startupCoordinator.start()
+        onboardingControllerHost.start()
     }
 
     var body: some Scene {

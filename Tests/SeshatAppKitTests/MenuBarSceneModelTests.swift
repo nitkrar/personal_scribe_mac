@@ -106,9 +106,10 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(requestCount, 1)
     }
 
-    func testHandleRecordButtonTapDoesNothingWhenPermissionDenied() async throws {
+    func testHandleRecordButtonTapRequestsOnboardingInsteadOfTogglingWhenPermissionDenied() async throws {
         let coordinator = try makeCoordinator()
         let requester = TestPermissionRequester(result: true)
+        var openOnboardingRequestCount = 0
         let model = MenuBarSceneModel(
             coordinator: coordinator,
             permissionRequester: requester,
@@ -116,6 +117,9 @@ final class MenuBarSceneModelTests: XCTestCase {
             clipboardWriter: { _ in },
             pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
+            openOnboardingRequested: {
+                openOnboardingRequestCount += 1
+            },
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
 
@@ -125,6 +129,62 @@ final class MenuBarSceneModelTests: XCTestCase {
         let requestCount = await requester.callCount()
         XCTAssertEqual(sessionState, .idle)
         XCTAssertEqual(requestCount, 0)
+        XCTAssertEqual(openOnboardingRequestCount, 1)
+    }
+
+    func testHandleRecordButtonTapRequestsOnboardingWhenCriticalPermissionGateFails() async throws {
+        let coordinator = try makeCoordinator()
+        let requester = TestPermissionRequester(result: true)
+        var openOnboardingRequestCount = 0
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: requester,
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
+            openSettings: {},
+            areCriticalPermissionsGranted: { false },
+            openOnboardingRequested: {
+                openOnboardingRequestCount += 1
+            },
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        await model.handleRecordButtonTap()
+
+        let sessionState = await coordinator.state()
+        let requestCount = await requester.callCount()
+        XCTAssertEqual(sessionState, .idle)
+        XCTAssertEqual(requestCount, 0)
+        XCTAssertEqual(openOnboardingRequestCount, 1)
+    }
+
+    func testHandleRecordButtonTapRequestsOnboardingWhenOnboardingIncompleteAndMicrophoneNotYetRequested() async throws {
+        let coordinator = try makeCoordinator()
+        let requester = TestPermissionRequester(result: true)
+        var openOnboardingRequestCount = 0
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: requester,
+            permissionStateProvider: { .notYetRequested },
+            clipboardWriter: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
+            openSettings: {},
+            areCriticalPermissionsGranted: { false },
+            openOnboardingRequested: {
+                openOnboardingRequestCount += 1
+            },
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        await model.handleRecordButtonTap()
+
+        let sessionState = await coordinator.state()
+        let requestCount = await requester.callCount()
+        XCTAssertEqual(model.permissionState, .notYetRequested)
+        XCTAssertEqual(sessionState, .idle)
+        XCTAssertEqual(requestCount, 0)
+        XCTAssertEqual(openOnboardingRequestCount, 1)
     }
 
     func testStartObservingPublishesRecordingAfterCoordinatorToggle() async throws {

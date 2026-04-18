@@ -16,6 +16,8 @@ final class MenuBarSceneModel: ObservableObject {
     private let clipboardWriter: @MainActor (String) -> Void
     private let pasteInjector: @MainActor (String) -> PasteRoutingDecision
     private let openSettings: @MainActor () -> Void
+    private let areCriticalPermissionsGranted: @MainActor () -> Bool
+    private let openOnboardingRequested: @MainActor () -> Void
     private let onClipboardOnlyCopy: @MainActor () -> Void
     private let logger: SeshatLogger
     private let onObservationCancelled: (@Sendable () -> Void)?
@@ -31,6 +33,8 @@ final class MenuBarSceneModel: ObservableObject {
         clipboardWriter: @escaping @MainActor (String) -> Void,
         pasteInjector: @escaping @MainActor (String) -> PasteRoutingDecision = { _ in .pasteAtCursor },
         openSettings: @escaping @MainActor () -> Void,
+        areCriticalPermissionsGranted: @escaping @MainActor () -> Bool = { true },
+        openOnboardingRequested: @escaping @MainActor () -> Void = {},
         onClipboardOnlyCopy: @escaping @MainActor () -> Void = {},
         onObservationCancelled: (@Sendable () -> Void)? = nil,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
@@ -41,6 +45,8 @@ final class MenuBarSceneModel: ObservableObject {
         self.clipboardWriter = clipboardWriter
         self.pasteInjector = pasteInjector
         self.openSettings = openSettings
+        self.areCriticalPermissionsGranted = areCriticalPermissionsGranted
+        self.openOnboardingRequested = openOnboardingRequested
         self.onClipboardOnlyCopy = onClipboardOnlyCopy
         self.onObservationCancelled = onObservationCancelled
         self.logger = logger
@@ -93,6 +99,12 @@ final class MenuBarSceneModel: ObservableObject {
     func handleRecordButtonTap() async {
         logger.info("Record button tapped")
 
+        guard areCriticalPermissionsGranted() else {
+            logger.info("Record button tapped while critical permissions are incomplete; reopening onboarding.")
+            openOnboardingRequested()
+            return
+        }
+
         switch permissionState {
         case .granted:
             await coordinator.toggle()
@@ -100,11 +112,14 @@ final class MenuBarSceneModel: ObservableObject {
             let granted = await permissionRequester.requestAccess()
             permissionState = granted ? .granted : .denied
             logger.info("Microphone permission request completed: \(granted)")
-            if granted {
+            if granted, areCriticalPermissionsGranted() {
                 await coordinator.toggle()
+            } else if !granted || !areCriticalPermissionsGranted() {
+                openOnboardingRequested()
             }
         case .denied:
-            logger.info("Record button tapped while permission denied; ignoring.")
+            logger.info("Record button tapped while permission denied; reopening onboarding.")
+            openOnboardingRequested()
         }
     }
 

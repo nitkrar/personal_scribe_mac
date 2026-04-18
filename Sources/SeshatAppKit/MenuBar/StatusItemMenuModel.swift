@@ -73,6 +73,10 @@ struct StatusItemMenuModel: Equatable {
         let hasMicWarning = (micPermission == .denied)
         let hasImWarning = (inputMonitoringPermission == .denied)
 
+        if hasMicWarning || hasImWarning {
+            items.append(.header(title: "Permissions needed before recording"))
+        }
+
         if hasMicWarning {
             items.append(.action(ActionItem(
                 id: .openMicrophoneSystemSettings,

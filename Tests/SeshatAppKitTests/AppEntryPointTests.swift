@@ -13,6 +13,7 @@ final class AppEntryPointTests: XCTestCase {
             prepareTranscriber: {},
             sleep: { _ in }
         )
+        let defaults = makeCompletedOnboardingDefaults()
         let entry = SeshatAppMain(
             coordinator: coordinator,
             permissionRequester: EntryPointPermissionRequester(),
@@ -20,12 +21,21 @@ final class AppEntryPointTests: XCTestCase {
             pasteInjector: SilentPaster(),
             openSettings: {},
             overlayPanelBuilder: NoOpPanelBuilder(),
+            defaults: defaults,
             startupCoordinator: startupCoordinator
         )
 
         XCTAssertTrue(entry.coordinator === coordinator)
         let state = await entry.coordinator.state()
         XCTAssertEqual(state, .idle)
+    }
+
+    private func makeCompletedOnboardingDefaults() -> UserDefaults {
+        let suiteName = "AppEntryPointTests.\(#function)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        OnboardingState.completed.persist(to: defaults)
+        return defaults
     }
 }
 

@@ -71,36 +71,38 @@ final class StatusItemMenuModelTests: XCTestCase {
 
     // MARK: - Permission warnings prepended
 
-    func testDeniedMicrophonePrependsWarningItem() {
+    func testDeniedMicrophonePrependsPermissionsNoteAndWarningItem() {
         let model = StatusItemMenuModel.make(
             sessionState: .idle,
             micPermission: .denied,
             inputMonitoringPermission: .granted
         )
 
-        guard case let .action(first) = model.items[0] else {
-            return XCTFail("Expected first item to be a warning action")
+        assertHeader(model.items[0], "Permissions needed before recording")
+        guard case let .action(firstWarning) = model.items[1] else {
+            return XCTFail("Expected second item to be a warning action")
         }
-        XCTAssertEqual(first.id, .openMicrophoneSystemSettings)
-        XCTAssertTrue(first.title.contains("Microphone"))
-        XCTAssertTrue(first.isEnabled)
-        XCTAssertEqual(model.items[1], .separator)
+        XCTAssertEqual(firstWarning.id, .openMicrophoneSystemSettings)
+        XCTAssertTrue(firstWarning.title.contains("Microphone"))
+        XCTAssertTrue(firstWarning.isEnabled)
+        XCTAssertEqual(model.items[2], .separator)
     }
 
-    func testDeniedInputMonitoringPrependsWarningItem() {
+    func testDeniedInputMonitoringPrependsPermissionsNoteAndWarningItem() {
         let model = StatusItemMenuModel.make(
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .denied
         )
 
-        guard case let .action(first) = model.items[0] else {
-            return XCTFail("Expected first item to be a warning action")
+        assertHeader(model.items[0], "Permissions needed before recording")
+        guard case let .action(firstWarning) = model.items[1] else {
+            return XCTFail("Expected second item to be a warning action")
         }
-        XCTAssertEqual(first.id, .openInputMonitoringSystemSettings)
-        XCTAssertTrue(first.title.contains("Input Monitoring"))
-        XCTAssertTrue(first.isEnabled)
-        XCTAssertEqual(model.items[1], .separator)
+        XCTAssertEqual(firstWarning.id, .openInputMonitoringSystemSettings)
+        XCTAssertTrue(firstWarning.title.contains("Input Monitoring"))
+        XCTAssertTrue(firstWarning.isEnabled)
+        XCTAssertEqual(model.items[2], .separator)
     }
 
     func testBothPermissionsDeniedPrependsBothWarningsInOrder() {
@@ -110,17 +112,19 @@ final class StatusItemMenuModelTests: XCTestCase {
             inputMonitoringPermission: .denied
         )
 
-        guard case let .action(first) = model.items[0] else {
+        assertHeader(model.items[0], "Permissions needed before recording")
+
+        guard case let .action(first) = model.items[1] else {
             return XCTFail("Expected first warning to be Microphone")
         }
         XCTAssertEqual(first.id, .openMicrophoneSystemSettings)
 
-        guard case let .action(second) = model.items[1] else {
+        guard case let .action(second) = model.items[2] else {
             return XCTFail("Expected second warning to be Input Monitoring")
         }
         XCTAssertEqual(second.id, .openInputMonitoringSystemSettings)
 
-        XCTAssertEqual(model.items[2], .separator)
+        XCTAssertEqual(model.items[3], .separator)
     }
 
     func testNotYetRequestedDoesNotPrependWarning() {
