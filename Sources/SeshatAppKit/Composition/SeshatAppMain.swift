@@ -15,6 +15,7 @@ struct SeshatAppMain: App {
     init() {
         let coordinator = AppComposition.sessionCoordinator
         let permissionRequester = AppComposition.makeMicrophonePermissionRequester()
+        let pasteInjector = PasteInjector()
 
         self.coordinator = coordinator
         self.permissionRequester = permissionRequester
@@ -32,6 +33,9 @@ struct SeshatAppMain: App {
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
                 pasteboard.setString(text, forType: .string)
+            },
+            pasteInjector: { text in
+                pasteInjector.paste(text)
             },
             openSettings: {
                 guard let url = URL(

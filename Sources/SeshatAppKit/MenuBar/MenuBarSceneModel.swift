@@ -14,11 +14,13 @@ final class MenuBarSceneModel: ObservableObject {
     private let permissionRequester: any MicrophonePermissionRequesting
     private let permissionStateProvider: @MainActor () -> MicrophonePermissionState
     private let clipboardWriter: @MainActor (String) -> Void
+    private let pasteInjector: @MainActor (String) -> Void
     private let openSettings: @MainActor () -> Void
     private let logger: SeshatLogger
     private let onObservationCancelled: (@Sendable () -> Void)?
     private var observationTask: Task<Void, Never>?
     private var downloadObservationTask: Task<Void, Never>?
+    private var lastAutoPastedTranscript: String?
     private(set) var observationTaskCreationCount = 0
 
     init(
@@ -26,6 +28,7 @@ final class MenuBarSceneModel: ObservableObject {
         permissionRequester: any MicrophonePermissionRequesting,
         permissionStateProvider: @escaping @MainActor () -> MicrophonePermissionState,
         clipboardWriter: @escaping @MainActor (String) -> Void,
+        pasteInjector: @escaping @MainActor (String) -> Void = { _ in },
         openSettings: @escaping @MainActor () -> Void,
         onObservationCancelled: (@Sendable () -> Void)? = nil,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
@@ -34,6 +37,7 @@ final class MenuBarSceneModel: ObservableObject {
         self.permissionRequester = permissionRequester
         self.permissionStateProvider = permissionStateProvider
         self.clipboardWriter = clipboardWriter
+        self.pasteInjector = pasteInjector
         self.openSettings = openSettings
         self.onObservationCancelled = onObservationCancelled
         self.logger = logger
@@ -69,6 +73,7 @@ final class MenuBarSceneModel: ObservableObject {
                     self.state = newState
                     if case .idle = newState {
                         self.lastResultText = lastResultText
+                        self.autoPasteTranscriptIfNeeded(lastResultText)
                     }
                 }
             }
@@ -116,6 +121,14 @@ final class MenuBarSceneModel: ObservableObject {
     func openMicrophonePrivacySettings() {
         logger.info("Opening microphone privacy settings")
         openSettings()
+    }
+
+    private func autoPasteTranscriptIfNeeded(_ transcript: String?) {
+        guard let transcript, !transcript.isEmpty else { return }
+        guard transcript != lastAutoPastedTranscript else { return }
+
+        lastAutoPastedTranscript = transcript
+        pasteInjector(transcript)
     }
 
     deinit {
