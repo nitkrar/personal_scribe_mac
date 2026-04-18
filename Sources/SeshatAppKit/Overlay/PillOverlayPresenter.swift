@@ -102,6 +102,7 @@ public final class PillOverlayPresenter {
     private let onTap: @MainActor () -> Void
     private var panel: DraggablePanel?
     private var visibilityCancellable: AnyCancellable?
+    private let diagnosticLogger = SeshatLogger(category: SeshatLogCategory.ui)
 
     /// Whether the presenter last asked the panel to show itself. Exposed
     /// for tests — NSPanel's real `isVisible` depends on AppKit runtime
@@ -125,6 +126,8 @@ public final class PillOverlayPresenter {
                 return
             }
 
+            diagnosticLogger.info("PillOverlayPresenter visibility-sink — visibility=\(visibility) isVisible=\(isVisible)")
+
             switch visibility {
             case .hidden:
                 hide()
@@ -142,12 +145,14 @@ public final class PillOverlayPresenter {
 
     public func show() {
         guard model.visibility != .hidden else {
+            diagnosticLogger.info("PillOverlayPresenter.show — redirecting to hide (visibility is .hidden)")
             hide()
             return
         }
 
         intendsToShow = true
 
+        let panelExisted = panel != nil
         let panel = panel ?? makePanel()
         self.panel = panel
 
@@ -156,11 +161,13 @@ public final class PillOverlayPresenter {
         }
 
         panel.orderFrontRegardless()
+        diagnosticLogger.info("PillOverlayPresenter.show — panelExisted=\(panelExisted) frame=\(panel.frame) isVisible=\(panel.isVisible)")
     }
 
     public func hide() {
         intendsToShow = false
         panel?.orderOut(nil)
+        diagnosticLogger.info("PillOverlayPresenter.hide — panel=\(panel == nil ? "nil" : "exists")")
     }
 
     private func makePanel() -> DraggablePanel {

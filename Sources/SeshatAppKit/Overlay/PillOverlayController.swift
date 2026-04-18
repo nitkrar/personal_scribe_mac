@@ -52,10 +52,17 @@ public final class PillOverlayController: ObservableObject {
         self.viewModel = viewModel
         self.presenter = PillOverlayPresenter(model: viewModel, onTap: onTap)
 
+        let diagnosticLogger = SeshatLogger(category: SeshatLogCategory.ui)
+        diagnosticLogger.info("PillOverlayController init — mode=\(visibilityMode)")
+
         Publishers
             .CombineLatest(statePublisher, preparationProgressPublisher)
+            .receive(on: DispatchQueue.main)
             .sink { [weak viewModel] state, progress in
-                viewModel?.apply(sessionState: state, preparationProgress: progress)
+                diagnosticLogger.info("PillOverlayController state-sink — state=\(state) progress=\(String(describing: progress))")
+                MainActor.assumeIsolated {
+                    viewModel?.apply(sessionState: state, preparationProgress: progress)
+                }
             }
             .store(in: &cancellables)
 

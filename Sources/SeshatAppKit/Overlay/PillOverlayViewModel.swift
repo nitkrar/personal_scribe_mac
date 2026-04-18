@@ -62,11 +62,15 @@ public final class PillOverlayViewModel: ObservableObject {
     ) {
         lastSessionState = sessionState
         lastPreparationProgress = preparationProgress
-        visibility = computeVisibility(
+        let newVisibility = computeVisibility(
             mode: visibilityMode,
             sessionState: sessionState,
             preparationProgress: preparationProgress
         )
+        SeshatLogger(category: SeshatLogCategory.ui).info(
+            "PillOverlayViewModel.apply — state=\(sessionState) progress=\(String(describing: preparationProgress)) mode=\(visibilityMode) → visibility=\(newVisibility)"
+        )
+        visibility = newVisibility
     }
 
     /// User flipped the visibility mode via Settings / menu bar; re-derive
