@@ -4,7 +4,14 @@ import SeshatCore
 @testable import SeshatTranscription
 
 final class FluidAudioTranscriberAlreadyDownloadedTests: XCTestCase {
+    private static let overrideLock = NSLock()
+
     private var testRoot: URL!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        Self.overrideLock.lock()
+    }
 
     override func setUp() async throws {
         try await super.setUp()
@@ -26,6 +33,11 @@ final class FluidAudioTranscriberAlreadyDownloadedTests: XCTestCase {
         SeshatConfig.testingBaseDirectoryOverride = nil
         try? FileManager.default.removeItem(at: testRoot)
         try await super.tearDown()
+    }
+
+    override func tearDownWithError() throws {
+        Self.overrideLock.unlock()
+        try super.tearDownWithError()
     }
 
     func testPrepareSkipsDownloadWhenModelAlreadyOnDisk() async throws {

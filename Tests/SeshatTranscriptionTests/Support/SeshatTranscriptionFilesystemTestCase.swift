@@ -3,7 +3,14 @@ import XCTest
 import SeshatCore
 
 class SeshatTranscriptionFilesystemTestCase: XCTestCase {
+    private static let overrideLock = NSLock()
+
     var testRoot: URL!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        Self.overrideLock.lock()
+    }
 
     override func setUp() async throws {
         try await super.setUp()
@@ -21,5 +28,10 @@ class SeshatTranscriptionFilesystemTestCase: XCTestCase {
         SeshatConfig.testingBaseDirectoryOverride = nil
         try? FileManager.default.removeItem(at: testRoot)
         try await super.tearDown()
+    }
+
+    override func tearDownWithError() throws {
+        Self.overrideLock.unlock()
+        try super.tearDownWithError()
     }
 }
