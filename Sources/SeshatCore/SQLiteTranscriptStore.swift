@@ -3,6 +3,8 @@ import GRDB
 
 public actor SQLiteTranscriptStore {
     private static let databaseFileName = "transcripts.sqlite"
+    private static let transcriptsTableName = "transcripts"
+    private static let transcriptsFTSTableName = "transcripts_fts"
 
     private let databaseURL: URL
     private let dbQueue: DatabaseQueue
@@ -92,6 +94,40 @@ public actor SQLiteTranscriptStore {
         }
     }
 
+    public func search(query: String) async throws -> [TranscriptEntry] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else {
+            return []
+        }
+
+        return try await dbQueue.read { db in
+            let pattern = try db.makeFTS5Pattern(
+                rawPattern: trimmedQuery,
+                forTable: Self.transcriptsFTSTableName
+            )
+
+            let persistedEntries = try PersistedTranscriptEntry.fetchAll(
+                db,
+                sql: """
+                SELECT
+                    transcripts.id,
+                    transcripts.timestamp,
+                    transcripts.text,
+                    transcripts.audio_duration,
+                    transcripts.processing_duration
+                FROM transcripts
+                JOIN transcripts_fts
+                  ON transcripts_fts.rowid = transcripts.rowid
+                WHERE transcripts_fts MATCH ?
+                ORDER BY transcripts.timestamp DESC
+                """,
+                arguments: [pattern]
+            )
+
+            return try persistedEntries.map { try $0.transcriptEntry }
+        }
+    }
+
     private static func makeMigrator() -> DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1_transcripts_table") { db in
@@ -105,6 +141,14 @@ public actor SQLiteTranscriptStore {
                 )
                 """)
             try db.execute(sql: "PRAGMA user_version = 1")
+        }
+        migrator.registerMigration("v2_fts_search") { db in
+            try db.create(virtualTable: Self.transcriptsFTSTableName, using: FTS5()) { table in
+                table.synchronize(withTable: Self.transcriptsTableName)
+                table.tokenizer = .unicode61(diacritics: .remove)
+                table.column("text")
+            }
+            try db.execute(sql: "PRAGMA user_version = 2")
         }
         return migrator
     }
