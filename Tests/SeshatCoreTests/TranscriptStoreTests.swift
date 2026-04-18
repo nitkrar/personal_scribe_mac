@@ -105,6 +105,38 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertEqual(count, entries.count)
     }
 
+    func testNewFileIsCreatedWith0600Permissions() async throws {
+        let context = try makeIsolatedRecordingsDirectory()
+        defer { cleanup(context.baseDirectory) }
+
+        _ = try TranscriptStore(recordingsDirectory: context.recordingsDirectory)
+
+        let attrs = try fileManager.attributesOfItem(atPath: context.fileURL.path)
+        let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue
+        XCTAssertEqual(perms, 0o600)
+    }
+
+    func testExistingFileIsMigratedTo0600Permissions() async throws {
+        let context = try makeIsolatedRecordingsDirectory()
+        defer { cleanup(context.baseDirectory) }
+
+        try fileManager.createDirectory(
+            at: context.recordingsDirectory,
+            withIntermediateDirectories: true
+        )
+        XCTAssertTrue(fileManager.createFile(
+            atPath: context.fileURL.path,
+            contents: nil,
+            attributes: [.posixPermissions: NSNumber(value: 0o644)]
+        ))
+
+        _ = try TranscriptStore(recordingsDirectory: context.recordingsDirectory)
+
+        let attrs = try fileManager.attributesOfItem(atPath: context.fileURL.path)
+        let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue
+        XCTAssertEqual(perms, 0o600)
+    }
+
     func testRecentLimitCaps() async throws {
         let context = try makeIsolatedRecordingsDirectory()
         defer { cleanup(context.baseDirectory) }

@@ -37,9 +37,18 @@ public actor TranscriptStore {
 
         try fileManager.createDirectory(at: recordingsDirectory, withIntermediateDirectories: true)
         if !fileManager.fileExists(atPath: transcriptsFile.path) {
-            guard fileManager.createFile(atPath: transcriptsFile.path, contents: nil) else {
+            guard fileManager.createFile(
+                atPath: transcriptsFile.path,
+                contents: nil,
+                attributes: [.posixPermissions: NSNumber(value: 0o600)]
+            ) else {
                 throw CocoaError(.fileWriteUnknown)
             }
+        } else {
+            try fileManager.setAttributes(
+                [.posixPermissions: NSNumber(value: 0o600)],
+                ofItemAtPath: transcriptsFile.path
+            )
         }
 
         var ring = RingBuffer<TranscriptEntry>(capacity: normalizedCapacity)
