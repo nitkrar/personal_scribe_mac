@@ -73,3 +73,26 @@ final class HappyPathCaptureTests: XCTestCase {
         await service.stop()
     }
 }
+
+final class SingleCaptureTests: XCTestCase {
+    func testSecondStartWhileLiveThrowsAudioEngineFailure() async throws {
+        let service = AVAudioCaptureService(
+            authorizationStatusProvider: { .authorized },
+            engineDriver: .testStub(),
+            resamplerFactory: { rate, logger in
+                try AudioResampler(inputSampleRate: rate, logger: logger)
+            }
+        )
+
+        _ = try await service.start()
+
+        do {
+            _ = try await service.start()
+            XCTFail("Expected audioEngineFailure")
+        } catch let error as SeshatError {
+            XCTAssertEqual(error, .audioEngineFailure)
+        }
+
+        await service.stop()
+    }
+}
