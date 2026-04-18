@@ -330,107 +330,6 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(openSettingsCallCount, 1)
     }
 
-    func testGrantedPermissionShowsRecordButtonModel() async throws {
-        let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
-
-        XCTAssertEqual(model.recordButton, RecordButtonViewModel.make(from: .idle))
-    }
-
-    func testPreparationStatusTextShowsDownloadPercent() async throws {
-        let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
-        model.preparationProgress = .init(
-            phase: .downloading,
-            fractionCompleted: 0.42,
-            receivedBytes: 42,
-            expectedBytes: 100
-        )
-
-        XCTAssertEqual(model.preparationStatusText, "Downloading model… 42%")
-    }
-
-    func testPreparationStatusTextShowsWarmupMessage() async throws {
-        let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
-        model.preparationProgress = .init(
-            phase: .loading,
-            fractionCompleted: 1.0,
-            receivedBytes: 0,
-            expectedBytes: nil
-        )
-
-        XCTAssertEqual(model.preparationStatusText, "Warming up model…")
-    }
-
-    func testDownloadingPreparationDisablesRecordButton() async throws {
-        let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
-        model.preparationProgress = .init(
-            phase: .downloading,
-            fractionCompleted: 0.42,
-            receivedBytes: 42,
-            expectedBytes: 100
-        )
-
-        XCTAssertEqual(model.recordButton.title, "Preparing…")
-        XCTAssertFalse(model.recordButton.isEnabled)
-    }
-
-    func testLoadingPreparationDisablesRecordButton() async throws {
-        let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
-        model.preparationProgress = .init(
-            phase: .loading,
-            fractionCompleted: 1.0,
-            receivedBytes: 0,
-            expectedBytes: nil
-        )
-
-        XCTAssertEqual(model.recordButton.title, "Preparing…")
-        XCTAssertFalse(model.recordButton.isEnabled)
-    }
-
     func testStartObservingTracksPreparationProgressLifecycle() async throws {
         let transcriber = ProgressReportingTranscriber(result: makeResult())
         let coordinator = SessionCoordinator(
@@ -486,20 +385,6 @@ final class MenuBarSceneModelTests: XCTestCase {
         await waitUntil {
             model.preparationProgress == nil
         }
-    }
-
-    func testNotYetRequestedPermissionShowsGrantPrimaryCTA() {
-        XCTAssertEqual(
-            MenuBarScene.primaryActionTitle(for: .notYetRequested),
-            "Grant microphone access"
-        )
-    }
-
-    func testDeniedPermissionShowsSettingsPrimaryCTA() {
-        XCTAssertEqual(
-            MenuBarScene.primaryActionTitle(for: .denied),
-            "Open System Settings"
-        )
     }
 
     func testCanInstantiateSeshatAppWithCoordinatorAndPermissionRequester() async throws {

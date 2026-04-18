@@ -44,44 +44,6 @@ final class MenuBarSceneModel: ObservableObject {
         self.permissionState = permissionStateProvider()
     }
 
-    var recordButton: RecordButtonViewModel {
-        if case .idle = state, let preparationProgress {
-            switch preparationProgress.phase {
-            case .downloading, .loading:
-                return RecordButtonViewModel(
-                    title: "Preparing…",
-                    systemImageName: "arrow.triangle.2.circlepath",
-                    isEnabled: false,
-                    usesDestructiveRole: false
-                )
-            case .idle, .finished:
-                break
-            }
-        }
-
-        return RecordButtonViewModel.make(from: state)
-    }
-
-    var statusIcon: MenuBarStatusIcon {
-        MenuBarStatusIcon.make(sessionState: state, permissionState: permissionState)
-    }
-
-    var preparationStatusText: String? {
-        guard let preparationProgress else {
-            return nil
-        }
-
-        switch preparationProgress.phase {
-        case .idle, .finished:
-            return nil
-        case .downloading:
-            let percent = Int((preparationProgress.fractionCompleted * 100).rounded())
-            return "Downloading model… \(percent)%"
-        case .loading:
-            return "Warming up model…"
-        }
-    }
-
     func startObserving() {
         guard observationTask == nil else { return }
 
