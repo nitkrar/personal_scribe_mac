@@ -5,6 +5,7 @@ import SeshatCore
 public actor SessionCoordinator {
     private let capture: any AudioCapturing
     private let transcriber: any Transcribing
+    private let transcriptStore: TranscriptStore?
     private let logger: SeshatLogger
     private let postProcessor = PostProcessor()
     private let signposter = OSSignposter(subsystem: SeshatLogger.subsystem, category: "prepare")
@@ -18,10 +19,12 @@ public actor SessionCoordinator {
     public init(
         capture: any AudioCapturing,
         transcriber: any Transcribing,
-        logger: SeshatLogger
+        logger: SeshatLogger,
+        transcriptStore: TranscriptStore? = nil
     ) {
         self.capture = capture
         self.transcriber = transcriber
+        self.transcriptStore = transcriptStore
         self.logger = logger
     }
 
@@ -123,10 +126,45 @@ public actor SessionCoordinator {
                 audioDuration: raw.audioDuration,
                 processingDuration: raw.processingDuration
             )
+            await persistTranscript(
+                text: cleanedText,
+                audioDuration: raw.audioDuration,
+                processingDuration: raw.processingDuration
+            )
             publish(.idle)
         } catch {
             publish(.error(map(error, default: .transcriptionFailure)))
         }
+    }
+
+    private func persistTranscript(
+        text: String,
+        audioDuration: Duration,
+        processingDuration: Duration
+    ) async {
+        guard let transcriptStore else {
+            return
+        }
+
+        let entry = TranscriptEntry(
+            id: UUID(),
+            timestamp: Date(),
+            text: text,
+            audioDuration: Self.seconds(from: audioDuration),
+            processingDuration: Self.seconds(from: processingDuration)
+        )
+
+        do {
+            try await transcriptStore.append(entry)
+        } catch {
+            logger.error("Failed to persist transcript to TranscriptStore", error: error)
+        }
+    }
+
+    private static func seconds(from duration: Duration) -> TimeInterval {
+        let components = duration.components
+        return TimeInterval(components.seconds)
+            + TimeInterval(components.attoseconds) / 1_000_000_000_000_000_000
     }
 
     private func consumeCaptureStream(_ stream: AsyncThrowingStream<PCMBuffer, Error>) async {

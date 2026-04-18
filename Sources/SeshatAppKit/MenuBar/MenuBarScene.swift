@@ -51,6 +51,8 @@ struct MenuBarScene: View {
             NSApp.terminate(nil)
         }
         .keyboardShortcut("q")
+
+        Text(BuildInfo.current.displayString)
     }
 
     static func stateLabel(for state: SessionState) -> String {

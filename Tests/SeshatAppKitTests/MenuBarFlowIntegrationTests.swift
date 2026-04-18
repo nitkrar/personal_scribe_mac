@@ -85,15 +85,22 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
 
     // MARK: - Phase 1 Step 1.3b — menu bar install ordering regression
 
-    /// `SeshatAppMain.init()` schedules `startupCoordinator.start()` through
-    /// `Task { await Task.yield(); ... }` so SwiftUI finishes installing the
-    /// `MenuBarExtra` status item before background startup work (which
-    /// eventually installs `GlobalHotkeyMonitor`) runs on the MainActor. A
-    /// regression that removed the wrapper — calling `start()` synchronously
-    /// in init — would reintroduce the per-launch menu bar click freeze
-    /// diagnosed in `1cb665c`. The hotkey monitor firing synchronously with
-    /// init is the observable proxy for that reordering.
-    func testStartupCoordinatorIsNotInvokedSynchronouslyDuringInit() async {
+    /// Guards against re-introducing the per-launch menu bar click freeze
+    /// diagnosed in `1cb665c`. The root cause was heavy startup work running
+    /// synchronously inside `SeshatAppMain.init()`; the fix was extracting
+    /// hotkey + transcriber-prepare into `AppStartupCoordinator`, whose
+    /// `start()` schedules a background Task and returns immediately.
+    ///
+    /// This test asserts the fire-and-forget shape holds: after init returns,
+    /// the hotkey-install callback has not yet fired. If a future refactor
+    /// puts blocking MainActor work back into init (e.g. awaiting the hotkey
+    /// install synchronously), the flag would be set before init returns.
+    ///
+    /// Caveat: this is a weak proxy. It does NOT observe MenuBarExtra
+    /// installation directly, and it won't catch someone bypassing
+    /// `AppStartupCoordinator` to install the hotkey monitor from init. The
+    /// 20-click runtime sanity check (Step 1.3a) remains ground truth.
+    func testStartupCoordinatorDoesNotBlockInitOnHotkeyInstall() async {
         let flag = HotkeyFireFlag()
         let sessionCoordinator = DevelopmentComposition.makeTestingSessionCoordinator()
         let startupCoordinator = AppStartupCoordinator(
@@ -112,8 +119,8 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
 
         XCTAssertFalse(
             flag.hasFired,
-            "SeshatAppMain.init() appears to invoke startupCoordinator.start() "
-                + "synchronously — Task.yield() wrapper may have been removed."
+            "SeshatAppMain.init() appears to block on hotkey install — "
+                + "AppStartupCoordinator should schedule the work and return."
         )
 
         for _ in 0..<500 {

@@ -31,6 +31,7 @@ VERSION="0.1.0"
 MIN_MACOS="14.0"
 BUILD_DIR=".build/$CONFIG"
 APP_PATH="$REPO_ROOT/$APP_NAME.app"
+GIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo 'unknown')"
 
 echo "==> [1/5] Building $BINARY_NAME ($CONFIG)..."
 swift build -c "$CONFIG" --product "$BINARY_NAME"
@@ -72,6 +73,8 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
     <string>????</string>
     <key>CFBundleVersion</key>
     <string>${VERSION}</string>
+    <key>SeshatGitSHA</key>
+    <string>${GIT_SHA}</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
     <key>LSMinimumSystemVersion</key>

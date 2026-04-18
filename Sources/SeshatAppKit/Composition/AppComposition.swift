@@ -18,9 +18,25 @@ public enum AppComposition {
         return SessionCoordinator(
             capture: capture,
             transcriber: transcriber,
-            logger: logger
+            logger: logger,
+            transcriptStore: makeTranscriptStore()
         )
     }()
+
+    /// TranscriptStore persists transcripts to JSONL under
+    /// `<base>/recordings/transcripts.jsonl`. Failures are logged and
+    /// swallowed — losing history is preferable to blocking the app from
+    /// starting when disk is read-only or the path isn't writable.
+    private static func makeTranscriptStore() -> TranscriptStore? {
+        let logger = SeshatLogger(category: SeshatLogCategory.session)
+        do {
+            let directory = try SeshatConfig.recordingsDirectory()
+            return try TranscriptStore(recordingsDirectory: directory)
+        } catch {
+            logger.error("TranscriptStore init failed; continuing without persistence", error: error)
+            return nil
+        }
+    }
 
     public static func makeSessionCoordinator() -> SessionCoordinator {
         sessionCoordinator

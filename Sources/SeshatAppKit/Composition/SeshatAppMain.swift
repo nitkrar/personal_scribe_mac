@@ -74,11 +74,7 @@ struct SeshatAppMain: App {
         )
 
         sceneModel.startObserving()
-        Task { @MainActor [startupCoordinator] in
-            // Let SwiftUI install the status item before background startup work begins.
-            await Task.yield()
-            startupCoordinator.start()
-        }
+        startupCoordinator.start()
     }
 
     var body: some Scene {

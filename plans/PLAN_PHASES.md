@@ -75,16 +75,17 @@ Commit `1cb665c` ("Fix startup warmup responsiveness and interaction handling") 
 
 **No further implementation work.** If Step 1.6 `SESHAT_BASE_DIR=/dev/null` smoke test surfaces any lingering silent swallow, open a follow-up there.
 
-### Step 1.3 — Menu bar click — **PROVISIONAL (runtime-verify required)**
+### Step 1.3 — Menu bar click — **DONE**
 
-**Status:** ⚠️ Codex applied a different fix than the plan prescribed: `await Task.yield()` before `startupCoordinator.start()` in `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:78-81` so the hotkey monitor installs AFTER `MenuBarExtra` is set up. Committed in `1cb665c`. **Not diagnosed; no regression test.**
+**Status:** ✅ Fixed in `1cb665c` by extracting hotkey-install + transcriber-prepare out of `SeshatAppMain.init()` into `AppStartupCoordinator.start()`. `start()` schedules a background Task and returns immediately, so `init()` no longer blocks the MainActor while SwiftUI installs `MenuBarExtra`. User runtime-verified on the DMG built from `1cb665c` (single click + 20-click sanity). A vestigial `await Task.yield()` wrapper was retained for a while under the wrong theory that it was the fix; removed once runtime data confirmed the actual mechanism.
 
-**User accepted provisionally.** Remaining work:
-- **1.3a — Runtime verification.** Cold launch; single-click menu bar icon — popover opens. Consecutive 20 open/close cycles — still opens. Do this on a fresh `/Applications/Seshat.app` install (TCC ad-hoc quirk). If any click fails, fall back to the original plan's diagnosis protocol (inspect `NSApplication.shared.windows`, disable `GlobalHotkeyMonitor.start()`, check `canBecomeKey`).
-- **1.3b — Regression test.** Add an integration test (new file `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift`) that asserts `MenuBarExtra` installs before `GlobalHotkeyMonitor.start()` — prevents a reorder regression even if we can't fully exercise the tap path.
+**Sub-steps landed:**
+- **1.3a — Runtime verification.** User tested on built DMG: single click opens popover; 20-click sanity passed.
+- **1.3b — Regression test.** `testStartupCoordinatorDoesNotBlockInitOnHotkeyInstall` in `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift` asserts `init()` does not synchronously block on hotkey install. Weak proxy (doesn't observe MenuBarExtra directly) — 1.3a remains ground truth.
 
-**Commit subject (1.3a):** `phase-1 step 1.3a: verify menu bar click — Task.yield() fix runtime check`
-**Commit subject (1.3b):** `phase-1 step 1.3b: MenuBarFlow ordering regression test`
+**Commit subjects:**
+- `phase-1 step 1.3b: MenuBarFlow ordering regression test`
+- (later) `phase-1 step 1.3 cleanup: remove vestigial Task.yield() from SeshatAppMain.init`
 
 ### Step 1.4 — Pill click end-to-end tests — **PARTIAL**
 
