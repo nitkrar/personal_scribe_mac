@@ -10,7 +10,8 @@ final class AppCompositionTests: XCTestCase {
         let second = AppComposition.makeSessionCoordinator()
 
         XCTAssertTrue(first === second)
-        XCTAssertEqual(await first.state(), .idle)
+        let state = await first.state()
+        XCTAssertEqual(state, .idle)
     }
 
     func testMakeMicrophonePermissionRequesterReturnsProductionType() async {

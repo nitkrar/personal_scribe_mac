@@ -9,6 +9,7 @@ final class AppEntryPointTests: XCTestCase {
         let entry = SeshatAppMain()
 
         XCTAssertTrue(entry.coordinator === AppComposition.sessionCoordinator)
-        XCTAssertEqual(await entry.coordinator.state(), .idle)
+        let state = await entry.coordinator.state()
+        XCTAssertEqual(state, .idle)
     }
 }
