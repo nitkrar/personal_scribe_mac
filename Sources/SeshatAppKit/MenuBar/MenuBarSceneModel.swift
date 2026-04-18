@@ -97,6 +97,11 @@ final class MenuBarSceneModel: ObservableObject {
         clipboardWriter(lastResultText)
     }
 
+    func openMicrophonePrivacySettings() {
+        logger.info("Opening microphone privacy settings")
+        openSettings()
+    }
+
     deinit {
         observationTask?.cancel()
         onObservationCancelled?()

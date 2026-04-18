@@ -239,6 +239,53 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertTrue(copiedValues.isEmpty)
     }
 
+    func testOpenMicrophonePrivacySettingsInvokesInjectedSettingsAction() async throws {
+        let coordinator = try makeCoordinator()
+        var openSettingsCallCount = 0
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .denied },
+            clipboardWriter: { _ in },
+            openSettings: {
+                openSettingsCallCount += 1
+            },
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        model.openMicrophonePrivacySettings()
+
+        XCTAssertEqual(openSettingsCallCount, 1)
+    }
+
+    func testGrantedPermissionShowsRecordButtonModel() async throws {
+        let coordinator = try makeCoordinator()
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        XCTAssertEqual(model.recordButton, RecordButtonViewModel.make(from: .idle))
+    }
+
+    func testNotYetRequestedPermissionShowsGrantPrimaryCTA() {
+        XCTAssertEqual(
+            MenuBarScene.primaryActionTitle(for: .notYetRequested),
+            "Grant microphone access"
+        )
+    }
+
+    func testDeniedPermissionShowsSettingsPrimaryCTA() {
+        XCTAssertEqual(
+            MenuBarScene.primaryActionTitle(for: .denied),
+            "Open System Settings"
+        )
+    }
+
     private func makeCoordinator() throws -> SessionCoordinator {
         SessionCoordinator(
             capture: FakeAudioCapturing(buffers: [try makeBuffer()]),
