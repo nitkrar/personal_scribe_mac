@@ -99,14 +99,31 @@ PLIST
 # Legacy macOS bundle marker (harmless; some tools still check for it).
 printf 'APPL????' > "$APP_PATH/Contents/PkgInfo"
 
-echo "==> [4/5] Ad-hoc code signing (hardened runtime)..."
-# macOS 26 requires hardened runtime for the binary to pass AMFI and actually
-# launch; ad-hoc signing without it is SIGKILLed on exec. Gatekeeper will still
-# flag the app (ad-hoc has no TeamIdentifier), but that's a separate policy
-# check resolved by the launch approach (see README: Xcode run OR self-signed
-# cert). Hardened runtime here is for local dev; Phase 4 distribution signs
-# with a real Developer ID.
-codesign --force --sign - --deep --options runtime --timestamp=none "$APP_PATH" >/dev/null
+echo "==> [4/5] Ad-hoc code signing (hardened runtime + mic entitlement)..."
+# macOS 26 requires hardened runtime for the binary to pass AMFI. Hardened
+# runtime additionally requires the audio-input entitlement for microphone
+# access; tccd silently denies the mic prompt (promptPolicy=4) without it.
+ENTITLEMENTS_PLIST="$(mktemp -t seshat-entitlements.XXXXXX).plist"
+trap 'rm -f "$ENTITLEMENTS_PLIST"' EXIT
+cat > "$ENTITLEMENTS_PLIST" <<'ENT'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+</dict>
+</plist>
+ENT
+
+codesign \
+    --force \
+    --sign - \
+    --deep \
+    --options runtime \
+    --entitlements "$ENTITLEMENTS_PLIST" \
+    --timestamp=none \
+    "$APP_PATH" >/dev/null
 
 echo "==> [5/5] Verifying signature..."
 codesign --verify --verbose "$APP_PATH"
