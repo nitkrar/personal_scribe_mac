@@ -209,7 +209,14 @@ cp "$ICNS_SOURCE" "$APP_PATH/Contents/Resources/$APP_NAME.icns"
 #   Keychain Access → Certificate Assistant → Create a Certificate…
 #   Name: "Nitkrar Dev", Identity Type: Self Signed Root, Type: Code Signing
 SIGN_IDENTITY="Nitkrar Dev"
-if ! security find-identity -v -p codesigning | grep -q "\"$SIGN_IDENTITY\""; then
+# Use `security find-identity -p codesigning` WITHOUT `-v`. Self-signed
+# roots (like Nitkrar Dev) report `CSSMERR_TP_NOT_TRUSTED` and are
+# filtered out by `-v` (valid-only), but `codesign --sign` uses them
+# fine — it doesn't require a trust chain for local signing. The
+# strict `-v` check was falling back to ad-hoc even when the cert
+# was installed correctly (bug caught 2026-04-18 when user verified
+# the cert in Keychain but script still fell through).
+if ! security find-identity -p codesigning 2>/dev/null | grep -q "\"$SIGN_IDENTITY\""; then
     echo "==> '$SIGN_IDENTITY' codesigning identity not found — falling back to ad-hoc."
     echo "    (Permissions will reset each rebuild. Create the cert in Keychain Access"
     echo "    to preserve TCC grants across rebuilds on this machine.)"
