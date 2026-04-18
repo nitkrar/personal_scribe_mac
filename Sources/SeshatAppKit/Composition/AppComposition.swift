@@ -26,6 +26,19 @@ public enum AppComposition {
         sessionCoordinator
     }
 
+    public static func makeGlobalHotkeyMonitor(
+        coordinator: SessionCoordinator = AppComposition.sessionCoordinator
+    ) -> GlobalHotkeyMonitor {
+        GlobalHotkeyMonitor(onTrigger: {
+            Task {
+                await coordinator.toggle()
+            }
+        })
+    }
+
+    @MainActor
+    public static let hotkeyMonitor: GlobalHotkeyMonitor = makeGlobalHotkeyMonitor()
+
     public static func makeMicrophonePermissionRequester() -> any MicrophonePermissionRequesting {
         AppKitMicrophonePermissionRequester()
     }
