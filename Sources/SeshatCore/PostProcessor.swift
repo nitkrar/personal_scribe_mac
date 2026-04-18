@@ -28,7 +28,7 @@ public struct PostProcessor: Sendable {
 
     public func clean(_ raw: String) -> String {
         let stageOne = removeFillers(from: raw)
-        return stageOne.trimmingCharacters(in: .whitespacesAndNewlines)
+        return applyBasicPunctuation(to: stageOne)
     }
 
     private func removeFillers(from raw: String) -> String {
@@ -58,5 +58,21 @@ public struct PostProcessor: Sendable {
             range: NSRange(trimmedLeadingPunctuationWhitespace.startIndex..., in: trimmedLeadingPunctuationWhitespace),
             withTemplate: "$1 "
         )
+    }
+
+    private func applyBasicPunctuation(to text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ""
+        }
+
+        let punctuated: String
+        if let lastCharacter = trimmed.last, ".!?".contains(lastCharacter) {
+            punctuated = trimmed
+        } else {
+            punctuated = trimmed + "."
+        }
+
+        return punctuated.prefix(1).uppercased() + punctuated.dropFirst()
     }
 }
