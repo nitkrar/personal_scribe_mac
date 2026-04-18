@@ -166,6 +166,31 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(panelBuilder.panel.orderFrontCallCount, 1)
     }
 
+    func testClipboardOnlyNoticeUsesResponseCardInfrastructure() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
+        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        let panelBuilder = RecordingPanelBuilder()
+        let responseCardBuilder = RecordingResponseCardBuilder()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            responseCardBuilder: responseCardBuilder
+        )
+
+        presenter.showClipboardOnlyNotice()
+
+        XCTAssertEqual(responseCardBuilder.makeResponseCardCallCount, 1)
+        XCTAssertEqual(
+            responseCardBuilder.card.lastText,
+            "Copied to clipboard · ⌘V to paste"
+        )
+        XCTAssertEqual(responseCardBuilder.card.lastAutoDismissAfter, 3.0, accuracy: 0.001)
+        XCTAssertEqual(
+            responseCardBuilder.card.lastAnchorWindow,
+            panelBuilder.panel.anchorWindow
+        )
+    }
+
     private func makeHostingView() -> (NSWindow, ClickThroughHostingView<EmptyView>) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 120, height: 80),
@@ -222,6 +247,12 @@ private final class RecordingPanelBuilder: PillOverlayPanelBuilding {
 private final class RecordingPanel: PillOverlayPaneling {
     var isVisible = false
     var frame = NSRect(x: 0, y: 0, width: 280, height: 60)
+    let anchorWindow: NSWindow? = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 280, height: 60),
+        styleMask: [.borderless],
+        backing: .buffered,
+        defer: false
+    )
     private(set) var orderFrontCallCount = 0
     private(set) var orderOutCallCount = 0
 
@@ -238,4 +269,34 @@ private final class RecordingPanel: PillOverlayPaneling {
     func setFrameOrigin(_ point: NSPoint) {
         frame.origin = point
     }
+}
+
+@MainActor
+private final class RecordingResponseCardBuilder: ResponseCardBuilding {
+    let card = RecordingResponseCard()
+    private(set) var makeResponseCardCallCount = 0
+
+    func makeResponseCard() -> any ResponseCardPresenting {
+        makeResponseCardCallCount += 1
+        return card
+    }
+}
+
+@MainActor
+private final class RecordingResponseCard: ResponseCardPresenting {
+    private(set) var lastText: String?
+    private(set) var lastAnchorWindow: NSWindow?
+    private(set) var lastAutoDismissAfter: TimeInterval = 0
+
+    func show(
+        text: String,
+        above pillWindow: NSWindow,
+        autoDismissAfter: TimeInterval
+    ) {
+        lastText = text
+        lastAnchorWindow = pillWindow
+        lastAutoDismissAfter = autoDismissAfter
+    }
+
+    func hide() {}
 }

@@ -23,7 +23,7 @@ import SeshatCore
 /// All colours resolve from `SeshatTheme.Palette.for(scheme:)`. Pill
 /// background + stop-red are the scheme-invariant pill tokens
 /// (`pillBackground`, `pillStopRed`, `pillForegroundText`). No raw
-/// `Color(hex:)` or inline RGB values — grepping for those outside
+/// hex-color helpers or inline RGB values — grepping for those outside
 /// `SeshatTheme.swift` must return zero hits.
 @MainActor
 public struct PillOverlayView: View {

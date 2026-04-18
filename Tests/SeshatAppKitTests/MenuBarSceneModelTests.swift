@@ -14,7 +14,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: TestPermissionRequester(result: true),
             permissionStateProvider: { .denied },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -29,7 +29,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: TestPermissionRequester(result: false),
             permissionStateProvider: { .notYetRequested },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -49,7 +49,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: requester,
             permissionStateProvider: { .granted },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -70,7 +70,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: requester,
             permissionStateProvider: { .notYetRequested },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -92,7 +92,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: requester,
             permissionStateProvider: { .notYetRequested },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -114,7 +114,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: requester,
             permissionStateProvider: { .denied },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -134,7 +134,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: TestPermissionRequester(result: true),
             permissionStateProvider: { .granted },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -153,7 +153,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: TestPermissionRequester(result: true),
             permissionStateProvider: { .granted },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -172,7 +172,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: TestPermissionRequester(result: true),
             permissionStateProvider: { .granted },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             onObservationCancelled: {
                 cancellationExpectation.fulfill()
@@ -195,7 +195,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: TestPermissionRequester(result: true),
             permissionStateProvider: { .granted },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -220,6 +220,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             clipboardWriter: { _ in },
             pasteInjector: { text in
                 pastedValues.append(text)
+                return .pasteAtCursor
             },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
@@ -236,6 +237,67 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(pastedValues, ["Stub transcript."])
     }
 
+    func testIdleTransitionTriggersClipboardOnlyNoticeWhenPasteRouteSkipsPaste() async throws {
+        let coordinator = try makeCoordinator()
+        var pastedValues: [String] = []
+        var clipboardOnlyNoticeCount = 0
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            pasteInjector: { text in
+                pastedValues.append(text)
+                return .clipboardOnly(reason: .frontmostAppIsSeshat)
+            },
+            openSettings: {},
+            onClipboardOnlyCopy: {
+                clipboardOnlyNoticeCount += 1
+            },
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        model.startObserving()
+        await coordinator.toggle()
+        await waitForState(.recording, on: model)
+        await coordinator.toggle()
+        await waitForState(.idle, on: model)
+        await waitForTranscriptText("Stub transcript.", on: model)
+        await Task.yield()
+
+        XCTAssertEqual(pastedValues, ["Stub transcript."])
+        XCTAssertEqual(clipboardOnlyNoticeCount, 1)
+    }
+
+    func testIdleTransitionDoesNotTriggerClipboardOnlyNoticeWhenPasteRouteTargetsCursor() async throws {
+        let coordinator = try makeCoordinator()
+        var clipboardOnlyNoticeCount = 0
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            pasteInjector: { _ in
+                .pasteAtCursor
+            },
+            openSettings: {},
+            onClipboardOnlyCopy: {
+                clipboardOnlyNoticeCount += 1
+            },
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        model.startObserving()
+        await coordinator.toggle()
+        await waitForState(.recording, on: model)
+        await coordinator.toggle()
+        await waitForState(.idle, on: model)
+        await waitForTranscriptText("Stub transcript.", on: model)
+        await Task.yield()
+
+        XCTAssertEqual(clipboardOnlyNoticeCount, 0)
+    }
+
     func testSecondIdleTransitionDoesNotAutoPasteWhenTranscriptIsUnchanged() async throws {
         let coordinator = try makeCoordinator()
         var pastedValues: [String] = []
@@ -246,6 +308,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             clipboardWriter: { _ in },
             pasteInjector: { text in
                 pastedValues.append(text)
+                return .pasteAtCursor
             },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
@@ -279,7 +342,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             clipboardWriter: { text in
                 copiedText = text
             },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -300,7 +363,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             clipboardWriter: { text in
                 copiedValues.append(text)
             },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -318,7 +381,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: TestPermissionRequester(result: true),
             permissionStateProvider: { .denied },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {
                 openSettingsCallCount += 1
             },
@@ -342,7 +405,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionRequester: TestPermissionRequester(result: true),
             permissionStateProvider: { .granted },
             clipboardWriter: { _ in },
-            pasteInjector: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )

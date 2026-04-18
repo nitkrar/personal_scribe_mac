@@ -14,8 +14,9 @@ final class MenuBarSceneModel: ObservableObject {
     private let permissionRequester: any MicrophonePermissionRequesting
     private let permissionStateProvider: @MainActor () -> MicrophonePermissionState
     private let clipboardWriter: @MainActor (String) -> Void
-    private let pasteInjector: @MainActor (String) -> Void
+    private let pasteInjector: @MainActor (String) -> PasteRoutingDecision
     private let openSettings: @MainActor () -> Void
+    private let onClipboardOnlyCopy: @MainActor () -> Void
     private let logger: SeshatLogger
     private let onObservationCancelled: (@Sendable () -> Void)?
     private var observationTask: Task<Void, Never>?
@@ -28,8 +29,9 @@ final class MenuBarSceneModel: ObservableObject {
         permissionRequester: any MicrophonePermissionRequesting,
         permissionStateProvider: @escaping @MainActor () -> MicrophonePermissionState,
         clipboardWriter: @escaping @MainActor (String) -> Void,
-        pasteInjector: @escaping @MainActor (String) -> Void = { _ in },
+        pasteInjector: @escaping @MainActor (String) -> PasteRoutingDecision = { _ in .pasteAtCursor },
         openSettings: @escaping @MainActor () -> Void,
+        onClipboardOnlyCopy: @escaping @MainActor () -> Void = {},
         onObservationCancelled: (@Sendable () -> Void)? = nil,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) {
@@ -39,6 +41,7 @@ final class MenuBarSceneModel: ObservableObject {
         self.clipboardWriter = clipboardWriter
         self.pasteInjector = pasteInjector
         self.openSettings = openSettings
+        self.onClipboardOnlyCopy = onClipboardOnlyCopy
         self.onObservationCancelled = onObservationCancelled
         self.logger = logger
         self.permissionState = permissionStateProvider()
@@ -125,7 +128,10 @@ final class MenuBarSceneModel: ObservableObject {
         guard transcript != lastAutoPastedTranscript else { return }
 
         lastAutoPastedTranscript = transcript
-        pasteInjector(transcript)
+        let route = pasteInjector(transcript)
+        if case .clipboardOnly = route {
+            onClipboardOnlyCopy()
+        }
     }
 
     deinit {

@@ -37,6 +37,7 @@ struct SeshatAppMain: App {
     ) {
         let startupCoordinator = startupCoordinator
             ?? AppComposition.makeStartupCoordinator(coordinator: coordinator)
+        var clipboardOnlyNotice: (@MainActor () -> Void)?
 
         self.coordinator = coordinator
         self.permissionRequester = permissionRequester
@@ -53,22 +54,29 @@ struct SeshatAppMain: App {
             },
             clipboardWriter: clipboardWriter,
             pasteInjector: { text in
-                _ = pasteInjector.paste(text)
+                pasteInjector.paste(text)
             },
-            openSettings: openSettings
+            openSettings: openSettings,
+            onClipboardOnlyCopy: {
+                clipboardOnlyNotice?()
+            }
         )
+        let pillController = PillOverlayController(
+            statePublisher: sceneModel.$state.eraseToAnyPublisher(),
+            preparationProgressPublisher: sceneModel.$preparationProgress.eraseToAnyPublisher(),
+            audioLevelPublisher: nil,
+            visibilityMode: PillVisibilityMode.resolve(),
+            onTap: {
+                Task { await coordinator.toggle() }
+            },
+            panelBuilder: overlayPanelBuilder
+        )
+        clipboardOnlyNotice = {
+            pillController.showClipboardOnlyNotice()
+        }
         _sceneModel = StateObject(wrappedValue: sceneModel)
         _pillController = StateObject(
-            wrappedValue: PillOverlayController(
-                statePublisher: sceneModel.$state.eraseToAnyPublisher(),
-                preparationProgressPublisher: sceneModel.$preparationProgress.eraseToAnyPublisher(),
-                audioLevelPublisher: nil,
-                visibilityMode: PillVisibilityMode.resolve(),
-                onTap: {
-                    Task { await coordinator.toggle() }
-                },
-                panelBuilder: overlayPanelBuilder
-            )
+            wrappedValue: pillController
         )
         _statusItemController = StateObject(
             wrappedValue: StatusItemControllerHost(sceneModel: sceneModel)

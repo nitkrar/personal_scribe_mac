@@ -110,4 +110,8 @@ public final class PillOverlayController: ObservableObject {
         viewModel.setVisibilityMode(mode)
         mode.persist(to: defaults)
     }
+
+    public func showClipboardOnlyNotice() {
+        presenter.showClipboardOnlyNotice()
+    }
 }

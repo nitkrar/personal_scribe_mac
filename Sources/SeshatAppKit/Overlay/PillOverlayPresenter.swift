@@ -100,12 +100,19 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
 protocol PillOverlayPaneling: AnyObject {
     var isVisible: Bool { get }
     var frame: NSRect { get }
+    var anchorWindow: NSWindow? { get }
     func orderFrontRegardless()
     func orderOut(_ sender: Any?)
     func setFrameOrigin(_ point: NSPoint)
 }
 
-extension DraggablePanel: PillOverlayPaneling {}
+extension PillOverlayPaneling {
+    var anchorWindow: NSWindow? { nil }
+}
+
+extension DraggablePanel: PillOverlayPaneling {
+    var anchorWindow: NSWindow? { self }
+}
 
 @MainActor
 protocol PillOverlayPanelBuilding {
@@ -170,9 +177,13 @@ public final class PillOverlayPresenter {
     private let model: PillOverlayViewModel
     private let onTap: @MainActor () -> Void
     private let panelBuilder: any PillOverlayPanelBuilding
+    private let responseCardBuilder: any ResponseCardBuilding
     private var panel: (any PillOverlayPaneling)?
+    private var responseCard: (any ResponseCardPresenting)?
     private var visibilityCancellable: AnyCancellable?
     private let diagnosticLogger = SeshatLogger(category: SeshatLogCategory.ui)
+    private static let clipboardOnlyNoticeText = "Copied to clipboard · ⌘V to paste"
+    private static let clipboardOnlyNoticeDismissAfter: TimeInterval = 3.0
 
     /// Whether the presenter last asked the panel to show itself. Exposed
     /// for tests — NSPanel's real `isVisible` depends on AppKit runtime
@@ -192,18 +203,21 @@ public final class PillOverlayPresenter {
         self.init(
             model: model,
             onTap: onTap,
-            panelBuilder: AppKitPillOverlayPanelBuilder()
+            panelBuilder: AppKitPillOverlayPanelBuilder(),
+            responseCardBuilder: LiveResponseCardBuilder()
         )
     }
 
     init(
         model: PillOverlayViewModel,
         onTap: @escaping @MainActor () -> Void = {},
-        panelBuilder: any PillOverlayPanelBuilding
+        panelBuilder: any PillOverlayPanelBuilding,
+        responseCardBuilder: any ResponseCardBuilding = LiveResponseCardBuilder()
     ) {
         self.model = model
         self.onTap = onTap
         self.panelBuilder = panelBuilder
+        self.responseCardBuilder = responseCardBuilder
         visibilityCancellable = model.$visibility.sink { [weak self] visibility in
             guard let self else {
                 return
@@ -262,6 +276,21 @@ public final class PillOverlayPresenter {
 
         panel.orderFrontRegardless()
         diagnosticLogger.info("PillOverlayPresenter.show — panelExisted=\(panelExisted) frame=\(panel.frame) isVisible=\(panel.isVisible)")
+    }
+
+    func showClipboardOnlyNotice() {
+        guard let anchorWindow = panel?.anchorWindow else {
+            diagnosticLogger.info("PillOverlayPresenter.showClipboardOnlyNotice — skipped because no anchor window is available")
+            return
+        }
+
+        let responseCard = responseCard ?? responseCardBuilder.makeResponseCard()
+        self.responseCard = responseCard
+        responseCard.show(
+            text: Self.clipboardOnlyNoticeText,
+            above: anchorWindow,
+            autoDismissAfter: Self.clipboardOnlyNoticeDismissAfter
+        )
     }
 
     public func hide() {

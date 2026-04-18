@@ -1,6 +1,23 @@
 import AppKit
 import SwiftUI
 
+@MainActor
+protocol ResponseCardPresenting: AnyObject {
+    func show(text: String, above pillWindow: NSWindow, autoDismissAfter: TimeInterval)
+    func hide()
+}
+
+@MainActor
+protocol ResponseCardBuilding {
+    func makeResponseCard() -> any ResponseCardPresenting
+}
+
+struct LiveResponseCardBuilder: ResponseCardBuilding {
+    func makeResponseCard() -> any ResponseCardPresenting {
+        ResponseCard()
+    }
+}
+
 /// Floating `NSPanel` that hosts the Command-Mode response card
 /// above the pill overlay. The pill itself never shows response
 /// text; the card is a separate panel per the Sprint 2 dogfood
@@ -9,9 +26,9 @@ import SwiftUI
 /// ## Lifecycle
 /// * Constructed once by the app composition layer (owned by the
 ///   same stateful host as `PillOverlayController`).
-/// * `show(text:above:)` places the panel 8pt above a given pill
-///   window, fades it in over 200ms, schedules a 6-second auto-
-///   dismiss timer.
+/// * `show(text:above:autoDismissAfter:)` places the panel 8pt above
+///   a given pill window, fades it in over 200ms, and schedules an
+///   auto-dismiss timer for the caller-supplied delay.
 /// * `hide()` cancels the timer and fades the panel out over 150ms.
 ///
 /// ## Why NSPanel (not another SwiftUI scene)
@@ -20,7 +37,7 @@ import SwiftUI
 /// a `MenuBarExtra` sibling. An explicit `NSPanel` keeps the
 /// positioning + dismiss semantics simple.
 @MainActor
-public final class ResponseCard: NSPanel {
+public final class ResponseCard: NSPanel, ResponseCardPresenting {
     private let hostingView: NSHostingView<ResponseCardView>
     private var dismissTimer: Timer?
 
@@ -36,8 +53,8 @@ public final class ResponseCard: NSPanel {
     /// Gap between the top of the pill window and the bottom of the
     /// card.
     private static let gapAbovePill: CGFloat = 8
-    /// Auto-dismiss after this many seconds of being visible.
-    private static let autoDismissAfter: TimeInterval = 6.0
+    /// Default auto-dismiss used by the future command-mode consumer.
+    private static let defaultAutoDismissAfter: TimeInterval = 6.0
 
     public init() {
         let content = ResponseCardView(text: "", onDismiss: {})
@@ -65,6 +82,18 @@ public final class ResponseCard: NSPanel {
 
     /// Present the card anchored above the given pill window.
     public func show(text: String, above pillWindow: NSWindow) {
+        show(
+            text: text,
+            above: pillWindow,
+            autoDismissAfter: Self.defaultAutoDismissAfter
+        )
+    }
+
+    func show(
+        text: String,
+        above pillWindow: NSWindow,
+        autoDismissAfter: TimeInterval
+    ) {
         dismissTimer?.invalidate()
 
         let pillFrame = pillWindow.frame
@@ -94,7 +123,7 @@ public final class ResponseCard: NSPanel {
         }
 
         dismissTimer = Timer.scheduledTimer(
-            withTimeInterval: Self.autoDismissAfter,
+            withTimeInterval: autoDismissAfter,
             repeats: false
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -110,7 +139,9 @@ public final class ResponseCard: NSPanel {
             ctx.duration = 0.15
             animator().alphaValue = 0
         }, completionHandler: { [weak self] in
-            self?.orderOut(nil)
+            Task { @MainActor [weak self] in
+                self?.orderOut(nil)
+            }
         })
     }
 
@@ -119,7 +150,7 @@ public final class ResponseCard: NSPanel {
     /// needing a live panel.
     static func estimatedHeight(for text: String, width: CGFloat) -> CGFloat {
         let font = NSFont.systemFont(ofSize: 13)
-        var paragraph = NSMutableParagraphStyle()
+        let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = 4
         let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
