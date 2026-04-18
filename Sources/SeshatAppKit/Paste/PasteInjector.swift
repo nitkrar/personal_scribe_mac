@@ -4,11 +4,17 @@ import Foundation
 import SeshatCore
 
 @MainActor
-public struct PasteInjector {
+protocol PasteInjecting {
+    func paste(_ text: String)
+}
+
+@MainActor
+public struct PasteInjector: PasteInjecting {
     public typealias RestoreScheduler = @MainActor (
         _ delay: TimeInterval,
         _ action: @escaping @MainActor () -> Void
     ) -> Void
+    public typealias PasteShortcutPoster = @MainActor (_ logger: SeshatLogger) -> Bool
 
     private let logger: SeshatLogger
     private let pasteboard: NSPasteboard
@@ -16,6 +22,7 @@ public struct PasteInjector {
     private let scheduleRestore: RestoreScheduler
     private let isAccessibilityTrusted: @MainActor () -> Bool
     private let requestAccessibilityPrompt: @MainActor () -> Void
+    private let pasteShortcutPoster: @MainActor () -> Bool
 
     public init(
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
@@ -34,7 +41,8 @@ public struct PasteInjector {
             // symbol is flagged non-Sendable under Swift 6 strict concurrency.
             let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
-        }
+        },
+        pasteShortcutPoster: @escaping PasteShortcutPoster = PasteInjector.postPasteShortcut
     ) {
         self.logger = logger
         self.pasteboard = pasteboard
@@ -42,6 +50,39 @@ public struct PasteInjector {
         self.scheduleRestore = scheduleRestore
         self.isAccessibilityTrusted = isAccessibilityTrusted
         self.requestAccessibilityPrompt = requestAccessibilityPrompt
+        self.pasteShortcutPoster = {
+            pasteShortcutPoster(logger)
+        }
+    }
+
+    @MainActor
+    static func live(
+        logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
+        pasteboard: NSPasteboard = .general,
+        restoreDelay: TimeInterval = 0.25,
+        scheduleRestore: @escaping RestoreScheduler = { delay, action in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                Task { @MainActor in
+                    action()
+                }
+            }
+        },
+        isAccessibilityTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
+        requestAccessibilityPrompt: @escaping @MainActor () -> Void = {
+            let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+        },
+        pasteShortcutPoster: @escaping PasteShortcutPoster = PasteInjector.postPasteShortcut
+    ) -> any PasteInjecting {
+        PasteInjector(
+            logger: logger,
+            pasteboard: pasteboard,
+            restoreDelay: restoreDelay,
+            scheduleRestore: scheduleRestore,
+            isAccessibilityTrusted: isAccessibilityTrusted,
+            requestAccessibilityPrompt: requestAccessibilityPrompt,
+            pasteShortcutPoster: pasteShortcutPoster
+        )
     }
 
     public func paste(_ text: String) {
@@ -62,7 +103,7 @@ public struct PasteInjector {
             return
         }
 
-        guard postCommandV() else { return }
+        guard pasteShortcutPoster() else { return }
 
         scheduleRestore(restoreDelay) { [pasteboard] in
             pasteboard.clearContents()
@@ -72,7 +113,8 @@ public struct PasteInjector {
         }
     }
 
-    private func postCommandV() -> Bool {
+    @usableFromInline
+    static func postPasteShortcut(logger: SeshatLogger) -> Bool {
         guard let source = CGEventSource(stateID: .combinedSessionState) else {
             logger.info("PasteInjector: failed to create CGEventSource; leaving transcript on clipboard as fallback")
             return false

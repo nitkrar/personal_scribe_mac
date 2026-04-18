@@ -12,36 +12,48 @@ final class PasteInjectorTests: XCTestCase {
     func testPromptsAccessibilityWhenNotTrustedAndLeavesTranscriptOnClipboard() {
         let pasteboard = makePasteboard()
         var promptCount = 0
-        let injector = PasteInjector(
+        var shortcutPostCount = 0
+        let injector = PasteInjector.live(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
             restoreDelay: 0.01,
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { false },
-            requestAccessibilityPrompt: { promptCount += 1 }
+            requestAccessibilityPrompt: { promptCount += 1 },
+            pasteShortcutPoster: { _ in
+                shortcutPostCount += 1
+                return true
+            }
         )
 
         injector.paste("hello world")
 
         XCTAssertEqual(promptCount, 1)
+        XCTAssertEqual(shortcutPostCount, 0)
         XCTAssertEqual(pasteboard.string(forType: .string), "hello world")
     }
 
     func testDoesNotPromptWhenAlreadyTrusted() {
         let pasteboard = makePasteboard()
         var promptCount = 0
-        let injector = PasteInjector(
+        var shortcutPostCount = 0
+        let injector = PasteInjector.live(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
             restoreDelay: 0.01,
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: { promptCount += 1 }
+            requestAccessibilityPrompt: { promptCount += 1 },
+            pasteShortcutPoster: { _ in
+                shortcutPostCount += 1
+                return true
+            }
         )
 
         injector.paste("already trusted")
 
         XCTAssertEqual(promptCount, 0)
+        XCTAssertEqual(shortcutPostCount, 1)
     }
 
     func testEmptyTranscriptIsNoop() {
@@ -49,25 +61,32 @@ final class PasteInjectorTests: XCTestCase {
         pasteboard.clearContents()
         _ = pasteboard.setString("prior", forType: .string)
         var promptCount = 0
-        let injector = PasteInjector(
+        var shortcutPostCount = 0
+        let injector = PasteInjector.live(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
             restoreDelay: 0.01,
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { false },
-            requestAccessibilityPrompt: { promptCount += 1 }
+            requestAccessibilityPrompt: { promptCount += 1 },
+            pasteShortcutPoster: { _ in
+                shortcutPostCount += 1
+                return true
+            }
         )
 
         injector.paste("")
 
         XCTAssertEqual(promptCount, 0)
+        XCTAssertEqual(shortcutPostCount, 0)
         XCTAssertEqual(pasteboard.string(forType: .string), "prior")
     }
 
     func testSchedulesClipboardRestoreWhenTrusted() {
         let pasteboard = makePasteboard()
         var scheduledAction: (() -> Void)?
-        let injector = PasteInjector(
+        var shortcutPostCount = 0
+        let injector = PasteInjector.live(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
             restoreDelay: 0.01,
@@ -75,7 +94,11 @@ final class PasteInjectorTests: XCTestCase {
                 scheduledAction = action
             },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {}
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in
+                shortcutPostCount += 1
+                return true
+            }
         )
 
         pasteboard.clearContents()
@@ -83,6 +106,7 @@ final class PasteInjectorTests: XCTestCase {
 
         injector.paste("transcript")
 
+        XCTAssertEqual(shortcutPostCount, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "transcript")
         XCTAssertNotNil(scheduledAction)
         scheduledAction?()
