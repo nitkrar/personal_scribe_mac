@@ -25,7 +25,8 @@ private struct PrivateModelDownloader: ModelDownloading {
         at directory: URL,
         progress: @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws -> URL {
-        _ = progress
+        progress(.init(phase: .downloading, fractionCompleted: 0, receivedBytes: 0, expectedBytes: nil))
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
 }
