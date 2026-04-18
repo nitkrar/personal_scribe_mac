@@ -1,4 +1,5 @@
 import Foundation
+import Dispatch
 import XCTest
 import SeshatCore
 @testable import SeshatAudio
@@ -184,5 +185,82 @@ final class NSErrorMappingTests: XCTestCase {
         if let messages = try? LogProbe.audioMessages(), !messages.isEmpty {
             XCTAssertTrue(messages.contains { $0.contains("Injected upstream resample failure") })
         }
+    }
+}
+
+private final class BlockingResampleBox: @unchecked Sendable {
+    // Safe in tests: NSLock protects mutable state and DispatchSemaphore gates one deliberate race point.
+    private let lock = NSLock()
+    private let gate = DispatchSemaphore(value: 0)
+    private let failOnCall: Int
+    private var callCount = 0
+
+    init(failOnCall: Int) {
+        self.failOnCall = failOnCall
+    }
+
+    func openGate() {
+        gate.signal()
+    }
+
+    func resample(
+        samples: [Float],
+        timestamp: ContinuousClock.Instant
+    ) throws -> PCMBuffer {
+        lock.lock()
+        callCount += 1
+        let shouldFail = callCount == failOnCall
+        lock.unlock()
+
+        if shouldFail {
+            gate.wait()
+            throw SeshatError.resampleFailure
+        }
+
+        return try PCMBuffer(
+            samples: samples,
+            sampleRate: SeshatConfig.sampleRate,
+            channelCount: 1,
+            timestamp: timestamp
+        )
+    }
+}
+
+final class FinishExactlyOnceRaceTests: XCTestCase {
+    func testStopRacingNthBufferFailureFinishesExactlyOnce() async throws {
+        let box = ThreadSafeEngineBox()
+        let failing = BlockingResampleBox(failOnCall: 3)
+        let service = AVAudioCaptureService(
+            authorizationStatusProvider: { .authorized },
+            engineDriver: .testStub(sampleRate: 16_000, box: box),
+            resamplerFactory: { _, _ in
+                AudioResampler(resampleImpl: failing.resample(samples:timestamp:))
+            }
+        )
+
+        let stream = try await service.start()
+        var iterator = stream.makeAsyncIterator()
+
+        let valid = AudioTestSupport.makeFloatBuffer(
+            sampleRate: 16_000,
+            channels: 1,
+            frames: 1_024
+        ) { _, _ in 0.1 }
+
+        box.emit(valid)
+        _ = try await iterator.next()
+        box.emit(valid)
+        _ = try await iterator.next()
+
+        let stopTask = Task {
+            await service.stop()
+        }
+
+        box.emit(valid)
+        failing.openGate()
+        await stopTask.value
+
+        XCTAssertNil(try await iterator.next())
+        XCTAssertNil(try await iterator.next())
     }
 }
