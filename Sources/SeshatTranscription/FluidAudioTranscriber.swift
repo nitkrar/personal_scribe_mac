@@ -35,6 +35,25 @@ public actor FluidAudioTranscriber: Transcribing {
         self.logSink = logSink
     }
 
+    static func modelRootDirectory(base: URL) -> URL {
+        base.appendingPathComponent(ParakeetArtifact.modelDirectoryName, isDirectory: true)
+    }
+
+    static func stagingDirectory(base: URL) -> URL {
+        base.appendingPathComponent("\(ParakeetArtifact.modelDirectoryName)-staging", isDirectory: true)
+    }
+
+    static func requiredModelPaths(in directory: URL) -> [URL] {
+        ParakeetArtifact.requiredRelativePaths.map {
+            directory.appendingPathComponent($0, isDirectory: false)
+        }
+    }
+
+    static func modelsExist(in directory: URL) -> Bool {
+        let fileManager = FileManager.default
+        return requiredModelPaths(in: directory).allSatisfy { fileManager.fileExists(atPath: $0.path) }
+    }
+
     public func prepare() async throws {
         fatalError("step 5+")
     }
