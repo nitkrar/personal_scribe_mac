@@ -61,9 +61,25 @@ Items already called out in Phase 2 scope:
 - Onboarding window + early Accessibility permission request.
 - Settings window (modes, base directory picker).
 
+## Phase 2 Sprint 1 — closures (2026-04-18)
+
+Sprint 1 (foundation components + state/audio plumbing) merged on `phase-2`. **254 tests green** (Phase 1 baseline 172 + 82 new). Execution model: 2 parallel Claude implementers in isolated worktrees + 2 Codex reviewers (`codex-cc:codex-rescue`) triggered per-completion; reviewers fixed mechanical issues in place and flagged design divergences.
+
+| Deliverable | Lane / merge | Notes |
+|---|---|---|
+| `SeshatTheme` (dark + light palettes, typography, spacing, radii; `Palette.for(scheme:)`) | A1 / `bc8e776` | Review `d800a05` corrected dark `appBackground` to `0E0E14` + centralized component metrics. `Color(hex:` outside theme = 0 hits. |
+| `SeshatLogoView` (quill with idle/listening/transcribing/error states) | A1 | Stylised SwiftUI vector; revisit at `.icns` export — see TODOs. |
+| `WaveformView` (audio-level meter) | A1 | `TimelineView(.animation)` ONLY when `isActive` (kickoff decision locked). No smoothing at this layer. |
+| `StatusPill` / `TagChip` / `ActionButton` | A1 | `StatusPill` scope: Settings + Onboarding only — never menu bar, never pill overlay. |
+| Asset catalog + `.process("Resources")` in `Package.swift` | A1 | `StatusBarIcon` PNGs are placeholders — see TODOs. |
+| `IntentClassifier` protocol + `NoOpIntentClassifier` stub | A2 / `baae506` | Phase 4 placeholder, Sendable-clean; protocol swap point for NLEmbedding / llama.cpp. |
+| `AudioLevelCalculator` + `AVAudioCaptureService` RMS stream @ 10 Hz | A2 | Buffer-cadence-driven (no `Timer.scheduledTimer`, no MainActor dep). -60 dBFS floor, 1.0 ceiling. |
+| `SessionCoordinator.audioLevelStream()` / `audioLevel()` | A2 | Mirrors `stateStream()` pattern. No new `AppState` type (plan line 279). Review `b359d2c`: fake level stream terminates on error. |
+| `@MainActor` on `ActionButtonTests` (test-fix) | Post-merge / `4192e7c` | Swift 6 strict concurrency required it. |
+
 ## Phase 2 Sprint 1 — TODOs (merged with placeholders)
 
-Sprint 1 (theme + foundation components + state/audio plumbing) merged on `phase-2`. Two items deferred rather than gated:
+Two items deferred rather than gated:
 
 - **StatusBarIcon — replace placeholder PNGs.** `Sources/SeshatAppKit/Resources/Assets.xcassets/StatusBarIcon.imageset/*.png` are opaque color tile-crops from `logo_dark.png` via `sips`. Menu-bar spec in `plans/seshat_agent_bundle/03_Surfaces/MenuBarMenu/IMPORTANT.md` requires a **transparent-background monochrome silhouette** (18×18pt @1x + 36×36 @2x) for `Render As = Template Image`. Manus export pending; swap in a 1-commit follow-up when it arrives. Functionally invisible until Sprint 2 wires the native `NSMenu` status item, so not blocking.
 - **Trailing `0.0` on `audioLevelStream()` at stop — UI-layer decay in Sprint 2.** `SessionCoordinator.stop()` publishes `0.0` as the final value before the stream finishes. When `WaveformView` gets consumed by the pill overlay in Sprint 2, it should interpolate a short coast-down (~300 ms) on stream-end rather than snapping flat. Plumbing stays as-is in `SeshatSession`/`SeshatAudio`; decay is a presentation concern.
