@@ -63,8 +63,9 @@ public actor AVAudioCaptureService: AudioCapturing {
             throw SeshatError.audioEngineFailure
         }
 
-        // 4. Create stream
+        // 4. Create streams
         let (stream, continuation) = AsyncThrowingStream<PCMBuffer, Error>.makeStream()
+        let (levelStream, levelContinuation) = AsyncStream<Float>.makeStream()
 
         // 5. Install tap, prepare, start engine
         do {
@@ -84,11 +85,16 @@ public actor AVAudioCaptureService: AudioCapturing {
             engineDriver.stop()
             engineDriver.reset()
             continuation.finish()
+            levelContinuation.finish()
             throw SeshatError.audioEngineFailure
         }
 
-        // 6. Mark live and wire continuation
+        // 6. Mark live and wire continuations
         self.continuation = continuation
+        self.levelContinuation = levelContinuation
+        self.levelSampleRate = sampleRate
+        self.levelAccumulator.removeAll(keepingCapacity: true)
+        self.levelAccumulatedFrames = 0
         self.resampler = resampler
         self.isCapturing = true
         self.isTerminated = false
@@ -99,7 +105,37 @@ public actor AVAudioCaptureService: AudioCapturing {
             }
         }
 
+        // A pending level-stream consumer that cancels while capture is still
+        // live should not tear down the PCM stream — just drop the level
+        // continuation so future emits no-op.
+        levelContinuation.onTermination = { [weak self] _ in
+            Task { [weak self] in
+                await self?.dropLevelContinuation()
+            }
+        }
+
+        self.pendingLevelStream = levelStream
+
         return stream
+    }
+
+    /// Returns an `AsyncStream<Float>` of normalized audio-level samples
+    /// published at roughly 10 Hz. Must be called after a successful
+    /// `start()` — before then (or after `stop()`), it returns an
+    /// immediately-finished stream. The stream terminates when `stop()` is
+    /// called or capture fails.
+    ///
+    /// Cadence comes from buffer size / sample rate: the service accumulates
+    /// ≥ 100 ms of input-rate audio, computes RMS across the accumulator,
+    /// emits a normalized `[0, 1]` level, and resets. No wall-clock timer.
+    public func audioLevelStream() async -> AsyncStream<Float> {
+        if let stream = pendingLevelStream {
+            pendingLevelStream = nil
+            return stream
+        }
+        return AsyncStream { continuation in
+            continuation.finish()
+        }
     }
 
     public func stop() async {
@@ -116,6 +152,11 @@ public actor AVAudioCaptureService: AudioCapturing {
 
         continuation?.finish()
         continuation = nil
+        levelContinuation?.finish()
+        levelContinuation = nil
+        pendingLevelStream = nil
+        levelAccumulator.removeAll(keepingCapacity: false)
+        levelAccumulatedFrames = 0
         resampler = nil
         isCapturing = false
     }
@@ -124,6 +165,11 @@ public actor AVAudioCaptureService: AudioCapturing {
 
     private func handleTapSamples(samples: [Float], timestamp: ContinuousClock.Instant) async {
         guard !isTerminated, let resampler, let continuation else { return }
+
+        // Step 2.9: additive audio-level emission. Runs on the actor so it's
+        // serialized against stop()/finishWithError() — no level yields
+        // happen after termination.
+        emitLevelIfWindowComplete(tapSamples: samples)
 
         do {
             let buffer = try await resampler.resample(
@@ -140,6 +186,37 @@ public actor AVAudioCaptureService: AudioCapturing {
         }
     }
 
+    /// Accumulate `tapSamples` into the 100 ms window. When the window fills,
+    /// compute `normalizedLevel` over the entire window, yield it on the
+    /// level continuation, and reset the accumulator. Buffers that arrive
+    /// larger than the window still yield one sample and keep the remainder
+    /// for the next window (so cadence stays ~10 Hz regardless of input
+    /// buffer size).
+    private func emitLevelIfWindowComplete(tapSamples: [Float]) {
+        guard let levelContinuation, levelSampleRate > 0 else { return }
+        let framesPerWindow = Int((levelSampleRate * levelWindowSeconds).rounded())
+        guard framesPerWindow > 0 else { return }
+
+        levelAccumulator.append(contentsOf: tapSamples)
+        levelAccumulatedFrames += tapSamples.count
+
+        // Drain as many full windows as have accumulated. This protects the
+        // cadence contract when a very large buffer arrives at once.
+        while levelAccumulatedFrames >= framesPerWindow {
+            let window = Array(levelAccumulator.prefix(framesPerWindow))
+            let level = AudioLevelCalculator.normalizedLevel(samples: window)
+            levelContinuation.yield(level)
+
+            levelAccumulator.removeFirst(framesPerWindow)
+            levelAccumulatedFrames -= framesPerWindow
+        }
+    }
+
+    private func dropLevelContinuation() {
+        levelContinuation = nil
+        pendingLevelStream = nil
+    }
+
     private func finishWithError(_ error: SeshatError) {
         guard !isTerminated else { return }
         isTerminated = true
@@ -148,6 +225,11 @@ public actor AVAudioCaptureService: AudioCapturing {
         engineDriver.reset()
         continuation?.finish(throwing: error)
         continuation = nil
+        levelContinuation?.finish()
+        levelContinuation = nil
+        pendingLevelStream = nil
+        levelAccumulator.removeAll(keepingCapacity: false)
+        levelAccumulatedFrames = 0
         resampler = nil
         isCapturing = false
     }
@@ -159,6 +241,11 @@ public actor AVAudioCaptureService: AudioCapturing {
         engineDriver.removeTap()
         engineDriver.stop()
         engineDriver.reset()
+        levelContinuation?.finish()
+        levelContinuation = nil
+        pendingLevelStream = nil
+        levelAccumulator.removeAll(keepingCapacity: false)
+        levelAccumulatedFrames = 0
         resampler = nil
         isCapturing = false
     }
@@ -203,4 +290,13 @@ public actor AVAudioCaptureService: AudioCapturing {
     private var resampler: AudioResampler?
     private var isCapturing = false
     private var isTerminated = false
+
+    // Step 2.9: audio-level stream state.
+    private var levelContinuation: AsyncStream<Float>.Continuation?
+    private var pendingLevelStream: AsyncStream<Float>?
+    private var levelSampleRate: Double = 0
+    private var levelAccumulator: [Float] = []
+    private var levelAccumulatedFrames: Int = 0
+    /// 100 ms window → ~10 Hz emission cadence.
+    private let levelWindowSeconds: Double = 0.1
 }
