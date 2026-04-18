@@ -3,8 +3,15 @@ import GRDB
 
 public actor SQLiteTranscriptStore {
     private static let databaseFileName = "transcripts.sqlite"
+    private static let jsonlFileName = "transcripts.jsonl"
     private static let transcriptsTableName = "transcripts"
     private static let transcriptsFTSTableName = "transcripts_fts"
+
+    enum TestingEvent: Sendable, Equatable {
+        case skippedCorruptJSONLLine(String)
+    }
+
+    nonisolated(unsafe) static var testingEventSink: (@Sendable (TestingEvent) -> Void)?
 
     private let databaseURL: URL
     private let dbQueue: DatabaseQueue
@@ -14,11 +21,23 @@ public actor SQLiteTranscriptStore {
         _ = max(0, ringCapacity)
 
         let fileManager = FileManager.default
+        let logger = SeshatLogger(category: SeshatLogCategory.app)
         let databaseURL = recordingsDirectory
             .appendingPathComponent(Self.databaseFileName, isDirectory: false)
             .standardizedFileURL
+        let jsonlURL = recordingsDirectory
+            .appendingPathComponent(Self.jsonlFileName, isDirectory: false)
+            .standardizedFileURL
+        let temporaryDatabaseURL = databaseURL.appendingPathExtension("tmp")
 
         try fileManager.createDirectory(at: recordingsDirectory, withIntermediateDirectories: true)
+        try Self.bootstrapDatabaseIfNeeded(
+            databaseURL: databaseURL,
+            jsonlURL: jsonlURL,
+            temporaryDatabaseURL: temporaryDatabaseURL,
+            fileManager: fileManager,
+            logger: logger
+        )
 
         let dbQueue = try DatabaseQueue(path: databaseURL.path)
         try Self.makeMigrator().migrate(dbQueue)
@@ -26,7 +45,7 @@ public actor SQLiteTranscriptStore {
 
         self.databaseURL = databaseURL
         self.dbQueue = dbQueue
-        self.logger = SeshatLogger(category: SeshatLogCategory.app)
+        self.logger = logger
     }
 
     public func append(_ entry: TranscriptEntry) async throws {
@@ -128,7 +147,10 @@ public actor SQLiteTranscriptStore {
         }
     }
 
-    private static func makeMigrator() -> DatabaseMigrator {
+    private static func makeMigrator(
+        jsonlImportURL: URL? = nil,
+        logger: SeshatLogger? = nil
+    ) -> DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1_transcripts_table") { db in
             try db.execute(sql: """
@@ -150,7 +172,95 @@ public actor SQLiteTranscriptStore {
             }
             try db.execute(sql: "PRAGMA user_version = 2")
         }
+        migrator.registerMigration("v3_jsonl_bootstrap") { db in
+            if let jsonlImportURL, let logger {
+                for entry in try Self.loadJSONLEntries(from: jsonlImportURL, logger: logger) {
+                    try Self.insert(entry, into: db)
+                }
+            }
+            try db.execute(sql: "PRAGMA user_version = 3")
+        }
         return migrator
+    }
+
+    private static func bootstrapDatabaseIfNeeded(
+        databaseURL: URL,
+        jsonlURL: URL,
+        temporaryDatabaseURL: URL,
+        fileManager: FileManager,
+        logger: SeshatLogger
+    ) throws {
+        guard !fileManager.fileExists(atPath: databaseURL.path),
+              fileManager.fileExists(atPath: jsonlURL.path)
+        else {
+            return
+        }
+
+        try removeSQLiteArtifactsIfPresent(at: temporaryDatabaseURL, fileManager: fileManager)
+
+        do {
+            let temporaryQueue = try DatabaseQueue(path: temporaryDatabaseURL.path)
+            try Self.makeMigrator(jsonlImportURL: jsonlURL, logger: logger).migrate(temporaryQueue)
+            try Self.setPermissionsIfPresent(at: temporaryDatabaseURL, fileManager: fileManager)
+            try fileManager.moveItem(at: temporaryDatabaseURL, to: databaseURL)
+            try Self.setPermissionsIfPresent(at: databaseURL, fileManager: fileManager)
+        } catch {
+            try? removeSQLiteArtifactsIfPresent(at: temporaryDatabaseURL, fileManager: fileManager)
+            throw error
+        }
+    }
+
+    private static func loadJSONLEntries(
+        from jsonlURL: URL,
+        logger: SeshatLogger
+    ) throws -> [TranscriptEntry] {
+        let data = try Data(contentsOf: jsonlURL)
+        guard !data.isEmpty else {
+            return []
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        var entries: [TranscriptEntry] = []
+        for line in data.split(separator: 0x0A, omittingEmptySubsequences: true) {
+            let lineData = Data(line)
+
+            do {
+                let entry = try decoder.decode(TranscriptEntry.self, from: lineData)
+                entries.append(entry)
+            } catch {
+                let renderedLine = String(decoding: lineData, as: UTF8.self)
+                logger.error(
+                    "Skipping corrupt transcript line during SQLite migration: \(renderedLine)",
+                    error: error
+                )
+                testingEventSink?(.skippedCorruptJSONLLine(renderedLine))
+            }
+        }
+
+        return entries
+    }
+
+    private static func insert(_ entry: TranscriptEntry, into db: Database) throws {
+        try db.execute(
+            sql: """
+            INSERT INTO transcripts (
+                id,
+                timestamp,
+                text,
+                audio_duration,
+                processing_duration
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                entry.id.uuidString,
+                entry.timestamp.timeIntervalSince1970,
+                entry.text,
+                entry.audioDuration,
+                entry.processingDuration,
+            ]
+        )
     }
 
     private static func setPermissionsIfPresent(at url: URL, fileManager: FileManager) throws {
@@ -162,6 +272,19 @@ public actor SQLiteTranscriptStore {
             [.posixPermissions: NSNumber(value: 0o600)],
             ofItemAtPath: url.path
         )
+    }
+
+    private static func removeSQLiteArtifactsIfPresent(
+        at url: URL,
+        fileManager: FileManager
+    ) throws {
+        for artifactURL in [
+            url,
+            url.appendingPathExtension("shm"),
+            url.appendingPathExtension("wal"),
+        ] where fileManager.fileExists(atPath: artifactURL.path) {
+            try fileManager.removeItem(at: artifactURL)
+        }
     }
 }
 

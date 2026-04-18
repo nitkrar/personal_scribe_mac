@@ -7,6 +7,25 @@ final class SQLiteTranscriptStoreTests: XCTestCase {
         let baseDirectory: URL
         let recordingsDirectory: URL
         let databaseURL: URL
+        let jsonlURL: URL
+        let temporaryDatabaseURL: URL
+    }
+
+    private final class EventRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var events: [SQLiteTranscriptStore.TestingEvent] = []
+
+        func append(_ event: SQLiteTranscriptStore.TestingEvent) {
+            lock.lock()
+            events.append(event)
+            lock.unlock()
+        }
+
+        func snapshot() -> [SQLiteTranscriptStore.TestingEvent] {
+            lock.lock()
+            defer { lock.unlock() }
+            return events
+        }
     }
 
     private static let configLock = NSLock()
@@ -64,6 +83,51 @@ final class SQLiteTranscriptStoreTests: XCTestCase {
         XCTAssertEqual(diacriticMatches.map(\.id), [diacriticEntry.id])
     }
 
+    func testMigratesExistingJSONLAndSkipsCorruptLinesOnlyOnce() async throws {
+        let context = try makeIsolatedRecordingsDirectory()
+        defer { cleanup(context.baseDirectory) }
+
+        let firstEntry = makeEntry(index: 1, text: "first migrated row")
+        let secondEntry = makeEntry(index: 2, text: "second migrated row")
+        try writeJSONLLines(
+            [
+                try encode(entry: firstEntry),
+                "{ malformed json",
+                try encode(entry: secondEntry),
+            ],
+            to: context.jsonlURL
+        )
+
+        let recorder = EventRecorder()
+        let originalSink = SQLiteTranscriptStore.testingEventSink
+        SQLiteTranscriptStore.testingEventSink = { event in
+            recorder.append(event)
+        }
+        defer {
+            SQLiteTranscriptStore.testingEventSink = originalSink
+        }
+
+        let migratedStore = try SQLiteTranscriptStore(recordingsDirectory: context.recordingsDirectory)
+        let migratedRecent = await migratedStore.recent(limit: 10)
+        let migratedCount = await migratedStore.count()
+        XCTAssertEqual(migratedRecent, [secondEntry, firstEntry])
+        XCTAssertEqual(migratedCount, 2)
+        XCTAssertTrue(fileManager.fileExists(atPath: context.databaseURL.path))
+        XCTAssertTrue(fileManager.fileExists(atPath: context.jsonlURL.path))
+        XCTAssertFalse(fileManager.fileExists(atPath: context.temporaryDatabaseURL.path))
+        XCTAssertEqual(recorder.snapshot(), [.skippedCorruptJSONLLine("{ malformed json")])
+
+        let laterJSONLEntry = makeEntry(index: 3, text: "should not be reimported")
+        try appendJSONLLine(try encode(entry: laterJSONLEntry), to: context.jsonlURL)
+
+        let reopenedStore = try SQLiteTranscriptStore(recordingsDirectory: context.recordingsDirectory)
+        let reopenedRecent = await reopenedStore.recent(limit: 10)
+        let reopenedCount = await reopenedStore.count()
+        XCTAssertEqual(reopenedRecent, [secondEntry, firstEntry])
+        XCTAssertEqual(reopenedCount, 2)
+        XCTAssertEqual(recorder.snapshot(), [.skippedCorruptJSONLLine("{ malformed json")])
+    }
+
     private func makeIsolatedRecordingsDirectory() throws -> DirectoryContext {
         let baseDirectory = fileManager.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -79,10 +143,14 @@ final class SQLiteTranscriptStoreTests: XCTestCase {
 
         let recordingsDirectory = try SeshatConfig.recordingsDirectory()
         let databaseURL = recordingsDirectory.appendingPathComponent("transcripts.sqlite", isDirectory: false)
+        let jsonlURL = recordingsDirectory.appendingPathComponent("transcripts.jsonl", isDirectory: false)
+        let temporaryDatabaseURL = databaseURL.appendingPathExtension("tmp")
         return DirectoryContext(
             baseDirectory: baseDirectory,
             recordingsDirectory: recordingsDirectory,
-            databaseURL: databaseURL
+            databaseURL: databaseURL,
+            jsonlURL: jsonlURL,
+            temporaryDatabaseURL: temporaryDatabaseURL
         )
     }
 
@@ -98,5 +166,32 @@ final class SQLiteTranscriptStoreTests: XCTestCase {
             audioDuration: TimeInterval(index) * 0.25,
             processingDuration: TimeInterval(index) * 0.1
         )
+    }
+
+    private func encode(entry: TranscriptEntry) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(entry)
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func writeJSONLLines(_ lines: [String], to url: URL) throws {
+        let data = (lines.joined(separator: "\n") + "\n").data(using: .utf8) ?? Data()
+        try data.write(to: url)
+    }
+
+    private func appendJSONLLine(_ line: String, to url: URL) throws {
+        guard let data = "\(line)\n".data(using: .utf8) else {
+            throw CocoaError(.fileWriteInapplicableStringEncoding)
+        }
+
+        if fileManager.fileExists(atPath: url.path) {
+            let handle = try FileHandle(forWritingTo: url)
+            defer { try? handle.close() }
+            _ = try handle.seekToEnd()
+            try handle.write(contentsOf: data)
+        } else {
+            try data.write(to: url)
+        }
     }
 }
