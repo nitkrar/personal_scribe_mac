@@ -25,26 +25,54 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertTrue(monitor.isActive)
     }
 
-    func testCallbackInvokedOnSimulatedFlagsChangedEventWithRightOption() throws {
+    func testSinglePressDoesNotTrigger() throws {
         var triggerCount = 0
         let monitor = GlobalHotkeyMonitor {
             triggerCount += 1
         }
 
         monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [.option], timestamp: 1))
+
+        XCTAssertEqual(triggerCount, 0)
+    }
+
+    func testDoubleTapWithinWindowTriggersOnce() throws {
+        var triggerCount = 0
+        let monitor = GlobalHotkeyMonitor {
+            triggerCount += 1
+        }
+
+        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [.option], timestamp: 1))
+        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [], timestamp: 1.05))
+        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [.option], timestamp: 1.2))
 
         XCTAssertEqual(triggerCount, 1)
     }
 
-    func testDebounceSuppressesRapidRepeat() throws {
+    func testDoubleTapOutsideWindowDoesNotTrigger() throws {
         var triggerCount = 0
         let monitor = GlobalHotkeyMonitor {
             triggerCount += 1
         }
 
         monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [.option], timestamp: 1))
-        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [], timestamp: 1.005))
-        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [.option], timestamp: 1.01))
+        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [], timestamp: 1.2))
+        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [.option], timestamp: 1.6))
+
+        XCTAssertEqual(triggerCount, 0)
+    }
+
+    func testTripleTapFiresOnceAndRearms() throws {
+        var triggerCount = 0
+        let monitor = GlobalHotkeyMonitor {
+            triggerCount += 1
+        }
+
+        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [.option], timestamp: 1.0))
+        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [], timestamp: 1.05))
+        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [.option], timestamp: 1.1))
+        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [], timestamp: 1.15))
+        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [.option], timestamp: 1.2))
 
         XCTAssertEqual(triggerCount, 1)
     }

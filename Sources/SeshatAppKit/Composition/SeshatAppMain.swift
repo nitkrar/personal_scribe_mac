@@ -10,6 +10,7 @@ struct SeshatAppMain: App {
     let permissionRequester: any MicrophonePermissionRequesting
 
     @StateObject private var sceneModel: MenuBarSceneModel
+    @StateObject private var pillController: PillOverlayController
 
     init() {
         let coordinator = AppComposition.sessionCoordinator
@@ -17,34 +18,40 @@ struct SeshatAppMain: App {
 
         self.coordinator = coordinator
         self.permissionRequester = permissionRequester
-        _sceneModel = StateObject(
-            wrappedValue: MenuBarSceneModel(
-                coordinator: coordinator,
-                permissionRequester: permissionRequester,
-                permissionStateProvider: {
-                    if let permissionRequester = permissionRequester as? AppKitMicrophonePermissionRequester {
-                        return permissionRequester.currentState()
-                    }
-
-                    return .notYetRequested
-                },
-                clipboardWriter: { text in
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(text, forType: .string)
-                },
-                openSettings: {
-                    guard let url = URL(
-                        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-                    ) else {
-                        return
-                    }
-
-                    NSWorkspace.shared.open(url)
+        let sceneModel = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: permissionRequester,
+            permissionStateProvider: {
+                if let permissionRequester = permissionRequester as? AppKitMicrophonePermissionRequester {
+                    return permissionRequester.currentState()
                 }
+
+                return .notYetRequested
+            },
+            clipboardWriter: { text in
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(text, forType: .string)
+            },
+            openSettings: {
+                guard let url = URL(
+                    string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+                ) else {
+                    return
+                }
+
+                NSWorkspace.shared.open(url)
+            }
+        )
+        _sceneModel = StateObject(wrappedValue: sceneModel)
+        _pillController = StateObject(
+            wrappedValue: PillOverlayController(
+                statePublisher: sceneModel.$state.eraseToAnyPublisher()
             )
         )
+
         AppComposition.prewarmTranscription()
+        AppComposition.hotkeyMonitor.start()
     }
 
     var body: some Scene {

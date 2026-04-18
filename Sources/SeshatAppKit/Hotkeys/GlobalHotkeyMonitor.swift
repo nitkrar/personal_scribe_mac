@@ -11,14 +11,14 @@ import SeshatSession
 @MainActor
 public final class GlobalHotkeyMonitor {
     private static let rightOptionKeyCode: UInt16 = 61
-    private static let debounceInterval: TimeInterval = 0.2
+    private static let doubleTapWindow: TimeInterval = 0.4
 
     private let onTrigger: @MainActor () -> Void
     private let logger: SeshatLogger
 
     private var monitor: Any?
     private var isRightOptionPressed = false
-    private var lastTriggerTimestamp: TimeInterval?
+    private var lastPressTimestamp: TimeInterval?
 
     public init(
         onTrigger: @escaping @MainActor () -> Void,
@@ -39,7 +39,7 @@ public final class GlobalHotkeyMonitor {
         }
 
         isRightOptionPressed = false
-        lastTriggerTimestamp = nil
+        lastPressTimestamp = nil
         monitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             Task { @MainActor [weak self] in
                 self?.handle(event: event)
@@ -55,7 +55,7 @@ public final class GlobalHotkeyMonitor {
         NSEvent.removeMonitor(handle)
         monitor = nil
         isRightOptionPressed = false
-        lastTriggerTimestamp = nil
+        lastPressTimestamp = nil
     }
 
     internal func handle(event: NSEvent) {
@@ -71,15 +71,20 @@ public final class GlobalHotkeyMonitor {
             isRightOptionPressed = isPressed
         }
 
+        // Only care about rising edge (released → pressed).
         guard isPressed, isRightOptionPressed == false else {
             return
         }
 
-        if let lastTriggerTimestamp, event.timestamp - lastTriggerTimestamp < Self.debounceInterval {
+        if
+            let lastPressTimestamp,
+            event.timestamp - lastPressTimestamp <= Self.doubleTapWindow
+        {
+            self.lastPressTimestamp = nil
+            onTrigger()
             return
         }
 
-        lastTriggerTimestamp = event.timestamp
-        onTrigger()
+        lastPressTimestamp = event.timestamp
     }
 }
