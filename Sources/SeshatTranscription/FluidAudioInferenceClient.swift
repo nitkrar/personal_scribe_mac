@@ -1,4 +1,5 @@
 import Foundation
+import FluidAudio
 import SeshatCore
 
 protocol FluidAudioInferencing: Sendable {
@@ -11,14 +12,19 @@ struct FluidAudioInferenceResult: Sendable, Equatable {
     let processingDuration: Duration
 }
 
-private struct PrivateFluidAudioInferenceClient: FluidAudioInferencing {
+private actor PrivateFluidAudioInferenceClient: FluidAudioInferencing {
+    private let manager = AsrManager(config: .default)
+
     func loadModel(from directory: URL) async throws {
-        _ = directory
-        fatalError("step 7+")
+        let models = try await AsrModels.load(from: directory, version: .v2)
+        try await manager.loadModels(models)
     }
 
     func transcribe(samples: [Float]) async throws -> FluidAudioInferenceResult {
-        _ = samples
-        fatalError("step 11+")
+        let result = try await manager.transcribe(samples, source: .microphone)
+        return FluidAudioInferenceResult(
+            text: result.text,
+            processingDuration: result.processingTime
+        )
     }
 }

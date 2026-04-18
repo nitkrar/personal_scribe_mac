@@ -108,13 +108,61 @@ public actor FluidAudioTranscriber: Transcribing {
     }
 
     public func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        _ = audio
-        fatalError("step 11+")
+        try await prepare()
+
+        do {
+            let result = try await inference.transcribe(samples: audio.samples)
+            return TranscriptionResult(
+                text: result.text,
+                segments: [],
+                audioDuration: audio.duration,
+                processingDuration: result.processingDuration
+            )
+        } catch {
+            logError("FluidAudio transcription failed", error: error)
+            throw SeshatError.transcriptionFailure
+        }
     }
 
     public func transcribe(stream: AsyncThrowingStream<PCMBuffer, Error>) async throws -> TranscriptionResult {
-        _ = stream
-        fatalError("step 12+")
+        var bufferedSamples: [Float] = []
+        var firstBuffer: PCMBuffer?
+
+        do {
+            for try await buffer in stream {
+                if let firstBuffer {
+                    guard
+                        buffer.sampleRate == firstBuffer.sampleRate,
+                        buffer.channelCount == firstBuffer.channelCount
+                    else {
+                        throw ModelArtifactValidationError.invalidStreamShape
+                    }
+                } else {
+                    firstBuffer = buffer
+                }
+
+                bufferedSamples.append(contentsOf: buffer.samples)
+            }
+        } catch {
+            logError("Replay stream transcription failed", error: error)
+            throw SeshatError.transcriptionFailure
+        }
+
+        do {
+            let aggregate = try PCMBuffer(
+                samples: bufferedSamples,
+                sampleRate: firstBuffer?.sampleRate ?? SeshatConfig.sampleRate,
+                channelCount: firstBuffer?.channelCount ?? SeshatConfig.channelCount,
+                timestamp: firstBuffer?.timestamp ?? ContinuousClock().now
+            )
+
+            return try await transcribe(aggregate)
+        } catch let error as SeshatError {
+            throw error
+        } catch {
+            logError("Replay stream transcription failed", error: error)
+            throw SeshatError.transcriptionFailure
+        }
     }
 }
 
@@ -137,8 +185,9 @@ private final class DownloadProgressBroadcaster: @unchecked Sendable {
             }
 
             continuation.onTermination = { [weak self] _ in
-                self?.lock.withLock {
-                    self?.continuations.removeValue(forKey: identifier)
+                guard let self else { return }
+                self.lock.withLock {
+                    self.continuations.removeValue(forKey: identifier)
                 }
             }
             continuation.yield(initial)
@@ -164,13 +213,16 @@ private final class DownloadProgressBroadcaster: @unchecked Sendable {
 private extension FluidAudioTranscriber {
     func ensureValidDownloadedModel(at modelDirectory: URL) async throws {
         let fileManager = FileManager.default
+        let progressBroadcaster = self.progressBroadcaster
 
         for attempt in 0..<2 {
             do {
                 _ = try await downloader.ensureModelAvailable(
                     at: modelDirectory,
                     progress: { snapshot in
-                        Task { await self.recordDownloadProgress(snapshot) }
+                        let current = progressBroadcaster.currentSnapshot
+                        let normalized = Self.normalizedProgress(snapshot, current: current)
+                        progressBroadcaster.update(normalized)
                     }
                 )
 
@@ -195,13 +247,7 @@ private extension FluidAudioTranscriber {
         logSink?("error", "\(message): \(error.localizedDescription)")
     }
 
-    func recordDownloadProgress(_ snapshot: ModelDownloadProgress) {
-        let current = progressBroadcaster.currentSnapshot
-        let normalized = normalizedProgress(snapshot, current: current)
-        progressBroadcaster.update(normalized)
-    }
-
-    func normalizedProgress(
+    static func normalizedProgress(
         _ snapshot: ModelDownloadProgress,
         current: ModelDownloadProgress
     ) -> ModelDownloadProgress {
@@ -254,4 +300,5 @@ private extension FluidAudioTranscriber {
 
 private enum ModelArtifactValidationError: Error {
     case invalidArtifacts
+    case invalidStreamShape
 }
