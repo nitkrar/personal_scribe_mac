@@ -61,6 +61,14 @@ Items already called out in Phase 2 scope:
 - Onboarding window + early Accessibility permission request.
 - Settings window (modes, base directory picker).
 
+## Phase 2 Sprint 1 — TODOs (merged with placeholders)
+
+Sprint 1 (theme + foundation components + state/audio plumbing) merged on `phase-2`. Two items deferred rather than gated:
+
+- **StatusBarIcon — replace placeholder PNGs.** `Sources/SeshatAppKit/Resources/Assets.xcassets/StatusBarIcon.imageset/*.png` are opaque color tile-crops from `logo_dark.png` via `sips`. Menu-bar spec in `plans/seshat_agent_bundle/03_Surfaces/MenuBarMenu/IMPORTANT.md` requires a **transparent-background monochrome silhouette** (18×18pt @1x + 36×36 @2x) for `Render As = Template Image`. Manus export pending; swap in a 1-commit follow-up when it arrives. Functionally invisible until Sprint 2 wires the native `NSMenu` status item, so not blocking.
+- **Trailing `0.0` on `audioLevelStream()` at stop — UI-layer decay in Sprint 2.** `SessionCoordinator.stop()` publishes `0.0` as the final value before the stream finishes. When `WaveformView` gets consumed by the pill overlay in Sprint 2, it should interpolate a short coast-down (~300 ms) on stream-end rather than snapping flat. Plumbing stays as-is in `SeshatSession`/`SeshatAudio`; decay is a presentation concern.
+- **Pixel-fidelity of `SeshatLogoView`** — current SwiftUI `QuillShape` is a stylised vector approximation, not a faithful trace of `plans/seshat_agent_bundle/01_Foundations/assets/logo_dark.png`. Revisit when exporting the `.icns` app icon (plan line 349) so SwiftUI view + icon share a common source.
+
 ## Deferred to Phase 3+ (not forgotten)
 
 - Personal dictionary + prompt injection
@@ -73,6 +81,40 @@ Items already called out in Phase 2 scope:
 - Full clipboard save/restore (all pasteboard types)
 - Active window context capture
 - SQLite note storage via GRDB.swift with FTS5 search (imports from existing JSONL — Phase 3)
+
+## FluidAudio feature map — post-current-phase pickup
+
+Captured from FluidAudio README + showcase-app review on 2026-04-18. All items assume current Phase 2 visual/architecture work lands first. No fixed priority within this list; order depends on dogfood feedback.
+
+**English-only, ASR-first scope:** translation and MT models are parked until after core features land.
+
+### Net-new — not yet listed elsewhere
+
+| Item | Pillar | Notes |
+|---|---|---|
+| Streaming dictation mode (EOU partials + v3 final) | Dictation | Separate hotkey from quick mode. EOU 120M partials render in overlay pill only (no paste during streaming); v3 batch re-transcribes on stop to produce the pasted final text. ~850MB ANE footprint while active. English-only. |
+| App-context rules for mode selection | Dictation | Frontmost-app rules (`Notes/Word/Pages → long-form`, `Slack/iMessage → quick`). Not a FluidAudio feature; depends on streaming mode shipping first. |
+| Speaker diarization (LS-EEND default) | Notes | FluidAudio LS-EEND: 10 speakers max, 100ms streaming updates, single model. Sortformer optional (4 speakers, stronger identity, NVIDIA Open Model License). |
+| Dual-track recording (mic + system audio separately) | Notes | `ScreenCaptureKit` audio tap (macOS 13+). Mic track = "me" trivially; diarize only the system-audio track. Precondition for meeting mode. NOT what current mic-only capture does — Seshat today mixes speaker leakage into the single mic stream. |
+| Cross-session speaker recognition | Notes | Pyannote WeSpeaker embeddings + local speaker DB; pre-enrollment flow. Only the Pyannote pipeline supports this reliably. |
+| Meeting mode | Notes | Zoom/Teams/Webex auto-detect + dual-track + diarization + cross-session IDs. Composes the three rows above. |
+| TTS for assistant speaking back (Kokoro + PocketTTS) | Assistant | Kokoro 82M parallel (SSML, pronunciation control) + PocketTTS streaming with voice cloning. English-only initially. |
+| MCP server exposing transcripts | Assistant | Local MCP endpoint so external agents (Claude, Codex) can query Seshat's transcript store. |
+
+### Cross-refs — already captured elsewhere, don't re-add
+
+- **VAD auto-stop** → existing `VAD auto-stop tuning, configurable timeout` (Deferred to Phase 3+).
+- **Inverse Text Normalization (ITN)** → one stage inside existing `7-stage post-processing pipeline` (Deferred to Phase 3+).
+- **Custom vocabulary / personal dictionary** → existing `Personal dictionary + prompt injection` (Deferred to Phase 3+). FluidAudio ships custom-vocabulary + custom-pronunciation guides that can inform implementation.
+- **Non-English ASR** → existing `whisper.cpp integration for non-English` (Future). Parakeet v3 already covers 25 European languages as an alternative.
+- **LLM summaries / action items / mindmaps** → existing `LLM assistant features` (Future). Covers Talat/OpenOats-style notes-pillar features.
+
+### Explicitly parked
+
+- **Real-time translation (source → non-source target)** — revisit based on performance; needs separate MT model (NLLB-200 or M2M-100, ~1.2GB quantized).
+- **Nemotron streaming ASR** — NVIDIA licensing more restrictive than Parakeet's Apache 2.0; no compelling reason to adopt.
+- **Qwen3-ASR** — redundant with Parakeet.
+- **Duration-based dictation-mode escalation** — UX-awkward; revisit only if explicit streaming hotkey feels insufficient.
 
 ## Future (not yet scoped)
 
