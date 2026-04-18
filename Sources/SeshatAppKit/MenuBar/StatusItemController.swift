@@ -122,6 +122,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func updateStatusItemAppearance(for sessionState: SessionState) {
         guard let button = statusItem.button else { return }
 
+        // Swap between the two quill-pose assets so recording is
+        // visually distinct from idle without relying on tint alone
+        // (plan line 342 — "cycle between two frames" for the status
+        // item during recording; second asset shipped 2026-04-18).
+        let pose: StatusItemIconLoader.Pose = {
+            switch sessionState {
+            case .recording, .transcribing:
+                return .listening
+            case .idle, .error:
+                return .idle
+            }
+        }()
+
+        if let image = StatusItemIconLoader.loadStatusBarIcon(pose: pose) {
+            button.image = image
+        }
+
         switch sessionState {
         case .recording:
             button.contentTintColor = .systemRed

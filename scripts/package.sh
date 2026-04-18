@@ -198,7 +198,24 @@ fi
 cp "$ICNS_SOURCE" "$APP_PATH/Contents/Resources/$APP_NAME.icns"
 
 # --- [4] Sign ---
-echo "==> Ad-hoc signing (hardened runtime + mic entitlement)..."
+# Prefer a stable self-signed identity (`Nitkrar Dev`) if present in
+# the login Keychain. Stable identity → TCC permissions persist across
+# rebuilds because the TCC database keys signed apps on signing
+# identity, not on CD hash. Ad-hoc (`--sign -`) is the fallback for
+# fresh clones / other machines that haven't created the cert yet —
+# permissions will reset per build on those.
+#
+# Set up the cert once per machine via:
+#   Keychain Access → Certificate Assistant → Create a Certificate…
+#   Name: "Nitkrar Dev", Identity Type: Self Signed Root, Type: Code Signing
+SIGN_IDENTITY="Nitkrar Dev"
+if ! security find-identity -v -p codesigning | grep -q "\"$SIGN_IDENTITY\""; then
+    echo "==> '$SIGN_IDENTITY' codesigning identity not found — falling back to ad-hoc."
+    echo "    (Permissions will reset each rebuild. Create the cert in Keychain Access"
+    echo "    to preserve TCC grants across rebuilds on this machine.)"
+    SIGN_IDENTITY="-"
+fi
+echo "==> Signing with identity: $SIGN_IDENTITY (hardened runtime + mic entitlement)..."
 ENTITLEMENTS_PLIST="$(mktemp -t seshat-entitlements.XXXXXX).plist"
 cleanup() {
     rm -f "$ENTITLEMENTS_PLIST"
@@ -218,7 +235,7 @@ ENT
 
 codesign \
     --force \
-    --sign - \
+    --sign "$SIGN_IDENTITY" \
     --deep \
     --options runtime \
     --entitlements "$ENTITLEMENTS_PLIST" \
