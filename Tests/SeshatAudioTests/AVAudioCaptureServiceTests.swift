@@ -144,3 +144,45 @@ final class EngineFailureTests: XCTestCase {
         }
     }
 }
+
+final class NSErrorMappingTests: XCTestCase {
+    func testPlainNSErrorIsLoggedThenMappedToResampleFailure() async throws {
+        let box = ThreadSafeEngineBox()
+        let service = AVAudioCaptureService(
+            logger: SeshatLogger(category: SeshatLogCategory.audio),
+            authorizationStatusProvider: { .authorized },
+            engineDriver: .testStub(box: box),
+            resamplerFactory: { _, _ in
+                AudioResampler { _, _ in
+                    throw NSError(
+                        domain: "TestDomain",
+                        code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: "Injected upstream resample failure"]
+                    )
+                }
+            }
+        )
+
+        let stream = try await service.start()
+        var iterator = stream.makeAsyncIterator()
+
+        let input = AudioTestSupport.makeFloatBuffer(
+            sampleRate: 44_100,
+            channels: 1,
+            frames: 4_410
+        ) { _, _ in 0.1 }
+
+        box.emit(input)
+
+        do {
+            _ = try await iterator.next()
+            XCTFail("Expected resampleFailure")
+        } catch let error as SeshatError {
+            XCTAssertEqual(error, .resampleFailure)
+        }
+
+        if let messages = try? LogProbe.audioMessages(), !messages.isEmpty {
+            XCTAssertTrue(messages.contains { $0.contains("Injected upstream resample failure") })
+        }
+    }
+}
