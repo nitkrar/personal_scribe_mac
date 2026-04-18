@@ -108,8 +108,7 @@ APP_PATH="$REPO_ROOT/$APP_NAME.app"
 INSTALL_PATH="/Applications/$APP_NAME.app"
 DMG_NAME="$APP_NAME-$VERSION"
 DMG_PATH="$REPO_ROOT/$DMG_NAME.dmg"
-ICON_SOURCE="$REPO_ROOT/plans/seshat_agent_bundle/01_Foundations/assets/logo_dark.png"
-ICNS_PATH="$REPO_ROOT/$APP_NAME.icns"
+ICNS_SOURCE="$REPO_ROOT/Sources/SeshatAppKit/Resources/AppIcon.icns"
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo 'unknown')"
 
 # --- [1] Build ---
@@ -183,30 +182,20 @@ PLIST
 
 printf 'APPL????' > "$APP_PATH/Contents/PkgInfo"
 
-# --- [3] Generate .icns from master logo ---
-# Regenerated every build: cheap (sips is fast on 2048px source) and avoids
-# drift between source logo and installed icon. Output `$APP_NAME.icns` lives
-# at repo root (.gitignored) so it can be inspected; the canonical copy is
-# embedded in `$APP_PATH/Contents/Resources/$APP_NAME.icns` referenced by
-# `CFBundleIconFile` in Info.plist.
-echo "==> Generating $ICNS_PATH from logo_dark.png..."
-if [[ ! -f "$ICON_SOURCE" ]]; then
-    echo "error: icon source not found at $ICON_SOURCE" >&2
+# --- [3] Embed app icon ---
+# The canonical `.icns` is a checked-in artifact at
+# `Sources/SeshatAppKit/Resources/AppIcon.icns` (has proper RGBA
+# transparency around the rounded rect). Earlier revisions auto-
+# generated from `logo_dark.png` via sips+iconutil, but that source
+# is an RGB-only logo with no alpha — the resulting icon rendered as
+# a flat dark square in the Dock/LaunchPad instead of the expected
+# rounded-rect-with-transparency. Ship the hand-authored icns.
+echo "==> Embedding $ICNS_SOURCE as app icon..."
+if [[ ! -f "$ICNS_SOURCE" ]]; then
+    echo "error: app icon source not found at $ICNS_SOURCE" >&2
     exit 1
 fi
-ICONSET_DIR="$(mktemp -d -t seshat-iconset)/$APP_NAME.iconset"
-mkdir -p "$ICONSET_DIR"
-# Canonical iconset slots per Apple HIG — iconutil requires these exact names.
-# 1x slots: 16, 32, 128, 256, 512.  @2x slots: same sizes, doubled pixels.
-for size in 16 32 128 256 512; do
-    doubled=$((size * 2))
-    sips -z "$size" "$size" "$ICON_SOURCE" \
-        --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
-    sips -z "$doubled" "$doubled" "$ICON_SOURCE" \
-        --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" >/dev/null
-done
-iconutil -c icns "$ICONSET_DIR" -o "$ICNS_PATH"
-cp "$ICNS_PATH" "$APP_PATH/Contents/Resources/$APP_NAME.icns"
+cp "$ICNS_SOURCE" "$APP_PATH/Contents/Resources/$APP_NAME.icns"
 
 # --- [4] Sign ---
 echo "==> Ad-hoc signing (hardened runtime + mic entitlement)..."
@@ -214,7 +203,6 @@ ENTITLEMENTS_PLIST="$(mktemp -t seshat-entitlements.XXXXXX).plist"
 cleanup() {
     rm -f "$ENTITLEMENTS_PLIST"
     [[ -n "${STAGING_DIR:-}" ]] && rm -rf "$STAGING_DIR"
-    [[ -n "${ICONSET_DIR:-}" ]] && rm -rf "$(dirname "$ICONSET_DIR")"
 }
 trap cleanup EXIT
 cat > "$ENTITLEMENTS_PLIST" <<'ENT'

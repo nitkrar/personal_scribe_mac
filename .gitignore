@@ -11,8 +11,6 @@ DerivedData/
 /Seshat.app/
 # DMG output of scripts/package.sh -d
 /Seshat-*.dmg
-# Generated app icon (scripts/package.sh output, regenerated each build)
-/Seshat.icns
 
 # Claude Code agent-tool worktrees (isolation: "worktree")
 .claude/worktrees/
