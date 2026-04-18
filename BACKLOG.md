@@ -25,10 +25,30 @@ Target: **By May 5 2026, using Seshat for daily dictation.**
 - [ ] Menu bar app with record/stop button
 
 **Week 2 — Inject and clean:**
-- [ ] Global hotkey (toggle mode, NSEvent.addGlobalMonitorForEvents)
-- [ ] Clipboard paste injection (save string, paste, restore string)
-- [ ] Post-processing: filler removal + basic punctuation
-- [ ] Minimal floating pill overlay (recording indicator)
+- [x] Global hotkey (double-tap right-option, NSEvent.addGlobalMonitorForEvents) — shipped
+- [x] Clipboard paste injection (save string, paste, restore string, Accessibility permission prompt) — shipped
+- [x] Post-processing: filler removal + basic punctuation — shipped
+- [x] Minimal floating pill overlay (recording + transcribing + downloading states) — shipped but **has open bugs, see Known Issues**
+
+### Week 2 Known Issues (end of 2026-04-18)
+
+| # | Severity | Issue | Proposed fix |
+|---|---|---|---|
+| 1 | P0 | App unresponsive at launch — prewarm + model download blocks UI | Remove `AppComposition.prewarmTranscription()`, revert to lazy download on first record |
+| 2 | P0 | Download progress hijacks recording pill — `.downloading` branch returns early in `PillOverlayViewModel.apply`, never reaches `.recording` | Change priority so active `.recording` / `.transcribing` session state overrides `.downloading`, OR show a combined state |
+| 3 | P1 | Every rebuild appears to re-download the 400MB model | `FluidAudioTranscriber.ensureValidDownloadedModel:235` wipes the final model directory on any download failure; only wipe the staging dir |
+| 4 | P1 | Idle dot visual doesn't match spec — 10pt circle inside 220x44 panel looks empty | Shrink NSPanel to ~20x20 when `visibility == .idle`, or delete the idle dot and rely on menu bar + hotkey entry points only |
+| 5 | P2 | Pill click doesn't toggle (fix in `aa73013` awaiting runtime verification) | Confirm `canBecomeKey = true` fix works after #1–#4 land |
+| 6 | P2 | Pulsing-dots listening animation looks "not nice" | Replace with single breathing red circle (Option C — simpler, Wispr-style) |
+| 7 | P3 | LSUIElement apps don't appear in Force Quit dialog | Add emergency-quit via triple-tap ⌥ once hotkey customization is in Settings |
+
+### Week 2 next-session starter
+
+Recommended ordering when you resume:
+1. Commit a revert of prewarm (fixes P0 #1 + P0 #2 in one shot)
+2. Fix model-redownload root cause (P1 #3) — don't destroy final dir on retry
+3. Manually verify pill click (P2 #5) and animation (P2 #6) — decide option C vs B
+4. Smooth out the idle dot or drop it (P1 #4)
 
 **Week 3 — Save and search:**
 - [ ] SQLite note storage via GRDB.swift
