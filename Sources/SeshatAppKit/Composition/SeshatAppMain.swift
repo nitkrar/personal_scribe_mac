@@ -12,6 +12,7 @@ struct SeshatAppMain: App {
 
     @StateObject private var sceneModel: MenuBarSceneModel
     @StateObject private var pillController: PillOverlayController
+    @StateObject private var statusItemController: StatusItemControllerHost
 
     init() {
         self.init(
@@ -72,21 +73,36 @@ struct SeshatAppMain: App {
                 }
             )
         )
+        _statusItemController = StateObject(
+            wrappedValue: StatusItemControllerHost(sceneModel: sceneModel)
+        )
 
         sceneModel.startObserving()
         startupCoordinator.start()
     }
 
     var body: some Scene {
-        // Default .menu style — popover renders as AppKit NSMenu. Keep the
-        // popover content simple (Text + Button only); ProgressView / nested
-        // VStacks don't render in NSMenu and caused silent click-breakage.
-        // Rich UI (download progress, recording pulse) lives in the pill overlay.
-        MenuBarExtra {
-            MenuBarScene(model: sceneModel)
-        } label: {
-            Image(systemName: sceneModel.statusIcon.systemImageName)
-                .accessibilityLabel(sceneModel.statusIcon.accessibilityLabel)
+        // Native NSStatusItem + NSMenu lives in StatusItemController
+        // (owned by StatusItemControllerHost above). Per
+        // plans/seshat_agent_bundle/03_Surfaces/MenuBarMenu/IMPORTANT.md
+        // the menu bar is zero-SwiftUI; we keep a Settings scene here
+        // only to satisfy SwiftUI.App's non-empty-body requirement on
+        // an LSUIElement app. It never appears.
+        Settings {
+            EmptyView()
         }
+    }
+}
+
+/// `@StateObject` host for `StatusItemController`. SwiftUI requires
+/// `@StateObject` wrappees to be `ObservableObject`; this wrapper
+/// adds the conformance without publishing anything (state flows
+/// through `MenuBarSceneModel`, not this host).
+@MainActor
+final class StatusItemControllerHost: ObservableObject {
+    let controller: StatusItemController
+
+    init(sceneModel: MenuBarSceneModel) {
+        self.controller = StatusItemController(sceneModel: sceneModel)
     }
 }

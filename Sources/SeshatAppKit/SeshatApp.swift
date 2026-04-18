@@ -52,11 +52,12 @@ struct SeshatApp {
     }
 
     var body: some Scene {
-        MenuBarExtra {
-            MenuBarScene(model: model)
-        } label: {
-            Image(systemName: model.statusIcon.systemImageName)
-                .accessibilityLabel(model.statusIcon.accessibilityLabel)
+        // Menu bar surface is native NSStatusItem + NSMenu
+        // (StatusItemController) — no SwiftUI in the menu bar per
+        // MenuBarMenu/IMPORTANT.md. The Settings scene here only
+        // satisfies SwiftUI scene non-emptiness.
+        Settings {
+            EmptyView()
         }
     }
 }
