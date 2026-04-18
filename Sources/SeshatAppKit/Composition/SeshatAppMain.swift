@@ -18,7 +18,10 @@ struct SeshatAppMain: App {
         self.init(
             coordinator: AppComposition.sessionCoordinator,
             permissionRequester: AppComposition.makeMicrophonePermissionRequester(),
+            clipboardWriter: SeshatAppMain.defaultClipboardWriter,
             pasteInjector: PasteInjector(),
+            openSettings: SeshatAppMain.defaultOpenSettings,
+            overlayPanelBuilder: AppKitPillOverlayPanelBuilder(),
             startupCoordinator: nil
         )
     }
@@ -26,7 +29,10 @@ struct SeshatAppMain: App {
     init(
         coordinator: SessionCoordinator,
         permissionRequester: any MicrophonePermissionRequesting,
-        pasteInjector: PasteInjector = PasteInjector(),
+        clipboardWriter: @escaping @MainActor (String) -> Void = SeshatAppMain.defaultClipboardWriter,
+        pasteInjector: any PasteInjecting = PasteInjector(),
+        openSettings: @escaping @MainActor () -> Void = SeshatAppMain.defaultOpenSettings,
+        overlayPanelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
         startupCoordinator: AppStartupCoordinator? = nil
     ) {
         let startupCoordinator = startupCoordinator
@@ -45,32 +51,23 @@ struct SeshatAppMain: App {
 
                 return .notYetRequested
             },
-            clipboardWriter: { text in
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(text, forType: .string)
-            },
+            clipboardWriter: clipboardWriter,
             pasteInjector: { text in
                 pasteInjector.paste(text)
             },
-            openSettings: {
-                guard let url = URL(
-                    string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-                ) else {
-                    return
-                }
-
-                NSWorkspace.shared.open(url)
-            }
+            openSettings: openSettings
         )
         _sceneModel = StateObject(wrappedValue: sceneModel)
         _pillController = StateObject(
             wrappedValue: PillOverlayController(
                 statePublisher: sceneModel.$state.eraseToAnyPublisher(),
                 preparationProgressPublisher: sceneModel.$preparationProgress.eraseToAnyPublisher(),
+                audioLevelPublisher: nil,
+                visibilityMode: PillVisibilityMode.resolve(),
                 onTap: {
                     Task { await coordinator.toggle() }
-                }
+                },
+                panelBuilder: overlayPanelBuilder
             )
         )
         _statusItemController = StateObject(
@@ -91,6 +88,24 @@ struct SeshatAppMain: App {
         Settings {
             EmptyView()
         }
+    }
+}
+
+private extension SeshatAppMain {
+    static let defaultClipboardWriter: @MainActor (String) -> Void = { text in
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    static let defaultOpenSettings: @MainActor () -> Void = {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        ) else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
     }
 }
 

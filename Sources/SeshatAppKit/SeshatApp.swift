@@ -16,6 +16,8 @@ struct SeshatApp {
         coordinator: SessionCoordinator,
         permissionRequester: any MicrophonePermissionRequesting,
         permissionStateProvider: (@MainActor () -> MicrophonePermissionState)? = nil,
+        clipboardWriter: @escaping @MainActor (String) -> Void = SeshatApp.defaultClipboardWriter,
+        openSettings: @escaping @MainActor () -> Void = SeshatApp.defaultOpenSettings,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) {
         let initialPermissionState: MicrophonePermissionState
@@ -32,20 +34,8 @@ struct SeshatApp {
                 coordinator: coordinator,
                 permissionRequester: permissionRequester,
                 permissionStateProvider: { initialPermissionState },
-                clipboardWriter: { text in
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(text, forType: .string)
-                },
-                openSettings: {
-                    guard let url = URL(
-                        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-                    ) else {
-                        return
-                    }
-
-                    NSWorkspace.shared.open(url)
-                },
+                clipboardWriter: clipboardWriter,
+                openSettings: openSettings,
                 logger: logger
             )
         )
@@ -59,5 +49,23 @@ struct SeshatApp {
         Settings {
             EmptyView()
         }
+    }
+}
+
+private extension SeshatApp {
+    static let defaultClipboardWriter: @MainActor (String) -> Void = { text in
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    static let defaultOpenSettings: @MainActor () -> Void = {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        ) else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
     }
 }

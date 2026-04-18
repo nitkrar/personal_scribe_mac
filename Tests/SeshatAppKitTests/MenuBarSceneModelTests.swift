@@ -392,7 +392,9 @@ final class MenuBarSceneModelTests: XCTestCase {
         let app = SeshatApp(
             coordinator: coordinator,
             permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted }
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            openSettings: {}
         )
 
         _ = app.body

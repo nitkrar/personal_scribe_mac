@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 import SeshatCore
 import SeshatSession
@@ -15,6 +16,10 @@ final class AppEntryPointTests: XCTestCase {
         let entry = SeshatAppMain(
             coordinator: coordinator,
             permissionRequester: EntryPointPermissionRequester(),
+            clipboardWriter: { _ in },
+            pasteInjector: SilentPaster(),
+            openSettings: {},
+            overlayPanelBuilder: NoOpPanelBuilder(),
             startupCoordinator: startupCoordinator
         )
 
@@ -26,4 +31,40 @@ final class AppEntryPointTests: XCTestCase {
 
 private struct EntryPointPermissionRequester: MicrophonePermissionRequesting {
     func requestAccess() async -> Bool { true }
+}
+
+@MainActor
+private struct SilentPaster: PasteInjecting {
+    func paste(_ text: String) {}
+}
+
+@MainActor
+private struct NoOpPanelBuilder: PillOverlayPanelBuilding {
+    func makePanel(
+        model: PillOverlayViewModel,
+        panelSize: NSSize,
+        onTap: @escaping @MainActor () -> Void,
+        onMouseDragged: @escaping @MainActor () -> Void,
+        isTapEnabled: @escaping @MainActor () -> Bool
+    ) -> any PillOverlayPaneling {
+        RecordingOverlayPanel()
+    }
+}
+
+@MainActor
+private final class RecordingOverlayPanel: PillOverlayPaneling {
+    var isVisible = false
+    var frame = NSRect(x: 0, y: 0, width: 280, height: 60)
+
+    func orderFrontRegardless() {
+        isVisible = true
+    }
+
+    func orderOut(_ sender: Any?) {
+        isVisible = false
+    }
+
+    func setFrameOrigin(_ point: NSPoint) {
+        frame.origin = point
+    }
 }

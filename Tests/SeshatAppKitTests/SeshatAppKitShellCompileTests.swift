@@ -21,7 +21,9 @@ final class SeshatAppKitShellCompileTests: XCTestCase {
         let app = SeshatApp(
             coordinator: coordinator,
             permissionRequester: TestShellPermissionRequester(),
-            permissionStateProvider: { .granted }
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            openSettings: {}
         )
 
         _ = app.body
