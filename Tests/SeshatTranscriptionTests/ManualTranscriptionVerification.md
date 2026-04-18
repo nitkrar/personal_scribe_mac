@@ -24,3 +24,29 @@ Verify that `FluidAudioTranscriber` downloads the pinned Parakeet v2 model on fi
    - `parakeet_vocab.json`
 7. Confirm failures log through `SeshatLogger(category: SeshatLogCategory.transcription)`.
 8. Confirm there is no production `print()` path in the transcription module.
+
+## Phase 1 Step 1.1b — Launch signposts
+
+Signposts emitted under subsystem `com.nitkrar.seshat`, category `prepare`:
+- `SessionCoordinator.prepareTranscriber`
+- `FluidAudioTranscriber.performPrepare`
+- `inference.loadModel`
+
+### Trace capture procedure
+1. Build and install the DMG to `/Applications/Seshat.app`.
+2. Quit any running instance.
+3. Capture a launch trace:
+   ```
+   xcrun xctrace record --template 'Logging' \
+     --output /tmp/seshat-launch.trace \
+     --launch -- /Applications/Seshat.app/Contents/MacOS/SeshatAppKit
+   ```
+4. Open `/tmp/seshat-launch.trace` in Instruments (os_signpost lane).
+5. Confirm all three intervals are visible with plausible durations.
+6. Record cold-launch durations below (milliseconds):
+
+| Date | Build SHA | `prepareTranscriber` | `performPrepare` | `loadModel` | Notes |
+|------|-----------|----------------------|------------------|-------------|-------|
+|      |           |                      |                  |             |       |
+
+Phase 1 gate target: cold-launch `prepareTranscriber` < 5s (or outlier with recorded hypothesis).

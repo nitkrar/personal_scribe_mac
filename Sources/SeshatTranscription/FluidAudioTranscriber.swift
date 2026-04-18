@@ -1,4 +1,5 @@
 import Foundation
+import os.signpost
 import SeshatCore
 
 protocol ModelDownloading: Sendable {
@@ -14,6 +15,7 @@ public actor FluidAudioTranscriber: Transcribing {
     private let logger: SeshatLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
     private let progressBroadcaster: DownloadProgressBroadcaster
+    private let signposter = OSSignposter(subsystem: SeshatLogger.subsystem, category: "prepare")
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
 
@@ -87,6 +89,10 @@ public actor FluidAudioTranscriber: Transcribing {
     }
 
     private func performPrepare() async throws {
+        let prepareInterval: StaticString = "FluidAudioTranscriber.performPrepare"
+        let prepareState = signposter.beginInterval(prepareInterval)
+        defer { signposter.endInterval(prepareInterval, prepareState) }
+
         let modelsDirectory = try SeshatConfig.modelsDirectory()
         let modelDirectory = Self.modelRootDirectory(base: modelsDirectory)
 
@@ -99,7 +105,15 @@ public actor FluidAudioTranscriber: Transcribing {
         )
 
         do {
-            try await inference.loadModel(from: modelDirectory)
+            let loadInterval: StaticString = "inference.loadModel"
+            let loadState = signposter.beginInterval(loadInterval)
+            do {
+                try await inference.loadModel(from: modelDirectory)
+                signposter.endInterval(loadInterval, loadState)
+            } catch {
+                signposter.endInterval(loadInterval, loadState)
+                throw error
+            }
         } catch {
             logError("FluidAudio model load failed", error: error)
             throw SeshatError.modelLoadFailure

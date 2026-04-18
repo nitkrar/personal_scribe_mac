@@ -1,4 +1,5 @@
 import Foundation
+import os.signpost
 import SeshatCore
 
 public actor SessionCoordinator {
@@ -6,6 +7,7 @@ public actor SessionCoordinator {
     private let transcriber: any Transcribing
     private let logger: SeshatLogger
     private let postProcessor = PostProcessor()
+    private let signposter = OSSignposter(subsystem: SeshatLogger.subsystem, category: "prepare")
 
     private var currentState: SessionState = .idle
     private var mostRecentResult: TranscriptionResult?
@@ -61,6 +63,9 @@ public actor SessionCoordinator {
 
     /// Idempotent passthrough for eager model preparation; `prepare()` coalesces repeated calls.
     public func prepareTranscriber() async throws {
+        let intervalName: StaticString = "SessionCoordinator.prepareTranscriber"
+        let state = signposter.beginInterval(intervalName)
+        defer { signposter.endInterval(intervalName, state) }
         try await transcriber.prepare()
     }
 
