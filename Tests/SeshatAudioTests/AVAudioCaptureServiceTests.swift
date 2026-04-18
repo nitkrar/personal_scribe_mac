@@ -114,7 +114,8 @@ final class StopBehaviorTests: XCTestCase {
         var iterator = stream.makeAsyncIterator()
 
         await service.stop()
-        XCTAssertNil(try await iterator.next())
+        let afterFirstStop = try await iterator.next()
+        XCTAssertNil(afterFirstStop)
 
         await service.stop()
 
@@ -260,7 +261,9 @@ final class FinishExactlyOnceRaceTests: XCTestCase {
         failing.openGate()
         await stopTask.value
 
-        XCTAssertNil(try await iterator.next())
-        XCTAssertNil(try await iterator.next())
+        let firstAfterStop = try await iterator.next()
+        XCTAssertNil(firstAfterStop)
+        let secondAfterStop = try await iterator.next()
+        XCTAssertNil(secondAfterStop)
     }
 }
