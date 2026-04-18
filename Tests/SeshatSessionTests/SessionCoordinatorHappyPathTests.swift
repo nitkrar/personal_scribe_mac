@@ -43,7 +43,7 @@ final class SessionCoordinatorHappyPathTests: XCTestCase {
         let lastResult = await coordinator.lastResult()
 
         XCTAssertEqual(observed, [.idle, .recording, .transcribing, .idle])
-        XCTAssertEqual(lastResult?.text, "hello")
+        XCTAssertEqual(lastResult?.text, "Hello.")
     }
 
     private func withTimeout<T: Sendable>(

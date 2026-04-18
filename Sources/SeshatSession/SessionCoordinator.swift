@@ -5,6 +5,7 @@ public actor SessionCoordinator {
     private let capture: any AudioCapturing
     private let transcriber: any Transcribing
     private let logger: SeshatLogger
+    private let postProcessor = PostProcessor()
 
     private var currentState: SessionState = .idle
     private var mostRecentResult: TranscriptionResult?
@@ -99,8 +100,14 @@ public actor SessionCoordinator {
         publish(.transcribing)
 
         do {
-            let result = try await transcriber.transcribe(stream: makeReplayStream(from: replayBuffers))
-            mostRecentResult = result
+            let raw = try await transcriber.transcribe(stream: makeReplayStream(from: replayBuffers))
+            let cleanedText = postProcessor.clean(raw.text)
+            mostRecentResult = TranscriptionResult(
+                text: cleanedText,
+                segments: raw.segments,
+                audioDuration: raw.audioDuration,
+                processingDuration: raw.processingDuration
+            )
             publish(.idle)
         } catch {
             publish(.error(map(error, default: .transcriptionFailure)))
