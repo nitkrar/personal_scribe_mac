@@ -9,8 +9,8 @@ import SwiftUI
 /// (title + body) and leaves the action buttons / icons for Phase 3.
 ///
 /// ## Responsibilities
-/// * Render a `title` (optional — may be empty string) and `body` in the
-///   champagne-palette surface.
+/// * Render a `title` (optional — may be empty string) and `message` in
+///   the champagne-palette surface.
 /// * Expose an `accessibilityDescription` string so tests and VoiceOver
 ///   can verify the composed label without reflecting into the SwiftUI
 ///   render tree.
@@ -26,13 +26,13 @@ import SwiftUI
 /// built before the pill rewrite.
 public struct ResponseCard: View {
     public let title: String
-    public let body: String
+    public let message: String
 
     @Environment(\.colorScheme) private var colorScheme
 
-    public init(title: String, body: String) {
+    public init(title: String, message: String) {
         self.title = title
-        self.body = body
+        self.message = message
     }
 
     /// Composed accessibility label. Tests read this directly rather
@@ -40,9 +40,9 @@ public struct ResponseCard: View {
     public var accessibilityDescription: String {
         let trimmedTitle = title.trimmingCharacters(in: .whitespaces)
         if trimmedTitle.isEmpty {
-            return body
+            return message
         }
-        return "\(trimmedTitle). \(body)"
+        return "\(trimmedTitle). \(message)"
     }
 
     public var body: some View {
@@ -60,7 +60,7 @@ public struct ResponseCard: View {
                         .foregroundStyle(palette.secondaryText)
                 }
 
-                Text(self.body)
+                Text(message)
                     .font(SeshatTheme.Typography.body.font)
                     .foregroundStyle(palette.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -89,12 +89,12 @@ public struct ResponseCard: View {
     VStack(spacing: SeshatTheme.Components.Preview.stackSpacing) {
         ResponseCard(
             title: "From your notes",
-            body: "Q3 review is Thursday at 3pm"
+            message: "Q3 review is Thursday at 3pm"
         )
 
         ResponseCard(
             title: "",
-            body: "Copied to clipboard"
+            message: "Copied to clipboard"
         )
     }
     .padding(SeshatTheme.Components.Preview.canvasPadding)

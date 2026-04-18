@@ -20,24 +20,24 @@ final class ResponseCardTests: XCTestCase {
     func testInitializerRetainsTitleAndBody() {
         let card = ResponseCard(
             title: "Q3 review",
-            body: "Q3 review is Thursday at 3pm"
+            message: "Q3 review is Thursday at 3pm"
         )
         XCTAssertEqual(card.title, "Q3 review")
-        XCTAssertEqual(card.body, "Q3 review is Thursday at 3pm")
+        XCTAssertEqual(card.message, "Q3 review is Thursday at 3pm")
     }
 
     func testInitializerAcceptsEmptyTitleAsNil() {
         // Some responses are body-only (action confirmations). The card
         // must accept an empty title without assuming a default.
-        let card = ResponseCard(title: "", body: "Copied to clipboard")
+        let card = ResponseCard(title: "", message: "Copied to clipboard")
         XCTAssertEqual(card.title, "")
-        XCTAssertEqual(card.body, "Copied to clipboard")
+        XCTAssertEqual(card.message, "Copied to clipboard")
     }
 
     func testAccessibilityLabelCombinesTitleAndBody() {
         let card = ResponseCard(
             title: "From your notes",
-            body: "Q3 review is Thursday at 3pm"
+            message: "Q3 review is Thursday at 3pm"
         )
         XCTAssertEqual(
             card.accessibilityDescription,
@@ -46,7 +46,7 @@ final class ResponseCardTests: XCTestCase {
     }
 
     func testAccessibilityLabelOmitsTitleWhenEmpty() {
-        let card = ResponseCard(title: "", body: "Copied to clipboard")
+        let card = ResponseCard(title: "", message: "Copied to clipboard")
         XCTAssertEqual(card.accessibilityDescription, "Copied to clipboard")
     }
 }

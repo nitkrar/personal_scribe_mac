@@ -8,23 +8,23 @@ import XCTest
 final class TranscriptRowTests: XCTestCase {
     // MARK: - Initializer / stored state
 
-    func testInitializerAcceptsTitleTimestampAndBody() {
+    func testInitializerAcceptsTitleTimestampAndPreview() {
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         let row = TranscriptRow(
             title: "Sync notes",
             timestamp: date,
-            body: "We discussed the roadmap."
+            preview: "We discussed the roadmap."
         )
         XCTAssertEqual(row.title, "Sync notes")
         XCTAssertEqual(row.timestamp, date)
-        XCTAssertEqual(row.body, "We discussed the roadmap.")
+        XCTAssertEqual(row.preview, "We discussed the roadmap.")
     }
 
     func testDefaultSelectionIsFalse() {
         let row = TranscriptRow(
             title: "T",
             timestamp: Date(timeIntervalSince1970: 1_700_000_000),
-            body: "B"
+            preview: "B"
         )
         XCTAssertFalse(row.isSelected)
     }
@@ -33,7 +33,7 @@ final class TranscriptRowTests: XCTestCase {
         let row = TranscriptRow(
             title: "T",
             timestamp: Date(timeIntervalSince1970: 1_700_000_000),
-            body: "B",
+            preview: "B",
             isSelected: true
         )
         XCTAssertTrue(row.isSelected)
@@ -59,7 +59,7 @@ final class TranscriptRowTests: XCTestCase {
         let output = TranscriptRow.Formatters.truncate(input, maxLength: 60)
         XCTAssertEqual(output.count, 60)
         XCTAssertTrue(output.hasSuffix("\u{2026}"))
-        XCTAssertEqual(output.dropLast(), String(repeating: "x", count: 59))
+        XCTAssertEqual(String(output.dropLast()), String(repeating: "x", count: 59))
     }
 
     func testDisplayTitleAppliesTruncation() {
@@ -67,7 +67,7 @@ final class TranscriptRowTests: XCTestCase {
         let row = TranscriptRow(
             title: long,
             timestamp: Date(timeIntervalSince1970: 1_700_000_000),
-            body: ""
+            preview: ""
         )
         XCTAssertEqual(row.displayTitle.count, TranscriptRow.Layout.titleMaxLength)
         XCTAssertTrue(row.displayTitle.hasSuffix("\u{2026}"))
@@ -178,7 +178,7 @@ final class TranscriptRowTests: XCTestCase {
         let row = TranscriptRow(
             title: "T",
             timestamp: ts,
-            body: "B",
+            preview: "B",
             referenceDate: now
         )
         XCTAssertEqual(row.displayTimestamp, "10m ago")
@@ -186,8 +186,8 @@ final class TranscriptRowTests: XCTestCase {
 
     // MARK: - Layout constants locked in
 
-    func testBodyLineLimitIsTwo() {
-        XCTAssertEqual(TranscriptRow.Layout.bodyLineLimit, 2)
+    func testPreviewLineLimitIsTwo() {
+        XCTAssertEqual(TranscriptRow.Layout.previewLineLimit, 2)
     }
 
     func testTitleMaxLengthIsSixty() {

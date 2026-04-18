@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A reusable list-row surface showing a title, timestamp, and a
-/// truncated body preview.
+/// truncated preview of the transcript body text.
 ///
 /// ## Scope
 /// Consumed by `HistoryPanel` and `NotesSidebar` (both Phase 3). Depends
@@ -11,12 +11,12 @@ import SwiftUI
 ///
 /// ## Typography
 /// * Title → `Typography.body` (13pt regular) with semibold weight.
-/// * Body preview → `Typography.caption` (11pt regular).
+/// * Preview → `Typography.caption` (11pt regular).
 /// * Timestamp → `Typography.caption` (11pt regular), secondary text.
 public struct TranscriptRow: View {
     public let title: String
     public let timestamp: Date
-    public let body: String
+    public let preview: String
     public let isSelected: Bool
 
     /// Reference `now` used for relative-timestamp formatting. Injected
@@ -28,13 +28,13 @@ public struct TranscriptRow: View {
     public init(
         title: String,
         timestamp: Date,
-        body: String,
+        preview: String,
         isSelected: Bool = false,
         referenceDate: Date = Date()
     ) {
         self.title = title
         self.timestamp = timestamp
-        self.body = body
+        self.preview = preview
         self.isSelected = isSelected
         self.referenceDate = referenceDate
     }
@@ -44,8 +44,8 @@ public struct TranscriptRow: View {
         Formatters.truncate(title, maxLength: Layout.titleMaxLength)
     }
 
-    internal var displayBody: String {
-        Formatters.collapseWhitespace(body)
+    internal var displayPreview: String {
+        Formatters.collapseWhitespace(preview)
     }
 
     internal var displayTimestamp: String {
@@ -74,11 +74,11 @@ public struct TranscriptRow: View {
                     .lineLimit(1)
             }
 
-            if !displayBody.isEmpty {
-                Text(displayBody)
+            if !displayPreview.isEmpty {
+                Text(displayPreview)
                     .font(SeshatTheme.Typography.caption.font)
                     .foregroundStyle(palette.secondaryText)
-                    .lineLimit(Layout.bodyLineLimit)
+                    .lineLimit(Layout.previewLineLimit)
                     .truncationMode(.tail)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -100,14 +100,14 @@ public struct TranscriptRow: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(displayTitle), \(displayTimestamp)")
-        .accessibilityHint(displayBody)
+        .accessibilityHint(displayPreview)
     }
 
     // MARK: - Layout constants
 
     internal enum Layout {
         static let titleMaxLength: Int = 60
-        static let bodyLineLimit: Int = 2
+        static let previewLineLimit: Int = 2
         static let innerSpacing: CGFloat = 4
         static let titleTimestampSpacing: CGFloat = 8
         static let borderWidth: CGFloat = 0.5
@@ -119,7 +119,7 @@ public struct TranscriptRow: View {
     /// Pure helpers exposed for TDD — no SwiftUI dependency.
     public enum Formatters {
         /// Collapse any run of whitespace / newlines into a single space.
-        /// Keeps list preview lines tidy when the source body contains
+        /// Keeps list preview lines tidy when the source text contains
         /// wrapping whitespace.
         public static func collapseWhitespace(_ input: String) -> String {
             let components = input
@@ -190,26 +190,26 @@ public struct TranscriptRow: View {
         TranscriptRow(
             title: "Product sync notes",
             timestamp: now.addingTimeInterval(-30),
-            body: "We reviewed the roadmap and aligned on shipping the pill overlay first.",
+            preview: "We reviewed the roadmap and aligned on shipping the pill overlay first.",
             referenceDate: now
         )
         TranscriptRow(
             title: "Long title that easily exceeds the truncation threshold so we can see the ellipsis behaviour in the preview",
             timestamp: now.addingTimeInterval(-60 * 45),
-            body: "Short body.",
+            preview: "Short body.",
             referenceDate: now
         )
         TranscriptRow(
             title: "Selected row",
             timestamp: now.addingTimeInterval(-60 * 60 * 3),
-            body: "Selected state has a subtle hover background so it reads as active.",
+            preview: "Selected state has a subtle hover background so it reads as active.",
             isSelected: true,
             referenceDate: now
         )
         TranscriptRow(
             title: "Yesterday",
             timestamp: now.addingTimeInterval(-60 * 60 * 30),
-            body: "",
+            preview: "",
             referenceDate: now
         )
     }
