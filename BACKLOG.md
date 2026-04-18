@@ -111,7 +111,11 @@ Sprint 2 merged on `phase-2`. **339 tests green** (Sprint 1 baseline 254 + Sprin
 
 ## Deferred to Phase 3+ (not forgotten)
 
-- Personal dictionary + prompt injection
+- **Personal dictionary — ship in two stages.** (Renamed from "Personal dictionary + prompt injection": prompt injection is Whisper-specific. Parakeet uses decoder-level custom-vocab instead — see `.build/checkouts/FluidAudio/Documentation/ASR/CustomVocabulary.md`.)
+  - _Stage A (minimum):_ refactor `Sources/SeshatCore/PostProcessor.swift` from single `clean()` to a chain-of-stages (preserve public API; current 2 stages become `FillerRemovalStage` + `BasicPunctuationStage`). Add `PersonalDictionaryStage` applied **first** in the chain (before filler removal, so corrections run on raw ASR output). Data model: 1:many — `struct DictionaryEntry { term: String, alternatives: [String], createdAt: Date, source: EntrySource }`. Storage: JSON at `<SeshatConfig.baseDirectory()>/dictionary.json`. Match: case-insensitive word-boundary replacement of each alternative → term; in-order iteration, first match wins per region. No regex (YAGNI). No frequency/starred/context fields at Stage A — those power Stage B. No UI — manual entry via file edit; Settings UI Phase 3. Soft ceiling guidance: ~40 entries / 60-char limit per entry (Wispr Flow reference).
+  - _Stage B:_ decoder-level biasing via Parakeet CTC custom-vocab head (backend-specific; whisper.cpp path would use `initial_prompt` instead). Correction learning loop — diff user-edited transcript vs original via `CollectionDifference`, pair removals with nearby insertions, filter by Levenshtein distance. Depends on Phase 3 `NotesWindow` edit UI. Add frequency + decay ranking if Stage B pursues biasing (top-30 terms by decayed frequency feed the CTC vocab / prompt).
+  - _Phase 4 (separate future item, NOT this row):_ Apple Foundation Models post-processing correction (macOS 26+). LLM takes raw transcription + dictionary as prompt context, returns corrected text. Different tier.
+  - _Reference:_ `explorations/memory_learning_research.md` lines 274–444 have the full data model, prompt builder, post-processing engine, and correction-learning algorithm. Don't re-derive.
 - Correction tracking / auto-learning
 - Time-saved analytics
 - Voice tags, micro-prompts
@@ -119,10 +123,18 @@ Sprint 2 merged on `phase-2`. **339 tests green** (Sprint 1 baseline 254 + Sprin
   - _Stage A (minimum, 1–2 commits):_ plumb FluidAudio `VadManager` into `AVAudioCaptureService` → `SessionCoordinator`. Two states only (`Recording`, `Quiet`). After **2.5s continuous Quiet** (VAD probability < 0.3), fire stop. **No UI change** — the pill's waveform flattens naturally when audio is quiet; that is the signal. Hard-coded threshold + duration, no Settings UI. Manual hotkey stop always wins in any state.
   - _Stage B (only if Stage A actually feels jarring in daily dogfood):_ add `About-to-stop` sub-state with subtle tint + `"…stopping"` text + ~0.8s grace window before fire. Threshold configurable behind `SettingsWindow` (Phase 3 anyway). Couples to Phase 2 pill design system; don't start until Stage A has ≥1 week of dogfood and a specific friction is observed.
   - _Scope-discipline rationale:_ don't design Stage B before Stage A tells you it's needed. The natural waveform-flatten may already be enough signal; designing a grace-window UI before feeling the MVP in daily use is the creep trap.
+- **Auto-pause playback during recording.**
+  - _Stage A (minimum):_ on `SessionCoordinator.start()`, read `UserDefaults.standard.bool(forKey: "SeshatAutoPausePlayback")` (default **true**). If enabled, call `MPRemoteCommandCenter.shared().pauseCommand` to send a system-wide pause to the active media-playing app (Netflix, Spotify, YouTube, Music.app). No auto-resume — user chose to pause, they can hit play when done. No Settings UI; users can flip via `defaults write com.nitkrar.seshat SeshatAutoPausePlayback -bool false` until Settings ships. Follows the same UserDefaults-now / Settings-UI-later pattern used for `SeshatPillVisibilityMode` (plan line 293) and `SeshatWaveformDecayMode`.
+  - _Stage B (ships with `SettingsWindow` in Phase 3):_ Settings toggle bound to the same UserDefaults key. Optional opt-in auto-resume after session ends.
+  - _Interaction with future meeting mode:_ meeting mode (dual-track recording) needs system audio playing — disable auto-pause when meeting mode is the active mode regardless of the toggle.
+  - _Default choice (`true`):_ dictation's default case is "leak hurts transcription quality"; protect-by-default. Power users who want music + dictation can flip the flag.
 - 7-stage post-processing pipeline
 - Smart auto-archive
 - Full clipboard save/restore (all pasteboard types)
-- Active window context capture
+- **Active window context capture — ship in two stages.**
+  - _Stage A (minimum):_ new `RecordingContext` struct in `SeshatCore` (`bundleIdentifier: String?`, `appName: String?`, `capturedAt: Date`). Add optional `context` field to `TranscriptEntry` (Codable optional handles JSONL backward-compat automatically — older entries decode `nil`, no migration). At hotkey-press time (mirror `PasteInjector`'s capture-before-Seshat-gains-focus pattern), read `NSWorkspace.shared.frontmostApplication` via a `FrontmostAppProviding` protocol for testability. Pass through `SessionCoordinator.start()` to the entry written on completion. **No UI, no consumer feature yet — persist metadata only.** No new permissions needed (NSWorkspace is free). Unknown context (menu-bar-triggered sessions where Seshat itself is frontmost) is a valid `nil`; don't force a value.
+  - _Stage B (when a consumer feature actually needs it):_ opt-in window title capture via AX (already have permission); opt-in browser URL via per-browser AppleScript/ScriptingBridge; surface in Phase 3 `NotesWindow` as filter chips; enables the parked `App-context rules for mode selection` (see FluidAudio feature map). Window titles + URLs are privacy-sensitive — explicit opt-in, never at Stage A.
+  - _Rationale:_ cheap to capture now, valuable substrate for future mode-selection rules / smart routing / search. Bundle ID + app name is low-sensitivity (Dock-visible); data stays local, never pulled.
 - SQLite note storage via GRDB.swift with FTS5 search (imports from existing JSONL — Phase 3)
 
 ## FluidAudio feature map — post-current-phase pickup
@@ -148,7 +160,7 @@ Captured from FluidAudio README + showcase-app review on 2026-04-18. All items a
 
 - **VAD auto-stop** → existing `VAD auto-stop tuning, configurable timeout` (Deferred to Phase 3+).
 - **Inverse Text Normalization (ITN)** → one stage inside existing `7-stage post-processing pipeline` (Deferred to Phase 3+).
-- **Custom vocabulary / personal dictionary** → existing `Personal dictionary + prompt injection` (Deferred to Phase 3+). FluidAudio ships custom-vocabulary + custom-pronunciation guides that can inform implementation.
+- **Custom vocabulary / personal dictionary** → existing `Personal dictionary` entry (Deferred to Phase 3+). Stage B decoder-level biasing there covers FluidAudio's `CustomVocabulary.md` + `CustomPronunciation.md` mechanisms.
 - **Non-English ASR** → existing `whisper.cpp integration for non-English` (Future). Parakeet v3 already covers 25 European languages as an alternative.
 - **LLM summaries / action items / mindmaps** → existing `LLM assistant features` (Future). Covers Talat/OpenOats-style notes-pillar features.
 
@@ -167,6 +179,7 @@ Captured from FluidAudio README + showcase-app review on 2026-04-18. All items a
 - [ ] Data-at-rest encryption (SQLCipher)
 - [ ] whisper.cpp integration for non-English
 - [ ] LLM assistant features
+- [ ] Mouse side-button trigger (4th/5th button via event-tap extension to `GlobalHotkeyMonitor`). Low-effort power-user feature for Logitech MX / gaming-mouse workflows. Skip trackpad gestures + Force Touch — they conflict with macOS system gestures.
 
 ## Project Files Index
 
