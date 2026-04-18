@@ -19,6 +19,13 @@ public final class PillOverlayViewModel: ObservableObject {
     ///   .recording    -> .recording
     ///   .transcribing -> .transcribing
     public func apply(sessionState: SessionState) {
-        visibility = .hidden
+        switch sessionState {
+        case .idle, .error:
+            visibility = .hidden
+        case .recording:
+            visibility = .recording
+        case .transcribing:
+            visibility = .transcribing
+        }
     }
 }
