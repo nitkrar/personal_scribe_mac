@@ -97,6 +97,17 @@ below tells you to change it.
 
 ---
 
+## Sine-wave animation during recording (9c4540a)
+
+- [ ] **MV-B1-9 (sine-wave crawls)** Start a recording (hotkey, pill
+  click, or menu item). Watch the centre of the recording pill: the
+  sine wave must visibly travel horizontally, completing one full loop
+  roughly every 1.2 s at ~30 fps. If the wave is rendered but frozen,
+  `SineWaveView`'s `TimelineView(.animation)` driver has regressed.
+  Stop recording and confirm the wave snaps to its static rest pose.
+
+---
+
 ## Notes
 
 - Manual checklist entries above are the only verification path for the
