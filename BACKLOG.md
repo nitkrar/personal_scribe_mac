@@ -52,14 +52,13 @@ Build: `0969f59` (Phase 1 round-out). DMG installed to `/Applications/Seshat.app
 | Mic permission re-prompted on install to `/Applications` | Expected (TCC ad-hoc path quirk — each install path has its own TCC record) | No fix; documented in memory |
 | Accessibility permission prompt fires at **first paste attempt**, not before recording | Friction — interrupts the first usage flow | **Phase 2:** move the Accessibility prompt to first-record (or an onboarding step before the first session). Consistent with Phase 2 NSMenu + onboarding surface. |
 
-## Phase 2 deferred (tracked, not scheduled)
+## Phase 2 → Phase 3 hand-offs
 
-Items already called out in Phase 2 scope:
-- New visual identity (theme, logo, waveform) per `plans/seshat_agent_bundle/`.
-- NSMenu popover rebuild (visible Input Monitoring + Mic permission states).
-- Pill redesign (idle dot, 180×34 recording, animated waveform).
+Items in original Phase 2 scope that graduated to Phase 3 per `plans/PLAN_PHASES.md`:
 - Onboarding window + early Accessibility permission request.
-- Settings window (modes, base directory picker).
+- Settings window (Modes tab, base directory picker, visibility toggles, hotkey customization).
+
+In-Phase-2 items (visual identity, pill redesign, NSMenu rebuild, permission surfacing) closed in Sprint 1 + Sprint 2 — see sections below.
 
 ## Phase 2 Sprint 1 — closures (2026-04-18)
 
@@ -80,8 +79,35 @@ Sprint 1 (foundation components + state/audio plumbing) merged on `phase-2`. **2
 ## Phase 2 Sprint 1 — TODOs
 
 - ~~**StatusBarIcon — replace placeholder PNGs.**~~ **Done `5250cca`** (`phase-2 step 2.7b`). Manus export swapped in: transparent monochrome quill silhouette, 18×18 @1x + 36×36 @2x.
-- **Trailing `0.0` on `audioLevelStream()` at stop — UI-layer decay in Sprint 2.** `SessionCoordinator.stop()` publishes `0.0` as the final value before the stream finishes. When `WaveformView` gets consumed by the pill overlay in Sprint 2, it should interpolate a short coast-down (~300 ms) on stream-end rather than snapping flat. Plumbing stays as-is in `SeshatSession`/`SeshatAudio`; decay is a presentation concern.
+- ~~**Trailing `0.0` on `audioLevelStream()` at stop — UI-layer decay in Sprint 2.**~~ **Done `9d7b413`** (`phase-2 step 2.B1c`). `SeshatWaveformDecayMode` UserDefaults enum (`.immediate` default, `.animated` = 500ms linear interpolation) gates `WaveformView` coast-down behaviour. Both modes are runnable dogfood settings.
 - **Pixel-fidelity of `SeshatLogoView`** — current SwiftUI `QuillShape` is a stylised vector approximation, not a faithful trace of `plans/seshat_agent_bundle/01_Foundations/assets/logo_dark.png`. Revisit when exporting the `.icns` app icon (plan line 349) so SwiftUI view + icon share a common source.
+
+## Phase 2 Sprint 2 — closures (2026-04-18)
+
+Sprint 2 merged on `phase-2`. **339 tests green** (Sprint 1 baseline 254 + Sprint 2 net 85: +87 new − 2 deleted view-model tests whose surfaces are gone). Execution model: two parallel Claude implementer agents in isolated worktrees (B1 pill, B2 composites), two Codex reviewers per lane, B3 NSMenu rewrite done in main session (worktree path conflicts with Santa / AMFI). B1's Santa popup-storm on worktree xctest execution is the concrete why behind the revised `seshat/CLAUDE.md` "use `swift build --build-tests` in worktrees" rule.
+
+| Deliverable | Lane / merge | Notes |
+|---|---|---|
+| `ResponseCard` (temporary Command-Mode overlay stub) | B1a / `6f467dd` | Stateless; title + message; champagne palette. Phase 4 consumer. Renamed param `body → message` in `4c8bee0` (SwiftUI `View.body` conflict). |
+| `PillVisibilityMode` + `SeshatPillVisibilityMode` UserDefaults (`"auto-show"` default) | B1b / `db806c5` | 3 modes: `.alwaysOn` / `.autoShow` / `.hidden`. Settings UI for toggling lands Phase 3. Invariant (pill + status item can't both be hidden) not yet enforced — trivially holds while Phase 2 status item is always visible. |
+| `WaveformDecayMode` + coast-down in `WaveformView` | B1c / `9d7b413` | `SeshatWaveformDecayMode` UserDefaults (`.immediate` default, `.animated` = 500ms linear). `WaveformView` public API preserved (new overload added). |
+| Pill overlay rewrite (`PillOverlayView/Presenter/ViewModel/Controller`) | B1d / `ecd3fde` | 180×34 recording pill, animated waveform, champagne palette, three visibility modes. `PulsingDot` deleted per plan line 291. |
+| `TranscriptRow` composite | B2a / `dc77f4d` | Phase 3 consumer (`HistoryPanel` + `NotesSidebar`). Title cap 60 chars; 2-line body truncate; timestamp right-aligned. Renamed param `body → preview` in `4c8bee0`. |
+| `ModeCard` composite | B2b / `a6f8594` | Phase 3 consumer (Settings Modes tab). Subtitle `"Voice: X · AI: Y"`. Imports `StatusPill`. |
+| `AudioPlayerThumbnail` composite | B2c / `36b8d6f` | Phase 3 consumer (Notes Context Panel). 16 bars × 20pt; `h:mm:ss` ≥1h. Imports `WaveformView`. |
+| `@MainActor` on composite test classes (B2 review fix) | B2 review / `a632c45` | Swift 6 strict concurrency on SwiftUI `View` test scaffolding. Same mechanical fix as Sprint 1 `4192e7c`. Identified by Codex reviewer pass. |
+| `StatusItemMenuModel` pure model + 12 tests | B3a / `bbd492c` | Per `03_Surfaces/MenuBarMenu/IMPORTANT.md`: Quick Memo header / Start Recording ⌥⌘ / History / Settings / Quit Seshat. Permission warnings (Mic + IM) prepend when denied. |
+| `StatusItemController` — NSStatusItem + NSMenu owner | B3b / `3dd3180` | Native AppKit class. Tints status-item icon `.systemRed` during recording (single-asset fallback — frame-swap animation needs a second asset). `isolated deinit` cleans up status item under Swift 6. |
+| `SeshatAppMain` rewire: `MenuBarExtra` → `Settings { EmptyView() }` + `StatusItemController` | B3c-1 / `bb79fe8` | Scene body is no-op; status item lives outside SwiftUI. Zero SwiftUI inside the menu bar, per IMPORTANT.md. |
+| Delete SwiftUI popover dead code | B3c-2 / `70d8f6d` | `MenuBarScene`, `MenuBarStatusIcon`, `RecordButtonView`, `RecordButtonViewModel` + their tests + `recordButton` / `statusIcon` / `preparationStatusText` on `MenuBarSceneModel`. |
+| `scripts/package.sh` — flag-driven packaging script | Meta / `26915c8` | Consolidates old `package-dev-app.sh` + `package-dev-dmg.sh` behind `-c/-i/-d/-r`. Always rebuilds fresh (prevents stale-binary trap). `-i` replaces `/Applications/Seshat.app` at a stable path to preserve per-path TCC grants across rebuilds. `-d` keeps the DMG flow for future GitHub Release uploads. |
+
+## Phase 2 Sprint 2 — TODOs
+
+- **Status item icon frame-swap animation.** Currently tints the single `StatusBarIcon` asset `.systemRed` during recording. Plan line 342 prescribes "cycle between two frames" — needs a second asset (e.g. `StatusBarIconListening`) exported from the quill mark before it can land. Not blocking dogfood; visual polish.
+- **macOS 15 URL-scheme branching for permission deep-links.** `StatusItemController` uses the macOS 14 anchor (`Privacy_Microphone`, `Privacy_ListenEvent`) which still works on 15. If 15 breaks the anchor in a future point release, branch via `if #available(macOS 15, *)`.
+- **`MenuBarSceneModel` rename.** The type no longer backs a "Scene" (no SwiftUI scene anymore); it publishes app state for both pill + status item. Cleaner name: `AppStateModel`. Deferred to Phase 3 to avoid mid-sprint churn. Low blast radius — StateObject ownership in `SeshatAppMain` + `SeshatApp`.
+- **`.icns` app icon.** Plan line 339 flagged for "after logo stabilises." Still open; when it lands, pair with the `SeshatLogoView` pixel-fidelity TODO above so SwiftUI view + icon share a source.
 
 ## Deferred to Phase 3+ (not forgotten)
 
@@ -89,7 +115,10 @@ Sprint 1 (foundation components + state/audio plumbing) merged on `phase-2`. **2
 - Correction tracking / auto-learning
 - Time-saved analytics
 - Voice tags, micro-prompts
-- VAD auto-stop tuning, configurable timeout
+- **VAD auto-stop — ship in two stages.**
+  - _Stage A (minimum, 1–2 commits):_ plumb FluidAudio `VadManager` into `AVAudioCaptureService` → `SessionCoordinator`. Two states only (`Recording`, `Quiet`). After **2.5s continuous Quiet** (VAD probability < 0.3), fire stop. **No UI change** — the pill's waveform flattens naturally when audio is quiet; that is the signal. Hard-coded threshold + duration, no Settings UI. Manual hotkey stop always wins in any state.
+  - _Stage B (only if Stage A actually feels jarring in daily dogfood):_ add `About-to-stop` sub-state with subtle tint + `"…stopping"` text + ~0.8s grace window before fire. Threshold configurable behind `SettingsWindow` (Phase 3 anyway). Couples to Phase 2 pill design system; don't start until Stage A has ≥1 week of dogfood and a specific friction is observed.
+  - _Scope-discipline rationale:_ don't design Stage B before Stage A tells you it's needed. The natural waveform-flatten may already be enough signal; designing a grace-window UI before feeling the MVP in daily use is the creep trap.
 - 7-stage post-processing pipeline
 - Smart auto-archive
 - Full clipboard save/restore (all pasteboard types)
@@ -113,7 +142,7 @@ Captured from FluidAudio README + showcase-app review on 2026-04-18. All items a
 | Cross-session speaker recognition | Notes | Pyannote WeSpeaker embeddings + local speaker DB; pre-enrollment flow. Only the Pyannote pipeline supports this reliably. |
 | Meeting mode | Notes | Zoom/Teams/Webex auto-detect + dual-track + diarization + cross-session IDs. Composes the three rows above. |
 | TTS for assistant speaking back (Kokoro + PocketTTS) | Assistant | Kokoro 82M parallel (SSML, pronunciation control) + PocketTTS streaming with voice cloning. English-only initially. |
-| MCP server exposing transcripts | Assistant | Local MCP endpoint so external agents (Claude, Codex) can query Seshat's transcript store. |
+| MCP server exposing transcripts | Assistant | **Wishlist — build only on actual demand.** When needed, Stage A shape: standalone stdio binary (~200-300 LOC SPM executable target) that reads `transcripts.jsonl` from `SeshatConfig.recordingsDirectory()` and exposes read-only tools `search_transcripts` / `list_recent_transcripts` / `get_transcript`. No in-app HTTP server unless Stage A proves insufficient. JSONL is already mode 600; document privacy caveat at opt-in time. Swift MCP SDK if mature, else hand-rolled JSON-RPC. |
 
 ### Cross-refs — already captured elsewhere, don't re-add
 
