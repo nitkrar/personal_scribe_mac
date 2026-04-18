@@ -38,6 +38,88 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(sessionState, .idle)
     }
 
+    func testHandleRecordButtonTapTogglesWhenPermissionAlreadyGranted() async throws {
+        let coordinator = try makeCoordinator()
+        let requester = TestPermissionRequester(result: true)
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: requester,
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        await model.handleRecordButtonTap()
+
+        let sessionState = await coordinator.state()
+        let requestCount = await requester.callCount()
+        XCTAssertEqual(sessionState, .recording)
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    func testHandleRecordButtonTapRequestsAccessThenTogglesWhenPromptSucceeds() async throws {
+        let coordinator = try makeCoordinator()
+        let requester = TestPermissionRequester(result: true)
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: requester,
+            permissionStateProvider: { .notYetRequested },
+            clipboardWriter: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        await model.handleRecordButtonTap()
+
+        let sessionState = await coordinator.state()
+        let requestCount = await requester.callCount()
+        XCTAssertEqual(model.permissionState, .granted)
+        XCTAssertEqual(sessionState, .recording)
+        XCTAssertEqual(requestCount, 1)
+    }
+
+    func testHandleRecordButtonTapDoesNotToggleWhenPromptReturnsFalse() async throws {
+        let coordinator = try makeCoordinator()
+        let requester = TestPermissionRequester(result: false)
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: requester,
+            permissionStateProvider: { .notYetRequested },
+            clipboardWriter: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        await model.handleRecordButtonTap()
+
+        let sessionState = await coordinator.state()
+        let requestCount = await requester.callCount()
+        XCTAssertEqual(model.permissionState, .denied)
+        XCTAssertEqual(sessionState, .idle)
+        XCTAssertEqual(requestCount, 1)
+    }
+
+    func testHandleRecordButtonTapDoesNothingWhenPermissionDenied() async throws {
+        let coordinator = try makeCoordinator()
+        let requester = TestPermissionRequester(result: true)
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: requester,
+            permissionStateProvider: { .denied },
+            clipboardWriter: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        await model.handleRecordButtonTap()
+
+        let sessionState = await coordinator.state()
+        let requestCount = await requester.callCount()
+        XCTAssertEqual(sessionState, .idle)
+        XCTAssertEqual(requestCount, 0)
+    }
+
     private func makeCoordinator() throws -> SessionCoordinator {
         SessionCoordinator(
             capture: FakeAudioCapturing(buffers: [try makeBuffer()]),
@@ -59,10 +141,16 @@ final class MenuBarSceneModelTests: XCTestCase {
     }
 }
 
-private struct TestPermissionRequester: MicrophonePermissionRequesting {
+private actor TestPermissionRequester: MicrophonePermissionRequesting {
     let result: Bool
+    private var requestCount = 0
 
     func requestAccess() async -> Bool {
+        requestCount += 1
         result
+    }
+
+    func callCount() -> Int {
+        requestCount
     }
 }

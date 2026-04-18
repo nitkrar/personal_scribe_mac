@@ -33,6 +33,10 @@ final class MenuBarSceneModel: ObservableObject {
         self.permissionState = permissionStateProvider()
     }
 
+    var recordButton: RecordButtonViewModel {
+        RecordButtonViewModel.make(from: state)
+    }
+
     func startObserving() {}
 
     func handleRecordButtonTap() async {
@@ -40,11 +44,14 @@ final class MenuBarSceneModel: ObservableObject {
 
         switch permissionState {
         case .granted:
-            return
+            await coordinator.toggle()
         case .notYetRequested:
             let granted = await permissionRequester.requestAccess()
             permissionState = granted ? .granted : .denied
             logger.info("Microphone permission request completed: \(granted)")
+            if granted {
+                await coordinator.toggle()
+            }
         case .denied:
             logger.info("Record button tapped while permission denied; ignoring.")
         }
