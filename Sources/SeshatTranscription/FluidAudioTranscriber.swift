@@ -14,6 +14,8 @@ public actor FluidAudioTranscriber: Transcribing {
     private let logger: SeshatLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
     private let progressBroadcaster: DownloadProgressBroadcaster
+    private var hasPreparedModel = false
+    private var prepareTask: Task<Void, Error>?
 
     public init(
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.transcription)
@@ -58,6 +60,30 @@ public actor FluidAudioTranscriber: Transcribing {
     }
 
     public func prepare() async throws {
+        if hasPreparedModel {
+            return
+        }
+
+        if let prepareTask {
+            return try await prepareTask.value
+        }
+
+        let task = Task {
+            try await self.performPrepare()
+        }
+        prepareTask = task
+
+        do {
+            try await task.value
+            hasPreparedModel = true
+            prepareTask = nil
+        } catch {
+            prepareTask = nil
+            throw error
+        }
+    }
+
+    private func performPrepare() async throws {
         let modelsDirectory = try SeshatConfig.modelsDirectory()
         let modelDirectory = Self.modelRootDirectory(base: modelsDirectory)
 
