@@ -77,11 +77,9 @@ Sprint 1 (foundation components + state/audio plumbing) merged on `phase-2`. **2
 | `SessionCoordinator.audioLevelStream()` / `audioLevel()` | A2 | Mirrors `stateStream()` pattern. No new `AppState` type (plan line 279). Review `b359d2c`: fake level stream terminates on error. |
 | `@MainActor` on `ActionButtonTests` (test-fix) | Post-merge / `4192e7c` | Swift 6 strict concurrency required it. |
 
-## Phase 2 Sprint 1 — TODOs (merged with placeholders)
+## Phase 2 Sprint 1 — TODOs
 
-Two items deferred rather than gated:
-
-- **StatusBarIcon — replace placeholder PNGs.** `Sources/SeshatAppKit/Resources/Assets.xcassets/StatusBarIcon.imageset/*.png` are opaque color tile-crops from `logo_dark.png` via `sips`. Menu-bar spec in `plans/seshat_agent_bundle/03_Surfaces/MenuBarMenu/IMPORTANT.md` requires a **transparent-background monochrome silhouette** (18×18pt @1x + 36×36 @2x) for `Render As = Template Image`. Manus export pending; swap in a 1-commit follow-up when it arrives. Functionally invisible until Sprint 2 wires the native `NSMenu` status item, so not blocking.
+- ~~**StatusBarIcon — replace placeholder PNGs.**~~ **Done `5250cca`** (`phase-2 step 2.7b`). Manus export swapped in: transparent monochrome quill silhouette, 18×18 @1x + 36×36 @2x.
 - **Trailing `0.0` on `audioLevelStream()` at stop — UI-layer decay in Sprint 2.** `SessionCoordinator.stop()` publishes `0.0` as the final value before the stream finishes. When `WaveformView` gets consumed by the pill overlay in Sprint 2, it should interpolate a short coast-down (~300 ms) on stream-end rather than snapping flat. Plumbing stays as-is in `SeshatSession`/`SeshatAudio`; decay is a presentation concern.
 - **Pixel-fidelity of `SeshatLogoView`** — current SwiftUI `QuillShape` is a stylised vector approximation, not a faithful trace of `plans/seshat_agent_bundle/01_Foundations/assets/logo_dark.png`. Revisit when exporting the `.icns` app icon (plan line 349) so SwiftUI view + icon share a common source.
 
