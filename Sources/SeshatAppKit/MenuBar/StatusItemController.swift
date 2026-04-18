@@ -103,13 +103,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func configureStatusItemButton() {
         guard let button = statusItem.button else { return }
 
-        if let image = NSImage(named: "StatusBarIcon") {
-            image.isTemplate = true
+        // Load from `Bundle.module` — the SwiftPM resource bundle the
+        // asset catalog lives in. `NSImage(named:)` only searches
+        // `Bundle.main`, which is why the packaged `.app` was falling
+        // back to the "S" text glyph.
+        if let image = StatusItemIconLoader.loadStatusBarIcon() {
             button.image = image
         } else {
-            // Fallback so the app still launches if the asset catalog
-            // fails to load (e.g. Resources not included in a build).
+            // Defensive fallback so the app still launches if the
+            // asset catalog is genuinely missing from the build.
             button.title = "S"
+            logger.error("StatusBarIcon asset missing from Bundle.module — falling back to text glyph")
         }
 
         button.toolTip = "Seshat"
