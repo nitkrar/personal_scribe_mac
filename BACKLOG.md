@@ -107,7 +107,19 @@ Sprint 2 merged on `phase-2`. **339 tests green** (Sprint 1 baseline 254 + Sprin
 - **Status item icon frame-swap animation.** Currently tints the single `StatusBarIcon` asset `.systemRed` during recording. Plan line 342 prescribes "cycle between two frames" — needs a second asset (e.g. `StatusBarIconListening`) exported from the quill mark before it can land. Not blocking dogfood; visual polish.
 - **macOS 15 URL-scheme branching for permission deep-links.** `StatusItemController` uses the macOS 14 anchor (`Privacy_Microphone`, `Privacy_ListenEvent`) which still works on 15. If 15 breaks the anchor in a future point release, branch via `if #available(macOS 15, *)`.
 - **`MenuBarSceneModel` rename.** The type no longer backs a "Scene" (no SwiftUI scene anymore); it publishes app state for both pill + status item. Cleaner name: `AppStateModel`. Deferred to Phase 3 to avoid mid-sprint churn. Low blast radius — StateObject ownership in `SeshatAppMain` + `SeshatApp`.
-- **`.icns` app icon.** Plan line 339 flagged for "after logo stabilises." Still open; when it lands, pair with the `SeshatLogoView` pixel-fidelity TODO above so SwiftUI view + icon share a source.
+- ~~**`.icns` app icon.** Plan line 339 flagged for "after logo stabilises."~~ **Done `41bb6eb`** — hand-authored RGBA `AppIcon.icns` checked in at `Sources/SeshatAppKit/Resources/`, `package.sh` copies to `Seshat.app/Contents/Resources/Seshat.icns`. Pixel-fidelity `SeshatLogoView` TODO above still open (live SwiftUI view + icon master share a source when the view gets redrawn).
+
+## Phase 2 Sprint 2 — dogfood fixes (2026-04-18)
+
+User-reported dogfood bugs after first `scripts/package.sh -ir` test-drive on 2026-04-18.
+
+| # | Bug | Status | Commit(s) |
+|---|---|---|---|
+| 1 | App icon missing in Finder / Applications | **Fixed** | `addb1ea` (sips/iconutil autogen) → `41bb6eb` (replaced with hand-authored RGBA icns — source was RGB-only, rendered as flat dark square) |
+| 2 | TCC permissions reset on every install; Accessibility asked at paste time not record time | **Parked** | Signing identity stability needed for TCC (ad-hoc CD hash changes per build). Accessibility timing is a known Phase 1 dogfood friction. User asked to follow up later. |
+| 3 | Menu bar shows "S" fallback, not quill icon | **Fixed** | `60082ab` (load via `Bundle.module` — SwiftPM doesn't search `Bundle.main`) → `1d1e63b` (flatten asset catalog to direct PNGs — SwiftPM's `.process` doesn't run `actool`, so no `.car` → no `image(forResource:)` lookup). New `StatusItemIconLoader` with manual @2x representation merge + new `ManualStatusItemVerification.md` runbook. |
+| 4 | Pill not visible by default or during recording; briefly appears at stop | **Open — diagnostic shipped** | `6b526bf` added `os_log` at every hop of pill state flow (controller init, CombineLatest sink, view-model apply, presenter visibility sink, show/hide panel frame/visibility). User to rebuild, record, capture `log stream --predicate 'subsystem == "com.nitkrar.seshat"' --last 2m` and share for diagnosis. |
+| 5 | Menu advertises Cmd-something shortcut; actual hotkey is double-tap right Option | **Fixed** | `e628d31` — removed AppKit keyEquivalent (NSMenu can't represent a double-tap), appended `⌥⌥` hint to the title text: `"Start Recording   ⌥⌥"` / `"Stop Recording   ⌥⌥"`. Test `testStartRecordingHasNoAppKitKeyEquivalent` guards against re-introducing the phantom shortcut. |
 
 ## Deferred to Phase 3+ (not forgotten)
 
