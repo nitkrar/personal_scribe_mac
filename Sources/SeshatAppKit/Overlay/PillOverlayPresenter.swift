@@ -144,12 +144,19 @@ public final class PillOverlayPresenter {
     }
 
     public func show() {
-        guard model.visibility != .hidden else {
-            diagnosticLogger.info("PillOverlayPresenter.show — redirecting to hide (visibility is .hidden)")
-            hide()
-            return
-        }
-
+        // Deliberately NOT reading `model.visibility` here. `@Published`
+        // emits its new value in `willSet`, so during a sink callback
+        // `model.visibility` still reflects the *previous* value — reading
+        // it here would make the guard use stale state and bounce an
+        // intended-visible update back into `hide()` (this was the bug
+        // behind the "pill only shows for a split second" regression;
+        // diagnostic log 2026-04-18 21:48:57 show the guard firing on
+        // visibility=loading and redirecting to hide because the stored
+        // value was still .hidden from the prior transition).
+        //
+        // The sink in the init already dispatches .hidden to hide() in a
+        // separate branch, so this method is only ever called when we
+        // genuinely want to show — no guard needed.
         intendsToShow = true
 
         let panelExisted = panel != nil
