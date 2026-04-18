@@ -61,18 +61,8 @@ public actor FluidAudioTranscriber: Transcribing {
         let modelsDirectory = try SeshatConfig.modelsDirectory()
         let modelDirectory = Self.modelRootDirectory(base: modelsDirectory)
 
-        if !Self.modelsExist(in: modelDirectory) {
-            do {
-                _ = try await downloader.ensureModelAvailable(
-                    at: modelDirectory,
-                    progress: { snapshot in
-                        Task { await self.recordDownloadProgress(snapshot) }
-                    }
-                )
-            } catch {
-                logError("Model download failed", error: error)
-                throw SeshatError.modelDownloadFailure
-            }
+        if !Self.modelArtifactsAreValid(in: modelDirectory) {
+            try await ensureValidDownloadedModel(at: modelDirectory)
         }
 
         do {
@@ -146,6 +136,34 @@ private final class DownloadProgressBroadcaster: @unchecked Sendable {
 }
 
 private extension FluidAudioTranscriber {
+    func ensureValidDownloadedModel(at modelDirectory: URL) async throws {
+        let fileManager = FileManager.default
+
+        for attempt in 0..<2 {
+            do {
+                _ = try await downloader.ensureModelAvailable(
+                    at: modelDirectory,
+                    progress: { snapshot in
+                        Task { await self.recordDownloadProgress(snapshot) }
+                    }
+                )
+
+                guard Self.modelArtifactsAreValid(in: modelDirectory) else {
+                    throw ModelArtifactValidationError.invalidArtifacts
+                }
+
+                return
+            } catch {
+                try? fileManager.removeItem(at: modelDirectory)
+
+                if attempt == 1 {
+                    logError("Model download failed", error: error)
+                    throw SeshatError.modelDownloadFailure
+                }
+            }
+        }
+    }
+
     func logError(_ message: String, error: Error) {
         logger.error("\(message): \(error.localizedDescription)", error: error)
         logSink?("error", "\(message): \(error.localizedDescription)")
@@ -172,4 +190,42 @@ private extension FluidAudioTranscriber {
             expectedBytes: snapshot.expectedBytes ?? current.expectedBytes
         )
     }
+}
+
+private extension FluidAudioTranscriber {
+    static func modelArtifactsAreValid(in directory: URL) -> Bool {
+        guard modelsExist(in: directory) else {
+            return false
+        }
+
+        let fileManager = FileManager.default
+
+        for path in requiredModelPaths(in: directory) where path.lastPathComponent == "coremldata.bin" {
+            guard
+                let attributes = try? fileManager.attributesOfItem(atPath: path.path),
+                let size = attributes[.size] as? NSNumber,
+                size.intValue > 0
+            else {
+                return false
+            }
+        }
+
+        let vocabURL = directory.appendingPathComponent("parakeet_vocab.json", isDirectory: false)
+        guard
+            let data = try? Data(contentsOf: vocabURL),
+            !data.isEmpty,
+            let contents = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .first,
+            contents == "{" || contents == "["
+        else {
+            return false
+        }
+
+        return true
+    }
+}
+
+private enum ModelArtifactValidationError: Error {
+    case invalidArtifacts
 }

@@ -137,3 +137,37 @@ actor StubInferenceClient: FluidAudioInferencing {
         return result
     }
 }
+
+actor RetryingStubModelDownloader: ModelDownloading {
+    enum ResultKind {
+        case corrupt
+        case valid
+    }
+
+    private(set) var attemptCount = 0
+
+    private let firstResult: ResultKind
+    private let secondResult: ResultKind
+
+    init(firstResult: ResultKind, secondResult: ResultKind) {
+        self.firstResult = firstResult
+        self.secondResult = secondResult
+    }
+
+    func ensureModelAvailable(
+        at directory: URL,
+        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
+    ) async throws -> URL {
+        attemptCount += 1
+        progress(.init(phase: .downloading, fractionCompleted: 1, receivedBytes: 1, expectedBytes: 1))
+
+        switch attemptCount == 1 ? firstResult : secondResult {
+        case .corrupt:
+            try TestModelArtifacts.writeCorrupt(to: directory)
+        case .valid:
+            try TestModelArtifacts.writeValid(to: directory)
+        }
+
+        return directory
+    }
+}
