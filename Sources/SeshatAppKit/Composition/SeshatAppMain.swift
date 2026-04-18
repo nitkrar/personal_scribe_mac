@@ -63,10 +63,13 @@ struct SeshatAppMain: App {
     }
 
     var body: some Scene {
+        // .window is required — default .menu style renders as NSMenu and
+        // silently drops SwiftUI views like ProgressView / nested VStacks.
         MenuBarExtra {
             MenuBarScene(model: sceneModel)
         } label: {
             Image(systemName: sceneModel.statusIcon.systemImageName)
         }
+        .menuBarExtraStyle(.window)
     }
 }
