@@ -3,13 +3,27 @@ import Combine
 import SwiftUI
 import SeshatCore
 
+fileprivate final class DraggablePanel: NSPanel {
+    var onMouseDragged: (() -> Void)?
+
+    override var canBecomeKey: Bool {
+        false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        onMouseDragged?()
+        performDrag(with: event)
+    }
+}
+
 @MainActor
 public final class PillOverlayPresenter {
     private let model: PillOverlayViewModel
     private let onTap: @MainActor () -> Void
-    private var panel: NSPanel?
+    private var panel: DraggablePanel?
     private var visibilityCancellable: AnyCancellable?
     private let panelSize = NSSize(width: 220, height: 44)
+    private var hasUserRepositioned = false
 
     public init(
         model: PillOverlayViewModel,
@@ -34,7 +48,7 @@ public final class PillOverlayPresenter {
     }
 
     public var isVisible: Bool {
-        panel != nil
+        panel?.isVisible == true
     }
 
     public func show() {
@@ -46,17 +60,19 @@ public final class PillOverlayPresenter {
         let panel = panel ?? makePanel()
         self.panel = panel
 
-        updatePanelPosition(panel)
+        if !hasUserRepositioned {
+            updatePanelPosition(panel)
+        }
+
         panel.orderFrontRegardless()
     }
 
     public func hide() {
-        panel?.close()
-        panel = nil
+        panel?.orderOut(nil)
     }
 
-    private func makePanel() -> NSPanel {
-        let panel = NSPanel(
+    private func makePanel() -> DraggablePanel {
+        let panel = DraggablePanel(
             contentRect: NSRect(origin: .zero, size: panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -71,6 +87,9 @@ public final class PillOverlayPresenter {
         panel.canHide = false
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         panel.ignoresMouseEvents = false
+        panel.onMouseDragged = { [weak self] in
+            self?.hasUserRepositioned = true
+        }
         panel.contentView = NSHostingView(
             rootView: PillOverlayView(model: model, onTap: onTap)
         )
