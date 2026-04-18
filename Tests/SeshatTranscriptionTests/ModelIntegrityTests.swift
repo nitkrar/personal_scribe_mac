@@ -12,7 +12,8 @@ final class ModelIntegrityTests: SeshatTranscriptionFilesystemTestCase {
 
         try await transcriber.prepare()
 
-        XCTAssertEqual(await downloader.attemptCount, 2)
+        let attempts = await downloader.attemptCount
+        XCTAssertEqual(attempts, 2)
     }
 
     func testCorruptDownloadTwiceThrowsModelDownloadFailure() async {

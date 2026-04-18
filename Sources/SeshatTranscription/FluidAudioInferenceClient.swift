@@ -12,7 +12,7 @@ struct FluidAudioInferenceResult: Sendable, Equatable {
     let processingDuration: Duration
 }
 
-private actor PrivateFluidAudioInferenceClient: FluidAudioInferencing {
+internal actor PrivateFluidAudioInferenceClient: FluidAudioInferencing {
     private let manager = AsrManager(config: .default)
 
     func loadModel(from directory: URL) async throws {
@@ -24,7 +24,7 @@ private actor PrivateFluidAudioInferenceClient: FluidAudioInferencing {
         let result = try await manager.transcribe(samples, source: .microphone)
         return FluidAudioInferenceResult(
             text: result.text,
-            processingDuration: result.processingTime
+            processingDuration: .seconds(result.processingTime)
         )
     }
 }

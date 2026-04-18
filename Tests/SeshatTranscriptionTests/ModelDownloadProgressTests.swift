@@ -16,8 +16,14 @@ final class ModelDownloadProgressTests: SeshatTranscriptionFilesystemTestCase {
             inference: StubInferenceClient()
         )
 
-        let task = Task {
-            await collect(stream: transcriber.modelDownloadProgress(), limit: 5)
+        let stream = transcriber.modelDownloadProgress()
+        let task: Task<[ModelDownloadProgress], Never> = Task {
+            var result: [ModelDownloadProgress] = []
+            for await value in stream {
+                result.append(value)
+                if result.count == 5 { break }
+            }
+            return result
         }
 
         try await transcriber.prepare()
@@ -44,8 +50,14 @@ final class ModelDownloadProgressTests: SeshatTranscriptionFilesystemTestCase {
             inference: StubInferenceClient()
         )
 
-        let task = Task {
-            await collect(stream: transcriber.modelDownloadProgress(), limit: 4)
+        let stream = transcriber.modelDownloadProgress()
+        let task: Task<[ModelDownloadProgress], Never> = Task {
+            var result: [ModelDownloadProgress] = []
+            for await value in stream {
+                result.append(value)
+                if result.count == 4 { break }
+            }
+            return result
         }
 
         try await transcriber.prepare()
@@ -58,7 +70,7 @@ final class ModelDownloadProgressTests: SeshatTranscriptionFilesystemTestCase {
         )
     }
 
-    private func collect(
+    private static func collect(
         stream: AsyncStream<ModelDownloadProgress>,
         limit: Int
     ) async -> [ModelDownloadProgress] {

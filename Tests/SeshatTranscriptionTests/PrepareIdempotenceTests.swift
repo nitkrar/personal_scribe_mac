@@ -14,8 +14,10 @@ final class PrepareIdempotenceTests: SeshatTranscriptionFilesystemTestCase {
         try await transcriber.prepare()
         try await transcriber.prepare()
 
-        XCTAssertEqual(await downloader.ensureCallCount, 1)
-        XCTAssertEqual(await inference.loadCallCount, 1)
+        let ensureCount = await downloader.ensureCallCount
+        let loadCount = await inference.loadCallCount
+        XCTAssertEqual(ensureCount, 1)
+        XCTAssertEqual(loadCount, 1)
     }
 
     func testConcurrentPrepareCallsShareOneTask() async throws {
@@ -30,7 +32,9 @@ final class PrepareIdempotenceTests: SeshatTranscriptionFilesystemTestCase {
         async let second: Void = transcriber.prepare()
         _ = try await (first, second)
 
-        XCTAssertEqual(await downloader.ensureCallCount, 1)
-        XCTAssertEqual(await inference.loadCallCount, 1)
+        let ensureCount = await downloader.ensureCallCount
+        let loadCount = await inference.loadCallCount
+        XCTAssertEqual(ensureCount, 1)
+        XCTAssertEqual(loadCount, 1)
     }
 }

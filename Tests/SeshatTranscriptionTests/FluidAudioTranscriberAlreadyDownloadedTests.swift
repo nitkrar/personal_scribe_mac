@@ -38,6 +38,7 @@ final class FluidAudioTranscriberAlreadyDownloadedTests: XCTestCase {
 
         try await transcriber.prepare()
 
-        XCTAssertTrue(await recordingSession.requests.isEmpty)
+        let requests = await recordingSession.requests
+        XCTAssertTrue(requests.isEmpty)
     }
 }

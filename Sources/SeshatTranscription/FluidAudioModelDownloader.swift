@@ -20,7 +20,7 @@ enum ParakeetArtifact {
     }
 }
 
-private struct PrivateModelDownloader: ModelDownloading {
+internal struct PrivateModelDownloader: ModelDownloading {
     private let session: URLSession = .shared
     private let clock = ContinuousClock()
 
