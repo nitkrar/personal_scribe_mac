@@ -10,13 +10,16 @@ public final class PillOverlayController: ObservableObject {
 
     public init(
         statePublisher: AnyPublisher<SessionState, Never>,
+        downloadProgressPublisher: AnyPublisher<ModelDownloadProgress?, Never>,
         onTap: @escaping @MainActor () -> Void = {}
     ) {
         let viewModel = PillOverlayViewModel()
         self.viewModel = viewModel
         self.presenter = PillOverlayPresenter(model: viewModel, onTap: onTap)
-        self.cancellable = statePublisher.sink { [weak viewModel] state in
-            viewModel?.apply(sessionState: state)
-        }
+        self.cancellable = Publishers
+            .CombineLatest(statePublisher, downloadProgressPublisher)
+            .sink { [weak viewModel] state, progress in
+                viewModel?.apply(sessionState: state, downloadProgress: progress)
+            }
     }
 }

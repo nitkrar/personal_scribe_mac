@@ -8,6 +8,7 @@ final class MenuBarSceneModel: ObservableObject {
     @Published var state: SessionState = .idle
     @Published var permissionState: MicrophonePermissionState
     @Published var lastResultText: String? = nil
+    @Published var downloadProgress: ModelDownloadProgress?
 
     private let coordinator: SessionCoordinator
     private let permissionRequester: any MicrophonePermissionRequesting
@@ -17,6 +18,7 @@ final class MenuBarSceneModel: ObservableObject {
     private let logger: SeshatLogger
     private let onObservationCancelled: (@Sendable () -> Void)?
     private var observationTask: Task<Void, Never>?
+    private var downloadObservationTask: Task<Void, Never>?
     private(set) var observationTaskCreationCount = 0
 
     init(
@@ -71,6 +73,16 @@ final class MenuBarSceneModel: ObservableObject {
                 }
             }
         }
+
+        downloadObservationTask = Task { [weak self, coordinator] in
+            guard let self else { return }
+            let stream = await coordinator.modelDownloadProgress()
+            for await progress in stream {
+                await MainActor.run {
+                    self.downloadProgress = (progress.phase == .downloading) ? progress : nil
+                }
+            }
+        }
     }
 
     func handleRecordButtonTap() async {
@@ -108,6 +120,7 @@ final class MenuBarSceneModel: ObservableObject {
 
     deinit {
         observationTask?.cancel()
+        downloadObservationTask?.cancel()
         onObservationCancelled?()
     }
 }

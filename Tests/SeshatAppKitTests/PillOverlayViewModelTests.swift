@@ -14,7 +14,7 @@ final class PillOverlayViewModelTests: XCTestCase {
     func testIdleMapsToIdle() {
         let viewModel = PillOverlayViewModel()
 
-        viewModel.apply(sessionState: .idle)
+        viewModel.apply(sessionState: .idle, downloadProgress: nil)
 
         XCTAssertEqual(viewModel.visibility, .idle)
     }
@@ -22,7 +22,7 @@ final class PillOverlayViewModelTests: XCTestCase {
     func testRecordingMapsToRecording() {
         let viewModel = PillOverlayViewModel()
 
-        viewModel.apply(sessionState: .recording)
+        viewModel.apply(sessionState: .recording, downloadProgress: nil)
 
         XCTAssertEqual(viewModel.visibility, .recording)
     }
@@ -30,7 +30,7 @@ final class PillOverlayViewModelTests: XCTestCase {
     func testTranscribingMapsToTranscribing() {
         let viewModel = PillOverlayViewModel()
 
-        viewModel.apply(sessionState: .transcribing)
+        viewModel.apply(sessionState: .transcribing, downloadProgress: nil)
 
         XCTAssertEqual(viewModel.visibility, .transcribing)
     }
@@ -38,12 +38,40 @@ final class PillOverlayViewModelTests: XCTestCase {
     func testErrorMapsToHidden() {
         let viewModel = PillOverlayViewModel()
 
-        viewModel.apply(sessionState: .error(.audioEngineFailure))
+        viewModel.apply(sessionState: .error(.audioEngineFailure), downloadProgress: nil)
 
         XCTAssertEqual(viewModel.visibility, .hidden)
     }
 
-    func testTransitionSequenceIdleRecordingTranscribingIdle() async {
+    func testDownloadingProgressOverridesSessionState() {
+        let viewModel = PillOverlayViewModel()
+        let progress = ModelDownloadProgress(
+            phase: .downloading,
+            fractionCompleted: 0.42,
+            receivedBytes: 42,
+            expectedBytes: 100
+        )
+
+        viewModel.apply(sessionState: .transcribing, downloadProgress: progress)
+
+        XCTAssertEqual(viewModel.visibility, .downloading(fractionCompleted: 0.42))
+    }
+
+    func testFinishedProgressDoesNotHijackVisibility() {
+        let viewModel = PillOverlayViewModel()
+        let progress = ModelDownloadProgress(
+            phase: .finished,
+            fractionCompleted: 1.0,
+            receivedBytes: 100,
+            expectedBytes: 100
+        )
+
+        viewModel.apply(sessionState: .recording, downloadProgress: progress)
+
+        XCTAssertEqual(viewModel.visibility, .recording)
+    }
+
+    func testTransitionSequenceRecordingTranscribingIdleError() async {
         let viewModel = PillOverlayViewModel()
         var emitted: [PillOverlayViewModel.Visibility] = []
         let expectation = expectation(description: "Collect published visibility updates")
@@ -59,10 +87,10 @@ final class PillOverlayViewModelTests: XCTestCase {
                 }
             }
 
-        viewModel.apply(sessionState: .recording)
-        viewModel.apply(sessionState: .transcribing)
-        viewModel.apply(sessionState: .idle)
-        viewModel.apply(sessionState: .error(.audioEngineFailure))
+        viewModel.apply(sessionState: .recording, downloadProgress: nil)
+        viewModel.apply(sessionState: .transcribing, downloadProgress: nil)
+        viewModel.apply(sessionState: .idle, downloadProgress: nil)
+        viewModel.apply(sessionState: .error(.audioEngineFailure), downloadProgress: nil)
 
         await fulfillment(of: [expectation], timeout: 1.0)
         withExtendedLifetime(cancellable) {}

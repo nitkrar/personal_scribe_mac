@@ -47,6 +47,7 @@ struct SeshatAppMain: App {
         _pillController = StateObject(
             wrappedValue: PillOverlayController(
                 statePublisher: sceneModel.$state.eraseToAnyPublisher(),
+                downloadProgressPublisher: sceneModel.$downloadProgress.eraseToAnyPublisher(),
                 onTap: {
                     Task { await coordinator.toggle() }
                 }

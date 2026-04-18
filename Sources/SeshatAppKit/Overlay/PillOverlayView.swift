@@ -46,6 +46,9 @@ public struct PillOverlayView: View {
                 idlePill
                     .transition(pillTransition)
                     .onTapGesture { onTap() }
+            case .downloading(let fraction):
+                downloadingPill(fraction: fraction)
+                    .transition(pillTransition)
             case .recording:
                 recordingPill
                     .transition(pillTransition)
@@ -98,6 +101,30 @@ public struct PillOverlayView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(minWidth: 160, idealWidth: 200, minHeight: 40)
+        .pillChrome
+    }
+
+    private func downloadingPill(fraction: Double) -> some View {
+        let percent = Int((fraction * 100).rounded())
+        return HStack(spacing: 10) {
+            Image(systemName: "arrow.down.circle")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Downloading model… \(percent)%")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
+
+                ProgressView(value: max(0, min(fraction, 1)))
+                    .progressViewStyle(.linear)
+                    .frame(width: 140)
+                    .tint(.accentColor)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(minWidth: 200, idealWidth: 220, minHeight: 44)
         .pillChrome
     }
 

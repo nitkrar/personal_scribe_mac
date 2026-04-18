@@ -64,6 +64,10 @@ public actor SessionCoordinator {
         try await transcriber.prepare()
     }
 
+    public func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        transcriber.modelDownloadProgress()
+    }
+
     private func removeContinuation(id: UUID) {
         stateContinuations[id] = nil
     }

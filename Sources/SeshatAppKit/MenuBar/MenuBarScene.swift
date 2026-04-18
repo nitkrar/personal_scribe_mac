@@ -18,6 +18,17 @@ struct MenuBarScene: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
+            if let downloadProgress = model.downloadProgress {
+                let percent = Int((downloadProgress.fractionCompleted * 100).rounded())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Downloading model… \(percent)%")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    ProgressView(value: max(0, min(downloadProgress.fractionCompleted, 1)))
+                        .progressViewStyle(.linear)
+                }
+            }
+
             switch model.permissionState {
             case .granted:
                 RecordButtonView(
