@@ -286,6 +286,18 @@ final class MenuBarSceneModelTests: XCTestCase {
         )
     }
 
+    func testCanInstantiateSeshatAppWithCoordinatorAndPermissionRequester() async throws {
+        let coordinator = try makeCoordinator()
+        let app = SeshatApp(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted }
+        )
+
+        _ = app.body
+        XCTAssertNotNil(app)
+    }
+
     private func makeCoordinator() throws -> SessionCoordinator {
         SessionCoordinator(
             capture: FakeAudioCapturing(buffers: [try makeBuffer()]),
