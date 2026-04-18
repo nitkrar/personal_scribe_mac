@@ -77,9 +77,8 @@ public struct PillOverlayView: View {
         let palette = SeshatTheme.Palette.for(scheme: colorScheme)
 
         return HStack {
-            Image(systemName: "waveform")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(palette.brandChampagne.opacity(0.7))
+            SeshatLogoView(color: palette.brandChampagne.opacity(0.9))
+                .frame(width: 14, height: 14)
         }
         .frame(width: Self.idleSize.width, height: Self.idleSize.height)
         .modifier(PillChrome(palette: palette))

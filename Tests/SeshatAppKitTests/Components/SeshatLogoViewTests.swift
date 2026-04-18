@@ -4,72 +4,45 @@ import XCTest
 
 /// Tests for the quill `SeshatLogoView`.
 ///
-/// The view itself is pure SwiftUI geometry; we test:
-///   * The `AnimationState` enum rounds out all four states.
-///   * The view's public initializer accepts size + state + tint.
-///   * The default tint is resolved from the current theme palette when
-///     no explicit tint is provided.
-///   * `Geometry` pre-computes deterministic state-driven values so we can
-///     test the quill without XCTest'ing rendered SwiftUI output.
+/// The 2026-04-18 redesign replaced the stylised hand-coded
+/// `QuillShape` with an SVG-traced version (vtracer spline trace of
+/// the master logo asset at 2048×2048). Public API simplified from
+/// `(size:state:tint:)` to `(color:)` — animation states and
+/// `Geometry` helpers are gone because the pill overlay no longer
+/// drives them (the pill uses `SineWaveView` + `ProgressView` for
+/// motion).
+@MainActor
 final class SeshatLogoViewTests: XCTestCase {
-    func testAnimationStateEnumHasAllFourCases() {
-        let cases: Set<SeshatLogoView.AnimationState> = Set(SeshatLogoView.AnimationState.allCases)
-        XCTAssertEqual(
-            cases,
-            [.idle, .listening, .transcribing, .error],
-            "AnimationState must cover all four states from logo_animation_states.png"
-        )
+    func testInitializerAcceptsCustomColor() {
+        let view = SeshatLogoView(color: .red)
+        XCTAssertEqual(view.color, .red)
     }
 
-    func testInitializerAcceptsSizeAndState() {
-        let view = SeshatLogoView(size: 64, state: .listening)
-        XCTAssertEqual(view.size, 64, accuracy: 0.001)
-        XCTAssertEqual(view.state, .listening)
+    func testDefaultColorIsChampagneFromDarkPalette() {
+        let view = SeshatLogoView()
+        XCTAssertEqual(view.color, SeshatTheme.Palette.dark.brandChampagne)
     }
 
-    func testInitializerDefaultsToIdleState() {
-        let view = SeshatLogoView(size: 48)
-        XCTAssertEqual(view.state, .idle)
+    func testQuillShapeProducesNonEmptyPath() {
+        // Rendering into a 100×100 rect — the SVG-parsed path should
+        // produce a visible path. Empty would mean the parser failed
+        // silently or the embedded path data is malformed.
+        let rect = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let path = QuillShape().path(in: rect)
+        XCTAssertFalse(path.isEmpty, "QuillShape must produce a non-empty path")
     }
 
-    func testExplicitTintOverridesDefaultBrandChampagne() {
-        let customTint = Color.red
-        let view = SeshatLogoView(size: 48, state: .idle, tint: customTint)
-        XCTAssertNotNil(view.explicitTint)
-    }
-
-    func testDefaultTintIsNilWhenNotSpecified() {
-        let view = SeshatLogoView(size: 48, state: .idle)
-        XCTAssertNil(view.explicitTint, "when tint is nil, view resolves from theme palette")
-    }
-
-    func testGeometryStrokeWidthScalesWithSize() {
-        let small = SeshatLogoView.Geometry(size: 24)
-        let large = SeshatLogoView.Geometry(size: 96)
-        XCTAssertLessThan(small.strokeWidth, large.strokeWidth)
-        XCTAssertGreaterThan(small.strokeWidth, 0)
-    }
-
-    func testGeometryInkDripOnlyVisibleInTranscribingState() {
-        XCTAssertFalse(SeshatLogoView.Geometry.showsInkDrip(for: .idle))
-        XCTAssertFalse(SeshatLogoView.Geometry.showsInkDrip(for: .listening))
-        XCTAssertTrue(SeshatLogoView.Geometry.showsInkDrip(for: .transcribing))
-        XCTAssertFalse(SeshatLogoView.Geometry.showsInkDrip(for: .error))
-    }
-
-    func testGeometryWaveformVisibleForIdleAndListeningAndTranscribing() {
-        XCTAssertTrue(SeshatLogoView.Geometry.showsWaveform(for: .idle))
-        XCTAssertTrue(SeshatLogoView.Geometry.showsWaveform(for: .listening))
-        XCTAssertTrue(SeshatLogoView.Geometry.showsWaveform(for: .transcribing))
-        XCTAssertFalse(SeshatLogoView.Geometry.showsWaveform(for: .error))
-    }
-
-    func testGeometryStateAnimationSpeedDiffersAcrossStates() {
-        // Listening should animate faster than idle; transcribing goes flat.
-        let idle = SeshatLogoView.Geometry.animationSpeed(for: .idle)
-        let listening = SeshatLogoView.Geometry.animationSpeed(for: .listening)
-        let transcribing = SeshatLogoView.Geometry.animationSpeed(for: .transcribing)
-        XCTAssertGreaterThan(listening, idle)
-        XCTAssertEqual(transcribing, 0, "transcribing = flat wave, no animation")
+    func testQuillShapeFitsRoughlyWithinProvidedRect() {
+        // Scaling from the 2048×2048 source should keep the path's
+        // bounding box within the target rect (±small tolerance for
+        // curve control points + anti-alias overspray).
+        let rect = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let path = QuillShape().path(in: rect)
+        let bounds = path.boundingRect
+        let tolerance: CGFloat = 4
+        XCTAssertGreaterThanOrEqual(bounds.minX, rect.minX - tolerance)
+        XCTAssertLessThanOrEqual(bounds.maxX, rect.maxX + tolerance)
+        XCTAssertGreaterThanOrEqual(bounds.minY, rect.minY - tolerance)
+        XCTAssertLessThanOrEqual(bounds.maxY, rect.maxY + tolerance)
     }
 }
