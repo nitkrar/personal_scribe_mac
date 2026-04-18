@@ -59,6 +59,11 @@ public actor SessionCoordinator {
         mostRecentResult
     }
 
+    /// Idempotent passthrough for eager model preparation; `prepare()` coalesces repeated calls.
+    public func prepareTranscriber() async throws {
+        try await transcriber.prepare()
+    }
+
     private func removeContinuation(id: UUID) {
         stateContinuations[id] = nil
     }
