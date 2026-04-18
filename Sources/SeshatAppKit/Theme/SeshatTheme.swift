@@ -22,18 +22,7 @@ public enum SeshatTheme {
     /// hex-to-channel conversion. Other sites MUST use the semantic
     /// `SeshatTheme.Palette.*` tokens.
     public static func color(hex: String) -> Color {
-        let trimmed = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count == 6,
-              trimmed.allSatisfy({ $0.isHexDigit })
-        else {
-            return .clear
-        }
-        var value: UInt64 = 0
-        Scanner(string: trimmed).scanHexInt64(&value)
-        let r = Double((value >> 16) & 0xFF) / 255.0
-        let g = Double((value >> 8) & 0xFF) / 255.0
-        let b = Double(value & 0xFF) / 255.0
-        return Color(.sRGB, red: r, green: g, blue: b, opacity: 1.0)
+        Color(hex: hex)
     }
 
     // MARK: - Palette
@@ -78,18 +67,18 @@ public enum SeshatTheme {
         /// `01_Foundations/assets/colour_system.png`.
         public static let dark = Palette(
             scheme: .dark,
-            appBackground: color(hex: "0E0E18"),
-            surface: color(hex: "1C1C1E"),
-            elevatedSurface: color(hex: "252525"),
-            hoverState: color(hex: "2A2A2A"),
-            brandChampagne: color(hex: "D4D0C8"),
-            primaryTextBase: color(hex: "FFFFFF"),
+            appBackground: Color(hex: "0E0E14"),
+            surface: Color(hex: "1C1C1E"),
+            elevatedSurface: Color(hex: "252525"),
+            hoverState: Color(hex: "2A2A2A"),
+            brandChampagne: Color(hex: "D4D0C8"),
+            primaryTextBase: Color(hex: "FFFFFF"),
             primaryTextOpacity: 0.60,
-            secondaryTextBase: color(hex: "FFFFFF"),
+            secondaryTextBase: Color(hex: "FFFFFF"),
             secondaryTextOpacity: 0.35,
-            statusReady: color(hex: "30D158"),
-            statusRecording: color(hex: "FF453A"),
-            statusLink: color(hex: "0A84FF")
+            statusReady: Color(hex: "30D158"),
+            statusRecording: Color(hex: "FF453A"),
+            statusLink: Color(hex: "0A84FF")
         )
 
         /// Light palette — verbatim hex values from
@@ -98,18 +87,18 @@ public enum SeshatTheme {
         /// that as the canonical pale-cream value.
         public static let light = Palette(
             scheme: .light,
-            appBackground: color(hex: "F5F5F0"),
-            surface: color(hex: "FFFFFF"),
-            elevatedSurface: color(hex: "F0EFE9"),
-            hoverState: color(hex: "E8E7E0"),
-            brandChampagne: color(hex: "6B6760"),
-            primaryTextBase: color(hex: "1A1A1A"),
+            appBackground: Color(hex: "F5F5F0"),
+            surface: Color(hex: "FFFFFF"),
+            elevatedSurface: Color(hex: "F0EFE9"),
+            hoverState: Color(hex: "E8E7E0"),
+            brandChampagne: Color(hex: "6B6760"),
+            primaryTextBase: Color(hex: "1A1A1A"),
             primaryTextOpacity: 1.0,
-            secondaryTextBase: color(hex: "1A1A1A"),
+            secondaryTextBase: Color(hex: "1A1A1A"),
             secondaryTextOpacity: 0.45,
-            statusReady: color(hex: "28A745"),
-            statusRecording: color(hex: "D93025"),
-            statusLink: color(hex: "0066CC")
+            statusReady: Color(hex: "28A745"),
+            statusRecording: Color(hex: "D93025"),
+            statusLink: Color(hex: "0066CC")
         )
 
         /// Accessor used by every view — pick the palette matching the
@@ -203,5 +192,64 @@ public enum SeshatTheme {
         public static let rowPadding: CGFloat = 12
         /// Icon padding — 8pt.
         public static let iconPadding: CGFloat = 8
+    }
+
+    // MARK: - Component metrics
+
+    enum Components {
+        enum StatusPill {
+            static let itemSpacing: CGFloat = 6
+            static let dotSize: CGFloat = 8
+            static let horizontalPadding: CGFloat = 10
+            static let verticalPadding: CGFloat = 4
+            static let borderWidth: CGFloat = 0.5
+            static let borderOpacity: Double = 0.15
+        }
+
+        enum TagChip {
+            static let horizontalPadding: CGFloat = 8
+            static let verticalPadding: CGFloat = 3
+            static let cornerRadius: CGFloat = 6
+            static let borderWidth: CGFloat = 0.5
+            static let accentFillOpacity: Double = 0.18
+            static let neutralBorderOpacity: Double = 0.15
+            static let accentBorderOpacity: Double = 0.35
+        }
+
+        enum ActionButton {
+            static let horizontalPadding: CGFloat = 16
+            static let verticalPadding: CGFloat = 8
+            static let minimumWidth: CGFloat = 92
+            static let borderWidth: CGFloat = 0.5
+            static let primaryBorderOpacity: Double = 0.60
+            static let secondaryBorderOpacity: Double = 0.20
+            static let disabledOpacity: Double = 0.45
+        }
+
+        enum Preview {
+            static let compactRowSpacing: CGFloat = 8
+            static let stackSpacing: CGFloat = 10
+            static let waveformStackSpacing: CGFloat = 20
+            static let logoRowSpacing: CGFloat = 24
+            static let canvasPadding: CGFloat = 24
+        }
+    }
+}
+
+private extension Color {
+    init(hex: String) {
+        let trimmed = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count == 6,
+              trimmed.allSatisfy({ $0.isHexDigit })
+        else {
+            self = .clear
+            return
+        }
+        var value: UInt64 = 0
+        Scanner(string: trimmed).scanHexInt64(&value)
+        let r = Double((value >> 16) & 0xFF) / 255.0
+        let g = Double((value >> 8) & 0xFF) / 255.0
+        let b = Double(value & 0xFF) / 255.0
+        self = Color(.sRGB, red: r, green: g, blue: b, opacity: 1.0)
     }
 }

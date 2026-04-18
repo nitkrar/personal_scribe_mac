@@ -12,6 +12,38 @@ public struct ActionButton: View {
     public enum Variant: Hashable, Sendable {
         case primary
         case secondary
+
+        func foregroundColor(for palette: SeshatTheme.Palette) -> Color {
+            switch self {
+            case .primary:
+                // Contrast against champagne fill — use the dark-scheme
+                // app-background colour so it reads correctly on both
+                // themes.
+                return SeshatTheme.Palette.dark.appBackground
+            case .secondary:
+                return palette.primaryText
+            }
+        }
+
+        func backgroundColor(for palette: SeshatTheme.Palette) -> Color {
+            switch self {
+            case .primary: return palette.brandChampagne
+            case .secondary: return palette.elevatedSurface
+            }
+        }
+
+        func borderColor(for palette: SeshatTheme.Palette) -> Color {
+            switch self {
+            case .primary:
+                return palette.brandChampagne.opacity(
+                    SeshatTheme.Components.ActionButton.primaryBorderOpacity
+                )
+            case .secondary:
+                return palette.brandChampagne.opacity(
+                    SeshatTheme.Components.ActionButton.secondaryBorderOpacity
+                )
+            }
+        }
     }
 
     public let title: String
@@ -33,64 +65,45 @@ public struct ActionButton: View {
         self.action = action
     }
 
+    internal var effectiveOpacity: Double {
+        isEnabled ? 1.0 : SeshatTheme.Components.ActionButton.disabledOpacity
+    }
+
     public var body: some View {
         let palette = SeshatTheme.Palette.for(scheme: colorScheme)
 
         Button(action: action) {
             Text(title)
                 .font(SeshatTheme.Typography.body.font.weight(.semibold))
-                .foregroundStyle(foreground(palette: palette))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .frame(minWidth: 92)
+                .foregroundStyle(variant.foregroundColor(for: palette))
+                .padding(.horizontal, SeshatTheme.Components.ActionButton.horizontalPadding)
+                .padding(.vertical, SeshatTheme.Components.ActionButton.verticalPadding)
+                .frame(minWidth: SeshatTheme.Components.ActionButton.minimumWidth)
                 .background(
                     RoundedRectangle(cornerRadius: SeshatTheme.Radius.row, style: .continuous)
-                        .fill(background(palette: palette))
+                        .fill(variant.backgroundColor(for: palette))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: SeshatTheme.Radius.row, style: .continuous)
-                        .strokeBorder(border(palette: palette), lineWidth: 0.5)
+                        .strokeBorder(
+                            variant.borderColor(for: palette),
+                            lineWidth: SeshatTheme.Components.ActionButton.borderWidth
+                        )
                 )
-                .opacity(isEnabled ? 1.0 : 0.45)
+                .opacity(effectiveOpacity)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
     }
-
-    private func foreground(palette: SeshatTheme.Palette) -> Color {
-        switch variant {
-        case .primary:
-            // Contrast against champagne fill — use the dark-scheme
-            // app-background colour so it reads correctly on both
-            // themes.
-            return SeshatTheme.Palette.dark.appBackground
-        case .secondary:
-            return palette.primaryText
-        }
-    }
-
-    private func background(palette: SeshatTheme.Palette) -> Color {
-        switch variant {
-        case .primary: return palette.brandChampagne
-        case .secondary: return palette.elevatedSurface
-        }
-    }
-
-    private func border(palette: SeshatTheme.Palette) -> Color {
-        switch variant {
-        case .primary: return palette.brandChampagne.opacity(0.6)
-        case .secondary: return palette.brandChampagne.opacity(0.2)
-        }
-    }
 }
 
 #Preview("ActionButton — variants") {
-    VStack(spacing: 10) {
+    VStack(spacing: SeshatTheme.Components.Preview.stackSpacing) {
         ActionButton(title: "Continue") { }
         ActionButton(title: "Cancel", variant: .secondary) { }
         ActionButton(title: "Disabled", isEnabled: false) { }
     }
-    .padding(24)
+    .padding(SeshatTheme.Components.Preview.canvasPadding)
     .background(SeshatTheme.Palette.dark.appBackground)
     .preferredColorScheme(.dark)
 }

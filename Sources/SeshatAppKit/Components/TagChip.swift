@@ -13,6 +13,36 @@ public struct TagChip: View {
         /// Champagne-tinted background signalling an active filter or
         /// mode tag.
         case accent
+
+        func foregroundColor(for palette: SeshatTheme.Palette) -> Color {
+            switch self {
+            case .neutral: return palette.primaryText
+            case .accent: return palette.brandChampagne
+            }
+        }
+
+        func backgroundColor(for palette: SeshatTheme.Palette) -> Color {
+            switch self {
+            case .neutral: return palette.elevatedSurface
+            case .accent:
+                return palette.brandChampagne.opacity(
+                    SeshatTheme.Components.TagChip.accentFillOpacity
+                )
+            }
+        }
+
+        func borderColor(for palette: SeshatTheme.Palette) -> Color {
+            switch self {
+            case .neutral:
+                return palette.brandChampagne.opacity(
+                    SeshatTheme.Components.TagChip.neutralBorderOpacity
+                )
+            case .accent:
+                return palette.brandChampagne.opacity(
+                    SeshatTheme.Components.TagChip.accentBorderOpacity
+                )
+            }
+        }
     }
 
     public let text: String
@@ -30,50 +60,38 @@ public struct TagChip: View {
 
         Text(text)
             .font(SeshatTheme.Typography.caption.font)
-            .foregroundStyle(foreground(palette: palette))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .foregroundStyle(variant.foregroundColor(for: palette))
+            .padding(.horizontal, SeshatTheme.Components.TagChip.horizontalPadding)
+            .padding(.vertical, SeshatTheme.Components.TagChip.verticalPadding)
             .background(
-                RoundedRectangle(cornerRadius: SeshatTheme.Radius.row - 2, style: .continuous)
-                    .fill(background(palette: palette))
+                RoundedRectangle(
+                    cornerRadius: SeshatTheme.Components.TagChip.cornerRadius,
+                    style: .continuous
+                )
+                .fill(variant.backgroundColor(for: palette))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: SeshatTheme.Radius.row - 2, style: .continuous)
-                    .strokeBorder(border(palette: palette), lineWidth: 0.5)
+                RoundedRectangle(
+                    cornerRadius: SeshatTheme.Components.TagChip.cornerRadius,
+                    style: .continuous
+                )
+                .strokeBorder(
+                    variant.borderColor(for: palette),
+                    lineWidth: SeshatTheme.Components.TagChip.borderWidth
+                )
             )
             .accessibilityElement()
             .accessibilityLabel("Tag \(text)")
     }
-
-    private func foreground(palette: SeshatTheme.Palette) -> Color {
-        switch variant {
-        case .neutral: return palette.primaryText
-        case .accent: return palette.brandChampagne
-        }
-    }
-
-    private func background(palette: SeshatTheme.Palette) -> Color {
-        switch variant {
-        case .neutral: return palette.elevatedSurface
-        case .accent: return palette.brandChampagne.opacity(0.18)
-        }
-    }
-
-    private func border(palette: SeshatTheme.Palette) -> Color {
-        switch variant {
-        case .neutral: return palette.brandChampagne.opacity(0.15)
-        case .accent: return palette.brandChampagne.opacity(0.35)
-        }
-    }
 }
 
 #Preview("TagChip — variants") {
-    HStack(spacing: 8) {
+    HStack(spacing: SeshatTheme.Components.Preview.compactRowSpacing) {
         TagChip(text: "meeting")
         TagChip(text: "idea", variant: .accent)
         TagChip(text: "followup")
     }
-    .padding(24)
+    .padding(SeshatTheme.Components.Preview.canvasPadding)
     .background(SeshatTheme.Palette.dark.appBackground)
     .preferredColorScheme(.dark)
 }

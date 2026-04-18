@@ -7,10 +7,10 @@ import XCTest
 /// The view itself is pure SwiftUI geometry; we test:
 ///   * The `AnimationState` enum rounds out all four states.
 ///   * The view's public initializer accepts size + state + tint.
-///   * Default tint for dark / light palettes matches the theme's
-///     `brandChampagne` token.
-///   * `ImageProvider` pre-computes deterministic geometry that the view
-///     renders (so we can test geometry without XCTest'ing SwiftUI).
+///   * The default tint is resolved from the current theme palette when
+///     no explicit tint is provided.
+///   * `Geometry` pre-computes deterministic state-driven values so we can
+///     test the quill without XCTest'ing rendered SwiftUI output.
 final class SeshatLogoViewTests: XCTestCase {
     func testAnimationStateEnumHasAllFourCases() {
         let cases: Set<SeshatLogoView.AnimationState> = Set(SeshatLogoView.AnimationState.allCases)

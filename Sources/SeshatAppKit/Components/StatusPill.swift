@@ -43,23 +43,29 @@ public struct StatusPill: View {
         let palette = SeshatTheme.Palette.for(scheme: colorScheme)
         let dotColor = status.color(for: palette)
 
-        HStack(spacing: 6) {
+        HStack(spacing: SeshatTheme.Components.StatusPill.itemSpacing) {
             Circle()
                 .fill(dotColor)
-                .frame(width: 8, height: 8)
+                .frame(
+                    width: SeshatTheme.Components.StatusPill.dotSize,
+                    height: SeshatTheme.Components.StatusPill.dotSize
+                )
             Text(label)
                 .font(SeshatTheme.Typography.caption.font)
                 .foregroundStyle(palette.primaryText)
         }
-        .padding(.horizontal, SeshatTheme.Spacing.iconPadding + 2)
-        .padding(.vertical, 4)
+        .padding(.horizontal, SeshatTheme.Components.StatusPill.horizontalPadding)
+        .padding(.vertical, SeshatTheme.Components.StatusPill.verticalPadding)
         .background(
             Capsule()
                 .fill(palette.elevatedSurface)
         )
         .overlay(
             Capsule()
-                .strokeBorder(palette.brandChampagne.opacity(0.15), lineWidth: 0.5)
+                .strokeBorder(
+                    palette.brandChampagne.opacity(SeshatTheme.Components.StatusPill.borderOpacity),
+                    lineWidth: SeshatTheme.Components.StatusPill.borderWidth
+                )
         )
         .accessibilityElement()
         .accessibilityLabel("\(label), \(accessibilityStatusPhrase)")
@@ -75,12 +81,12 @@ public struct StatusPill: View {
 }
 
 #Preview("StatusPill — variants") {
-    VStack(spacing: 10) {
+    VStack(spacing: SeshatTheme.Components.Preview.stackSpacing) {
         StatusPill(status: .ready, label: "Ready")
         StatusPill(status: .recording, label: "Recording")
         StatusPill(status: .neutral, label: "Idle")
     }
-    .padding(24)
+    .padding(SeshatTheme.Components.Preview.canvasPadding)
     .background(SeshatTheme.Palette.dark.appBackground)
     .preferredColorScheme(.dark)
 }

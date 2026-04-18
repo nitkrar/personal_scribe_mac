@@ -163,7 +163,7 @@ public struct WaveformView: View {
 }
 
 #Preview("Waveform — idle vs active") {
-    VStack(spacing: 20) {
+    VStack(spacing: SeshatTheme.Components.Preview.waveformStackSpacing) {
         WaveformView(
             audioLevel: .constant(0.0),
             isActive: .constant(false)
@@ -176,7 +176,7 @@ public struct WaveformView: View {
         )
         .frame(height: 24)
     }
-    .padding(24)
+    .padding(SeshatTheme.Components.Preview.canvasPadding)
     .background(SeshatTheme.Palette.dark.appBackground)
     .preferredColorScheme(.dark)
 }

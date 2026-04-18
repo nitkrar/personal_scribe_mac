@@ -31,7 +31,7 @@ final class SeshatThemeTests: XCTestCase {
     // MARK: - Dark palette hex spec
 
     func testDarkAppBackgroundHex() {
-        assertColor(SeshatTheme.Palette.dark.appBackground, equalsHex: "0E0E18")
+        assertColor(SeshatTheme.Palette.dark.appBackground, equalsHex: "0E0E14")
     }
 
     func testDarkSurfaceHex() {
@@ -163,7 +163,7 @@ final class SeshatThemeTests: XCTestCase {
 
     func testPaletteForDarkSchemeReturnsDarkPalette() {
         let palette = SeshatTheme.Palette.for(scheme: .dark)
-        assertColor(palette.appBackground, equalsHex: "0E0E18")
+        assertColor(palette.appBackground, equalsHex: "0E0E14")
     }
 
     func testPaletteForLightSchemeReturnsLightPalette() {

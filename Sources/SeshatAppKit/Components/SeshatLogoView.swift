@@ -282,7 +282,7 @@ struct InkDripShape: Shape {
 }
 
 #Preview("Seshat Logo — all states") {
-    HStack(spacing: 24) {
+    HStack(spacing: SeshatTheme.Components.Preview.logoRowSpacing) {
         VStack {
             SeshatLogoView(size: 96, state: .idle)
             Text("idle").font(SeshatTheme.Typography.caption.font)
@@ -300,7 +300,7 @@ struct InkDripShape: Shape {
             Text("error").font(SeshatTheme.Typography.caption.font)
         }
     }
-    .padding(24)
+    .padding(SeshatTheme.Components.Preview.canvasPadding)
     .background(SeshatTheme.Palette.dark.appBackground)
     .preferredColorScheme(.dark)
 }
