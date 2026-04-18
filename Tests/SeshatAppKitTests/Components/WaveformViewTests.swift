@@ -1,5 +1,6 @@
 import SwiftUI
 import XCTest
+import SeshatCore
 @testable import SeshatAppKit
 
 /// Tests for the `WaveformView` audio-level meter.
@@ -73,6 +74,29 @@ final class WaveformViewTests: XCTestCase {
             availableHeight: availableHeight
         )
         XCTAssertNotEqual(h0, h1, "bars must differ to form a waveform silhouette")
+    }
+
+    // MARK: - Additive decay-mode parameter (Sprint 2)
+
+    func testDefaultDecayModeIsImmediateForBackwardsCompat() {
+        // The Sprint 1 call-site signature `WaveformView(audioLevel:isActive:)`
+        // must keep compiling; the new `decayMode` param defaults to
+        // `.immediate` so the shipped behaviour (snap to zero on stream
+        // termination) is preserved.
+        let view = WaveformView(
+            audioLevel: .constant(0.3),
+            isActive: .constant(true)
+        )
+        XCTAssertEqual(view.currentDecayMode, .immediate)
+    }
+
+    func testExplicitAnimatedDecayModeIsHonored() {
+        let view = WaveformView(
+            audioLevel: .constant(0.3),
+            isActive: .constant(false),
+            decayMode: .animated
+        )
+        XCTAssertEqual(view.currentDecayMode, .animated)
     }
 
     func testGeometryIdleLevelProducesFlatProfile() {
