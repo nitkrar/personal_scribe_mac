@@ -87,6 +87,16 @@ final class MenuBarSceneModel: ObservableObject {
         }
     }
 
+    func copyLatestTranscript() {
+        guard let lastResultText, !lastResultText.isEmpty else {
+            logger.info("Copy transcript skipped because no transcript is available")
+            return
+        }
+
+        logger.info("Copying latest transcript to clipboard")
+        clipboardWriter(lastResultText)
+    }
+
     deinit {
         observationTask?.cancel()
         onObservationCancelled?()

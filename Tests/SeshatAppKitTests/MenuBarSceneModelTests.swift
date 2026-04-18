@@ -200,6 +200,45 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(model.lastResultText, "stub transcript")
     }
 
+    func testCopyLatestTranscriptWritesCurrentTranscriptToClipboard() async throws {
+        let coordinator = try makeCoordinator()
+        var copiedText: String?
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { text in
+                copiedText = text
+            },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+        model.lastResultText = "copied transcript"
+
+        model.copyLatestTranscript()
+
+        XCTAssertEqual(copiedText, "copied transcript")
+    }
+
+    func testCopyLatestTranscriptDoesNothingWhenTranscriptIsMissing() async throws {
+        let coordinator = try makeCoordinator()
+        var copiedValues: [String] = []
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { text in
+                copiedValues.append(text)
+            },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        model.copyLatestTranscript()
+
+        XCTAssertTrue(copiedValues.isEmpty)
+    }
+
     private func makeCoordinator() throws -> SessionCoordinator {
         SessionCoordinator(
             capture: FakeAudioCapturing(buffers: [try makeBuffer()]),
