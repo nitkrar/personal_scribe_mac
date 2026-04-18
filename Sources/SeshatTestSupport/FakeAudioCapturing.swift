@@ -66,8 +66,7 @@ public actor FakeAudioCapturing: AudioCapturing {
         }
 
         // Prepare a level stream; emission is driven lazily when
-        // `audioLevelStream()` is called or `emitLevels()` is invoked
-        // directly by tests. This keeps the PCM path unchanged.
+        // `audioLevelStream()` is called so the PCM path stays unchanged.
         let (levelStream, levelContinuation) = AsyncStream<Float>.makeStream()
         self.levelContinuation = levelContinuation
         self.pendingLevelStream = levelStream
@@ -123,6 +122,11 @@ public actor FakeAudioCapturing: AudioCapturing {
         guard !didFinishStream else { return }
         didFinishStream = true
         isCapturing = false
+        levelEmissionTask?.cancel()
+        levelEmissionTask = nil
+        levelContinuation?.finish()
+        levelContinuation = nil
+        pendingLevelStream = nil
 
         if let error {
             continuation?.finish(throwing: error)

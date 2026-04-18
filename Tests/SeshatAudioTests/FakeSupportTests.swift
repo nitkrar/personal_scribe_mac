@@ -71,6 +71,8 @@ final class FakeSupportTests: XCTestCase {
         )
         let capture = FakeAudioCapturing(buffers: [buffer], error: .resampleFailure)
         let stream = try await capture.start()
+        let levelStream = await capture.audioLevelStream()
+        var levelIterator = levelStream.makeAsyncIterator()
         var caughtError: SeshatError?
 
         do {
@@ -80,6 +82,12 @@ final class FakeSupportTests: XCTestCase {
         }
 
         XCTAssertEqual(caughtError, .resampleFailure)
+        let finished = expectation(description: "level stream finishes on programmed error")
+        Task {
+            _ = await levelIterator.next()
+            finished.fulfill()
+        }
+        await fulfillment(of: [finished], timeout: 1.0)
     }
 
     func testFakeCaptureStreamFinishesExactlyOnceOnStop() async throws {
