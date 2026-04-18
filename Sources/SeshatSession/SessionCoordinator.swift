@@ -16,6 +16,15 @@ public actor SessionCoordinator {
     private var bufferedAudio: [PCMBuffer] = []
     private var captureTask: Task<Void, Never>?
 
+    // Step 2.10: additive audio-level multiplexing. Subscribes to the capture
+    // service's per-session level stream and fans values out to all
+    // registered consumers so SwiftUI surfaces can bind directly without
+    // holding a reference to the capture actor. Current value is cached so
+    // late subscribers get a starting sample.
+    private var audioLevelContinuations: [UUID: AsyncStream<Float>.Continuation] = [:]
+    private var currentAudioLevel: Float = 0.0
+    private var audioLevelTask: Task<Void, Never>?
+
     public init(
         capture: any AudioCapturing,
         transcriber: any Transcribing,
@@ -60,6 +69,33 @@ public actor SessionCoordinator {
         }
     }
 
+    /// Multiplexed audio-level stream (phase-2 step 2.10). Yields the latest
+    /// cached level on subscription and every subsequent level republished
+    /// from the capture service while recording is live. Values are
+    /// normalized `[0, 1]`. Stream stays open across start/stop cycles —
+    /// the coordinator resubscribes to the capture's level stream on every
+    /// new recording.
+    public func audioLevelStream() -> AsyncStream<Float> {
+        let id = UUID()
+
+        return AsyncStream { continuation in
+            continuation.yield(self.currentAudioLevel)
+            self.audioLevelContinuations[id] = continuation
+            continuation.onTermination = { [self] _ in
+                Task {
+                    await self.removeAudioLevelContinuation(id: id)
+                }
+            }
+        }
+    }
+
+    /// Latest cached audio-level sample for consumers that prefer a pull
+    /// model over stream subscription. Matches the `audioLevel` accessor
+    /// pattern in the Phase 2 plan's "AppState role" mapping.
+    public func audioLevel() -> Float {
+        currentAudioLevel
+    }
+
     public func lastResult() -> TranscriptionResult? {
         mostRecentResult
     }
@@ -80,10 +116,22 @@ public actor SessionCoordinator {
         stateContinuations[id] = nil
     }
 
+    private func removeAudioLevelContinuation(id: UUID) {
+        audioLevelContinuations[id] = nil
+    }
+
     private func publish(_ state: SessionState) {
         currentState = state
         for continuation in stateContinuations.values {
             continuation.yield(state)
+        }
+    }
+
+    /// Update the cached audio level and fan out to all subscribers.
+    private func publishAudioLevel(_ level: Float) {
+        currentAudioLevel = level
+        for continuation in audioLevelContinuations.values {
+            continuation.yield(level)
         }
     }
 
@@ -92,6 +140,20 @@ public actor SessionCoordinator {
 
         do {
             let stream = try await capture.start()
+            // Step 2.10: subscribe to capture's level stream before flipping
+            // to .recording so any early emissions reach UI consumers.
+            let levelStream = await capture.audioLevelStream()
+            audioLevelTask?.cancel()
+            audioLevelTask = Task { [weak self] in
+                for await level in levelStream {
+                    await self?.publishAudioLevel(level)
+                }
+                // When the capture's level stream ends, fall back to silence
+                // so a subsequent recording starts from 0 rather than the
+                // last loud sample.
+                await self?.publishAudioLevel(0.0)
+            }
+
             publish(.recording)
             prepareTranscriberInBackground()
             captureTask = Task {
@@ -106,6 +168,11 @@ public actor SessionCoordinator {
         await capture.stop()
         await captureTask?.value
         captureTask = nil
+
+        // Step 2.10: drain the level-forwarding task so the coordinator's
+        // cached level settles to 0 before the UI observes .transcribing.
+        await audioLevelTask?.value
+        audioLevelTask = nil
 
         if case .error = currentState {
             logger.info("Capture stream failed while stop was in flight; preserving error state")

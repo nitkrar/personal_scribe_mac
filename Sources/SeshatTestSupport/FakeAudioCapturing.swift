@@ -5,20 +5,30 @@ public actor FakeAudioCapturing: AudioCapturing {
     private let buffers: [PCMBuffer]
     private var programmedError: SeshatError?
     private let delayPerBuffer: Duration?
+    private let levels: [Float]
 
     private var isCapturing = false
     private var didFinishStream = false
     private var continuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?
     private var emissionTask: Task<Void, Never>?
 
+    // Step 2.9 / 2.10: support an optional canned audio-level stream so
+    // SessionCoordinator tests can observe level republishing without a
+    // real engine.
+    private var levelContinuation: AsyncStream<Float>.Continuation?
+    private var pendingLevelStream: AsyncStream<Float>?
+    private var levelEmissionTask: Task<Void, Never>?
+
     public init(
         buffers: [PCMBuffer] = [],
         error: SeshatError? = nil,
-        delayPerBuffer: Duration? = nil
+        delayPerBuffer: Duration? = nil,
+        levels: [Float] = []
     ) {
         self.buffers = buffers
         self.programmedError = error
         self.delayPerBuffer = delayPerBuffer
+        self.levels = levels
     }
 
     public func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
@@ -55,13 +65,53 @@ public actor FakeAudioCapturing: AudioCapturing {
             }
         }
 
+        // Prepare a level stream; emission is driven lazily when
+        // `audioLevelStream()` is called or `emitLevels()` is invoked
+        // directly by tests. This keeps the PCM path unchanged.
+        let (levelStream, levelContinuation) = AsyncStream<Float>.makeStream()
+        self.levelContinuation = levelContinuation
+        self.pendingLevelStream = levelStream
+
         return stream
     }
 
     public func stop() async {
         emissionTask?.cancel()
         emissionTask = nil
+        levelEmissionTask?.cancel()
+        levelEmissionTask = nil
         finishStream()
+        levelContinuation?.finish()
+        levelContinuation = nil
+        pendingLevelStream = nil
+    }
+
+    public func audioLevelStream() async -> AsyncStream<Float> {
+        if let stream = pendingLevelStream {
+            pendingLevelStream = nil
+
+            // If canned levels were provided, schedule them for emission on
+            // first subscription. They emit as fast as the consumer can
+            // receive.
+            if !levels.isEmpty {
+                let captured = levels
+                levelEmissionTask = Task { [weak self] in
+                    for level in captured {
+                        if Task.isCancelled { return }
+                        await self?.yieldLevel(level)
+                    }
+                }
+            }
+
+            return stream
+        }
+        return AsyncStream { continuation in
+            continuation.finish()
+        }
+    }
+
+    private func yieldLevel(_ level: Float) {
+        levelContinuation?.yield(level)
     }
 
     private func yield(_ buffer: PCMBuffer) {
