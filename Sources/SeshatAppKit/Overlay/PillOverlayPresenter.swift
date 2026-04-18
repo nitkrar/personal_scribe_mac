@@ -102,7 +102,16 @@ public final class PillOverlayPresenter {
     private let onTap: @MainActor () -> Void
     private var panel: DraggablePanel?
     private var visibilityCancellable: AnyCancellable?
-    private let panelSize = NSSize(width: 220, height: 44)
+
+    /// Whether the presenter last asked the panel to show itself. Exposed
+    /// for tests — NSPanel's real `isVisible` depends on AppKit runtime
+    /// state that isn't reliable in unit tests.
+    public private(set) var intendsToShow: Bool = false
+    /// Panel must be wide enough to hold the widest pill variant
+    /// (download / loading — 240pt) plus some slack for shadow / padding.
+    /// Height is the 34pt recording-pill height + headroom for the
+    /// download pill's two-line layout.
+    private let panelSize = NSSize(width: 280, height: 60)
     private var hasUserRepositioned = false
 
     public init(
@@ -137,6 +146,8 @@ public final class PillOverlayPresenter {
             return
         }
 
+        intendsToShow = true
+
         let panel = panel ?? makePanel()
         self.panel = panel
 
@@ -148,6 +159,7 @@ public final class PillOverlayPresenter {
     }
 
     public func hide() {
+        intendsToShow = false
         panel?.orderOut(nil)
     }
 

@@ -1,35 +1,46 @@
 import SwiftUI
+import SeshatCore
 
-private struct PulsingDot: View {
-    let delay: Double
-    let color: Color
-
-    @State private var animate = false
-
-    var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 4, height: 4)
-            .opacity(animate ? 1.0 : 0.3)
-            .scaleEffect(animate ? 1.2 : 0.8)
-            .animation(
-                .easeInOut(duration: 0.6)
-                    .repeatForever(autoreverses: true)
-                    .delay(delay),
-                value: animate
-            )
-            .onAppear {
-                animate = true
-            }
-    }
-}
-
+/// Pill overlay — the floating surface that tracks the recording / idle /
+/// transcribing / download states.
+///
+/// ## Visual spec (Phase 2 Sprint 2 Lane B1)
+/// * Idle pill (Always On mode) — compact capsule with quill + flat
+///   wave + "Idle" label.
+///   Ref: `plans/seshat_agent_bundle/03_Surfaces/PillOverlayWindow/command_mode_states.png`
+///   PANEL 1 (180×34pt).
+/// * Recording pill — quill (listening state) + animated waveform +
+///   elapsed placeholder + stop glyph. 180×34pt per
+///   `command_mode_states.png` PANEL 1 + `recording_states.png` "Pill
+///   only" variant.
+///   `PulsingDot × 3` from Sprint 1 has been DELETED (PLAN_PHASES.md line
+///   291 + DoD line 356).
+/// * Transcribing pill — flat wave + quill with ink drip.
+///   Ref: `light_mode_states.png` PANEL 3.
+/// * Downloading / Loading — keep the Sprint 1 behaviour but wrap in the
+///   theme-palette chrome.
+/// * Hidden — render `EmptyView`.
+///
+/// ## Theme compliance
+/// All colours resolve from `SeshatTheme.Palette.for(scheme:)` — no raw
+/// `Color(hex:)` or `.regularMaterial` material-blur calls. Dark/light
+/// parity is automatic via `@Environment(\.colorScheme)`.
 @MainActor
 public struct PillOverlayView: View {
     @ObservedObject private var model: PillOverlayViewModel
 
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// The 180×34 pill size from `command_mode_states.png` PANEL 1.
+    private static let pillWidth: CGFloat = 180
+    private static let pillHeight: CGFloat = 34
+
+    /// A wider layout for download / loading messages that don't fit the
+    /// 180-wide recording pill.
+    private static let wideWidth: CGFloat = 240
+
     public init(model: PillOverlayViewModel) {
-        _model = ObservedObject(wrappedValue: model)
+        self._model = ObservedObject(wrappedValue: model)
     }
 
     public var body: some View {
@@ -38,7 +49,7 @@ public struct PillOverlayView: View {
             case .hidden:
                 EmptyView()
             case .idle:
-                idleDot
+                idlePill
                     .transition(pillTransition)
             case .downloading(let fraction):
                 downloadingPill(fraction: fraction)
@@ -57,107 +68,138 @@ public struct PillOverlayView: View {
         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: model.visibility)
     }
 
-    private var idleDot: some View {
-        Circle()
-            .fill(.secondary)
-            .frame(width: 10, height: 10)
-            .padding(4)
-            .background {
-                Circle()
-                    .fill(.regularMaterial)
-                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-            }
-            .overlay {
-                Circle()
-                    .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
-            }
-            .opacity(0.75)
-            .help("Double-tap ⌥ or click to record")
-    }
+    // MARK: - Idle
 
-    private var recordingPill: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "mic.fill")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.red)
+    /// Compact capsule — quill (idle state) + flat wave (handled
+    /// internally by `SeshatLogoView.idle`) + "Idle" label.
+    /// Per BACKLOG P1 #4 / UX audit BUG-10 — NOT a bare dot.
+    private var idlePill: some View {
+        let palette = SeshatTheme.Palette.for(scheme: colorScheme)
 
-            Text("Listening")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.primary)
+        return HStack(spacing: SeshatTheme.Spacing.iconPadding) {
+            SeshatLogoView(size: 20, state: .idle)
+                .frame(width: 20, height: 20)
 
-            HStack(spacing: 4) {
-                PulsingDot(delay: 0.0, color: .red)
-                PulsingDot(delay: 0.2, color: .red)
-                PulsingDot(delay: 0.4, color: .red)
-            }
-
-            Text("⌥⌥ stop")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            Text("Idle")
+                .font(SeshatTheme.Typography.caption.font)
+                .foregroundStyle(palette.secondaryText)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(minWidth: 160, idealWidth: 200, minHeight: 40)
-        .pillChrome
+        .padding(.horizontal, SeshatTheme.Spacing.rowPadding)
+        .frame(
+            width: Self.pillWidth,
+            height: Self.pillHeight,
+            alignment: .leading
+        )
+        .modifier(PillChrome(palette: palette))
+        .accessibilityElement()
+        .accessibilityLabel("Seshat idle — double-tap option to record")
     }
+
+    // MARK: - Recording
+
+    /// 180×34 recording pill. Horizontal layout:
+    /// quill (listening) | waveform | stop glyph.
+    /// Elapsed-timer wiring is tracked for Lane B1 follow-up; Phase 2
+    /// ships the chrome + waveform composition.
+    private var recordingPill: some View {
+        let palette = SeshatTheme.Palette.for(scheme: colorScheme)
+
+        return HStack(spacing: 6) {
+            SeshatLogoView(size: 18, state: .listening)
+                .frame(width: 18, height: 18)
+
+            WaveformView(
+                audioLevel: $model.audioLevel,
+                isActive: .constant(model.isAudioActive),
+                decayMode: .animated
+            )
+            .frame(height: 20)
+
+            Image(systemName: "stop.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(palette.statusRecording)
+                .frame(width: 16, height: 16)
+        }
+        .padding(.horizontal, SeshatTheme.Spacing.rowPadding)
+        .frame(width: Self.pillWidth, height: Self.pillHeight)
+        .modifier(PillChrome(palette: palette))
+        .accessibilityElement()
+        .accessibilityLabel("Seshat recording — tap to stop")
+    }
+
+    // MARK: - Transcribing
+
+    /// Flat waveform + quill with ink drip + "Transcribing…" label.
+    /// Ref `light_mode_states.png` PANEL 3 + `logo_animation_states.png`
+    /// "Transcribing" tile.
+    private var transcribingPill: some View {
+        let palette = SeshatTheme.Palette.for(scheme: colorScheme)
+
+        return HStack(spacing: SeshatTheme.Spacing.iconPadding) {
+            SeshatLogoView(size: 20, state: .transcribing)
+                .frame(width: 20, height: 20)
+
+            Text("Transcribing…")
+                .font(SeshatTheme.Typography.caption.font.weight(.medium))
+                .foregroundStyle(palette.primaryText)
+        }
+        .padding(.horizontal, SeshatTheme.Spacing.rowPadding)
+        .frame(width: Self.pillWidth, height: Self.pillHeight, alignment: .leading)
+        .modifier(PillChrome(palette: palette))
+        .accessibilityElement()
+        .accessibilityLabel("Seshat transcribing")
+    }
+
+    // MARK: - Downloading
 
     private func downloadingPill(fraction: Double) -> some View {
+        let palette = SeshatTheme.Palette.for(scheme: colorScheme)
         let percent = Int((fraction * 100).rounded())
-        return HStack(spacing: 10) {
-            Image(systemName: "arrow.down.circle")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 3) {
+        return HStack(spacing: SeshatTheme.Spacing.iconPadding) {
+            SeshatLogoView(size: 18, state: .idle)
+                .frame(width: 18, height: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Downloading model… \(percent)%")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .font(SeshatTheme.Typography.caption.font.weight(.medium))
+                    .foregroundStyle(palette.primaryText)
 
                 ProgressView(value: max(0, min(fraction, 1)))
                     .progressViewStyle(.linear)
-                    .frame(width: 140)
-                    .tint(.accentColor)
+                    .tint(palette.brandChampagne)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(minWidth: 200, idealWidth: 220, minHeight: 44)
-        .pillChrome
+        .padding(.horizontal, SeshatTheme.Spacing.rowPadding)
+        .padding(.vertical, 4)
+        .frame(width: Self.wideWidth)
+        .modifier(PillChrome(palette: palette))
     }
+
+    // MARK: - Loading
 
     private var loadingPill: some View {
-        HStack(spacing: 10) {
+        let palette = SeshatTheme.Palette.for(scheme: colorScheme)
+
+        return HStack(spacing: SeshatTheme.Spacing.iconPadding) {
+            SeshatLogoView(size: 18, state: .idle)
+                .frame(width: 18, height: 18)
+
             ProgressView()
                 .progressViewStyle(.circular)
                 .controlSize(.small)
-                .tint(.white)
+                .tint(palette.brandChampagne)
 
             Text("Warming up model…")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.primary)
+                .font(SeshatTheme.Typography.caption.font.weight(.medium))
+                .foregroundStyle(palette.primaryText)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(minWidth: 180, idealWidth: 200, minHeight: 44)
-        .pillChrome
+        .padding(.horizontal, SeshatTheme.Spacing.rowPadding)
+        .frame(width: Self.wideWidth, height: Self.pillHeight + 6)
+        .modifier(PillChrome(palette: palette))
     }
 
-    private var transcribingPill: some View {
-        HStack(spacing: 8) {
-            ProgressView()
-                .progressViewStyle(.circular)
-                .controlSize(.small)
-                .tint(.white)
-
-            Text("Transcribing…")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.primary)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(minWidth: 160, idealWidth: 180, minHeight: 40)
-        .pillChrome
-    }
+    // MARK: - Helpers
 
     private var pillTransition: AnyTransition {
         .opacity
@@ -166,17 +208,51 @@ public struct PillOverlayView: View {
     }
 }
 
-private extension View {
-    var pillChrome: some View {
-        self
+/// Shared capsule-background view-modifier so every pill variant gets the
+/// same chrome without duplicating the stack.
+private struct PillChrome: ViewModifier {
+    let palette: SeshatTheme.Palette
+
+    func body(content: Content) -> some View {
+        content
             .background {
                 Capsule()
-                    .fill(.regularMaterial)
+                    .fill(palette.elevatedSurface)
                     .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
             }
             .overlay {
                 Capsule()
-                    .strokeBorder(.white.opacity(0.08), lineWidth: 0.5)
+                    .strokeBorder(
+                        palette.brandChampagne.opacity(0.18),
+                        lineWidth: 0.5
+                    )
             }
     }
+}
+
+#Preview("PillOverlayView — state tour") {
+    VStack(spacing: SeshatTheme.Components.Preview.stackSpacing) {
+        PillOverlayView(model: previewModel(state: .idle, mode: .alwaysOn))
+        PillOverlayView(model: previewModel(
+            state: .recording,
+            mode: .alwaysOn,
+            audioLevel: 0.6
+        ))
+        PillOverlayView(model: previewModel(state: .transcribing, mode: .alwaysOn))
+    }
+    .padding(SeshatTheme.Components.Preview.canvasPadding)
+    .background(SeshatTheme.Palette.dark.appBackground)
+    .preferredColorScheme(.dark)
+}
+
+@MainActor
+private func previewModel(
+    state: SessionState,
+    mode: PillVisibilityMode,
+    audioLevel: Double = 0
+) -> PillOverlayViewModel {
+    let m = PillOverlayViewModel(visibilityMode: mode)
+    m.apply(sessionState: state, preparationProgress: nil)
+    m.audioLevel = audioLevel
+    return m
 }

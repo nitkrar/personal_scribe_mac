@@ -97,6 +97,65 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(tapCount, 0, "onTap must be suppressed after a drag session")
     }
 
+    // MARK: - Sprint 2 Lane B1 — visibility-mode-aware presenter behaviour.
+
+    /// `.hidden` mode + recording session → presenter must not intend to
+    /// show the panel. Lane B1 invariant: hidden overrides everything.
+    ///
+    /// Asserts on `intendsToShow` rather than NSPanel's real `isVisible`;
+    /// real-visibility behaviour requires an AppKit runtime that headless
+    /// XCTest doesn't fully emulate.
+    func testPresenterDoesNotShowPanelWhenVisibilityIsHidden() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .hidden)
+        let presenter = PillOverlayPresenter(model: viewModel)
+
+        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+
+        // The `@Published` assign is synchronous; the presenter's Combine
+        // sink fires on the current run-loop pass. Give it one spin.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+
+        XCTAssertFalse(presenter.intendsToShow,
+                       "Hidden visibility must not intend to show the panel")
+    }
+
+    /// `.alwaysOn` mode + idle session → presenter intends to show.
+    func testPresenterShowsIdlePillInAlwaysOnMode() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
+        let presenter = PillOverlayPresenter(model: viewModel)
+
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+
+        XCTAssertTrue(presenter.intendsToShow,
+                      "Always-on mode must intend to show the idle pill")
+    }
+
+    /// `.autoShow` mode + idle session → presenter does not intend to
+    /// show.
+    func testPresenterHidesIdlePillInAutoShowMode() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
+        let presenter = PillOverlayPresenter(model: viewModel)
+
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+
+        XCTAssertFalse(presenter.intendsToShow,
+                       "Auto-show + idle session must not intend to present the pill")
+    }
+
+    /// `.autoShow` mode + active recording → presenter intends to show.
+    func testPresenterShowsRecordingPillInAutoShowMode() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
+        let presenter = PillOverlayPresenter(model: viewModel)
+
+        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+
+        XCTAssertTrue(presenter.intendsToShow,
+                      "Auto-show + recording must intend to present the pill")
+    }
+
     private func makeHostingView() -> (NSWindow, ClickThroughHostingView<EmptyView>) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 120, height: 80),

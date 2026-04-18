@@ -11,12 +11,20 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .idle)
     }
 
-    func testIdleSessionMapsToIdlePill() {
+    func testInitialVisibilityModeDefaultsToAutoShow() {
+        // Sprint 2 Lane B1 — auto-show is the mockup-default row.
+        let viewModel = PillOverlayViewModel()
+        XCTAssertEqual(viewModel.visibilityMode, .autoShow)
+    }
+
+    func testIdleSessionMapsToHiddenInAutoShow() {
         let viewModel = PillOverlayViewModel()
 
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
 
-        XCTAssertEqual(viewModel.visibility, .idle)
+        // Auto-show default: idle session when there's no download/loading
+        // means the pill stays hidden (Mode 2 row — "Pill hidden at rest").
+        XCTAssertEqual(viewModel.visibility, .hidden)
     }
 
     func testRecordingMapsToRecording() {
@@ -57,7 +65,7 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .downloading(fractionCompleted: 0.42))
     }
 
-    func testFinishedDownloadRestoresIdlePill() {
+    func testFinishedDownloadHidesPillInAutoShow() {
         let viewModel = PillOverlayViewModel()
         let progress = ModelDownloadProgress(
             phase: .finished,
@@ -68,7 +76,8 @@ final class PillOverlayViewModelTests: XCTestCase {
 
         viewModel.apply(sessionState: .idle, preparationProgress: progress)
 
-        XCTAssertEqual(viewModel.visibility, .idle)
+        // Auto-show: finished download + idle session → pill fades out.
+        XCTAssertEqual(viewModel.visibility, .hidden)
     }
 
     func testLoadingProgressMapsToLoadingPill() {
@@ -113,8 +122,85 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .loading)
     }
 
+    // MARK: - Visibility mode interactions (Sprint 2 Lane B1)
+
+    func testAlwaysOnModeShowsIdlePillWhenSessionIsIdle() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
+
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
+
+        // Mode 1 row ("Always On") — idle pill visible at rest.
+        XCTAssertEqual(viewModel.visibility, .idle)
+    }
+
+    func testAlwaysOnModeShowsRecordingWhenRecording() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
+
+        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+
+        XCTAssertEqual(viewModel.visibility, .recording)
+    }
+
+    func testHiddenModeForcesHiddenAcrossAllSessionStates() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .hidden)
+
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
+        XCTAssertEqual(viewModel.visibility, .hidden)
+
+        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        XCTAssertEqual(viewModel.visibility, .hidden,
+                       "Hidden mode must override even active recording")
+
+        viewModel.apply(sessionState: .transcribing, preparationProgress: nil)
+        XCTAssertEqual(viewModel.visibility, .hidden)
+
+        let progress = ModelDownloadProgress(
+            phase: .downloading,
+            fractionCompleted: 0.5,
+            receivedBytes: 50,
+            expectedBytes: 100
+        )
+        viewModel.apply(sessionState: .idle, preparationProgress: progress)
+        XCTAssertEqual(viewModel.visibility, .hidden)
+    }
+
+    func testAutoShowModeHidesPillWhenIdleAndNoPreparation() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
+
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
+
+        XCTAssertEqual(viewModel.visibility, .hidden,
+                       "Auto-show: idle session + no prep = no pill")
+    }
+
+    func testAutoShowModeShowsDownloadingProgressEvenAtRest() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
+        let progress = ModelDownloadProgress(
+            phase: .downloading,
+            fractionCompleted: 0.25,
+            receivedBytes: 25,
+            expectedBytes: 100
+        )
+
+        viewModel.apply(sessionState: .idle, preparationProgress: progress)
+
+        XCTAssertEqual(viewModel.visibility, .downloading(fractionCompleted: 0.25))
+    }
+
+    func testSetVisibilityModeReevaluatesVisibilityImmediately() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
+        XCTAssertEqual(viewModel.visibility, .idle)
+
+        viewModel.setVisibilityMode(.hidden)
+        XCTAssertEqual(viewModel.visibility, .hidden)
+
+        viewModel.setVisibilityMode(.alwaysOn)
+        XCTAssertEqual(viewModel.visibility, .idle)
+    }
+
     func testTransitionSequenceIdleRecordingTranscribingIdleError() async {
-        let viewModel = PillOverlayViewModel()
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
         var emitted: [PillOverlayViewModel.Visibility] = []
         let expectation = expectation(description: "Collect published visibility updates")
         var cancellable: AnyCancellable?
