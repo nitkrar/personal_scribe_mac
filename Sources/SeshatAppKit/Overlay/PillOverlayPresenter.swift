@@ -16,6 +16,12 @@ fileprivate final class DraggablePanel: NSPanel {
     }
 }
 
+fileprivate final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+}
+
 @MainActor
 public final class PillOverlayPresenter {
     private let model: PillOverlayViewModel
@@ -90,9 +96,16 @@ public final class PillOverlayPresenter {
         panel.onMouseDragged = { [weak self] in
             self?.hasUserRepositioned = true
         }
-        panel.contentView = NSHostingView(
+
+        let contentView = panel.contentView ?? NSView(frame: NSRect(origin: .zero, size: panelSize))
+        panel.contentView = contentView
+
+        let hostingView = ClickThroughHostingView(
             rootView: PillOverlayView(model: model, onTap: onTap)
         )
+        hostingView.frame = contentView.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        contentView.addSubview(hostingView)
 
         return panel
     }
