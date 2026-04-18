@@ -7,26 +7,15 @@ Extends `~/Projects/nitkrar/CLAUDE.md` (local-first search, backward-compat APIs
 - **Flexible TDD** for SwiftUI UI that can't be XCTest'd: test what can be tested (view model, published state, presenter behavior). Add a manual-verification checklist entry to the relevant `Tests/*/Manual*Verification.md` runbook before claiming shipped.
 - `swift build` succeeding is not evidence the feature works. Runtime verification is the only proof for UI.
 
-## Build / test frequency — Santa-gated machines batch, don't loop
+## Build / test frequency
 
-### The check (run once at session start, or at subagent dispatch)
-```bash
-command -v santactl >/dev/null 2>&1 && echo "SANTA=on" || echo "SANTA=off"
-```
-If `SANTA=on`, the developer machine gates every unsigned binary behind a per-binary approval prompt. `swift build` / `swift test` produces unsigned `.build/**/SeshatPackageTests.xctest` — one prompt per rebuild. Iterative loops become tens of popups.
+Santa on this machine runs in **Lockdown** with **Transitive Allowlisting** enabled (53 compiler rules, confirmed via `santactl status`). Binaries produced by `swiftc` / `clang` are auto-allowed — iterative `swift build` / `swift test` in the main repo is fine, no popups, no batching discipline needed.
 
-### When `SANTA=on` — batching rule (strict)
-- Write all tests for a step + the implementation, then run `swift build` / `swift test` ONCE at the end of the step.
-- TDD's red-green-refactor still applies conceptually, but you verify by reading code + running tests at the step boundary — not after each intermediate edit.
-- Prefer one `swift test` invocation that covers the whole lane's tests over many targeted runs.
-- NEVER run `swift build` / `swift test` "to check syntax" — use the Swift language server / visual inspection first; only compile when you're ready to commit.
+### Worktree-path caveat
 
-### When `SANTA=off` — normal cadence
-- Iterative `swift build` / `swift test` is fine. Classic red-green-refactor per edit is allowed.
-- Still prefer one invocation over many when the work is mechanically obvious and batching doesn't cost signal.
+`Agent`-tool subagents run in isolated worktrees under `.claude/worktrees/<agent-id>/`. Transitive Allowlisting does NOT fully cover worktree paths end-to-end — we've seen both Package.swift manifest AMFI kills (`"Missing or empty JSON output from manifest compilation"`) and Santa popups when xctest binaries execute from a worktree path.
 
-### Subagent contract
-Every implementer/reviewer prompt dispatched from this repo must run the check above as its first step, and explicitly state which cadence it will follow in its return message. Do not assume — probe.
+**Subagent contract (worktree agents)**: use `swift build --build-tests` at lane close. This compiles the xctest bundles without executing them, which stays inside Transitive Allowlisting's coverage. **Do NOT run `swift test` from a worktree** — it executes fresh unsigned xctest binaries and will prompt. The main session runs `swift test` from the canonical repo path after cherry-picking the worktree's commits (Transitive Allowlisting covers that path fine).
 
 ## Architectural Invariants
 <!-- TODO: fill in load-bearing invariants from the plan in progress in another session.
