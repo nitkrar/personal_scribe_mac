@@ -72,13 +72,10 @@ public final class PillOverlayPresenter {
     }
 
     private func updatePanelPosition(_ panel: NSPanel) {
-        let visibleFrame = (NSScreen.main ?? panel.screen ?? NSScreen.screens.first)?.visibleFrame
-            ?? NSRect(origin: .zero, size: panelSize)
-        let origin = NSPoint(
-            x: visibleFrame.midX - (panelSize.width / 2),
-            y: visibleFrame.maxY - 80 - panelSize.height
-        )
+        let screenFrame = NSScreen.main?.visibleFrame ?? .zero
+        let x = screenFrame.midX - panel.frame.width / 2
+        let y = screenFrame.minY + 64
 
-        panel.setFrame(NSRect(origin: origin, size: panelSize), display: false)
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 }
