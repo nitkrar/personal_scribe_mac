@@ -27,9 +27,14 @@ private struct PulsingDot: View {
 @MainActor
 public struct PillOverlayView: View {
     @ObservedObject private var model: PillOverlayViewModel
+    private let onTap: @MainActor () -> Void
 
-    public init(model: PillOverlayViewModel) {
+    public init(
+        model: PillOverlayViewModel,
+        onTap: @escaping @MainActor () -> Void = {}
+    ) {
         _model = ObservedObject(wrappedValue: model)
+        self.onTap = onTap
     }
 
     public var body: some View {
@@ -37,16 +42,37 @@ public struct PillOverlayView: View {
             switch model.visibility {
             case .hidden:
                 EmptyView()
+            case .idle:
+                idlePill
+                    .transition(pillTransition)
+                    .onTapGesture { onTap() }
             case .recording:
                 recordingPill
                     .transition(pillTransition)
+                    .onTapGesture { onTap() }
             case .transcribing:
                 transcribingPill
                     .transition(pillTransition)
             }
         }
-        .allowsHitTesting(false)
         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: model.visibility)
+    }
+
+    private var idlePill: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "mic")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Text("Double-tap ⌥ to record")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(minWidth: 160, idealWidth: 180, minHeight: 32)
+        .pillChrome
+        .opacity(0.85)
     }
 
     private var recordingPill: some View {
@@ -64,10 +90,14 @@ public struct PillOverlayView: View {
                 PulsingDot(delay: 0.2, color: .red)
                 PulsingDot(delay: 0.4, color: .red)
             }
+
+            Text("⌥⌥ stop")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .frame(minWidth: 160, idealWidth: 180, minHeight: 40)
+        .frame(minWidth: 160, idealWidth: 200, minHeight: 40)
         .pillChrome
     }
 

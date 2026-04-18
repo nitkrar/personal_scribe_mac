@@ -5,18 +5,18 @@ import SeshatCore
 
 @MainActor
 final class PillOverlayViewModelTests: XCTestCase {
-    func testInitialVisibilityIsHidden() {
+    func testInitialVisibilityIsIdle() {
         let viewModel = PillOverlayViewModel()
 
-        XCTAssertEqual(viewModel.visibility, .hidden)
+        XCTAssertEqual(viewModel.visibility, .idle)
     }
 
-    func testIdleMapsToHidden() {
+    func testIdleMapsToIdle() {
         let viewModel = PillOverlayViewModel()
 
         viewModel.apply(sessionState: .idle)
 
-        XCTAssertEqual(viewModel.visibility, .hidden)
+        XCTAssertEqual(viewModel.visibility, .idle)
     }
 
     func testRecordingMapsToRecording() {
@@ -59,15 +59,15 @@ final class PillOverlayViewModelTests: XCTestCase {
                 }
             }
 
-        viewModel.apply(sessionState: .idle)
         viewModel.apply(sessionState: .recording)
         viewModel.apply(sessionState: .transcribing)
         viewModel.apply(sessionState: .idle)
+        viewModel.apply(sessionState: .error(.audioEngineFailure))
 
         await fulfillment(of: [expectation], timeout: 1.0)
         withExtendedLifetime(cancellable) {}
 
         XCTAssertEqual(viewModel.visibility, .hidden)
-        XCTAssertEqual(emitted, [.hidden, .recording, .transcribing, .hidden])
+        XCTAssertEqual(emitted, [.recording, .transcribing, .idle, .hidden])
     }
 }

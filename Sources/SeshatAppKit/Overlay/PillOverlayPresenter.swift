@@ -6,12 +6,17 @@ import SeshatCore
 @MainActor
 public final class PillOverlayPresenter {
     private let model: PillOverlayViewModel
+    private let onTap: @MainActor () -> Void
     private var panel: NSPanel?
     private var visibilityCancellable: AnyCancellable?
-    private let panelSize = NSSize(width: 160, height: 40)
+    private let panelSize = NSSize(width: 220, height: 44)
 
-    public init(model: PillOverlayViewModel) {
+    public init(
+        model: PillOverlayViewModel,
+        onTap: @escaping @MainActor () -> Void = {}
+    ) {
         self.model = model
+        self.onTap = onTap
         visibilityCancellable = model.$visibility.sink { [weak self] visibility in
             guard let self else {
                 return
@@ -20,7 +25,7 @@ public final class PillOverlayPresenter {
             switch visibility {
             case .hidden:
                 hide()
-            case .recording, .transcribing:
+            case .idle, .recording, .transcribing:
                 if !isVisible {
                     show()
                 }
@@ -65,8 +70,10 @@ public final class PillOverlayPresenter {
         panel.hidesOnDeactivate = false
         panel.canHide = false
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-        panel.ignoresMouseEvents = true
-        panel.contentView = NSHostingView(rootView: PillOverlayView(model: model))
+        panel.ignoresMouseEvents = false
+        panel.contentView = NSHostingView(
+            rootView: PillOverlayView(model: model, onTap: onTap)
+        )
 
         return panel
     }
