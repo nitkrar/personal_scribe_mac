@@ -6,3 +6,6 @@ xcuserdata/
 DerivedData/
 *.xcodeproj
 .netrc
+
+# Dev-built app bundle (scripts/package-dev-app.sh output)
+/Seshat.app/
