@@ -42,10 +42,6 @@ public struct PillOverlayView: View {
             switch model.visibility {
             case .hidden:
                 EmptyView()
-            case .idle:
-                idlePill
-                    .transition(pillTransition)
-                    .onTapGesture { onTap() }
             case .downloading(let fraction):
                 downloadingPill(fraction: fraction)
                     .transition(pillTransition)
@@ -59,23 +55,6 @@ public struct PillOverlayView: View {
             }
         }
         .animation(.spring(response: 0.28, dampingFraction: 0.82), value: model.visibility)
-    }
-
-    private var idlePill: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "mic")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            Text("Double-tap ⌥ to record")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .frame(minWidth: 160, idealWidth: 180, minHeight: 32)
-        .pillChrome
-        .opacity(0.85)
     }
 
     private var recordingPill: some View {

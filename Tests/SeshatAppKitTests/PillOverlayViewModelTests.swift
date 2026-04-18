@@ -5,18 +5,18 @@ import SeshatCore
 
 @MainActor
 final class PillOverlayViewModelTests: XCTestCase {
-    func testInitialVisibilityIsIdle() {
+    func testInitialVisibilityIsHidden() {
         let viewModel = PillOverlayViewModel()
 
-        XCTAssertEqual(viewModel.visibility, .idle)
+        XCTAssertEqual(viewModel.visibility, .hidden)
     }
 
-    func testIdleMapsToIdle() {
+    func testIdleMapsToHidden() {
         let viewModel = PillOverlayViewModel()
 
         viewModel.apply(sessionState: .idle, downloadProgress: nil)
 
-        XCTAssertEqual(viewModel.visibility, .idle)
+        XCTAssertEqual(viewModel.visibility, .hidden)
     }
 
     func testRecordingMapsToRecording() {
@@ -96,6 +96,6 @@ final class PillOverlayViewModelTests: XCTestCase {
         withExtendedLifetime(cancellable) {}
 
         XCTAssertEqual(viewModel.visibility, .hidden)
-        XCTAssertEqual(emitted, [.recording, .transcribing, .idle, .hidden])
+        XCTAssertEqual(emitted, [.recording, .transcribing, .hidden, .hidden])
     }
 }

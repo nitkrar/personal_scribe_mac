@@ -25,7 +25,7 @@ public final class PillOverlayPresenter {
             switch visibility {
             case .hidden:
                 hide()
-            case .idle, .downloading, .recording, .transcribing:
+            case .downloading, .recording, .transcribing:
                 if !isVisible {
                     show()
                 }
