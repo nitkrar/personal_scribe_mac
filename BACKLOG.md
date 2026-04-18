@@ -38,7 +38,9 @@ Target: **By May 5 2026, using Seshat for daily dictation.**
 | 2 | P0 | Download progress hijacks recording pill — `.downloading` branch returns early in `PillOverlayViewModel.apply`, never reaches `.recording` | Change priority so active `.recording` / `.transcribing` session state overrides `.downloading`, OR show a combined state |
 | 3 | P1 | Every rebuild appears to re-download the 400MB model | `FluidAudioTranscriber.ensureValidDownloadedModel:235` wipes the final model directory on any download failure; only wipe the staging dir |
 | 4 | P1 | Idle dot visual doesn't match spec — 10pt circle inside 220x44 panel looks empty | Shrink NSPanel to ~20x20 when `visibility == .idle`, or delete the idle dot and rely on menu bar + hotkey entry points only |
-| 5 | P2 | Pill click doesn't toggle (fix in `aa73013` awaiting runtime verification) | Confirm `canBecomeKey = true` fix works after #1–#4 land |
+| 5 | P0 | Pill click AND menu bar click never work, even after launch freeze clears — `aa73013`'s `canBecomeKey = true` was insufficient | Bypass SwiftUI `.onTapGesture`; use AppKit `mouseDown`/`mouseUp` override in `DraggablePanel`. For menu bar, check if a listener (hotkey monitor? prewarm?) is intercepting NSStatusItem clicks |
+| 8 | P1 | Idle pill should be draggable | Apply `DraggablePanel.mouseDragged` → `performDrag(with:)` path to the idle visibility branch too (currently only active for other states) |
+| 9 | P1 | Recording/"listening" pill is too big | Tighten `.frame` to ~140x32, reduce padding, shorter content |
 | 6 | P2 | Pulsing-dots listening animation looks "not nice" | Replace with single breathing red circle (Option C — simpler, Wispr-style) |
 | 7 | P3 | LSUIElement apps don't appear in Force Quit dialog | Add emergency-quit via triple-tap ⌥ once hotkey customization is in Settings |
 
@@ -46,19 +48,22 @@ Target: **By May 5 2026, using Seshat for daily dictation.**
 
 **Reshaped priorities after end-of-session retest from /Applications:**
 - Unresponsive-at-launch is **per-launch**, not first-launch-only → model is cached (451MB on disk verified), so the blocker is `FluidAudio.AsrManager.loadModel(from:)` doing CoreML/ANE work that starves the UI each launch, not the download.
-- `aa73013` pill-click fix (`canBecomeKey = true`) did NOT restore clicks — but can't distinguish "fix insufficient" from "clicks don't register because app is frozen at launch" until #1 is solved.
-- Idle rendering shows as a full 220x44 translucent white pill — Material chrome visible, 10pt dot content invisible inside it.
+- **Clicks NEVER work, including after model load completes and the app is responsive.** User correction: this is an independent bug from launch freeze, not a symptom. `aa73013`'s `canBecomeKey = true` fix is insufficient. Menu bar click also dead always — may be getting intercepted by hotkey monitor or some other listener.
+- Idle pill renders as a 220x44 translucent white pill — user accepts this visual as-is, no need to shrink to a dot.
+- Idle pill needs to be **draggable** (same as the recording pill) so user can position it.
+- Recording ("listening") pill is too big — needs to be smaller.
 
 Recommended ordering when you resume:
-1. **Diagnose launch freeze** — instrument `SessionCoordinator.prepareTranscriber()` / `FluidAudioTranscriber.performPrepare()` / `inference.loadModel(from:)` with `os.signpost` to see where the stall is. Options after diagnosis:
+1. **Fix clicks end-to-end, independent of launch freeze.** Bypass SwiftUI `.onTapGesture` — override `mouseDown`/`mouseUp` in `DraggablePanel` to detect click vs drag at the AppKit level and call `onTap` directly. For the menu bar, trace why NSStatusItem clicks don't open the menu (hotkey monitor? prewarm? some retained NSWindow?).
+2. **Diagnose launch freeze** — instrument `SessionCoordinator.prepareTranscriber()` / `FluidAudioTranscriber.performPrepare()` / `inference.loadModel(from:)` with `os.signpost` to find the stall. Options after diagnosis:
    - Move FluidAudio load fully off MainActor (if it's reentering MainActor unexpectedly)
    - Gate prewarm behind a "user has pressed Record before" flag (lazy)
-   - Remove prewarm entirely, show download-or-load progress in pill on first Record
-2. Fix download-priority hijacking the recording pill (P0 #2)
-3. Shrink idle NSPanel to dot-size (or delete idle state entirely) so the translucent pill stops appearing when idle (P1 #4)
-4. Retest pill click + menu bar click now that launch is responsive — confirm `aa73013` works or file a follow-up
-5. Fix model-redownload root cause (P1 #3)
-6. Animation polish (P2 #6) — decide C vs B
+   - Remove prewarm entirely, show load-progress in pill on first Record
+3. Make the idle pill draggable (reuse DraggablePanel's mouseDragged path — it already exists, just needs to apply in the .idle visibility branch too).
+4. Shrink the recording pill — probably cut `.frame(minWidth: 160, idealWidth: 200, minHeight: 40)` down to something like 140x32 plus less generous padding.
+5. Fix download-priority hijacking the recording pill (P0 #2).
+6. Fix model-redownload root cause (P1 #3).
+7. Animation polish (P2 #6) — decide C vs B.
 
 **Week 3 — Save and search:**
 - [ ] SQLite note storage via GRDB.swift
