@@ -47,6 +47,6 @@ Signposts emitted under subsystem `com.nitkrar.seshat`, category `prepare`:
 
 | Date | Build SHA | `prepareTranscriber` | `performPrepare` | `loadModel` | Notes |
 |------|-----------|----------------------|------------------|-------------|-------|
-|      |           |                      |                  |             |       |
+| 2026-04-18 | 0969f59 | ~730-750 ms (cold), ~450 ms (warm) | under 1 s | under 1 s | Dogfood session; approximate visual read from Instruments os_signpost track. All three intervals visible. |
 
-Phase 1 gate target: cold-launch `prepareTranscriber` < 5s (or outlier with recorded hypothesis).
+Phase 1 gate target: cold-launch `prepareTranscriber` < 5s (or outlier with recorded hypothesis). **Met on 2026-04-18.**
