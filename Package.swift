@@ -83,7 +83,10 @@ let package = Package(
                 "SeshatAudio",
                 "SeshatTranscription",
             ],
-            path: "Sources/SeshatAppKit"
+            path: "Sources/SeshatAppKit",
+            resources: [
+                .process("Resources"),
+            ]
         ),
         .testTarget(
             name: "SeshatCoreTests",
