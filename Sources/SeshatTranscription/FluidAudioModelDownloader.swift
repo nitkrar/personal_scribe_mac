@@ -18,3 +18,13 @@ enum ParakeetArtifact {
         )!
     }
 }
+
+private struct PrivateModelDownloader: ModelDownloading {
+    func ensureModelAvailable(
+        at directory: URL,
+        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
+    ) async throws -> URL {
+        _ = progress
+        return directory
+    }
+}
