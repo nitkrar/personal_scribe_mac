@@ -141,18 +141,24 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .recording)
     }
 
-    func testHiddenModeForcesHiddenAcrossAllSessionStates() {
+    func testHiddenModeHidesIdleButRecordingOverridesHidden() {
+        // Sprint 2 redesign (2026-04-18) reversed the prior rule.
+        // Claude's pill spec requires the stop affordance to stay
+        // reachable during `.recording` regardless of the user's
+        // visibility preference. The menu bar still satisfies the
+        // "at-least-one-surface-visible" invariant in Phase 2.
         let viewModel = PillOverlayViewModel(visibilityMode: .hidden)
 
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
         XCTAssertEqual(viewModel.visibility, .hidden)
 
         viewModel.apply(sessionState: .recording, preparationProgress: nil)
-        XCTAssertEqual(viewModel.visibility, .hidden,
-                       "Hidden mode must override even active recording")
+        XCTAssertEqual(viewModel.visibility, .recording,
+                       "Recording must override hidden mode (stop affordance)")
 
         viewModel.apply(sessionState: .transcribing, preparationProgress: nil)
-        XCTAssertEqual(viewModel.visibility, .hidden)
+        XCTAssertEqual(viewModel.visibility, .transcribing,
+                       "Transcribing continues showing the pill after recording override until we return to idle")
 
         let progress = ModelDownloadProgress(
             phase: .downloading,
@@ -160,6 +166,14 @@ final class PillOverlayViewModelTests: XCTestCase {
             receivedBytes: 50,
             expectedBytes: 100
         )
+        // Transcribing → idle fires the `.done` confirmation (prior
+        // state was transcribing). Consume that first before checking
+        // the idle-hidden behaviour.
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
+        XCTAssertEqual(viewModel.visibility, .done)
+
+        // With idle already set, a subsequent apply with download
+        // progress should hide the pill under hidden mode.
         viewModel.apply(sessionState: .idle, preparationProgress: progress)
         XCTAssertEqual(viewModel.visibility, .hidden)
     }
@@ -200,6 +214,11 @@ final class PillOverlayViewModelTests: XCTestCase {
     }
 
     func testTransitionSequenceIdleRecordingTranscribingIdleError() async {
+        // Sprint 2 redesign inserted a transient `.done` state between
+        // a successful `transcribing → idle` handoff. This test now
+        // asserts the new sequence:
+        //   recording → transcribing → done → hidden (error)
+        // The `.done` visibility replaces the former direct `.idle`.
         let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
         var emitted: [PillOverlayViewModel.Visibility] = []
         let expectation = expectation(description: "Collect published visibility updates")
@@ -224,6 +243,39 @@ final class PillOverlayViewModelTests: XCTestCase {
         withExtendedLifetime(cancellable) {}
 
         XCTAssertEqual(viewModel.visibility, .hidden)
-        XCTAssertEqual(emitted, [.recording, .transcribing, .idle, .hidden])
+        XCTAssertEqual(emitted, [.recording, .transcribing, .done, .hidden])
+    }
+
+    func testTranscribingToIdleShowsDoneConfirmation() {
+        // Core semantics of the `.done` transient state: when the
+        // session transitions transcribing → idle (success path),
+        // the view model emits `.done` immediately so the pill can
+        // show a checkmark. The done task then falls through to the
+        // mode's normal idle after `doneConfirmationDuration`.
+        let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
+
+        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        XCTAssertEqual(viewModel.visibility, .recording)
+
+        viewModel.apply(sessionState: .transcribing, preparationProgress: nil)
+        XCTAssertEqual(viewModel.visibility, .transcribing)
+
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
+        XCTAssertEqual(viewModel.visibility, .done)
+    }
+
+    func testNewRecordingPreemptsDoneConfirmation() {
+        // If the user triggers a fresh recording while the previous
+        // `.done` confirmation is still on screen, the new recording
+        // wins — the done task is cancelled and `.recording` replaces
+        // `.done` without waiting out the timer.
+        let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
+
+        viewModel.apply(sessionState: .transcribing, preparationProgress: nil)
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
+        XCTAssertEqual(viewModel.visibility, .done)
+
+        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        XCTAssertEqual(viewModel.visibility, .recording)
     }
 }

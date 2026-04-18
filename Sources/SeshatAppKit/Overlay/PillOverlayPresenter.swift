@@ -131,7 +131,7 @@ public final class PillOverlayPresenter {
             switch visibility {
             case .hidden:
                 hide()
-            case .idle, .downloading, .loading, .recording, .transcribing:
+            case .idle, .downloading, .loading, .recording, .transcribing, .done:
                 if !isVisible {
                     show()
                 }
@@ -228,7 +228,7 @@ public final class PillOverlayPresenter {
         switch model.visibility {
         case .idle, .recording:
             return true
-        case .hidden, .downloading, .loading, .transcribing:
+        case .hidden, .downloading, .loading, .transcribing, .done:
             return false
         }
     }
