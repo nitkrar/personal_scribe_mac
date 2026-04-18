@@ -18,7 +18,7 @@ final class StatusItemMenuModelTests: XCTestCase {
 
         XCTAssertEqual(model.items.count, 6)
         assertHeader(model.items[0], "Quick Memo")
-        assertAction(model.items[1], id: .startStopRecording, title: "Start Recording")
+        assertAction(model.items[1], id: .startStopRecording, title: "Start Recording   ⌥⌥")
         assertAction(model.items[2], id: .openHistory, title: "History")
         assertAction(model.items[3], id: .openSettings, title: "Settings")
         XCTAssertEqual(model.items[4], .separator)
@@ -43,7 +43,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             micPermission: .granted,
             inputMonitoringPermission: .granted
         )
-        assertAction(model.items[1], id: .startStopRecording, title: "Stop Recording")
+        assertAction(model.items[1], id: .startStopRecording, title: "Stop Recording   ⌥⌥")
     }
 
     func testTranscribingStateDisablesRecordingItem() {
@@ -66,7 +66,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             micPermission: .granted,
             inputMonitoringPermission: .granted
         )
-        assertAction(model.items[1], id: .startStopRecording, title: "Start Recording")
+        assertAction(model.items[1], id: .startStopRecording, title: "Start Recording   ⌥⌥")
     }
 
     // MARK: - Permission warnings prepended
@@ -168,7 +168,12 @@ final class StatusItemMenuModelTests: XCTestCase {
         XCTAssertEqual(quit.keyEquivalent, "q")
     }
 
-    func testStartRecordingHasRKeyEquivalent() {
+    func testStartRecordingHasNoAppKitKeyEquivalent() {
+        // The actual hotkey is a double-tap of right Option (see
+        // GlobalHotkeyMonitor). AppKit's NSMenu can't bind that, so
+        // no key-equivalent is published — the ⌥⌥ hint lives in the
+        // title instead. Guards against re-introducing a wrong
+        // shortcut like ⌥⌘R that doesn't actually trigger recording.
         let model = StatusItemMenuModel.make(
             sessionState: .idle,
             micPermission: .granted,
@@ -177,7 +182,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         guard case let .action(record) = model.items[1] else {
             return XCTFail("Expected record action at index 1")
         }
-        XCTAssertEqual(record.keyEquivalent, "r")
+        XCTAssertEqual(record.keyEquivalent, "")
     }
 
     // MARK: - Helpers

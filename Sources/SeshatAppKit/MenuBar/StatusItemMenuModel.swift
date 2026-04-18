@@ -133,22 +133,29 @@ struct StatusItemMenuModel: Equatable {
     // MARK: - Record/stop toggle helpers
 
     static func recordingItemTitle(for sessionState: SessionState) -> String {
+        // Title includes the ⌥⌥ hint for the actual hotkey (double-tap
+        // right Option, see GlobalHotkeyMonitor). AppKit NSMenu's
+        // keyEquivalent cannot represent a double-tap sequence, so the
+        // hotkey is surfaced as plain text in the title instead of an
+        // AppKit key-equivalent binding.
         switch sessionState {
         case .idle, .error:
-            return "Start Recording"
+            return "Start Recording   ⌥⌥"
         case .recording:
-            return "Stop Recording"
+            return "Stop Recording   ⌥⌥"
         case .transcribing:
             return "Transcribing…"
         }
     }
 
     static func recordingItemKeyEquivalent(for sessionState: SessionState) -> String {
-        // ⌥⌘ modifier is applied by StatusItemController; here we
-        // only publish the unshifted key character. During transcribe
-        // the item is disabled but we still return the letter so the
-        // shortcut doesn't reassign mid-state.
-        return "r"
+        // Intentionally empty — the actual hotkey is a double-tap of
+        // right Option (see GlobalHotkeyMonitor). NSMenu can't bind
+        // that, so we publish no key-equivalent and put the ⌥⌥ hint in
+        // the title instead. Earlier revisions advertised ⌥⌘R; that
+        // was a lie — the AppKit shortcut didn't actually trigger
+        // recording.
+        return ""
     }
 
     static func recordingItemIsEnabled(for sessionState: SessionState) -> Bool {
