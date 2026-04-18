@@ -146,6 +146,15 @@ public final class PillOverlayViewModel: ObservableObject {
             return .recording
         }
 
+        // Transcribing is the tail of the same session — once the pill
+        // became visible for recording it stays visible through
+        // transcription (and the .done confirmation) before returning
+        // to hidden. Otherwise hidden-mode would snap the pill off
+        // mid-session the moment the user stops speaking.
+        if case .transcribing = sessionState {
+            return transcribingVisibility(for: preparationProgress)
+        }
+
         // Session error state → hidden. Error UX lives in the menu
         // bar (permission / mic error surfaces) rather than the pill.
         if case .error = sessionState {
