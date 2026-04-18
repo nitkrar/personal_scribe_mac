@@ -3,26 +3,96 @@ import Combine
 import SwiftUI
 import SeshatCore
 
-fileprivate final class DraggablePanel: NSPanel {
-    var onMouseDragged: (() -> Void)?
+struct OverlayPanelInteractionState: Equatable {
+    private let dragThreshold: CGFloat = 4
+    private var mouseDownPoint: NSPoint?
+    private(set) var isDragging = false
 
-    // canBecomeKey = true so SwiftUI .onTapGesture receives clicks. Combined
-    // with .nonactivatingPanel in styleMask, the panel becomes key but does
-    // NOT activate the app — so clicking the pill routes to SwiftUI without
-    // stealing focus from other apps or the menu bar.
-    override var canBecomeKey: Bool {
-        true
+    mutating func begin(at point: NSPoint) {
+        mouseDownPoint = point
+        isDragging = false
     }
 
-    override func mouseDragged(with event: NSEvent) {
-        onMouseDragged?()
-        performDrag(with: event)
+    mutating func drag(to point: NSPoint) -> Bool {
+        guard let mouseDownPoint else {
+            return false
+        }
+
+        if isDragging {
+            return false
+        }
+
+        let deltaX = point.x - mouseDownPoint.x
+        let deltaY = point.y - mouseDownPoint.y
+        let distance = hypot(deltaX, deltaY)
+        if distance >= dragThreshold {
+            isDragging = true
+            return true
+        }
+
+        return false
+    }
+
+    mutating func end(at point: NSPoint) -> Bool {
+        defer {
+            mouseDownPoint = nil
+            isDragging = false
+        }
+
+        guard let mouseDownPoint else {
+            return false
+        }
+
+        let deltaX = point.x - mouseDownPoint.x
+        let deltaY = point.y - mouseDownPoint.y
+        let distance = hypot(deltaX, deltaY)
+        return !isDragging && distance < dragThreshold
     }
 }
 
-fileprivate final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
+final class DraggablePanel: NSPanel {
+    override var canBecomeKey: Bool {
+        true
+    }
+}
+
+final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
+    var onMouseDragged: (() -> Void)?
+    var onTap: (() -> Void)?
+    var isTapEnabled: (() -> Bool)?
+    private var interactionState = OverlayPanelInteractionState()
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        interactionState.begin(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let localPoint = convert(event.locationInWindow, from: nil)
+        let startedDragging = interactionState.drag(to: localPoint)
+        if startedDragging {
+            onMouseDragged?()
+        }
+
+        if interactionState.isDragging {
+            window?.performDrag(with: event)
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let localPoint = convert(event.locationInWindow, from: nil)
+        guard interactionState.end(at: localPoint) else {
+            return
+        }
+
+        guard isTapEnabled?() == true else {
+            return
+        }
+
+        onTap?()
     }
 }
 
@@ -49,7 +119,7 @@ public final class PillOverlayPresenter {
             switch visibility {
             case .hidden:
                 hide()
-            case .idle, .downloading, .recording, .transcribing:
+            case .idle, .downloading, .loading, .recording, .transcribing:
                 if !isVisible {
                     show()
                 }
@@ -97,16 +167,22 @@ public final class PillOverlayPresenter {
         panel.canHide = false
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         panel.ignoresMouseEvents = false
-        panel.onMouseDragged = { [weak self] in
-            self?.hasUserRepositioned = true
-        }
 
         let contentView = panel.contentView ?? NSView(frame: NSRect(origin: .zero, size: panelSize))
         panel.contentView = contentView
 
         let hostingView = ClickThroughHostingView(
-            rootView: PillOverlayView(model: model, onTap: onTap)
+            rootView: PillOverlayView(model: model)
         )
+        hostingView.onMouseDragged = { [weak self] in
+            self?.hasUserRepositioned = true
+        }
+        hostingView.onTap = { [weak self] in
+            self?.onTap()
+        }
+        hostingView.isTapEnabled = { [weak self] in
+            self?.supportsTap ?? false
+        }
         hostingView.frame = contentView.bounds
         hostingView.autoresizingMask = [.width, .height]
         contentView.addSubview(hostingView)
@@ -120,5 +196,14 @@ public final class PillOverlayPresenter {
         let y = screenFrame.minY + 64
 
         panel.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private var supportsTap: Bool {
+        switch model.visibility {
+        case .idle, .recording:
+            return true
+        case .hidden, .downloading, .loading, .transcribing:
+            return false
+        }
     }
 }

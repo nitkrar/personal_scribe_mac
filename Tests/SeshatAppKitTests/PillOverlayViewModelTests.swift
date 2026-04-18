@@ -14,7 +14,7 @@ final class PillOverlayViewModelTests: XCTestCase {
     func testIdleSessionMapsToIdlePill() {
         let viewModel = PillOverlayViewModel()
 
-        viewModel.apply(sessionState: .idle, downloadProgress: nil)
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
 
         XCTAssertEqual(viewModel.visibility, .idle)
     }
@@ -22,7 +22,7 @@ final class PillOverlayViewModelTests: XCTestCase {
     func testRecordingMapsToRecording() {
         let viewModel = PillOverlayViewModel()
 
-        viewModel.apply(sessionState: .recording, downloadProgress: nil)
+        viewModel.apply(sessionState: .recording, preparationProgress: nil)
 
         XCTAssertEqual(viewModel.visibility, .recording)
     }
@@ -30,7 +30,7 @@ final class PillOverlayViewModelTests: XCTestCase {
     func testTranscribingMapsToTranscribing() {
         let viewModel = PillOverlayViewModel()
 
-        viewModel.apply(sessionState: .transcribing, downloadProgress: nil)
+        viewModel.apply(sessionState: .transcribing, preparationProgress: nil)
 
         XCTAssertEqual(viewModel.visibility, .transcribing)
     }
@@ -38,7 +38,7 @@ final class PillOverlayViewModelTests: XCTestCase {
     func testErrorMapsToHidden() {
         let viewModel = PillOverlayViewModel()
 
-        viewModel.apply(sessionState: .error(.audioEngineFailure), downloadProgress: nil)
+        viewModel.apply(sessionState: .error(.audioEngineFailure), preparationProgress: nil)
 
         XCTAssertEqual(viewModel.visibility, .hidden)
     }
@@ -52,7 +52,7 @@ final class PillOverlayViewModelTests: XCTestCase {
             expectedBytes: 100
         )
 
-        viewModel.apply(sessionState: .idle, downloadProgress: progress)
+        viewModel.apply(sessionState: .idle, preparationProgress: progress)
 
         XCTAssertEqual(viewModel.visibility, .downloading(fractionCompleted: 0.42))
     }
@@ -66,9 +66,51 @@ final class PillOverlayViewModelTests: XCTestCase {
             expectedBytes: 100
         )
 
-        viewModel.apply(sessionState: .idle, downloadProgress: progress)
+        viewModel.apply(sessionState: .idle, preparationProgress: progress)
 
         XCTAssertEqual(viewModel.visibility, .idle)
+    }
+
+    func testLoadingProgressMapsToLoadingPill() {
+        let viewModel = PillOverlayViewModel()
+        let progress = ModelDownloadProgress(
+            phase: .loading,
+            fractionCompleted: 1.0,
+            receivedBytes: 0,
+            expectedBytes: nil
+        )
+
+        viewModel.apply(sessionState: .idle, preparationProgress: progress)
+
+        XCTAssertEqual(viewModel.visibility, .loading)
+    }
+
+    func testRecordingStateKeepsRecordingVisibleDuringDownload() {
+        let viewModel = PillOverlayViewModel()
+        let progress = ModelDownloadProgress(
+            phase: .downloading,
+            fractionCompleted: 0.42,
+            receivedBytes: 42,
+            expectedBytes: 100
+        )
+
+        viewModel.apply(sessionState: .recording, preparationProgress: progress)
+
+        XCTAssertEqual(viewModel.visibility, .recording)
+    }
+
+    func testTranscribingShowsLoadingWhenModelIsStillLoading() {
+        let viewModel = PillOverlayViewModel()
+        let progress = ModelDownloadProgress(
+            phase: .loading,
+            fractionCompleted: 1.0,
+            receivedBytes: 0,
+            expectedBytes: nil
+        )
+
+        viewModel.apply(sessionState: .transcribing, preparationProgress: progress)
+
+        XCTAssertEqual(viewModel.visibility, .loading)
     }
 
     func testTransitionSequenceIdleRecordingTranscribingIdleError() async {
@@ -87,10 +129,10 @@ final class PillOverlayViewModelTests: XCTestCase {
                 }
             }
 
-        viewModel.apply(sessionState: .recording, downloadProgress: nil)
-        viewModel.apply(sessionState: .transcribing, downloadProgress: nil)
-        viewModel.apply(sessionState: .idle, downloadProgress: nil)
-        viewModel.apply(sessionState: .error(.audioEngineFailure), downloadProgress: nil)
+        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        viewModel.apply(sessionState: .transcribing, preparationProgress: nil)
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
+        viewModel.apply(sessionState: .error(.audioEngineFailure), preparationProgress: nil)
 
         await fulfillment(of: [expectation], timeout: 1.0)
         withExtendedLifetime(cancellable) {}

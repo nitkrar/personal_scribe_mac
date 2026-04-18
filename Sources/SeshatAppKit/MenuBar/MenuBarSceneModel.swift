@@ -8,7 +8,7 @@ final class MenuBarSceneModel: ObservableObject {
     @Published var state: SessionState = .idle
     @Published var permissionState: MicrophonePermissionState
     @Published var lastResultText: String? = nil
-    @Published var downloadProgress: ModelDownloadProgress?
+    @Published var preparationProgress: ModelDownloadProgress?
 
     private let coordinator: SessionCoordinator
     private let permissionRequester: any MicrophonePermissionRequesting
@@ -19,7 +19,7 @@ final class MenuBarSceneModel: ObservableObject {
     private let logger: SeshatLogger
     private let onObservationCancelled: (@Sendable () -> Void)?
     private var observationTask: Task<Void, Never>?
-    private var downloadObservationTask: Task<Void, Never>?
+    private var preparationObservationTask: Task<Void, Never>?
     private var lastAutoPastedTranscript: String?
     private(set) var observationTaskCreationCount = 0
 
@@ -45,11 +45,41 @@ final class MenuBarSceneModel: ObservableObject {
     }
 
     var recordButton: RecordButtonViewModel {
-        RecordButtonViewModel.make(from: state)
+        if case .idle = state, let preparationProgress {
+            switch preparationProgress.phase {
+            case .downloading, .loading:
+                return RecordButtonViewModel(
+                    title: "Preparing…",
+                    systemImageName: "arrow.triangle.2.circlepath",
+                    isEnabled: false,
+                    usesDestructiveRole: false
+                )
+            case .idle, .finished:
+                break
+            }
+        }
+
+        return RecordButtonViewModel.make(from: state)
     }
 
     var statusIcon: MenuBarStatusIcon {
         MenuBarStatusIcon.make(sessionState: state, permissionState: permissionState)
+    }
+
+    var preparationStatusText: String? {
+        guard let preparationProgress else {
+            return nil
+        }
+
+        switch preparationProgress.phase {
+        case .idle, .finished:
+            return nil
+        case .downloading:
+            let percent = Int((preparationProgress.fractionCompleted * 100).rounded())
+            return "Downloading model… \(percent)%"
+        case .loading:
+            return "Warming up model…"
+        }
     }
 
     func startObserving() {
@@ -79,12 +109,17 @@ final class MenuBarSceneModel: ObservableObject {
             }
         }
 
-        downloadObservationTask = Task { [weak self, coordinator] in
+        preparationObservationTask = Task { [weak self, coordinator] in
             guard let self else { return }
             let stream = await coordinator.modelDownloadProgress()
             for await progress in stream {
                 await MainActor.run {
-                    self.downloadProgress = (progress.phase == .downloading) ? progress : nil
+                    switch progress.phase {
+                    case .idle, .finished:
+                        self.preparationProgress = nil
+                    case .downloading, .loading:
+                        self.preparationProgress = progress
+                    }
                 }
             }
         }
@@ -133,7 +168,7 @@ final class MenuBarSceneModel: ObservableObject {
 
     deinit {
         observationTask?.cancel()
-        downloadObservationTask?.cancel()
+        preparationObservationTask?.cancel()
         onObservationCancelled?()
     }
 }

@@ -13,18 +13,18 @@ struct MenuBarScene: View {
     var body: some View {
         Text("Seshat — \(Self.stateLabel(for: model.state))")
 
-        if let downloadProgress = model.downloadProgress {
-            let percent = Int((downloadProgress.fractionCompleted * 100).rounded())
-            Text("Downloading model… \(percent)%")
+        if let preparationStatusText = model.preparationStatusText {
+            Text(preparationStatusText)
         }
 
         switch model.permissionState {
         case .granted:
-            Button(Self.primaryActionTitle(for: .granted)) {
+            Button(model.recordButton.title) {
                 Task {
                     await model.handleRecordButtonTap()
                 }
             }
+            .disabled(!model.recordButton.isEnabled)
             .keyboardShortcut("r")
         case .notYetRequested:
             Button(Self.primaryActionTitle(for: .notYetRequested)) {

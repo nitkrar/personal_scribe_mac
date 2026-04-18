@@ -8,17 +8,32 @@ import SeshatSession
 struct SeshatAppMain: App {
     let coordinator: SessionCoordinator
     let permissionRequester: any MicrophonePermissionRequesting
+    let startupCoordinator: AppStartupCoordinator
 
     @StateObject private var sceneModel: MenuBarSceneModel
     @StateObject private var pillController: PillOverlayController
 
     init() {
-        let coordinator = AppComposition.sessionCoordinator
-        let permissionRequester = AppComposition.makeMicrophonePermissionRequester()
-        let pasteInjector = PasteInjector()
+        self.init(
+            coordinator: AppComposition.sessionCoordinator,
+            permissionRequester: AppComposition.makeMicrophonePermissionRequester(),
+            pasteInjector: PasteInjector(),
+            startupCoordinator: nil
+        )
+    }
+
+    init(
+        coordinator: SessionCoordinator,
+        permissionRequester: any MicrophonePermissionRequesting,
+        pasteInjector: PasteInjector = PasteInjector(),
+        startupCoordinator: AppStartupCoordinator? = nil
+    ) {
+        let startupCoordinator = startupCoordinator
+            ?? AppComposition.makeStartupCoordinator(coordinator: coordinator)
 
         self.coordinator = coordinator
         self.permissionRequester = permissionRequester
+        self.startupCoordinator = startupCoordinator
         let sceneModel = MenuBarSceneModel(
             coordinator: coordinator,
             permissionRequester: permissionRequester,
@@ -51,16 +66,19 @@ struct SeshatAppMain: App {
         _pillController = StateObject(
             wrappedValue: PillOverlayController(
                 statePublisher: sceneModel.$state.eraseToAnyPublisher(),
-                downloadProgressPublisher: sceneModel.$downloadProgress.eraseToAnyPublisher(),
+                preparationProgressPublisher: sceneModel.$preparationProgress.eraseToAnyPublisher(),
                 onTap: {
                     Task { await coordinator.toggle() }
                 }
             )
         )
 
-        AppComposition.prewarmTranscription()
-        AppComposition.hotkeyMonitor.start()
         sceneModel.startObserving()
+        Task { @MainActor [startupCoordinator] in
+            // Let SwiftUI install the status item before background startup work begins.
+            await Task.yield()
+            startupCoordinator.start()
+        }
     }
 
     var body: some Scene {
@@ -72,6 +90,7 @@ struct SeshatAppMain: App {
             MenuBarScene(model: sceneModel)
         } label: {
             Image(systemName: sceneModel.statusIcon.systemImageName)
+                .accessibilityLabel(sceneModel.statusIcon.accessibilityLabel)
         }
     }
 }

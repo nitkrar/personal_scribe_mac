@@ -27,14 +27,9 @@ private struct PulsingDot: View {
 @MainActor
 public struct PillOverlayView: View {
     @ObservedObject private var model: PillOverlayViewModel
-    private let onTap: @MainActor () -> Void
 
-    public init(
-        model: PillOverlayViewModel,
-        onTap: @escaping @MainActor () -> Void = {}
-    ) {
+    public init(model: PillOverlayViewModel) {
         _model = ObservedObject(wrappedValue: model)
-        self.onTap = onTap
     }
 
     public var body: some View {
@@ -45,14 +40,15 @@ public struct PillOverlayView: View {
             case .idle:
                 idleDot
                     .transition(pillTransition)
-                    .onTapGesture { onTap() }
             case .downloading(let fraction):
                 downloadingPill(fraction: fraction)
+                    .transition(pillTransition)
+            case .loading:
+                loadingPill
                     .transition(pillTransition)
             case .recording:
                 recordingPill
                     .transition(pillTransition)
-                    .onTapGesture { onTap() }
             case .transcribing:
                 transcribingPill
                     .transition(pillTransition)
@@ -126,6 +122,23 @@ public struct PillOverlayView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .frame(minWidth: 200, idealWidth: 220, minHeight: 44)
+        .pillChrome
+    }
+
+    private var loadingPill: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .progressViewStyle(.circular)
+                .controlSize(.small)
+                .tint(.white)
+
+            Text("Warming up model…")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(minWidth: 180, idealWidth: 200, minHeight: 44)
         .pillChrome
     }
 

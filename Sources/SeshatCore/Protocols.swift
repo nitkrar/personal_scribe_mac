@@ -22,6 +22,7 @@ public struct ModelDownloadProgress: Sendable, Equatable {
     public enum Phase: Sendable, Equatable {
         case idle
         case downloading
+        case loading
         case finished
     }
 

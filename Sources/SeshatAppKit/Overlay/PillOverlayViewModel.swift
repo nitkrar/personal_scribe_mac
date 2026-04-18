@@ -8,6 +8,7 @@ public final class PillOverlayViewModel: ObservableObject {
         case hidden
         case idle
         case downloading(fractionCompleted: Double)
+        case loading
         case recording
         case transcribing
     }
@@ -16,27 +17,51 @@ public final class PillOverlayViewModel: ObservableObject {
 
     public init() {}
 
-    /// Combined mapping from session state + download progress. Download state
-    /// takes priority so the user sees a determinate download pill instead of a
-    /// generic "Transcribing…" spinner when the model isn't ready yet.
+    /// Combined mapping from session state + model preparation progress.
+    /// Active recording always wins so the stop affordance stays visible.
     public func apply(
         sessionState: SessionState,
-        downloadProgress: ModelDownloadProgress?
+        preparationProgress: ModelDownloadProgress?
     ) {
-        if let downloadProgress, downloadProgress.phase == .downloading {
-            visibility = .downloading(fractionCompleted: downloadProgress.fractionCompleted)
-            return
-        }
-
         switch sessionState {
         case .idle:
-            visibility = .idle
+            visibility = visibilityForIdleState(preparationProgress)
         case .recording:
             visibility = .recording
         case .transcribing:
-            visibility = .transcribing
+            visibility = visibilityForTranscribingState(preparationProgress)
         case .error:
             visibility = .hidden
+        }
+    }
+
+    private func visibilityForIdleState(_ preparationProgress: ModelDownloadProgress?) -> Visibility {
+        guard let preparationProgress else {
+            return .idle
+        }
+
+        switch preparationProgress.phase {
+        case .idle, .finished:
+            return .idle
+        case .downloading:
+            return .downloading(fractionCompleted: preparationProgress.fractionCompleted)
+        case .loading:
+            return .loading
+        }
+    }
+
+    private func visibilityForTranscribingState(_ preparationProgress: ModelDownloadProgress?) -> Visibility {
+        guard let preparationProgress else {
+            return .transcribing
+        }
+
+        switch preparationProgress.phase {
+        case .idle, .finished:
+            return .transcribing
+        case .downloading:
+            return .downloading(fractionCompleted: preparationProgress.fractionCompleted)
+        case .loading:
+            return .loading
         }
     }
 }

@@ -6,10 +6,24 @@ import SeshatSession
 @MainActor
 final class AppEntryPointTests: XCTestCase {
     func testSeshatAppMainBuildsSceneModelFromComposition() async {
-        let entry = SeshatAppMain()
+        let coordinator = DevelopmentComposition.makeTestingSessionCoordinator()
+        let startupCoordinator = AppStartupCoordinator(
+            startHotkeyMonitor: {},
+            prepareTranscriber: {},
+            sleep: { _ in }
+        )
+        let entry = SeshatAppMain(
+            coordinator: coordinator,
+            permissionRequester: EntryPointPermissionRequester(),
+            startupCoordinator: startupCoordinator
+        )
 
-        XCTAssertTrue(entry.coordinator === AppComposition.sessionCoordinator)
+        XCTAssertTrue(entry.coordinator === coordinator)
         let state = await entry.coordinator.state()
         XCTAssertEqual(state, .idle)
     }
+}
+
+private struct EntryPointPermissionRequester: MicrophonePermissionRequesting {
+    func requestAccess() async -> Bool { true }
 }

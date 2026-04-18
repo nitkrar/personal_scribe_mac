@@ -345,6 +345,149 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(model.recordButton, RecordButtonViewModel.make(from: .idle))
     }
 
+    func testPreparationStatusTextShowsDownloadPercent() async throws {
+        let coordinator = try makeCoordinator()
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            pasteInjector: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+        model.preparationProgress = .init(
+            phase: .downloading,
+            fractionCompleted: 0.42,
+            receivedBytes: 42,
+            expectedBytes: 100
+        )
+
+        XCTAssertEqual(model.preparationStatusText, "Downloading model… 42%")
+    }
+
+    func testPreparationStatusTextShowsWarmupMessage() async throws {
+        let coordinator = try makeCoordinator()
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            pasteInjector: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+        model.preparationProgress = .init(
+            phase: .loading,
+            fractionCompleted: 1.0,
+            receivedBytes: 0,
+            expectedBytes: nil
+        )
+
+        XCTAssertEqual(model.preparationStatusText, "Warming up model…")
+    }
+
+    func testDownloadingPreparationDisablesRecordButton() async throws {
+        let coordinator = try makeCoordinator()
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            pasteInjector: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+        model.preparationProgress = .init(
+            phase: .downloading,
+            fractionCompleted: 0.42,
+            receivedBytes: 42,
+            expectedBytes: 100
+        )
+
+        XCTAssertEqual(model.recordButton.title, "Preparing…")
+        XCTAssertFalse(model.recordButton.isEnabled)
+    }
+
+    func testLoadingPreparationDisablesRecordButton() async throws {
+        let coordinator = try makeCoordinator()
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            pasteInjector: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+        model.preparationProgress = .init(
+            phase: .loading,
+            fractionCompleted: 1.0,
+            receivedBytes: 0,
+            expectedBytes: nil
+        )
+
+        XCTAssertEqual(model.recordButton.title, "Preparing…")
+        XCTAssertFalse(model.recordButton.isEnabled)
+    }
+
+    func testStartObservingTracksPreparationProgressLifecycle() async throws {
+        let transcriber = ProgressReportingTranscriber(result: makeResult())
+        let coordinator = SessionCoordinator(
+            capture: FakeAudioCapturing(),
+            transcriber: transcriber,
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            pasteInjector: { _ in },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+
+        model.startObserving()
+
+        transcriber.emit(
+            .init(
+                phase: .downloading,
+                fractionCompleted: 0.42,
+                receivedBytes: 42,
+                expectedBytes: 100
+            )
+        )
+        await waitUntil {
+            model.preparationProgress?.phase == .downloading
+        }
+        XCTAssertEqual(model.preparationProgress?.fractionCompleted, 0.42)
+
+        transcriber.emit(
+            .init(
+                phase: .loading,
+                fractionCompleted: 1.0,
+                receivedBytes: 0,
+                expectedBytes: nil
+            )
+        )
+        await waitUntil {
+            model.preparationProgress?.phase == .loading
+        }
+
+        transcriber.emit(
+            .init(
+                phase: .finished,
+                fractionCompleted: 1.0,
+                receivedBytes: 100,
+                expectedBytes: 100
+            )
+        )
+        await waitUntil {
+            model.preparationProgress == nil
+        }
+    }
+
     func testNotYetRequestedPermissionShowsGrantPrimaryCTA() {
         XCTAssertEqual(
             MenuBarScene.primaryActionTitle(for: .notYetRequested),
@@ -424,6 +567,21 @@ final class MenuBarSceneModelTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 1.0)
         cancellable.cancel()
     }
+
+    private func waitUntil(
+        maxIterations: Int = 500,
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        for _ in 0..<maxIterations {
+            if condition() {
+                return
+            }
+
+            await Task.yield()
+        }
+
+        XCTFail("Timed out waiting for condition")
+    }
 }
 
 private actor TestPermissionRequester: MicrophonePermissionRequesting {
@@ -441,5 +599,69 @@ private actor TestPermissionRequester: MicrophonePermissionRequesting {
 
     func callCount() -> Int {
         requestCount
+    }
+}
+
+private final class ProgressReportingTranscriber: @unchecked Sendable, Transcribing {
+    private let relay = ProgressRelay()
+    private let result: TranscriptionResult
+
+    init(result: TranscriptionResult) {
+        self.result = result
+    }
+
+    func prepare() async throws {}
+
+    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        relay.stream()
+    }
+
+    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+        result
+    }
+
+    func transcribe(stream: AsyncThrowingStream<PCMBuffer, Error>) async throws -> TranscriptionResult {
+        for try await _ in stream {}
+        return result
+    }
+
+    func emit(_ progress: ModelDownloadProgress) {
+        relay.emit(progress)
+    }
+}
+
+private final class ProgressRelay: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: AsyncStream<ModelDownloadProgress>.Continuation?
+    private var snapshot = ModelDownloadProgress(
+        phase: .idle,
+        fractionCompleted: 0,
+        receivedBytes: 0,
+        expectedBytes: nil
+    )
+
+    func stream() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { continuation in
+            lock.lock()
+            self.continuation = continuation
+            let snapshot = self.snapshot
+            lock.unlock()
+
+            continuation.yield(snapshot)
+            continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
+                self.lock.lock()
+                self.continuation = nil
+                self.lock.unlock()
+            }
+        }
+    }
+
+    func emit(_ progress: ModelDownloadProgress) {
+        lock.lock()
+        snapshot = progress
+        let continuation = continuation
+        lock.unlock()
+        continuation?.yield(progress)
     }
 }

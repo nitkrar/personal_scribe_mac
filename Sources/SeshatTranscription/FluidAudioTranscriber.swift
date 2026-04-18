@@ -79,6 +79,9 @@ public actor FluidAudioTranscriber: Transcribing {
             prepareTask = nil
         } catch {
             prepareTask = nil
+            progressBroadcaster.update(
+                .init(phase: .idle, fractionCompleted: 0, receivedBytes: 0, expectedBytes: nil)
+            )
             throw error
         }
     }
@@ -90,6 +93,10 @@ public actor FluidAudioTranscriber: Transcribing {
         if !Self.modelArtifactsAreValid(in: modelDirectory) {
             try await ensureValidDownloadedModel(at: modelDirectory)
         }
+
+        progressBroadcaster.update(
+            .init(phase: .loading, fractionCompleted: 1, receivedBytes: 0, expectedBytes: nil)
+        )
 
         do {
             try await inference.loadModel(from: modelDirectory)
@@ -186,7 +193,7 @@ private final class DownloadProgressBroadcaster: @unchecked Sendable {
 
             continuation.onTermination = { [weak self] _ in
                 guard let self else { return }
-                self.lock.withLock {
+                _ = self.lock.withLock {
                     self.continuations.removeValue(forKey: identifier)
                 }
             }
@@ -214,6 +221,7 @@ private extension FluidAudioTranscriber {
     func ensureValidDownloadedModel(at modelDirectory: URL) async throws {
         let fileManager = FileManager.default
         let progressBroadcaster = self.progressBroadcaster
+        let stagingDirectory = Self.stagingDirectory(base: modelDirectory.deletingLastPathComponent())
 
         for attempt in 0..<2 {
             do {
@@ -232,7 +240,7 @@ private extension FluidAudioTranscriber {
 
                 return
             } catch {
-                try? fileManager.removeItem(at: modelDirectory)
+                try? fileManager.removeItem(at: stagingDirectory)
 
                 if attempt == 1 {
                     logError("Model download failed", error: error)

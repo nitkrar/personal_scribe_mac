@@ -85,6 +85,7 @@ public actor SessionCoordinator {
         do {
             let stream = try await capture.start()
             publish(.recording)
+            prepareTranscriberInBackground()
             captureTask = Task {
                 await self.consumeCaptureStream(stream)
             }
@@ -149,5 +150,20 @@ public actor SessionCoordinator {
 
         logger.error("Mapped underlying error to shared contract", error: error)
         return fallback
+    }
+
+    private func prepareTranscriberInBackground() {
+        let transcriber = transcriber
+        let logger = logger
+
+        Task.detached(priority: .background) {
+            do {
+                try await transcriber.prepare()
+            } catch is CancellationError {
+                return
+            } catch {
+                logger.error("Background transcriber preparation failed", error: error)
+            }
+        }
     }
 }
