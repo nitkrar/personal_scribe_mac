@@ -42,6 +42,10 @@ final class MenuBarSceneModel: ObservableObject {
         RecordButtonViewModel.make(from: state)
     }
 
+    var statusIcon: MenuBarStatusIcon {
+        MenuBarStatusIcon.make(sessionState: state, permissionState: permissionState)
+    }
+
     func startObserving() {
         guard observationTask == nil else { return }
 
