@@ -75,7 +75,13 @@ public actor FluidAudioTranscriber: Transcribing {
             }
         }
 
-        try await inference.loadModel(from: modelDirectory)
+        do {
+            try await inference.loadModel(from: modelDirectory)
+        } catch {
+            logError("FluidAudio model load failed", error: error)
+            throw SeshatError.modelLoadFailure
+        }
+
         progressBroadcaster.update(
             .init(phase: .finished, fractionCompleted: 1, receivedBytes: 0, expectedBytes: nil)
         )
