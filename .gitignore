@@ -9,3 +9,6 @@ DerivedData/
 
 # Dev-built app bundle (scripts/package-dev-app.sh output)
 /Seshat.app/
+
+# Claude Code agent-tool worktrees (isolation: "worktree")
+.claude/worktrees/
