@@ -1,0 +1,8 @@
+- Grant permission through the Plan 04 UI flow.
+- Instantiate `AVAudioCaptureService()`.
+- Call `start()`.
+- Speak for 2–3 seconds.
+- Confirm yielded buffers report `sampleRate == 16_000`, `channelCount == 1`, and non-zero sample energy.
+- Call `stop()`.
+- Confirm the stream finishes normally once.
+- Confirm a second `stop()` has no extra effect.
