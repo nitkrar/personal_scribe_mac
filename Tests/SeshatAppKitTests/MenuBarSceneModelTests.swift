@@ -156,6 +156,29 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(model.observationTaskCreationCount, 1)
     }
 
+    func testDeinitCancelsObservationTask() async throws {
+        let coordinator = try makeCoordinator()
+        let cancellationExpectation = expectation(description: "Observation task cancelled")
+        var model: MenuBarSceneModel? = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            openSettings: {},
+            onObservationCancelled: {
+                cancellationExpectation.fulfill()
+            },
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+        weak var weakModel = model
+
+        model?.startObserving()
+        model = nil
+
+        XCTAssertNil(weakModel)
+        await fulfillment(of: [cancellationExpectation], timeout: 1.0)
+    }
+
     private func makeCoordinator() throws -> SessionCoordinator {
         SessionCoordinator(
             capture: FakeAudioCapturing(buffers: [try makeBuffer()]),

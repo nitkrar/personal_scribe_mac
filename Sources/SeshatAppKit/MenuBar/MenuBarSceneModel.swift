@@ -15,6 +15,7 @@ final class MenuBarSceneModel: ObservableObject {
     private let clipboardWriter: @MainActor (String) -> Void
     private let openSettings: @MainActor () -> Void
     private let logger: SeshatLogger
+    private let onObservationCancelled: (() -> Void)?
     private var observationTask: Task<Void, Never>?
     private(set) var observationTaskCreationCount = 0
 
@@ -24,6 +25,7 @@ final class MenuBarSceneModel: ObservableObject {
         permissionStateProvider: @escaping @MainActor () -> MicrophonePermissionState,
         clipboardWriter: @escaping @MainActor (String) -> Void,
         openSettings: @escaping @MainActor () -> Void,
+        onObservationCancelled: (() -> Void)? = nil,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) {
         self.coordinator = coordinator
@@ -31,6 +33,7 @@ final class MenuBarSceneModel: ObservableObject {
         self.permissionStateProvider = permissionStateProvider
         self.clipboardWriter = clipboardWriter
         self.openSettings = openSettings
+        self.onObservationCancelled = onObservationCancelled
         self.logger = logger
         self.permissionState = permissionStateProvider()
     }
@@ -72,5 +75,10 @@ final class MenuBarSceneModel: ObservableObject {
         case .denied:
             logger.info("Record button tapped while permission denied; ignoring.")
         }
+    }
+
+    deinit {
+        observationTask?.cancel()
+        onObservationCancelled?()
     }
 }
