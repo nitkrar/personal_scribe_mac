@@ -80,6 +80,10 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Nitkrar. MIT License.</string>
     <key>NSMicrophoneUsageDescription</key>
@@ -95,7 +99,13 @@ PLIST
 # Legacy macOS bundle marker (harmless; some tools still check for it).
 printf 'APPL????' > "$APP_PATH/Contents/PkgInfo"
 
-echo "==> [4/5] Ad-hoc code signing..."
+echo "==> [4/5] Ad-hoc code signing (hardened runtime)..."
+# macOS 26 requires hardened runtime for the binary to pass AMFI and actually
+# launch; ad-hoc signing without it is SIGKILLed on exec. Gatekeeper will still
+# flag the app (ad-hoc has no TeamIdentifier), but that's a separate policy
+# check resolved by the launch approach (see README: Xcode run OR self-signed
+# cert). Hardened runtime here is for local dev; Phase 4 distribution signs
+# with a real Developer ID.
 codesign --force --sign - --deep --options runtime --timestamp=none "$APP_PATH" >/dev/null
 
 echo "==> [5/5] Verifying signature..."
