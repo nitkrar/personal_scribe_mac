@@ -1,98 +1,124 @@
 import XCTest
 @testable import SeshatAppKit
+import SeshatCore
 
 @MainActor
 final class OnboardingViewModelTests: XCTestCase {
-    func testInitialPaneIsWelcome() {
+    func testInitialStateStartsWithAllPermissionsPending() {
         let viewModel = OnboardingViewModel(permissionProbe: FakePermissionRequester())
 
-        XCTAssertEqual(viewModel.currentPane, .welcome)
         XCTAssertEqual(viewModel.microphoneOutcome, .pending)
         XCTAssertEqual(viewModel.inputMonitoringOutcome, .pending)
         XCTAssertEqual(viewModel.accessibilityOutcome, .pending)
+        XCTAssertFalse(viewModel.canContinue)
         XCTAssertFalse(viewModel.isOnboardingComplete)
     }
 
-    func testAdvanceMovesFromWelcomeToMicrophone() {
-        let viewModel = OnboardingViewModel(permissionProbe: FakePermissionRequester())
-
-        viewModel.advance()
-
-        XCTAssertEqual(viewModel.currentPane, .microphone)
-    }
-
-    func testRequestCurrentPermissionMarksMicrophoneGrantedAndAdvances() async {
+    func testRequestMicrophoneAccessMarksMicrophoneGranted() async {
         let viewModel = OnboardingViewModel(
             permissionProbe: FakePermissionRequester(microphoneResult: .granted)
         )
-        viewModel.advance()
 
-        await viewModel.requestCurrentPermission()
+        await viewModel.requestMicrophoneAccess()
 
         XCTAssertEqual(viewModel.microphoneOutcome, .granted)
-        XCTAssertEqual(viewModel.currentPane, .inputMonitoring)
+        XCTAssertEqual(viewModel.inputMonitoringOutcome, .pending)
+        XCTAssertEqual(viewModel.accessibilityOutcome, .pending)
     }
 
-    func testRequestCurrentPermissionMarksMicrophoneDeniedAndStaysPut() async {
-        let viewModel = OnboardingViewModel(
-            permissionProbe: FakePermissionRequester(microphoneResult: .denied)
-        )
-        viewModel.advance()
-
-        await viewModel.requestCurrentPermission()
-
-        XCTAssertEqual(viewModel.microphoneOutcome, .denied)
-        XCTAssertEqual(viewModel.currentPane, .microphone)
-        XCTAssertFalse(viewModel.isOnboardingComplete)
-    }
-
-    func testSkipCurrentPermissionMarksMicrophoneSkippedAndAdvances() {
-        let viewModel = OnboardingViewModel(permissionProbe: FakePermissionRequester())
-        viewModel.advance()
-
-        viewModel.skipCurrentPermission()
-
-        XCTAssertEqual(viewModel.microphoneOutcome, .skipped)
-        XCTAssertEqual(viewModel.currentPane, .inputMonitoring)
-    }
-
-    func testResolvingAllPermissionPanesEndsOnDone() async {
+    func testCanContinueRequiresMicrophoneAndInputMonitoringButNotAccessibility() async {
         let viewModel = OnboardingViewModel(
             permissionProbe: FakePermissionRequester(
                 microphoneResult: .granted,
                 inputMonitoringResult: .granted,
-                accessibilityResult: .granted
+                accessibilityResult: .denied
             )
         )
 
-        viewModel.advance()
-        await viewModel.requestCurrentPermission()
-        await viewModel.requestCurrentPermission()
-        await viewModel.requestCurrentPermission()
+        XCTAssertFalse(viewModel.canContinue)
 
-        XCTAssertEqual(viewModel.currentPane, .done)
-        XCTAssertEqual(viewModel.microphoneOutcome, .granted)
-        XCTAssertEqual(viewModel.inputMonitoringOutcome, .granted)
-        XCTAssertEqual(viewModel.accessibilityOutcome, .granted)
-        XCTAssertTrue(viewModel.isOnboardingComplete)
+        await viewModel.requestMicrophoneAccess()
+        XCTAssertFalse(viewModel.canContinue)
+
+        await viewModel.requestInputMonitoringAccess()
+        XCTAssertTrue(viewModel.canContinue)
+
+        await viewModel.requestAccessibilityAccess()
+        XCTAssertEqual(viewModel.accessibilityOutcome, .denied)
+        XCTAssertTrue(viewModel.canContinue)
     }
 
-    func testSkippingRemainingPermissionsCanAlsoCompleteOnboarding() async {
+    func testContinueTappedPersistsCompletionWhenMandatoryPermissionsGranted() async {
+        let defaults = isolatedDefaults(for: #function)
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            permissionProbe: FakePermissionRequester(
+                microphoneResult: .granted,
+                inputMonitoringResult: .granted
+            )
+        )
+
+        viewModel.continueTapped()
+        XCTAssertEqual(SeshatOnboardingCompleted.resolve(from: defaults), .incomplete)
+        XCTAssertFalse(viewModel.isOnboardingComplete)
+
+        await viewModel.requestMicrophoneAccess()
+        await viewModel.requestInputMonitoringAccess()
+
+        viewModel.continueTapped()
+
+        XCTAssertTrue(viewModel.isOnboardingComplete)
+        XCTAssertEqual(viewModel.accessibilityOutcome, .skipped)
+        XCTAssertEqual(SeshatOnboardingCompleted.resolve(from: defaults), .completed)
+    }
+
+    func testSkipSetupTappedPersistsCompletion() {
+        let defaults = isolatedDefaults(for: #function)
+        let viewModel = makeViewModel(defaults: defaults)
+
+        viewModel.skipSetupTapped()
+
+        XCTAssertTrue(viewModel.isOnboardingComplete)
+        XCTAssertEqual(SeshatOnboardingCompleted.resolve(from: defaults), .completed)
+    }
+
+    func testSkipAccessibilityMarksWarningStateWithoutBlockingContinue() async {
         let viewModel = OnboardingViewModel(
             permissionProbe: FakePermissionRequester(
                 microphoneResult: .granted,
-                accessibilityResult: .granted
+                inputMonitoringResult: .granted
             )
         )
 
-        viewModel.advance()
-        await viewModel.requestCurrentPermission()
-        viewModel.skipCurrentPermission()
-        await viewModel.requestCurrentPermission()
+        await viewModel.requestMicrophoneAccess()
+        await viewModel.requestInputMonitoringAccess()
 
-        XCTAssertEqual(viewModel.currentPane, .done)
-        XCTAssertEqual(viewModel.inputMonitoringOutcome, .skipped)
-        XCTAssertTrue(viewModel.isOnboardingComplete)
+        viewModel.skipAccessibilityAccess()
+
+        XCTAssertEqual(viewModel.accessibilityOutcome, .skipped)
+        XCTAssertTrue(viewModel.canContinue)
+    }
+
+    private func makeViewModel(
+        defaults: UserDefaults,
+        permissionProbe: any OnboardingPermissionProbing = FakePermissionRequester()
+    ) -> OnboardingViewModel {
+        OnboardingViewModel(
+            permissionProbe: permissionProbe,
+            persistCompletion: {
+                SeshatOnboardingCompleted.completed.persist(to: defaults)
+            }
+        )
+    }
+
+    private func isolatedDefaults(for testName: String) -> UserDefaults {
+        let suiteName = "OnboardingViewModelTests.\(testName)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        addTeardownBlock {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        return defaults
     }
 }
 

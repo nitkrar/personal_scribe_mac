@@ -1,118 +1,68 @@
 import Combine
 import Foundation
 
-enum OnboardingPane: Equatable, Sendable {
-    case welcome
-    case microphone
-    case inputMonitoring
-    case accessibility
-    case done
-}
-
 enum OnboardingPermissionOutcome: Equatable, Sendable {
     case pending
     case granted
     case denied
     case skipped
-
-    var isResolved: Bool {
-        switch self {
-        case .pending:
-            false
-        case .granted, .denied, .skipped:
-            true
-        }
-    }
 }
 
 @MainActor
 final class OnboardingViewModel: ObservableObject {
-    @Published private(set) var currentPane: OnboardingPane = .welcome
     @Published private(set) var microphoneOutcome: OnboardingPermissionOutcome = .pending
     @Published private(set) var inputMonitoringOutcome: OnboardingPermissionOutcome = .pending
     @Published private(set) var accessibilityOutcome: OnboardingPermissionOutcome = .pending
     @Published private(set) var isOnboardingComplete = false
 
+    var canContinue: Bool {
+        microphoneOutcome == .granted && inputMonitoringOutcome == .granted
+    }
+
+    var showsAccessibilityWarning: Bool {
+        accessibilityOutcome == .denied || accessibilityOutcome == .skipped
+    }
+
     private let permissionProbe: any OnboardingPermissionProbing
+    private let persistCompletion: @MainActor () -> Void
 
-    init(permissionProbe: any OnboardingPermissionProbing = PermissionRequester()) {
+    init(
+        permissionProbe: any OnboardingPermissionProbing = PermissionRequester(),
+        persistCompletion: @escaping @MainActor () -> Void = {}
+    ) {
         self.permissionProbe = permissionProbe
+        self.persistCompletion = persistCompletion
     }
 
-    func advance() {
-        switch currentPane {
-        case .welcome:
-            currentPane = nextUnresolvedPane()
-        case .microphone where microphoneOutcome.isResolved:
-            currentPane = nextUnresolvedPane()
-        case .inputMonitoring where inputMonitoringOutcome.isResolved:
-            currentPane = nextUnresolvedPane()
-        case .accessibility where accessibilityOutcome.isResolved:
-            currentPane = nextUnresolvedPane()
-        case .done:
-            break
-        default:
-            return
-        }
-
-        isOnboardingComplete = (currentPane == .done)
+    func requestMicrophoneAccess() async {
+        microphoneOutcome = await permissionProbe.requestMicrophoneAccess()
     }
 
-    func requestCurrentPermission() async {
-        switch currentPane {
-        case .welcome:
-            advance()
-        case .microphone:
-            microphoneOutcome = await permissionProbe.requestMicrophoneAccess()
-            if microphoneOutcome == .granted {
-                advance()
-            }
-        case .inputMonitoring:
-            inputMonitoringOutcome = await permissionProbe.requestInputMonitoringAccess()
-            if inputMonitoringOutcome == .granted {
-                advance()
-            }
-        case .accessibility:
-            accessibilityOutcome = await permissionProbe.requestAccessibilityAccess()
-            if accessibilityOutcome == .granted {
-                advance()
-            }
-        case .done:
-            break
-        }
+    func requestInputMonitoringAccess() async {
+        inputMonitoringOutcome = await permissionProbe.requestInputMonitoringAccess()
     }
 
-    func skipCurrentPermission() {
-        switch currentPane {
-        case .welcome:
-            advance()
-        case .microphone:
-            microphoneOutcome = .skipped
-            advance()
-        case .inputMonitoring:
-            inputMonitoringOutcome = .skipped
-            advance()
-        case .accessibility:
+    func requestAccessibilityAccess() async {
+        accessibilityOutcome = await permissionProbe.requestAccessibilityAccess()
+    }
+
+    func skipAccessibilityAccess() {
+        accessibilityOutcome = .skipped
+    }
+
+    func continueTapped() {
+        guard canContinue else { return }
+
+        if accessibilityOutcome == .pending {
             accessibilityOutcome = .skipped
-            advance()
-        case .done:
-            break
         }
+
+        persistCompletion()
+        isOnboardingComplete = true
     }
 
-    private func nextUnresolvedPane() -> OnboardingPane {
-        if !microphoneOutcome.isResolved {
-            return .microphone
-        }
-
-        if !inputMonitoringOutcome.isResolved {
-            return .inputMonitoring
-        }
-
-        if !accessibilityOutcome.isResolved {
-            return .accessibility
-        }
-
-        return .done
+    func skipSetupTapped() {
+        persistCompletion()
+        isOnboardingComplete = true
     }
 }
