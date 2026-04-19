@@ -114,7 +114,7 @@ final class MenuBarSceneModel: ObservableObject {
             logger.info("Microphone permission request completed: \(granted)")
             if granted, areCriticalPermissionsGranted() {
                 await coordinator.toggle()
-            } else if !granted || !areCriticalPermissionsGranted() {
+            } else {
                 openOnboardingRequested()
             }
         case .denied:
