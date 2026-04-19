@@ -105,3 +105,4 @@ _(high-level progression)_
 | 01:33 | 1 | Slice B reviewer verdict PASS. SHOULD-FIX #1 (tautological else-if) applied as `f3516b2`. |
 | 01:38 | 1 | **Poll tick.** 3.I task `task-mo514rly-u1h31v` still no commits after 2 resume attempts spanning 80+ min. Council-decided to commit on behalf. Split into two commits: `cee52d8` (I.1 hotkey + tests + runbook) + `5288b7e` (flagged BACKLOG scope-drift). Dispatched 3.I reviewer (`a1efd5e2ee716750b`). |
 | 01:38 | 2 | **Wave 2 fired.** 3.A (Settings window) dispatched as codex `a9eda3f19c2be7dc8` with skip-build-test baked in from go. Owns `Sources/SeshatAppKit/Settings/*`, `Sources/SeshatCore/ModeDescriptor.swift`, composition tweaks. |
+| 01:43 | 2 | **Poll tick — quiet.** 3.A dispatcher handed off to Codex `task-mo51fkp8-bkdfv6` ~5 min ago; real work underway, no commits yet. 3.I reviewer `a1efd5e2ee716750b` still running. Both below stall threshold. |
