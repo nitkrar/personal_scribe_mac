@@ -3,8 +3,8 @@ import Foundation
 import SeshatCore
 
 @MainActor
-final class PermissionServiceAdapter: PermissionService {
-    @Published private(set) var statuses: [Permission: PermissionStatus]
+public final class PermissionServiceAdapter: PermissionService {
+    @Published public private(set) var statuses: [Permission: PermissionStatus]
 
     private let statusReader: @MainActor (Permission) -> PermissionStatus
     private let requester: @MainActor (Permission) async -> RequestOutcome
@@ -12,7 +12,7 @@ final class PermissionServiceAdapter: PermissionService {
     private let deepLinkProvider: @MainActor (Permission) -> URL
     private var observation: AnyCancellable?
 
-    init<Service: PermissionService>(wrapping service: Service) {
+    public init<Service: PermissionService>(wrapping service: Service) {
         self.statuses = service.statusSnapshot()
         self.statusReader = { permission in
             service.status(for: permission)
@@ -45,11 +45,11 @@ final class PermissionServiceAdapter: PermissionService {
         self.deepLinkProvider = deepLinkProvider
     }
 
-    func status(for permission: Permission) -> PermissionStatus {
+    public func status(for permission: Permission) -> PermissionStatus {
         statusReader(permission)
     }
 
-    func request(_ permission: Permission) async -> RequestOutcome {
+    public func request(_ permission: Permission) async -> RequestOutcome {
         let outcome = await requester(permission)
         refresh()
         if statuses[permission] == nil {
@@ -58,15 +58,15 @@ final class PermissionServiceAdapter: PermissionService {
         return outcome
     }
 
-    func statusSnapshot() -> [Permission: PermissionStatus] {
+    public func statusSnapshot() -> [Permission: PermissionStatus] {
         refresher()
     }
 
-    func refresh() {
+    public func refresh() {
         statuses = refresher()
     }
 
-    func systemSettingsDeepLink(for permission: Permission) -> URL {
+    public func systemSettingsDeepLink(for permission: Permission) -> URL {
         deepLinkProvider(permission)
     }
 

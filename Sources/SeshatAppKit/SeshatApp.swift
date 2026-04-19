@@ -39,8 +39,8 @@ struct SeshatApp {
                     return .notYetRequested
                 },
                 clipboardWriter: clipboardWriter,
-                permissionService: resolvedPermissionService,
                 openSettings: openSettings,
+                permissionService: resolvedPermissionService,
                 logger: logger
             )
         )

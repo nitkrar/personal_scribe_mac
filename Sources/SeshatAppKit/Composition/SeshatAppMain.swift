@@ -82,12 +82,12 @@ struct SeshatAppMain: App {
         self.startupCoordinator = startupCoordinator
         let sceneModel = MenuBarSceneModel(
             coordinator: coordinator,
-            permissionService: permissionService,
             clipboardWriter: clipboardWriter,
             pasteInjector: { text in
                 pasteInjector.paste(text)
             },
             openSettings: openSettings,
+            permissionService: permissionService,
             openURL: { url in
                 _ = NSWorkspace.shared.open(url)
             },
@@ -142,7 +142,7 @@ struct SeshatAppMain: App {
             }
         )
         showSettingsWindow = {
-            settingsWindowControllerHost.showWindow(nil)
+            settingsWindowControllerHost.showWindow(nil as Any?)
         }
         showNotesWindow = {
             guard isOnboardingCompleteProvider() else {
