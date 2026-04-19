@@ -15,26 +15,31 @@ struct SeshatApp {
     init(
         coordinator: SessionCoordinator,
         permissionRequester: any MicrophonePermissionRequesting,
+        permissionService: PermissionServiceAdapter? = nil,
         permissionStateProvider: (@MainActor () -> MicrophonePermissionState)? = nil,
         clipboardWriter: @escaping @MainActor (String) -> Void = SeshatApp.defaultClipboardWriter,
         openSettings: @escaping @MainActor () -> Void = SeshatApp.defaultOpenSettings,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) {
-        let initialPermissionState: MicrophonePermissionState
-        if let permissionStateProvider {
-            initialPermissionState = permissionStateProvider()
-        } else if let permissionRequester = permissionRequester as? AppKitMicrophonePermissionRequester {
-            initialPermissionState = permissionRequester.currentState()
-        } else {
-            initialPermissionState = .notYetRequested
-        }
+        let resolvedPermissionService = permissionService
+            ?? SeshatAppMain.makeCompatibilityPermissionService(
+                permissionRequester: permissionRequester,
+                inputMonitoringProbe: IOHIDPermissionProbe(),
+                isAccessibilityTrusted: { false }
+            )
 
         _model = StateObject(
             wrappedValue: MenuBarSceneModel(
                 coordinator: coordinator,
                 permissionRequester: permissionRequester,
-                permissionStateProvider: { initialPermissionState },
+                permissionStateProvider: permissionStateProvider ?? {
+                    if let permissionRequester = permissionRequester as? AppKitMicrophonePermissionRequester {
+                        return permissionRequester.currentState()
+                    }
+                    return .notYetRequested
+                },
                 clipboardWriter: clipboardWriter,
+                permissionService: resolvedPermissionService,
                 openSettings: openSettings,
                 logger: logger
             )

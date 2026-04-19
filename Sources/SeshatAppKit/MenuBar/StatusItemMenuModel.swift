@@ -62,13 +62,14 @@ struct StatusItemMenuModel: Equatable {
     /// ---
     /// Quit Seshat
     /// ```
-    static func make(
+    static func makeUnified(
         sessionState: SessionState,
-        micPermission: MicrophonePermissionState,
-        inputMonitoringPermission: InputMonitoringPermissionState,
+        micPermission: PermissionStatus,
+        inputMonitoringPermission: PermissionStatus,
         activeModeName: String = "Quick Memo",
         isOnboardingComplete: Bool = true
     ) -> StatusItemMenuModel {
+        _ = isOnboardingComplete
         var items: [Item] = []
 
         let hasMicWarning = (micPermission == .denied)
@@ -133,6 +134,22 @@ struct StatusItemMenuModel: Equatable {
         )))
 
         return StatusItemMenuModel(items: items)
+    }
+
+    static func make(
+        sessionState: SessionState,
+        micPermission: MicrophonePermissionState,
+        inputMonitoringPermission: InputMonitoringPermissionState,
+        activeModeName: String = "Quick Memo",
+        isOnboardingComplete: Bool = true
+    ) -> StatusItemMenuModel {
+        makeUnified(
+            sessionState: sessionState,
+            micPermission: micPermission.unifiedPermissionStatus,
+            inputMonitoringPermission: inputMonitoringPermission.unifiedPermissionStatus,
+            activeModeName: activeModeName,
+            isOnboardingComplete: isOnboardingComplete
+        )
     }
 
     // MARK: - Record/stop toggle helpers

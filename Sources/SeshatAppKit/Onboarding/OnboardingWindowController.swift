@@ -67,10 +67,11 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 final class OnboardingWindowControllerHost: ObservableObject {
     private let defaults: UserDefaults
     private let startupCoordinator: AppStartupCoordinator
-    private let microphoneStateProvider: @MainActor () -> MicrophonePermissionState
-    private let inputMonitoringProbe: any PermissionProbing
-    private let isAccessibilityTrusted: @MainActor () -> Bool
-    private let controllerFactory: @MainActor (_ onFinish: @escaping @MainActor () -> Void) -> OnboardingWindowController
+    private let permissionService: PermissionServiceAdapter
+    private let controllerFactory: @MainActor (
+        _ viewModel: OnboardingViewModel,
+        _ onFinish: @escaping @MainActor () -> Void
+    ) -> OnboardingWindowController
 
     private var controller: OnboardingWindowController?
     private var didStartStartupCoordinator = false
@@ -79,27 +80,33 @@ final class OnboardingWindowControllerHost: ObservableObject {
     init(
         defaults: UserDefaults = .standard,
         startupCoordinator: AppStartupCoordinator,
+        permissionService: PermissionServiceAdapter? = nil,
         microphoneStateProvider: @escaping @MainActor () -> MicrophonePermissionState,
         inputMonitoringProbe: any PermissionProbing = IOHIDPermissionProbe(),
         isAccessibilityTrusted: @escaping @MainActor () -> Bool,
         controllerFactory: @escaping @MainActor (
+            _ viewModel: OnboardingViewModel,
             _ onFinish: @escaping @MainActor () -> Void
-        ) -> OnboardingWindowController = { OnboardingWindowController(onFinish: $0) }
+        ) -> OnboardingWindowController = { viewModel, onFinish in
+            OnboardingWindowController(viewModel: viewModel, onFinish: onFinish)
+        }
     ) {
         self.defaults = defaults
         self.startupCoordinator = startupCoordinator
-        self.microphoneStateProvider = microphoneStateProvider
-        self.inputMonitoringProbe = inputMonitoringProbe
-        self.isAccessibilityTrusted = isAccessibilityTrusted
+        self.permissionService = permissionService
+            ?? Self.makeCompatibilityPermissionService(
+                microphoneStateProvider: microphoneStateProvider,
+                inputMonitoringProbe: inputMonitoringProbe,
+                isAccessibilityTrusted: isAccessibilityTrusted
+            )
         self.controllerFactory = controllerFactory
         self.hasCompletedFirstRunOnboarding = SeshatOnboardingCompleted.resolve(from: defaults).rawValue
     }
 
     var areCriticalPermissionsGranted: Bool {
         guard hasCompletedFirstRunOnboarding else { return false }
-        guard microphoneStateProvider() == .granted else { return false }
-        guard inputMonitoringProbe.checkInputMonitoring() == .granted else { return false }
-        return isAccessibilityTrusted()
+        guard permissionService.status(for: .microphone) == .granted else { return false }
+        return permissionService.status(for: .inputMonitoring) == .granted
     }
 
     func start() {
@@ -131,7 +138,8 @@ final class OnboardingWindowControllerHost: ObservableObject {
             return
         }
 
-        let controller = controllerFactory { [weak self] in
+        let viewModel = OnboardingViewModel(permissionService: permissionService)
+        let controller = controllerFactory(viewModel) { [weak self] in
             self?.handleOnboardingFinish(persistCompletionOnFinish: persistCompletionOnFinish)
         }
         self.controller = controller
@@ -152,5 +160,35 @@ final class OnboardingWindowControllerHost: ObservableObject {
         guard !didStartStartupCoordinator else { return }
         didStartStartupCoordinator = true
         startupCoordinator.start()
+    }
+
+    private static func makeCompatibilityPermissionService(
+        microphoneStateProvider: @escaping @MainActor () -> MicrophonePermissionState,
+        inputMonitoringProbe: any PermissionProbing,
+        isAccessibilityTrusted: @escaping @MainActor () -> Bool
+    ) -> PermissionServiceAdapter {
+        let snapshot: @MainActor () -> [Permission: PermissionStatus] = {
+            [
+                .microphone: microphoneStateProvider().unifiedPermissionStatus,
+                .inputMonitoring: inputMonitoringProbe.checkInputMonitoring().unifiedPermissionStatus,
+                .accessibility: isAccessibilityTrusted() ? .granted : .pending,
+            ]
+        }
+
+        return PermissionServiceAdapter(
+            initialStatuses: snapshot(),
+            statusReader: { permission in
+                snapshot()[permission] ?? .pending
+            },
+            requester: { permission in
+                RequestOutcome(
+                    prompted: false,
+                    openedSettings: false,
+                    requiresRelaunch: permission == .inputMonitoring,
+                    finalStatus: snapshot()[permission] ?? .pending
+                )
+            },
+            refresher: snapshot
+        )
     }
 }

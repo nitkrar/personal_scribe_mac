@@ -16,8 +16,7 @@ import SeshatSession
 /// * Subscribes to `MenuBarSceneModel.$state` for status-item icon
 ///   tinting on recording.
 /// * Rebuilds the menu from scratch on each `menuNeedsUpdate(_:)`
-///   (re-probes Input Monitoring permission each time; mic state
-///   comes from `sceneModel.permissionState`).
+///   using the shared permission snapshot.
 /// * Forwards clicks to injected handlers (record-toggle goes via
 ///   `MenuBarSceneModel.handleRecordButtonTap()` so the existing
 ///   permission-request flow keeps working).
@@ -29,36 +28,49 @@ import SeshatSession
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let sceneModel: MenuBarSceneModel
-    private let imPermissionProbe: any PermissionProbing
+    private let permissionService: PermissionServiceAdapter
     private let openHistory: @MainActor () -> Void
     private let openSettings: @MainActor () -> Void
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
-    private let openMicrophoneSystemSettings: @MainActor () -> Void
-    private let openInputMonitoringSystemSettings: @MainActor () -> Void
+    private let openURL: @MainActor (URL) -> Void
     private let logger: SeshatLogger
 
     private var stateCancellable: AnyCancellable?
-    private var micPermissionCancellable: AnyCancellable?
+    private var permissionStatusesCancellable: AnyCancellable?
 
     init(
         sceneModel: MenuBarSceneModel,
+        permissionService: PermissionServiceAdapter? = nil,
         imPermissionProbe: any PermissionProbing = IOHIDPermissionProbe(),
         openHistory: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "History"),
         openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
             SeshatOnboardingCompleted.resolve().rawValue
         },
+        openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) {
         self.sceneModel = sceneModel
-        self.imPermissionProbe = imPermissionProbe
+        self.permissionService = permissionService
+            ?? Self.makeCompatibilityPermissionService(
+                sceneModel: sceneModel,
+                imPermissionProbe: imPermissionProbe
+            )
         self.openHistory = openHistory
         self.openSettings = openSettings
         self.isOnboardingCompleteProvider = isOnboardingCompleteProvider
-        self.openMicrophoneSystemSettings = openMicrophoneSystemSettings
-        self.openInputMonitoringSystemSettings = openInputMonitoringSystemSettings
+        self.openURL = openURL ?? { url in
+            switch url {
+            case PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .microphone):
+                openMicrophoneSystemSettings()
+            case PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .inputMonitoring):
+                openInputMonitoringSystemSettings()
+            default:
+                _ = NSWorkspace.shared.open(url)
+            }
+        }
         self.logger = logger
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
@@ -77,12 +89,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 self?.updateStatusItemAppearance(for: newState)
             }
 
-        micPermissionCancellable = sceneModel.$permissionState
+        permissionStatusesCancellable = self.permissionService.$statuses
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                // Mic permission changed — if the menu is currently open,
-                // rebuild it so the warning item appears/disappears. If
-                // closed, the next open triggers menuNeedsUpdate.
+                // If the menu is currently open, rebuild it so permission
+                // warnings appear/disappear after prompts or Settings changes.
                 guard let self else { return }
                 if self.statusItem.menu?.numberOfItems ?? 0 > 0 {
                     self.rebuildMenu()
@@ -122,9 +133,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         case .openSettings:
             openSettings()
         case .openMicrophoneSystemSettings:
-            openMicrophoneSystemSettings()
+            openURL(permissionService.systemSettingsDeepLink(for: .microphone))
         case .openInputMonitoringSystemSettings:
-            openInputMonitoringSystemSettings()
+            openURL(permissionService.systemSettingsDeepLink(for: .inputMonitoring))
         case .quit:
             NSApplication.shared.terminate(nil)
         }
@@ -193,11 +204,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func rebuildMenu() {
         guard let menu = statusItem.menu else { return }
 
-        let imPermission = imPermissionProbe.checkInputMonitoring()
-        let model = StatusItemMenuModel.make(
+        let permissions = permissionService.statusSnapshot()
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: sceneModel.state,
-            micPermission: sceneModel.permissionState,
-            inputMonitoringPermission: imPermission,
+            micPermission: permissions[.microphone] ?? .pending,
+            inputMonitoringPermission: permissions[.inputMonitoring] ?? .pending,
             isOnboardingComplete: isOnboardingCompleteProvider()
         )
 
@@ -264,5 +275,34 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
         ) else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    private static func makeCompatibilityPermissionService(
+        sceneModel: MenuBarSceneModel,
+        imPermissionProbe: any PermissionProbing
+    ) -> PermissionServiceAdapter {
+        let snapshot: @MainActor () -> [Permission: PermissionStatus] = {
+            [
+                .microphone: sceneModel.permissionState.unifiedPermissionStatus,
+                .inputMonitoring: imPermissionProbe.checkInputMonitoring().unifiedPermissionStatus,
+                .accessibility: .pending,
+            ]
+        }
+
+        return PermissionServiceAdapter(
+            initialStatuses: snapshot(),
+            statusReader: { permission in
+                snapshot()[permission] ?? .pending
+            },
+            requester: { permission in
+                RequestOutcome(
+                    prompted: false,
+                    openedSettings: false,
+                    requiresRelaunch: permission == .inputMonitoring,
+                    finalStatus: snapshot()[permission] ?? .pending
+                )
+            },
+            refresher: snapshot
+        )
     }
 }

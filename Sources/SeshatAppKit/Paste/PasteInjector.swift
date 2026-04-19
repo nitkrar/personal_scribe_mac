@@ -65,11 +65,38 @@ public struct PasteInjector: PasteInjecting {
     private let frontmostAppProvider: any FrontmostAppProviding
     private let selfBundleIdentifier: String
     private let scheduleRestore: RestoreScheduler
-    private let isAccessibilityTrusted: @MainActor () -> Bool
-    private let requestAccessibilityPrompt: @MainActor () -> Void
+    private let permissionService: PermissionServiceAdapter
     private let pasteShortcutPoster: @MainActor () -> Bool
 
     private static let seshatBundleIdentifier = "com.nitkrar.seshat"
+
+    init(
+        logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
+        pasteboard: NSPasteboard = .general,
+        defaults: UserDefaults = .standard,
+        frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
+        selfBundleIdentifier: String = PasteInjector.seshatBundleIdentifier,
+        permissionService: PermissionServiceAdapter,
+        scheduleRestore: @escaping RestoreScheduler = { delay, action in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                Task { @MainActor in
+                    action()
+                }
+            }
+        },
+        pasteShortcutPoster: @escaping PasteShortcutPoster = PasteInjector.postPasteShortcut
+    ) {
+        self.logger = logger
+        self.pasteboard = pasteboard
+        self.defaults = defaults
+        self.frontmostAppProvider = frontmostAppProvider
+        self.selfBundleIdentifier = selfBundleIdentifier
+        self.permissionService = permissionService
+        self.scheduleRestore = scheduleRestore
+        self.pasteShortcutPoster = {
+            pasteShortcutPoster(logger)
+        }
+    }
 
     init(
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
@@ -86,8 +113,6 @@ public struct PasteInjector: PasteInjecting {
         },
         isAccessibilityTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
         requestAccessibilityPrompt: @escaping @MainActor () -> Void = {
-            // Raw literal matches kAXTrustedCheckOptionPrompt; the CF-imported
-            // symbol is flagged non-Sendable under Swift 6 strict concurrency.
             let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
         },
@@ -98,12 +123,43 @@ public struct PasteInjector: PasteInjecting {
         self.defaults = defaults
         self.frontmostAppProvider = frontmostAppProvider
         self.selfBundleIdentifier = selfBundleIdentifier
+        self.permissionService = Self.makeCompatibilityPermissionService(
+            isAccessibilityTrusted: isAccessibilityTrusted,
+            requestAccessibilityPrompt: requestAccessibilityPrompt
+        )
         self.scheduleRestore = scheduleRestore
-        self.isAccessibilityTrusted = isAccessibilityTrusted
-        self.requestAccessibilityPrompt = requestAccessibilityPrompt
         self.pasteShortcutPoster = {
             pasteShortcutPoster(logger)
         }
+    }
+
+    @MainActor
+    static func live(
+        logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
+        pasteboard: NSPasteboard = .general,
+        defaults: UserDefaults = .standard,
+        frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
+        selfBundleIdentifier: String = PasteInjector.seshatBundleIdentifier,
+        permissionService: PermissionServiceAdapter,
+        scheduleRestore: @escaping RestoreScheduler = { delay, action in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                Task { @MainActor in
+                    action()
+                }
+            }
+        },
+        pasteShortcutPoster: @escaping PasteShortcutPoster = PasteInjector.postPasteShortcut
+    ) -> any PasteInjecting {
+        PasteInjector(
+            logger: logger,
+            pasteboard: pasteboard,
+            defaults: defaults,
+            frontmostAppProvider: frontmostAppProvider,
+            selfBundleIdentifier: selfBundleIdentifier,
+            permissionService: permissionService,
+            scheduleRestore: scheduleRestore,
+            pasteShortcutPoster: pasteShortcutPoster
+        )
     }
 
     @MainActor
@@ -165,9 +221,11 @@ public struct PasteInjector: PasteInjecting {
             return route
         }
 
-        guard isAccessibilityTrusted() else {
+        guard permissionService.status(for: .accessibility) == .granted else {
             logger.info("PasteInjector: Accessibility permission not granted; triggering system prompt and leaving transcript on clipboard for manual Cmd+V")
-            requestAccessibilityPrompt()
+            Task { @MainActor in
+                _ = await permissionService.request(.accessibility)
+            }
             return route
         }
 
@@ -224,5 +282,44 @@ public struct PasteInjector: PasteInjecting {
         if !items.isEmpty {
             pasteboard.writeObjects(items)
         }
+    }
+
+    private static func makeCompatibilityPermissionService(
+        isAccessibilityTrusted: @escaping @MainActor () -> Bool,
+        requestAccessibilityPrompt: @escaping @MainActor () -> Void
+    ) -> PermissionServiceAdapter {
+        let currentStatuses: @MainActor () -> [Permission: PermissionStatus] = {
+            [
+                .microphone: .granted,
+                .inputMonitoring: .granted,
+                .accessibility: isAccessibilityTrusted() ? .granted : .pending,
+            ]
+        }
+
+        return PermissionServiceAdapter(
+            initialStatuses: currentStatuses(),
+            statusReader: { permission in
+                currentStatuses()[permission] ?? .pending
+            },
+            requester: { permission in
+                guard permission == .accessibility else {
+                    return RequestOutcome(
+                        prompted: false,
+                        openedSettings: false,
+                        requiresRelaunch: false,
+                        finalStatus: currentStatuses()[permission] ?? .pending
+                    )
+                }
+
+                requestAccessibilityPrompt()
+                return RequestOutcome(
+                    prompted: true,
+                    openedSettings: false,
+                    requiresRelaunch: false,
+                    finalStatus: isAccessibilityTrusted() ? .granted : .pending
+                )
+            },
+            refresher: currentStatuses
+        )
     }
 }

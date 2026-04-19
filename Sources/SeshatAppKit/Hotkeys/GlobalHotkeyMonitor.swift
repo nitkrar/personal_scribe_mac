@@ -31,7 +31,7 @@ public final class GlobalHotkeyMonitor {
     private let recordingHotkey: HotkeyPreference
     private let tapWindow: TimeInterval
     private let scheduleDeferredTrigger: DeferredActionScheduler
-    private let permissionProbe: any PermissionProbing
+    private let permissionService: PermissionServiceAdapter
     private let logger: SeshatLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
 
@@ -61,6 +61,7 @@ public final class GlobalHotkeyMonitor {
                 workItem.cancel()
             }
         },
+        permissionService: PermissionServiceAdapter? = nil,
         permissionProbe: any PermissionProbing = IOHIDPermissionProbe(),
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
@@ -70,7 +71,8 @@ public final class GlobalHotkeyMonitor {
         self.recordingHotkey = recordingHotkey
         self.tapWindow = tapWindow
         self.scheduleDeferredTrigger = scheduleDeferredTrigger
-        self.permissionProbe = permissionProbe
+        self.permissionService = permissionService
+            ?? Self.makeCompatibilityPermissionService(permissionProbe: permissionProbe)
         self.logger = logger
         self.logSink = logSink
     }
@@ -106,27 +108,33 @@ public final class GlobalHotkeyMonitor {
     /// `log stream --predicate 'subsystem == "com.nitkrar.seshat"'` is how
     /// dogfood users discover the state.
     internal func handleMonitorInstallFailure() {
-        let state = permissionProbe.checkInputMonitoring()
-        let message = Self.monitorInstallFailureMessage(for: state)
+        let state = permissionService.status(for: .inputMonitoring)
+        let message = Self.monitorInstallFailureMessage(forUnifiedState: state)
         logger.error(message)
         logSink?("error", message)
     }
 
-    internal static func monitorInstallFailureMessage(
-        for state: InputMonitoringPermissionState
+    private static func monitorInstallFailureMessage(
+        forUnifiedState state: PermissionStatus
     ) -> String {
         let suffix = "Visible remediation will land with Phase 2 NSMenu; until then, grant access in "
             + "System Settings -> Privacy & Security -> Input Monitoring and restart."
         switch state {
         case .denied:
             return "Global hotkey monitor failed to register — Input Monitoring permission denied. " + suffix
-        case .notDetermined:
+        case .pending:
             return "Global hotkey monitor failed to register — Input Monitoring permission not yet "
                 + "determined (system may surface the TCC prompt on next attempt). " + suffix
         case .granted:
             return "Global hotkey monitor failed to register despite Input Monitoring reporting granted "
                 + "— likely a transient AppKit failure. " + suffix
         }
+    }
+
+    internal static func monitorInstallFailureMessage(
+        for state: InputMonitoringPermissionState
+    ) -> String {
+        monitorInstallFailureMessage(forUnifiedState: state.unifiedPermissionStatus)
     }
 
     public func stop() {
@@ -325,5 +333,33 @@ public final class GlobalHotkeyMonitor {
             modifierFlags.remove(.option)
         }
         return modifierFlags
+    }
+
+    private static func makeCompatibilityPermissionService(
+        permissionProbe: any PermissionProbing
+    ) -> PermissionServiceAdapter {
+        let snapshot: @MainActor () -> [Permission: PermissionStatus] = {
+            [
+                .microphone: .granted,
+                .inputMonitoring: permissionProbe.checkInputMonitoring().unifiedPermissionStatus,
+                .accessibility: .granted,
+            ]
+        }
+
+        return PermissionServiceAdapter(
+            initialStatuses: snapshot(),
+            statusReader: { permission in
+                snapshot()[permission] ?? .pending
+            },
+            requester: { permission in
+                RequestOutcome(
+                    prompted: false,
+                    openedSettings: false,
+                    requiresRelaunch: permission == .inputMonitoring,
+                    finalStatus: snapshot()[permission] ?? .pending
+                )
+            },
+            refresher: snapshot
+        )
     }
 }

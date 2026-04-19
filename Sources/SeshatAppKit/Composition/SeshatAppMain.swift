@@ -8,7 +8,6 @@ import SeshatSession
 @MainActor
 struct SeshatAppMain: App {
     let coordinator: SessionCoordinator
-    let permissionRequester: any MicrophonePermissionRequesting
     let startupCoordinator: AppStartupCoordinator
 
     @StateObject private var sceneModel: MenuBarSceneModel
@@ -19,16 +18,19 @@ struct SeshatAppMain: App {
     @StateObject private var settingsWindowController: SettingsWindowControllerHost
 
     init() {
+        let permissionService = PermissionServiceAdapter(
+            wrapping: AppComposition.makePermissionService()
+        )
         self.init(
             coordinator: AppComposition.sessionCoordinator,
             permissionRequester: AppComposition.makeMicrophonePermissionRequester(),
+            permissionService: permissionService,
             clipboardWriter: SeshatAppMain.defaultClipboardWriter,
-            pasteInjector: PasteInjector(),
+            pasteInjector: PasteInjector(permissionService: permissionService),
             openSettings: SeshatAppMain.defaultOpenSettings,
             overlayPanelBuilder: AppKitPillOverlayPanelBuilder(),
             defaults: .standard,
             inputMonitoringProbe: IOHIDPermissionProbe(),
-            isAccessibilityTrusted: { AXIsProcessTrusted() },
             startupCoordinator: nil
         )
     }
@@ -36,6 +38,7 @@ struct SeshatAppMain: App {
     init(
         coordinator: SessionCoordinator,
         permissionRequester: any MicrophonePermissionRequesting,
+        permissionService: PermissionServiceAdapter? = nil,
         clipboardWriter: @escaping @MainActor (String) -> Void = SeshatAppMain.defaultClipboardWriter,
         pasteInjector: any PasteInjecting = PasteInjector(),
         openSettings: @escaping @MainActor () -> Void = SeshatAppMain.defaultOpenSettings,
@@ -48,20 +51,26 @@ struct SeshatAppMain: App {
         },
         startupCoordinator: AppStartupCoordinator? = nil
     ) {
+        let permissionService = permissionService
+            ?? Self.makeCompatibilityPermissionService(
+                permissionRequester: permissionRequester,
+                inputMonitoringProbe: inputMonitoringProbe,
+                isAccessibilityTrusted: isAccessibilityTrusted
+            )
         let startupCoordinator = startupCoordinator
-            ?? AppComposition.makeStartupCoordinator(coordinator: coordinator)
+            ?? AppComposition.makeStartupCoordinator(
+                coordinator: coordinator,
+                hotkeyMonitor: AppComposition.makeGlobalHotkeyMonitor(
+                    permissionService: permissionService,
+                    coordinator: coordinator
+                )
+            )
         var clipboardOnlyNotice: (@MainActor () -> Void)?
-        let microphoneStateProvider: @MainActor () -> MicrophonePermissionState = {
-            if let permissionRequester = permissionRequester as? AppKitMicrophonePermissionRequester {
-                return permissionRequester.currentState()
-            }
-
-            return .notYetRequested
-        }
         let onboardingControllerHost = OnboardingWindowControllerHost(
             defaults: defaults,
             startupCoordinator: startupCoordinator,
-            microphoneStateProvider: microphoneStateProvider,
+            permissionService: permissionService,
+            microphoneStateProvider: { .notYetRequested },
             inputMonitoringProbe: inputMonitoringProbe,
             isAccessibilityTrusted: isAccessibilityTrusted
         )
@@ -70,22 +79,17 @@ struct SeshatAppMain: App {
         }
 
         self.coordinator = coordinator
-        self.permissionRequester = permissionRequester
         self.startupCoordinator = startupCoordinator
         let sceneModel = MenuBarSceneModel(
             coordinator: coordinator,
-            permissionRequester: permissionRequester,
-            permissionStateProvider: microphoneStateProvider,
+            permissionService: permissionService,
             clipboardWriter: clipboardWriter,
             pasteInjector: { text in
                 pasteInjector.paste(text)
             },
             openSettings: openSettings,
-            areCriticalPermissionsGranted: {
-                onboardingControllerHost.areCriticalPermissionsGranted
-            },
-            openOnboardingRequested: {
-                onboardingControllerHost.presentPermissionsFallback()
+            openURL: { url in
+                _ = NSWorkspace.shared.open(url)
             },
             onClipboardOnlyCopy: {
                 clipboardOnlyNotice?()
@@ -115,6 +119,7 @@ struct SeshatAppMain: App {
         var showSettingsWindow: @MainActor () -> Void = {}
         let statusItemControllerHost = StatusItemControllerHost(
             sceneModel: sceneModel,
+            permissionService: permissionService,
             openHistory: {
                 showNotesWindow()
             },
@@ -180,7 +185,7 @@ struct SeshatAppMain: App {
     }
 }
 
-private extension SeshatAppMain {
+extension SeshatAppMain {
     static func defaultTranscriptReader(
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) -> any TranscriptReading {
@@ -201,13 +206,92 @@ private extension SeshatAppMain {
     }
 
     static let defaultOpenSettings: @MainActor () -> Void = {
-        guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-        ) else {
-            return
+        NSWorkspace.shared.open(
+            PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .microphone)
+        )
+    }
+
+    static func makeCompatibilityPermissionService(
+        permissionRequester: any MicrophonePermissionRequesting,
+        inputMonitoringProbe: any PermissionProbing,
+        isAccessibilityTrusted: @escaping @MainActor () -> Bool
+    ) -> PermissionServiceAdapter {
+        @MainActor
+        final class StateBox {
+            var statuses: [Permission: PermissionStatus]
+
+            init(statuses: [Permission: PermissionStatus]) {
+                self.statuses = statuses
+            }
         }
 
-        NSWorkspace.shared.open(url)
+        let initialMicrophoneStatus: PermissionStatus
+        if let permissionRequester = permissionRequester as? AppKitMicrophonePermissionRequester {
+            initialMicrophoneStatus = permissionRequester.currentState().unifiedPermissionStatus
+        } else {
+            initialMicrophoneStatus = .pending
+        }
+
+        let box = StateBox(statuses: [
+            .microphone: initialMicrophoneStatus,
+            .inputMonitoring: inputMonitoringProbe.checkInputMonitoring().unifiedPermissionStatus,
+            .accessibility: isAccessibilityTrusted() ? .granted : .pending,
+        ])
+
+        return PermissionServiceAdapter(
+            initialStatuses: box.statuses,
+            statusReader: { permission in
+                switch permission {
+                case .inputMonitoring:
+                    let status = inputMonitoringProbe.checkInputMonitoring().unifiedPermissionStatus
+                    box.statuses[.inputMonitoring] = status
+                    return status
+                case .accessibility:
+                    let status: PermissionStatus = isAccessibilityTrusted() ? .granted : .pending
+                    box.statuses[.accessibility] = status
+                    return status
+                case .microphone:
+                    return box.statuses[.microphone] ?? .pending
+                }
+            },
+            requester: { permission in
+                switch permission {
+                case .microphone:
+                    let granted = await permissionRequester.requestAccess()
+                    let finalStatus: PermissionStatus = granted ? .granted : .denied
+                    box.statuses[.microphone] = finalStatus
+                    return RequestOutcome(
+                        prompted: true,
+                        openedSettings: false,
+                        requiresRelaunch: false,
+                        finalStatus: finalStatus
+                    )
+                case .inputMonitoring:
+                    let finalStatus = inputMonitoringProbe.checkInputMonitoring().unifiedPermissionStatus
+                    box.statuses[.inputMonitoring] = finalStatus
+                    return RequestOutcome(
+                        prompted: false,
+                        openedSettings: false,
+                        requiresRelaunch: true,
+                        finalStatus: finalStatus
+                    )
+                case .accessibility:
+                    let finalStatus: PermissionStatus = isAccessibilityTrusted() ? .granted : .pending
+                    box.statuses[.accessibility] = finalStatus
+                    return RequestOutcome(
+                        prompted: false,
+                        openedSettings: false,
+                        requiresRelaunch: false,
+                        finalStatus: finalStatus
+                    )
+                }
+            },
+            refresher: {
+                box.statuses[.inputMonitoring] = inputMonitoringProbe.checkInputMonitoring().unifiedPermissionStatus
+                box.statuses[.accessibility] = isAccessibilityTrusted() ? .granted : .pending
+                return box.statuses
+            }
+        )
     }
 }
 
@@ -221,6 +305,7 @@ final class StatusItemControllerHost: ObservableObject {
 
     init(
         sceneModel: MenuBarSceneModel,
+        permissionService: PermissionServiceAdapter? = nil,
         openHistory: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
@@ -229,6 +314,7 @@ final class StatusItemControllerHost: ObservableObject {
     ) {
         self.controller = StatusItemController(
             sceneModel: sceneModel,
+            permissionService: permissionService,
             openHistory: openHistory,
             openSettings: openSettings,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider

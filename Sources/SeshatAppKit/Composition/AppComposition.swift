@@ -48,6 +48,7 @@ public enum AppComposition {
     }
 
     public static func makeGlobalHotkeyMonitor(
+        permissionService: PermissionServiceAdapter? = nil,
         coordinator: SessionCoordinator = AppComposition.sessionCoordinator
     ) -> GlobalHotkeyMonitor {
         GlobalHotkeyMonitor(
@@ -58,7 +59,8 @@ public enum AppComposition {
             },
             emergencyQuitRequested: {
                 NSApplication.shared.terminate(nil)
-            }
+            },
+            permissionService: permissionService
         )
     }
 
@@ -91,5 +93,9 @@ public enum AppComposition {
 
     public static func makeMicrophonePermissionRequester() -> any MicrophonePermissionRequesting {
         AppKitMicrophonePermissionRequester()
+    }
+
+    static func makePermissionService() -> AppKitPermissionService {
+        AppKitPermissionService()
     }
 }

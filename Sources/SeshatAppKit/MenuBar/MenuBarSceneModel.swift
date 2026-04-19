@@ -6,51 +6,61 @@ import SeshatSession
 @MainActor
 final class MenuBarSceneModel: ObservableObject {
     @Published var state: SessionState = .idle
-    @Published var permissionState: MicrophonePermissionState
     @Published var lastResultText: String? = nil
     @Published var preparationProgress: ModelDownloadProgress?
 
     private let coordinator: SessionCoordinator
-    private let permissionRequester: any MicrophonePermissionRequesting
-    private let permissionStateProvider: @MainActor () -> MicrophonePermissionState
+    private let permissionService: PermissionServiceAdapter
     private let clipboardWriter: @MainActor (String) -> Void
     private let pasteInjector: @MainActor (String) -> PasteRoutingDecision
-    private let openSettings: @MainActor () -> Void
-    private let areCriticalPermissionsGranted: @MainActor () -> Bool
-    private let openOnboardingRequested: @MainActor () -> Void
+    private let openURL: @MainActor (URL) -> Void
     private let onClipboardOnlyCopy: @MainActor () -> Void
     private let logger: SeshatLogger
     private let onObservationCancelled: (@Sendable () -> Void)?
     private var observationTask: Task<Void, Never>?
     private var preparationObservationTask: Task<Void, Never>?
+    private var permissionObservation: AnyCancellable?
     private var lastAutoPastedTranscript: String?
     private(set) var observationTaskCreationCount = 0
 
+    var permissionState: MicrophonePermissionState {
+        permissionService.status(for: .microphone).microphonePermissionState
+    }
+
     init(
         coordinator: SessionCoordinator,
-        permissionRequester: any MicrophonePermissionRequesting,
-        permissionStateProvider: @escaping @MainActor () -> MicrophonePermissionState,
+        permissionRequester: any MicrophonePermissionRequesting = AppKitMicrophonePermissionRequester(),
+        permissionStateProvider: @escaping @MainActor () -> MicrophonePermissionState = { .notYetRequested },
         clipboardWriter: @escaping @MainActor (String) -> Void,
         pasteInjector: @escaping @MainActor (String) -> PasteRoutingDecision = { _ in .pasteAtCursor },
         openSettings: @escaping @MainActor () -> Void,
+        permissionService: PermissionServiceAdapter? = nil,
+        openURL: (@MainActor (URL) -> Void)? = nil,
         areCriticalPermissionsGranted: @escaping @MainActor () -> Bool = { true },
         openOnboardingRequested: @escaping @MainActor () -> Void = {},
         onClipboardOnlyCopy: @escaping @MainActor () -> Void = {},
         onObservationCancelled: (@Sendable () -> Void)? = nil,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) {
+        _ = areCriticalPermissionsGranted
+        _ = openOnboardingRequested
         self.coordinator = coordinator
-        self.permissionRequester = permissionRequester
-        self.permissionStateProvider = permissionStateProvider
+        self.permissionService = permissionService
+            ?? Self.makeCompatibilityPermissionService(
+                permissionRequester: permissionRequester,
+                permissionStateProvider: permissionStateProvider
+            )
         self.clipboardWriter = clipboardWriter
         self.pasteInjector = pasteInjector
-        self.openSettings = openSettings
-        self.areCriticalPermissionsGranted = areCriticalPermissionsGranted
-        self.openOnboardingRequested = openOnboardingRequested
+        self.openURL = openURL ?? { _ in openSettings() }
         self.onClipboardOnlyCopy = onClipboardOnlyCopy
         self.onObservationCancelled = onObservationCancelled
         self.logger = logger
-        self.permissionState = permissionStateProvider()
+        self.permissionObservation = self.permissionService.$statuses
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
     }
 
     func startObserving() {
@@ -106,13 +116,12 @@ final class MenuBarSceneModel: ObservableObject {
         // onboarding window. User explicitly asked for this behaviour
         // (2026-04-19) after a `defaults delete` left menu items stuck
         // in an onboarding-required state.
-        switch permissionState {
+        switch permissionService.status(for: .microphone) {
         case .granted, .denied:
             await coordinator.toggle()
-        case .notYetRequested:
-            let granted = await permissionRequester.requestAccess()
-            permissionState = granted ? .granted : .denied
-            logger.info("Microphone permission request completed: \(granted)")
+        case .pending:
+            let outcome = await permissionService.request(.microphone)
+            logger.info("Microphone permission request completed: \(outcome.finalStatus == .granted)")
             await coordinator.toggle()
         }
     }
@@ -129,7 +138,7 @@ final class MenuBarSceneModel: ObservableObject {
 
     func openMicrophonePrivacySettings() {
         logger.info("Opening microphone privacy settings")
-        openSettings()
+        openURL(permissionService.systemSettingsDeepLink(for: .microphone))
     }
 
     private func autoPasteTranscriptIfNeeded(_ transcript: String?) {
@@ -147,5 +156,55 @@ final class MenuBarSceneModel: ObservableObject {
         observationTask?.cancel()
         preparationObservationTask?.cancel()
         onObservationCancelled?()
+    }
+
+    private static func makeCompatibilityPermissionService(
+        permissionRequester: any MicrophonePermissionRequesting,
+        permissionStateProvider: @escaping @MainActor () -> MicrophonePermissionState
+    ) -> PermissionServiceAdapter {
+        @MainActor
+        final class StateBox {
+            var statuses: [Permission: PermissionStatus]
+
+            init(statuses: [Permission: PermissionStatus]) {
+                self.statuses = statuses
+            }
+        }
+
+        let box = StateBox(statuses: [
+            .microphone: permissionStateProvider().unifiedPermissionStatus,
+            .inputMonitoring: .pending,
+            .accessibility: .pending,
+        ])
+
+        return PermissionServiceAdapter(
+            initialStatuses: box.statuses,
+            statusReader: { permission in
+                box.statuses[permission] ?? .pending
+            },
+            requester: { permission in
+                guard permission == .microphone else {
+                    return RequestOutcome(
+                        prompted: false,
+                        openedSettings: false,
+                        requiresRelaunch: false,
+                        finalStatus: box.statuses[permission] ?? .pending
+                    )
+                }
+
+                let granted = await permissionRequester.requestAccess()
+                let finalStatus: PermissionStatus = granted ? .granted : .denied
+                box.statuses[.microphone] = finalStatus
+                return RequestOutcome(
+                    prompted: true,
+                    openedSettings: false,
+                    requiresRelaunch: false,
+                    finalStatus: finalStatus
+                )
+            },
+            refresher: {
+                box.statuses
+            }
+        )
     }
 }
