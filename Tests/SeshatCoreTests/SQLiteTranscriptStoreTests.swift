@@ -128,6 +128,76 @@ final class SQLiteTranscriptStoreTests: XCTestCase {
         XCTAssertEqual(recorder.snapshot(), [.skippedCorruptJSONLLine("{ malformed json")])
     }
 
+    func testRuntimeGuardsAndGoldenCorpusSmokeQueries() async throws {
+        XCTAssertThrowsError(
+            try SQLiteTranscriptStore.validateRuntimeMetadata(
+                .init(
+                    sqliteVersion: "3.37.9",
+                    fts5Enabled: true,
+                    ftsTableSQL: "CREATE VIRTUAL TABLE transcripts_fts USING fts5(text, tokenize='unicode61 remove_diacritics 2')"
+                )
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? SQLiteTranscriptStore.OpenError,
+                .unsupportedSQLiteVersion(current: "3.37.9", minimum: "3.38.0")
+            )
+        }
+
+        XCTAssertThrowsError(
+            try SQLiteTranscriptStore.validateRuntimeMetadata(
+                .init(
+                    sqliteVersion: "3.38.0",
+                    fts5Enabled: false,
+                    ftsTableSQL: "CREATE VIRTUAL TABLE transcripts_fts USING fts5(text, tokenize='unicode61 remove_diacritics 2')"
+                )
+            )
+        ) { error in
+            XCTAssertEqual(error as? SQLiteTranscriptStore.OpenError, .missingFTS5CompileOption)
+        }
+
+        XCTAssertThrowsError(
+            try SQLiteTranscriptStore.validateRuntimeMetadata(
+                .init(
+                    sqliteVersion: "3.38.0",
+                    fts5Enabled: true,
+                    ftsTableSQL: "CREATE VIRTUAL TABLE transcripts_fts USING fts5(text)"
+                )
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? SQLiteTranscriptStore.OpenError,
+                .invalidFTSTokenizerConfiguration(sql: "CREATE VIRTUAL TABLE transcripts_fts USING fts5(text)")
+            )
+        }
+
+        let context = try makeIsolatedRecordingsDirectory()
+        defer { cleanup(context.baseDirectory) }
+
+        let store = try SQLiteTranscriptStore(recordingsDirectory: context.recordingsDirectory)
+        let exactEntry = makeEntry(index: 1, text: "launch window confirmed")
+        let prefixEntry = makeEntry(index: 2, text: "prefix matching rewards care")
+        let phraseEntry = makeEntry(index: 3, text: "swift package manager")
+        let diacriticEntry = makeEntry(index: 4, text: "Café au lait")
+        let nonMatchEntry = makeEntry(index: 5, text: "silent background noise")
+
+        for entry in [exactEntry, prefixEntry, phraseEntry, diacriticEntry, nonMatchEntry] {
+            try await store.append(entry)
+        }
+
+        let exactMatches = try await store.search(query: "launch")
+        let prefixMatches = try await store.search(query: "pref*")
+        let phraseMatches = try await store.search(query: "\"swift package\"")
+        let diacriticMatches = try await store.search(query: "cafe")
+        let noMatches = try await store.search(query: "galaxy")
+
+        XCTAssertEqual(exactMatches.map(\.id), [exactEntry.id])
+        XCTAssertEqual(prefixMatches.map(\.id), [prefixEntry.id])
+        XCTAssertEqual(phraseMatches.map(\.id), [phraseEntry.id])
+        XCTAssertEqual(diacriticMatches.map(\.id), [diacriticEntry.id])
+        XCTAssertEqual(noMatches, [])
+    }
+
     private func makeIsolatedRecordingsDirectory() throws -> DirectoryContext {
         let baseDirectory = fileManager.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -6,6 +6,19 @@ public actor SQLiteTranscriptStore {
     private static let jsonlFileName = "transcripts.jsonl"
     private static let transcriptsTableName = "transcripts"
     private static let transcriptsFTSTableName = "transcripts_fts"
+    private static let minimumSQLiteVersion = "3.38.0"
+
+    struct RuntimeMetadata: Sendable, Equatable {
+        let sqliteVersion: String
+        let fts5Enabled: Bool
+        let ftsTableSQL: String?
+    }
+
+    enum OpenError: Error, Equatable {
+        case unsupportedSQLiteVersion(current: String, minimum: String)
+        case missingFTS5CompileOption
+        case invalidFTSTokenizerConfiguration(sql: String?)
+    }
 
     enum TestingEvent: Sendable, Equatable {
         case skippedCorruptJSONLLine(String)
@@ -40,7 +53,9 @@ public actor SQLiteTranscriptStore {
         )
 
         let dbQueue = try DatabaseQueue(path: databaseURL.path)
+        try Self.validateRuntimePrerequisites(on: dbQueue)
         try Self.makeMigrator().migrate(dbQueue)
+        try Self.validateRuntimeMetadata(Self.fetchRuntimeMetadata(from: dbQueue, includeFTSTableSQL: true))
         try Self.setPermissionsIfPresent(at: databaseURL, fileManager: fileManager)
 
         self.databaseURL = databaseURL
@@ -180,6 +195,9 @@ public actor SQLiteTranscriptStore {
             }
             try db.execute(sql: "PRAGMA user_version = 3")
         }
+        migrator.registerMigration("v4_runtime_guard_marker") { db in
+            try db.execute(sql: "PRAGMA user_version = 4")
+        }
         return migrator
     }
 
@@ -200,6 +218,7 @@ public actor SQLiteTranscriptStore {
 
         do {
             let temporaryQueue = try DatabaseQueue(path: temporaryDatabaseURL.path)
+            try Self.validateRuntimePrerequisites(on: temporaryQueue)
             try Self.makeMigrator(jsonlImportURL: jsonlURL, logger: logger).migrate(temporaryQueue)
             try Self.setPermissionsIfPresent(at: temporaryDatabaseURL, fileManager: fileManager)
             try fileManager.moveItem(at: temporaryDatabaseURL, to: databaseURL)
@@ -263,6 +282,37 @@ public actor SQLiteTranscriptStore {
         )
     }
 
+    static func validateRuntimeMetadata(_ metadata: RuntimeMetadata) throws {
+        guard let currentVersion = SQLiteVersion(metadata.sqliteVersion),
+              let minimumVersion = SQLiteVersion(minimumSQLiteVersion),
+              currentVersion >= minimumVersion
+        else {
+            throw OpenError.unsupportedSQLiteVersion(
+                current: metadata.sqliteVersion,
+                minimum: minimumSQLiteVersion
+            )
+        }
+
+        guard metadata.fts5Enabled else {
+            throw OpenError.missingFTS5CompileOption
+        }
+
+        let normalizedTokens = metadata.ftsTableSQL.map { sql in
+            Set(
+                sql.lowercased().split { character in
+                    !(character.isLetter || character.isNumber || character == "_")
+                }
+            )
+        }
+        guard let normalizedTokens,
+              normalizedTokens.contains("unicode61"),
+              normalizedTokens.contains("remove_diacritics"),
+              normalizedTokens.contains("2")
+        else {
+            throw OpenError.invalidFTSTokenizerConfiguration(sql: metadata.ftsTableSQL)
+        }
+    }
+
     private static func setPermissionsIfPresent(at url: URL, fileManager: FileManager) throws {
         guard fileManager.fileExists(atPath: url.path) else {
             return
@@ -285,6 +335,91 @@ public actor SQLiteTranscriptStore {
         ] where fileManager.fileExists(atPath: artifactURL.path) {
             try fileManager.removeItem(at: artifactURL)
         }
+    }
+
+    private static func validateRuntimePrerequisites(on dbQueue: DatabaseQueue) throws {
+        let metadata = try fetchRuntimeMetadata(from: dbQueue, includeFTSTableSQL: false)
+
+        guard let currentVersion = SQLiteVersion(metadata.sqliteVersion),
+              let minimumVersion = SQLiteVersion(minimumSQLiteVersion),
+              currentVersion >= minimumVersion
+        else {
+            throw OpenError.unsupportedSQLiteVersion(
+                current: metadata.sqliteVersion,
+                minimum: minimumSQLiteVersion
+            )
+        }
+
+        guard metadata.fts5Enabled else {
+            throw OpenError.missingFTS5CompileOption
+        }
+    }
+
+    private static func fetchRuntimeMetadata(
+        from dbQueue: DatabaseQueue,
+        includeFTSTableSQL: Bool
+    ) throws -> RuntimeMetadata {
+        try dbQueue.read { db in
+            let sqliteVersion = try String.fetchOne(db, sql: "SELECT sqlite_version()") ?? "0.0.0"
+            let fts5Enabled = (try Int.fetchOne(
+                db,
+                sql: "SELECT sqlite_compileoption_used('ENABLE_FTS5')"
+            ) ?? 0) != 0
+            let ftsTableSQL: String?
+            if includeFTSTableSQL {
+                ftsTableSQL = try String.fetchOne(
+                    db,
+                    sql: """
+                    SELECT sql
+                    FROM sqlite_master
+                    WHERE type = 'table' AND name = ?
+                    """,
+                    arguments: [Self.transcriptsFTSTableName]
+                )
+            } else {
+                ftsTableSQL = nil
+            }
+
+            return RuntimeMetadata(
+                sqliteVersion: sqliteVersion,
+                fts5Enabled: fts5Enabled,
+                ftsTableSQL: ftsTableSQL
+            )
+        }
+    }
+}
+
+private struct SQLiteVersion: Comparable {
+    let major: Int
+    let minor: Int
+    let patch: Int
+
+    init?(_ rawValue: String) {
+        let numericComponents = rawValue
+            .split(separator: ".", omittingEmptySubsequences: false)
+            .prefix(3)
+            .map { component -> Int in
+                let digits = component.prefix { $0.isNumber }
+                return Int(digits) ?? 0
+            }
+
+        guard let major = numericComponents.first else {
+            return nil
+        }
+
+        self.major = major
+        self.minor = numericComponents.count > 1 ? numericComponents[1] : 0
+        self.patch = numericComponents.count > 2 ? numericComponents[2] : 0
+    }
+
+    static func < (lhs: SQLiteVersion, rhs: SQLiteVersion) -> Bool {
+        if lhs.major != rhs.major {
+            return lhs.major < rhs.major
+        }
+        if lhs.minor != rhs.minor {
+            return lhs.minor < rhs.minor
+        }
+        return lhs.patch < rhs.patch
     }
 }
 
