@@ -188,3 +188,4 @@ _(high-level progression)_
 **Zero sibling-lane collision.** Files touched: `BaseDirectoryMigrator.swift` (new), `Config.swift`, `AdvancedTab.swift`, `BaseDirectoryMigratorTests.swift` (new), `AdvancedTabViewModelTests.swift` (new), `ManualSettingsVerification.md`. No bleed into `Notes/*`, `Hotkeys/*`, `SQLiteTranscriptStore.swift`, `Onboarding/*`, `Package.swift`, or other Settings tabs.
 
 **Reviewer note:** did not run `swift test` (Santa worktree AMFI kill). Verified by reading.
+| 02:24 | 3a | **Poll tick.** Massive progress: B.4 `fb1a61c` editor, B.5 `6fcc146` context panel, B.6 `e946a96` view, B.7 `deabd91` window controller, G.3 `1fd2a53` recorder, G.4 `3f911af` ShortcutsTab integration. **3.G COMPLETE** (G.1-G.4 all landed + runbook section). Dispatched 3.G reviewer `abf511491f73ba8c7`. 3.B at B.7 with B.8 menu wire-up uncommitted (SeshatAppMain + StatusItemMenuModel + MenuBarSceneModelTests dirty). |
