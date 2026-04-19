@@ -157,8 +157,18 @@ public final class AppStore: ObservableObject {
     }
 
     private func handleModelDownloadProgressChange(_ progress: ModelDownloadProgress) {
+        let normalized = Self.normalize(progress)
+        let previousProgress = snapshot.modelDownloadProgress
+
+        // Skip no-op yields (initial-stream replays, duplicate events) so they
+        // don't clobber a live `.done`/`.error(message:)` transient that the
+        // session-state handler just scheduled.
+        if normalized == previousProgress {
+            return
+        }
+
         updateSnapshot { snapshot in
-            snapshot.modelDownloadProgress = Self.normalize(progress)
+            snapshot.modelDownloadProgress = normalized
         }
         cancelPillTransition()
         rederivePillVisibility()
