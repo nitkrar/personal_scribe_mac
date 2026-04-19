@@ -26,6 +26,7 @@ _(every time I told a codex agent to skip build/test)_
 | Time | Agent | Reason | Files produced without codex-side verification |
 |---|---|---|---|
 | 01:10 | 3.I (`abbac261468f031e8` → Codex `task-mo50kwzq-40tjys`) | 52 min with zero commits, `GlobalHotkeyMonitor.swift` modified uncommitted — strong Santa-blocked hypothesis | Any 3.I commits from this point — user MUST run `swift test` on them in the morning |
+| 01:20 | Slice B (`abf644a18789a90ad` → underlying Codex task) | 23 min silent since B.3 — stall-threshold trip, Santa-blocked hypothesis by pattern match | Any Slice B commits from this point — user MUST run `swift test` on them in the morning |
 
 ## Parked items (need morning attention)
 _(any design-inflection that waits for the user)_
@@ -68,3 +69,5 @@ _(high-level progression)_
 | 01:10 | 1 | **Poll tick.** 3.D COMPLETE (D.0-D.5 all landed: `1beb4be` / `fecbf7d` / `3da4e87` / `a0f2cd3` / `56bfbd0` / `e50170a`). Slice B at B.3 (`7de2985`, 13 min silent — below stall threshold). 3.I zero commits in 52 min — stall-pinged. |
 | 01:10 | 1 | Dispatched `10x-engineer:code-reviewer` for 3.D (agent `ad999b2e8d7802617`, background). Review covers D.0-D.5 + DECISION doc. |
 | 01:10 | 1 | 3.I dispatcher forwarded skip-build-test mitigation to Codex task; resumed as `task-mo50kwzq-40tjys`. |
+| 01:19 | 1 | 3.D reviewer clean — no MUST-FIX. Applied SHOULD-FIX #1 (GRDB `from:` → `exact:`) as `5980d98`. Other SHOULD-FIX items deferred, logged. |
+| 01:20 | 1 | **Poll tick.** Slice B silent 23 min since B.3 — stall-pinged with skip-build-test. 3.I still at zero commits post-resume, within grace. 3.D fully shipped + reviewed + housekept. |
