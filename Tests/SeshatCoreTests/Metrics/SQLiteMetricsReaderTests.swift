@@ -20,17 +20,17 @@ final class SQLiteMetricsReaderTests: XCTestCase {
             ),
             makeMetricsTestEntry(
                 timestamp: window.start,
-                text: "alpha beta",
+                text: "don't can't",
                 audioDuration: 30
             ),
             makeMetricsTestEntry(
                 timestamp: referenceDate.addingTimeInterval(-60),
-                text: "Café déjà vu",
+                text: "hello, world!",
                 audioDuration: 30
             ),
             makeMetricsTestEntry(
                 timestamp: window.end,
-                text: "delta echo foxtrot",
+                text: "你好 世界",
                 audioDuration: 0
             ),
             makeMetricsTestEntry(
@@ -52,13 +52,52 @@ final class SQLiteMetricsReaderTests: XCTestCase {
 
         XCTAssertEqual(snapshot.rollups.recordingsThisWeek, 3)
         XCTAssertEqual(snapshot.rollups.sampleCount, 3)
-        XCTAssertEqual(snapshot.rollups.wordsThisWeek, 8)
+        XCTAssertEqual(snapshot.rollups.wordsThisWeek, 6)
         XCTAssertEqual(snapshot.rollups.minutesSavedThisWeek, 0, accuracy: 0.0001)
-        XCTAssertEqual(snapshot.rollups.averageWPMThisWeek, 8, accuracy: 0.0001)
+        XCTAssertEqual(snapshot.rollups.averageWPMThisWeek, 6, accuracy: 0.0001)
         XCTAssertEqual(snapshot.rollups.windowStart, window.start)
         XCTAssertEqual(snapshot.rollups.windowEnd, window.end)
         XCTAssertEqual(snapshot.lastUpdatedAt, referenceDate)
         XCTAssertEqual(snapshot.lastRefreshReason, .initialLoad)
+    }
+
+    func testInitThrowsForMissingDatabasePathWhenOpenedReadOnly() throws {
+        let baseDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: baseDirectory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: baseDirectory) }
+
+        let missingDatabaseURL = baseDirectory.appendingPathComponent("missing.sqlite", isDirectory: false)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missingDatabaseURL.path))
+
+        XCTAssertThrowsError(try SQLiteMetricsReader(databaseURL: missingDatabaseURL))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missingDatabaseURL.path))
+    }
+
+    func testReadOnlyQueueRejectsWriteAttempts() async throws {
+        let context = try makeMetricsTestDatabaseContext()
+        defer { cleanupMetricsTestDatabaseContext(context) }
+
+        let store = try SQLiteTranscriptStore(recordingsDirectory: context.recordingsDirectory)
+        let entry = makeMetricsTestEntry(
+            timestamp: Date(timeIntervalSince1970: 123),
+            text: "readonly probe",
+            audioDuration: 5
+        )
+        try await store.append(entry)
+
+        let reader = try SQLiteMetricsReader(databaseURL: context.databaseURL)
+
+        do {
+            try await reader.executeWriteForTesting(sql: "DELETE FROM transcripts")
+            XCTFail("Expected readonly write to throw")
+        } catch {
+            let recent = try await reader.recentTranscriptions(limit: 1)
+            XCTAssertEqual(recent, [entry])
+        }
     }
 
     func testLoadSnapshotUsesFortyWPMBaselineForPositiveMinutesSaved() async throws {

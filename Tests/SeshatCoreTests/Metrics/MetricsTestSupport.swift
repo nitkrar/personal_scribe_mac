@@ -1,4 +1,3 @@
-import Combine
 import Foundation
 import XCTest
 @testable import SeshatCore
@@ -129,55 +128,37 @@ struct ScriptedMetricsReader: MetricsReading {
     }
 }
 
-@MainActor
-final class ScriptedMetricsService: MetricsService, @unchecked Sendable {
-    @Published private(set) var rollups: MetricsRollups
-    @Published private(set) var recentTranscriptions: [TranscriptEntry]
-    @Published private(set) var lastUpdatedAt: Date?
-    @Published private(set) var lastRefreshReason: MetricsRefreshReason?
-    @Published private(set) var isRefreshing: Bool
+struct ScriptedMetricsService: MetricsSnapshotLoading {
+    let snapshot: MetricsSnapshot
+    let recentEntries: [TranscriptEntry]
 
-    private(set) var refreshReasons: [MetricsRefreshReason] = []
-    private(set) var startObservingCount = 0
-    private(set) var stopObservingCount = 0
-
-    init(snapshot: MetricsSnapshot? = nil, isRefreshing: Bool = false) {
-        if let snapshot {
-            rollups = snapshot.rollups
-            recentTranscriptions = snapshot.recentTranscriptions
-            lastUpdatedAt = snapshot.lastUpdatedAt
-            lastRefreshReason = snapshot.lastRefreshReason
-        } else {
-            let window = MetricsWindow(
-                start: Date(timeIntervalSince1970: 0),
-                end: Date(timeIntervalSince1970: 0)
-            )
-            rollups = MetricsRollups.empty(window: window)
-            recentTranscriptions = []
-            lastUpdatedAt = nil
-            lastRefreshReason = nil
-        }
-
-        self.isRefreshing = isRefreshing
+    func loadSnapshot(window: MetricsWindow, recentLimit: Int) async throws -> MetricsSnapshot {
+        snapshot
     }
 
-    func refresh(reason: MetricsRefreshReason) async {
-        refreshReasons.append(reason)
-        lastRefreshReason = reason
+    func recordingsThisWeek() async throws -> Int {
+        snapshot.rollups.recordingsThisWeek
     }
 
-    func startObserving() {
-        startObservingCount += 1
+    func wordsThisWeek() async throws -> Int {
+        snapshot.rollups.wordsThisWeek
     }
 
-    func stopObserving() {
-        stopObservingCount += 1
+    func minsSavedThisWeek() async throws -> Duration {
+        .seconds(snapshot.rollups.minutesSavedThisWeek * 60)
+    }
+
+    func wpmAverageThisWeek() async throws -> Double {
+        snapshot.rollups.averageWPMThisWeek
+    }
+
+    func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry] {
+        Array(recentEntries.prefix(limit))
     }
 }
 
-actor ControllableMetricsReader: MetricsReading {
+actor ControllableMetricsService: MetricsSnapshotLoading {
     private var loadRequests: [(window: MetricsWindow, recentLimit: Int)] = []
-    private var recentRequests: [Int] = []
     private var loadContinuations: [CheckedContinuation<MetricsSnapshot, Error>] = []
 
     func loadSnapshot(window: MetricsWindow, recentLimit: Int) async throws -> MetricsSnapshot {
@@ -187,9 +168,24 @@ actor ControllableMetricsReader: MetricsReading {
         }
     }
 
+    func recordingsThisWeek() async throws -> Int {
+        throw UnexpectedMetricsQueryInvocation()
+    }
+
+    func wordsThisWeek() async throws -> Int {
+        throw UnexpectedMetricsQueryInvocation()
+    }
+
+    func minsSavedThisWeek() async throws -> Duration {
+        throw UnexpectedMetricsQueryInvocation()
+    }
+
+    func wpmAverageThisWeek() async throws -> Double {
+        throw UnexpectedMetricsQueryInvocation()
+    }
+
     func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry] {
-        recentRequests.append(limit)
-        return []
+        throw UnexpectedMetricsQueryInvocation()
     }
 
     func loadRequestCount() -> Int {
@@ -198,10 +194,6 @@ actor ControllableMetricsReader: MetricsReading {
 
     func loadRequest(at index: Int) -> (window: MetricsWindow, recentLimit: Int) {
         loadRequests[index]
-    }
-
-    func recentRequestCount() -> Int {
-        recentRequests.count
     }
 
     func completeNextLoad(with result: Result<MetricsSnapshot, Error>) {
@@ -222,3 +214,5 @@ actor ControllableMetricsReader: MetricsReading {
 private struct WaitForConditionTimeout: Error {
     let description: String
 }
+
+private struct UnexpectedMetricsQueryInvocation: Error {}

@@ -9,7 +9,9 @@ public actor SQLiteMetricsReader: MetricsReading {
         databaseURL: URL,
         referenceDateProvider: @escaping @Sendable () -> Date = Date.init
     ) throws {
-        self.dbQueue = try DatabaseQueue(path: databaseURL.path)
+        var configuration = Configuration()
+        configuration.readonly = true
+        self.dbQueue = try DatabaseQueue(path: databaseURL.path, configuration: configuration)
         self.referenceDateProvider = referenceDateProvider
     }
 
@@ -115,6 +117,13 @@ public actor SQLiteMetricsReader: MetricsReading {
         }
 
         return try rows.map { try $0.transcriptEntry }
+    }
+
+    // Internal characterization seam for tests that assert the queue is truly read-only.
+    func executeWriteForTesting(sql: String) async throws {
+        try await dbQueue.writeWithoutTransaction { db in
+            try db.execute(sql: sql)
+        }
     }
 
     private static func wordCount(in text: String) -> Int {

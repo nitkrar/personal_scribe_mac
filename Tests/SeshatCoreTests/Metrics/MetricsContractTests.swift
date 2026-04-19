@@ -2,7 +2,6 @@ import Foundation
 import XCTest
 @testable import SeshatCore
 
-@MainActor
 final class MetricsContractTests: XCTestCase {
     func testMetricsContractsAcceptScriptedConformers() async throws {
         let window = MetricsWindow(
@@ -18,7 +17,7 @@ final class MetricsContractTests: XCTestCase {
             window: window,
             recordingsThisWeek: 1,
             wordsThisWeek: 2,
-            minutesSavedThisWeek: 0,
+            minutesSavedThisWeek: 2,
             averageWPMThisWeek: 4,
             recentTranscriptions: [entry],
             lastUpdatedAt: Date(timeIntervalSince1970: 200),
@@ -29,20 +28,25 @@ final class MetricsContractTests: XCTestCase {
             snapshot: snapshot,
             recentEntries: [entry]
         )
-        let service = ScriptedMetricsService(snapshot: snapshot)
+        let service: any MetricsService = ScriptedMetricsService(
+            snapshot: snapshot,
+            recentEntries: [entry]
+        )
         let loadResult = try await reader.loadSnapshot(window: window, recentLimit: 3)
-        let recentResult = try await reader.recentTranscriptions(limit: 1)
-
-        await service.refresh(reason: .windowFocus)
-        service.startObserving()
-        service.stopObserving()
+        let readerRecentResult = try await reader.recentTranscriptions(limit: 1)
+        let recordingsThisWeek = try await service.recordingsThisWeek()
+        let wordsThisWeek = try await service.wordsThisWeek()
+        let minsSavedThisWeek = try await service.minsSavedThisWeek()
+        let wpmAverageThisWeek = try await service.wpmAverageThisWeek()
+        let serviceRecentResult = try await service.recentTranscriptions(limit: 1)
 
         XCTAssertEqual(loadResult, snapshot)
-        XCTAssertEqual(recentResult, [entry])
-        XCTAssertEqual(service.rollups, snapshot.rollups)
-        XCTAssertEqual(service.lastRefreshReason, .windowFocus)
-        XCTAssertEqual(service.startObservingCount, 1)
-        XCTAssertEqual(service.stopObservingCount, 1)
+        XCTAssertEqual(readerRecentResult, [entry])
+        XCTAssertEqual(recordingsThisWeek, 1)
+        XCTAssertEqual(wordsThisWeek, 2)
+        XCTAssertEqual(minsSavedThisWeek, .seconds(120))
+        XCTAssertEqual(wpmAverageThisWeek, 4)
+        XCTAssertEqual(serviceRecentResult, [entry])
         XCTAssertEqual(
             MetricsNotification.transcriptCommit,
             Notification.Name("Seshat.metrics.transcriptCommit")

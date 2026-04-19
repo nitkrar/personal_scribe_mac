@@ -1,4 +1,3 @@
-import Combine
 import Foundation
 
 public protocol MetricsReading: Sendable {
@@ -6,15 +5,10 @@ public protocol MetricsReading: Sendable {
     func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry]
 }
 
-@MainActor
-public protocol MetricsService: ObservableObject, Sendable {
-    var rollups: MetricsRollups { get }
-    var recentTranscriptions: [TranscriptEntry] { get }
-    var lastUpdatedAt: Date? { get }
-    var lastRefreshReason: MetricsRefreshReason? { get }
-    var isRefreshing: Bool { get }
-
-    func refresh(reason: MetricsRefreshReason) async
-    func startObserving()
-    func stopObserving()
+public protocol MetricsService: Sendable {
+    func recordingsThisWeek() async throws -> Int
+    func wordsThisWeek() async throws -> Int
+    func minsSavedThisWeek() async throws -> Duration
+    func wpmAverageThisWeek() async throws -> Double
+    func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry]
 }
