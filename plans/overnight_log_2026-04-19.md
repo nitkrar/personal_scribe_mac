@@ -167,3 +167,24 @@ _(high-level progression)_
 **Reviewer note on testing:** `swift build --build-tests` aborted locally with AMFI manifest-compilation kill (Santa worktree/Xcode env). Compile-correctness verified by static inspection only. User should run `swift test --filter 'ModeDescriptorTests|SettingsWindowControllerTests|GeneralTabViewModelTests|StatusItemMenuModelTests|MenuBarSceneModelTests'` from canonical main-repo path in the morning before claiming 3.A shipped.
 | 02:14 | 3a | **Poll tick.** Wave 3a progressing: G.1 `ad17780` HotkeyPreference, B.1 `82a0bca` TranscriptReading. 3.E E.1 in working tree (BaseDirectoryMigrator + Config.swift edits uncommitted). All agents healthy. |
 | 02:19 | 3a | **Poll tick.** 6 commits landed 02:09-02:12: E.1 `59becc5`, B.2 `2dcf4d1`, G.2 `936a8bb`, B.3 `d111933`, E.2 `a284f6a`, E.3 `4ca5bb7`. **3.E COMPLETE** (E.1/E.2/E.3). 3.B at B.3 + B.4 editor uncommitted. 3.G at G.2 + G.3 recorder uncommitted. Dispatched 3.E reviewer `a33580ac896bd360d`. |
+
+### 3.E reviewer — agent `a33580ac896bd360d` at 02:23
+
+**Verdict:** PASS with 5 SHOULD-FIX. No MUST-FIX. Contract fully met (actor, rollback, no-op, UserDefaults key, all four required tests present).
+
+**SHOULD-FIX all deferred to morning** (no MUST-FIX, 3.B/3.G actively editing codebase in parallel — minimizing interleaved edits):
+- **#1 Write-probe misses "destination not a dir" case.** `BaseDirectoryMigrator.swift:107-120` — `createFile` silently returns false if destination isn't a directory; error message "Choose a folder you can write to" is misleading. Add explicit `fileExists(atPath:isDirectory:)` pre-check so errors distinguish "not writable" from "not a directory". Low practical risk (NSOpenPanel filters to dirs) but migrator is a public actor.
+- **#2 Failed-probe cleanup leaves a dotfile on partial probe.** `validateWritableDestination` can leave `.seshat-migration-probe-<UUID>` in user's chosen dir if `removeItem` throws. Add `defer { try? fileManager.removeItem(at: probeURL) }` or retry in catch.
+- **#3 AdvancedTabViewModel success-after-failure UX edge.** `AdvancedTab.swift:147-162` writes `.success(selectedDirectory)` on migration success without re-reading current config. If initial `baseDirectoryResult` was `.failure` from a permission issue, this silently overwrites without accurately reflecting state. Consider reloading from `SeshatConfig.baseDirectory()` after migration. Rare path.
+- **#4 Missing test for empty-source-subdirs migration.** When source has no `models/`/`modes/`/`recordings/` (brand-new install), `migrate(to:)` still updates Config and returns `.migrated([], totalBytes: 0)` — not `.noOp`. Distinct behavior not covered by existing tests. Add `testMigrationWithNoManagedSubdirsStillUpdatesConfig`.
+- **#5 Manual runbook missing failure-path bullets.** `ManualSettingsVerification.md` covers happy path only; no "pick read-only folder" or "pick already-populated folder" checks. FILE COLLISION — 3.G is extending the same file. Batch with 3.G housekeeping once 3.G lands.
+
+**ACCEPT-WITH-RATIONALE (no action):**
+- Non-atomic rollback logs via `NSLog` rather than surfacing partial-rollback failure in report. Rename-level atomic `moveItem` on same volume makes rollback-failure rare; `.partialFailure` case already informative.
+- `totalBytes` uses `totalFileAllocatedSize → fileAllocatedSize → totalFileSize → fileSize → 0` fallback chain. Exact bytes not load-bearing.
+- `LocalizedError` conformance on `BaseDirectoryMigrationError` — surfaces via `error.localizedDescription`. 
+- No `public` on `AdvancedTabViewModel` — `internal` is correct, matches existing Settings tab pattern.
+
+**Zero sibling-lane collision.** Files touched: `BaseDirectoryMigrator.swift` (new), `Config.swift`, `AdvancedTab.swift`, `BaseDirectoryMigratorTests.swift` (new), `AdvancedTabViewModelTests.swift` (new), `ManualSettingsVerification.md`. No bleed into `Notes/*`, `Hotkeys/*`, `SQLiteTranscriptStore.swift`, `Onboarding/*`, `Package.swift`, or other Settings tabs.
+
+**Reviewer note:** did not run `swift test` (Santa worktree AMFI kill). Verified by reading.
