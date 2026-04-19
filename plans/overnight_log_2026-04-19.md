@@ -165,3 +165,4 @@ _(high-level progression)_
 - Settings menu item is DISABLED (greyed) pre-onboarding, not hidden — reviewer chose disabled per standard macOS idiom.
 
 **Reviewer note on testing:** `swift build --build-tests` aborted locally with AMFI manifest-compilation kill (Santa worktree/Xcode env). Compile-correctness verified by static inspection only. User should run `swift test --filter 'ModeDescriptorTests|SettingsWindowControllerTests|GeneralTabViewModelTests|StatusItemMenuModelTests|MenuBarSceneModelTests'` from canonical main-repo path in the morning before claiming 3.A shipped.
+| 02:14 | 3a | **Poll tick.** Wave 3a progressing: G.1 `ad17780` HotkeyPreference, B.1 `82a0bca` TranscriptReading. 3.E E.1 in working tree (BaseDirectoryMigrator + Config.swift edits uncommitted). All agents healthy. |
