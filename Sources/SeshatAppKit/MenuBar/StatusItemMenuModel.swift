@@ -66,7 +66,8 @@ struct StatusItemMenuModel: Equatable {
         sessionState: SessionState,
         micPermission: MicrophonePermissionState,
         inputMonitoringPermission: InputMonitoringPermissionState,
-        activeModeName: String = "Quick Memo"
+        activeModeName: String = "Quick Memo",
+        isOnboardingComplete: Bool = true
     ) -> StatusItemMenuModel {
         var items: [Item] = []
 
@@ -119,7 +120,7 @@ struct StatusItemMenuModel: Equatable {
             id: .openSettings,
             title: "Settings",
             keyEquivalent: "",
-            isEnabled: true
+            isEnabled: isOnboardingComplete
         )))
 
         items.append(.separator)

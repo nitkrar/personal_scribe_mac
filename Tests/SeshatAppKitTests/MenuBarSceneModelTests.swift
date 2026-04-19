@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import XCTest
 import SeshatCore
@@ -185,6 +186,33 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(sessionState, .idle)
         XCTAssertEqual(requestCount, 0)
         XCTAssertEqual(openOnboardingRequestCount, 1)
+    }
+
+    func testSettingsMenuActionRaisesOpenSettingsRequestedSignal() async throws {
+        _ = NSApplication.shared
+        let coordinator = try makeCoordinator()
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+        var openSettingsRequestCount = 0
+        let controller = StatusItemController(
+            sceneModel: model,
+            imPermissionProbe: GrantedInputMonitoringProbe(),
+            openHistory: {},
+            openSettings: {
+                openSettingsRequestCount += 1
+            }
+        )
+
+        controller.performMenuAction(.openSettings)
+
+        XCTAssertEqual(openSettingsRequestCount, 1)
     }
 
     func testStartObservingPublishesRecordingAfterCoordinatorToggle() async throws {
@@ -609,6 +637,12 @@ private actor TestPermissionRequester: MicrophonePermissionRequesting {
 
     func callCount() -> Int {
         requestCount
+    }
+}
+
+private struct GrantedInputMonitoringProbe: PermissionProbing {
+    func checkInputMonitoring() -> InputMonitoringPermissionState {
+        .granted
     }
 }
 

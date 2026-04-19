@@ -22,9 +22,9 @@ import SeshatSession
 ///   `MenuBarSceneModel.handleRecordButtonTap()` so the existing
 ///   permission-request flow keeps working).
 ///
-/// ## Phase-3 placeholder handlers
-/// `openHistory` and `openSettings` are wired with `NSAlert` stubs
-/// by default; Phase 3 replaces these with real window launchers.
+/// ## Default handlers
+/// `openHistory` remains a placeholder alert by default; app
+/// composition now injects the live Settings window launcher.
 @MainActor
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
@@ -32,6 +32,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let imPermissionProbe: any PermissionProbing
     private let openHistory: @MainActor () -> Void
     private let openSettings: @MainActor () -> Void
+    private let isOnboardingCompleteProvider: @MainActor () -> Bool
     private let openMicrophoneSystemSettings: @MainActor () -> Void
     private let openInputMonitoringSystemSettings: @MainActor () -> Void
     private let logger: SeshatLogger
@@ -43,7 +44,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         sceneModel: MenuBarSceneModel,
         imPermissionProbe: any PermissionProbing = IOHIDPermissionProbe(),
         openHistory: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "History"),
-        openSettings: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "Settings"),
+        openSettings: @escaping @MainActor () -> Void = {},
+        isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
+            SeshatOnboardingCompleted.resolve().rawValue
+        },
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
@@ -52,6 +56,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.imPermissionProbe = imPermissionProbe
         self.openHistory = openHistory
         self.openSettings = openSettings
+        self.isOnboardingCompleteProvider = isOnboardingCompleteProvider
         self.openMicrophoneSystemSettings = openMicrophoneSystemSettings
         self.openInputMonitoringSystemSettings = openInputMonitoringSystemSettings
         self.logger = logger
@@ -96,6 +101,33 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         rebuildMenu()
+    }
+
+    var isStatusItemVisible: Bool {
+        statusItem.isVisible
+    }
+
+    func setStatusItemVisible(_ isVisible: Bool) {
+        statusItem.isVisible = isVisible
+    }
+
+    func performMenuAction(_ id: StatusItemMenuModel.ActionID) {
+        switch id {
+        case .startStopRecording:
+            Task { @MainActor in
+                await sceneModel.handleRecordButtonTap()
+            }
+        case .openHistory:
+            openHistory()
+        case .openSettings:
+            openSettings()
+        case .openMicrophoneSystemSettings:
+            openMicrophoneSystemSettings()
+        case .openInputMonitoringSystemSettings:
+            openInputMonitoringSystemSettings()
+        case .quit:
+            NSApplication.shared.terminate(nil)
+        }
     }
 
     // MARK: - Private
@@ -165,7 +197,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let model = StatusItemMenuModel.make(
             sessionState: sceneModel.state,
             micPermission: sceneModel.permissionState,
-            inputMonitoringPermission: imPermission
+            inputMonitoringPermission: imPermission,
+            isOnboardingComplete: isOnboardingCompleteProvider()
         )
 
         menu.removeAllItems()
@@ -202,22 +235,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             return
         }
 
-        switch id {
-        case .startStopRecording:
-            Task { @MainActor in
-                await sceneModel.handleRecordButtonTap()
-            }
-        case .openHistory:
-            openHistory()
-        case .openSettings:
-            openSettings()
-        case .openMicrophoneSystemSettings:
-            openMicrophoneSystemSettings()
-        case .openInputMonitoringSystemSettings:
-            openInputMonitoringSystemSettings()
-        case .quit:
-            NSApp.terminate(nil)
-        }
+        performMenuAction(id)
     }
 
     // MARK: - Default handlers

@@ -15,6 +15,7 @@ struct SeshatAppMain: App {
     @StateObject private var pillController: PillOverlayController
     @StateObject private var statusItemController: StatusItemControllerHost
     @StateObject private var onboardingController: OnboardingWindowControllerHost
+    @StateObject private var settingsWindowController: SettingsWindowControllerHost
 
     init() {
         self.init(
@@ -60,6 +61,9 @@ struct SeshatAppMain: App {
             inputMonitoringProbe: inputMonitoringProbe,
             isAccessibilityTrusted: isAccessibilityTrusted
         )
+        let isOnboardingCompleteProvider: @MainActor () -> Bool = {
+            SeshatOnboardingCompleted.resolve(from: defaults).rawValue
+        }
 
         self.coordinator = coordinator
         self.permissionRequester = permissionRequester
@@ -100,15 +104,42 @@ struct SeshatAppMain: App {
         clipboardOnlyNotice = {
             pillController.showClipboardOnlyNotice()
         }
+        var showSettingsWindow: @MainActor () -> Void = {}
+        let statusItemControllerHost = StatusItemControllerHost(
+            sceneModel: sceneModel,
+            openSettings: {
+                showSettingsWindow()
+            },
+            isOnboardingCompleteProvider: isOnboardingCompleteProvider
+        )
+        let settingsWindowControllerHost = SettingsWindowControllerHost(
+            controllerFactory: {
+                SettingsWindowController(
+                    defaults: defaults,
+                    menuBarVisibilityProvider: {
+                        statusItemControllerHost.isMenuBarVisible
+                    },
+                    menuBarVisibilitySetter: { isVisible in
+                        statusItemControllerHost.setMenuBarVisible(isVisible)
+                    }
+                )
+            }
+        )
+        showSettingsWindow = {
+            settingsWindowControllerHost.showWindow(nil)
+        }
         _sceneModel = StateObject(wrappedValue: sceneModel)
         _pillController = StateObject(
             wrappedValue: pillController
         )
         _statusItemController = StateObject(
-            wrappedValue: StatusItemControllerHost(sceneModel: sceneModel)
+            wrappedValue: statusItemControllerHost
         )
         _onboardingController = StateObject(
             wrappedValue: onboardingControllerHost
+        )
+        _settingsWindowController = StateObject(
+            wrappedValue: settingsWindowControllerHost
         )
 
         sceneModel.startObserving()
@@ -154,7 +185,25 @@ private extension SeshatAppMain {
 final class StatusItemControllerHost: ObservableObject {
     let controller: StatusItemController
 
-    init(sceneModel: MenuBarSceneModel) {
-        self.controller = StatusItemController(sceneModel: sceneModel)
+    init(
+        sceneModel: MenuBarSceneModel,
+        openSettings: @escaping @MainActor () -> Void = {},
+        isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
+            SeshatOnboardingCompleted.resolve().rawValue
+        }
+    ) {
+        self.controller = StatusItemController(
+            sceneModel: sceneModel,
+            openSettings: openSettings,
+            isOnboardingCompleteProvider: isOnboardingCompleteProvider
+        )
+    }
+
+    var isMenuBarVisible: Bool {
+        controller.isStatusItemVisible
+    }
+
+    func setMenuBarVisible(_ isVisible: Bool) {
+        controller.setStatusItemVisible(isVisible)
     }
 }

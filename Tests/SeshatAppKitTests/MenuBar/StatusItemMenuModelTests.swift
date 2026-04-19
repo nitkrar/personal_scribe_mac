@@ -35,6 +35,22 @@ final class StatusItemMenuModelTests: XCTestCase {
         assertHeader(model.items[0], "Long-form")
     }
 
+    func testIncompleteOnboardingDisablesSettingsItem() {
+        let model = StatusItemMenuModel.make(
+            sessionState: .idle,
+            micPermission: .granted,
+            inputMonitoringPermission: .granted,
+            isOnboardingComplete: false
+        )
+
+        guard case let .action(settings) = model.items[3] else {
+            return XCTFail("Expected Settings action at index 3")
+        }
+
+        XCTAssertEqual(settings.id, .openSettings)
+        XCTAssertFalse(settings.isEnabled)
+    }
+
     // MARK: - Recording-toggle title switching
 
     func testRecordingStateSwitchesTitleToStop() {
