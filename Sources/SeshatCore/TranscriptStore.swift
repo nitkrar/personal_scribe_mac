@@ -22,7 +22,7 @@ public struct TranscriptEntry: Codable, Sendable, Equatable {
     }
 }
 
-public actor TranscriptStore {
+public actor TranscriptStoreJSONL {
     private let fileURL: URL
     private let fileHandle: FileHandle
     private var ring: RingBuffer<TranscriptEntry>
@@ -84,6 +84,38 @@ public actor TranscriptStore {
         ring.count
     }
 
+    static func loadAllPersistedEntries(
+        from fileURL: URL,
+        logger: SeshatLogger,
+        onCorruptLine: ((String) -> Void)? = nil
+    ) throws -> [TranscriptEntry] {
+        let data = try Data(contentsOf: fileURL)
+        guard !data.isEmpty else {
+            return []
+        }
+
+        let decoder = makeDecoder()
+        var entries: [TranscriptEntry] = []
+
+        for line in data.split(separator: 0x0A, omittingEmptySubsequences: true) {
+            let lineData = Data(line)
+
+            do {
+                let entry = try decoder.decode(TranscriptEntry.self, from: lineData)
+                entries.append(entry)
+            } catch {
+                let renderedLine = String(decoding: lineData, as: UTF8.self)
+                logger.error(
+                    "Skipping corrupt transcript line: \(renderedLine)",
+                    error: error
+                )
+                onCorruptLine?(renderedLine)
+            }
+        }
+
+        return entries
+    }
+
     private static func loadPersistedEntries(
         from fileURL: URL,
         ringCapacity: Int,
@@ -93,29 +125,10 @@ public actor TranscriptStore {
             return []
         }
 
-        let data = try Data(contentsOf: fileURL)
-        guard !data.isEmpty else {
-            return []
-        }
-
-        let decoder = makeDecoder()
-        var entries: [TranscriptEntry] = []
-
-        for line in data.split(separator: 0x0A, omittingEmptySubsequences: true).suffix(ringCapacity) {
-            let lineData = Data(line)
-
-            do {
-                let entry = try decoder.decode(TranscriptEntry.self, from: lineData)
-                entries.append(entry)
-            } catch {
-                logger.error(
-                    "Skipping corrupt transcript line: \(String(decoding: lineData, as: UTF8.self))",
-                    error: error
-                )
-            }
-        }
-
-        return entries
+        return Array(
+            try loadAllPersistedEntries(from: fileURL, logger: logger)
+                .suffix(ringCapacity)
+        )
     }
 
     private func makeEncoder() -> JSONEncoder {

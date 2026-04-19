@@ -16,7 +16,7 @@ final class TranscriptStoreTests: XCTestCase {
         let context = try makeIsolatedRecordingsDirectory()
         defer { cleanup(context.baseDirectory) }
 
-        let store = try TranscriptStore(recordingsDirectory: context.recordingsDirectory)
+        let store = try TranscriptStoreJSONL(recordingsDirectory: context.recordingsDirectory)
         let entries = [
             makeEntry(index: 1),
             makeEntry(index: 2),
@@ -39,7 +39,7 @@ final class TranscriptStoreTests: XCTestCase {
         let context = try makeIsolatedRecordingsDirectory()
         defer { cleanup(context.baseDirectory) }
 
-        let store = try TranscriptStore(recordingsDirectory: context.recordingsDirectory, ringCapacity: 3)
+        let store = try TranscriptStoreJSONL(recordingsDirectory: context.recordingsDirectory, ringCapacity: 3)
         let entries = (1...5).map(makeEntry(index:))
 
         for entry in entries {
@@ -63,12 +63,12 @@ final class TranscriptStoreTests: XCTestCase {
             makeEntry(index: 11),
         ]
 
-        let firstStore = try TranscriptStore(recordingsDirectory: context.recordingsDirectory)
+        let firstStore = try TranscriptStoreJSONL(recordingsDirectory: context.recordingsDirectory)
         for entry in entries {
             try await firstStore.append(entry)
         }
 
-        let secondStore = try TranscriptStore(recordingsDirectory: context.recordingsDirectory)
+        let secondStore = try TranscriptStoreJSONL(recordingsDirectory: context.recordingsDirectory)
         let recent = await secondStore.recent(limit: 10)
         let count = await secondStore.count()
 
@@ -97,7 +97,7 @@ final class TranscriptStoreTests: XCTestCase {
 
         try contents.write(to: context.fileURL)
 
-        let store = try TranscriptStore(recordingsDirectory: context.recordingsDirectory)
+        let store = try TranscriptStoreJSONL(recordingsDirectory: context.recordingsDirectory)
         let recent = await store.recent(limit: 10)
         let count = await store.count()
 
@@ -109,7 +109,7 @@ final class TranscriptStoreTests: XCTestCase {
         let context = try makeIsolatedRecordingsDirectory()
         defer { cleanup(context.baseDirectory) }
 
-        _ = try TranscriptStore(recordingsDirectory: context.recordingsDirectory)
+        _ = try TranscriptStoreJSONL(recordingsDirectory: context.recordingsDirectory)
 
         let attrs = try fileManager.attributesOfItem(atPath: context.fileURL.path)
         let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue
@@ -130,7 +130,7 @@ final class TranscriptStoreTests: XCTestCase {
             attributes: [.posixPermissions: NSNumber(value: 0o644)]
         ))
 
-        _ = try TranscriptStore(recordingsDirectory: context.recordingsDirectory)
+        _ = try TranscriptStoreJSONL(recordingsDirectory: context.recordingsDirectory)
 
         let attrs = try fileManager.attributesOfItem(atPath: context.fileURL.path)
         let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue
@@ -141,7 +141,7 @@ final class TranscriptStoreTests: XCTestCase {
         let context = try makeIsolatedRecordingsDirectory()
         defer { cleanup(context.baseDirectory) }
 
-        let store = try TranscriptStore(recordingsDirectory: context.recordingsDirectory)
+        let store = try TranscriptStoreJSONL(recordingsDirectory: context.recordingsDirectory)
         let entries = (1...10).map(makeEntry(index:))
 
         for entry in entries {

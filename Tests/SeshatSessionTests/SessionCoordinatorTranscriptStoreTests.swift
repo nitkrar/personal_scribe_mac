@@ -4,11 +4,11 @@ import SeshatTestSupport
 @testable import SeshatSession
 
 final class SessionCoordinatorTranscriptStoreTests: XCTestCase {
-    func testSuccessfulTranscriptionAppendsEntryToStore() async throws {
+    func testSuccessfulTranscriptionAppendsEntryToSQLiteStore() async throws {
         let tempDirectory = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: tempDirectory) }
 
-        let store = try TranscriptStore(recordingsDirectory: tempDirectory)
+        let store = try SQLiteTranscriptStore(recordingsDirectory: tempDirectory)
         let coordinator = try makeCoordinator(
             resultText: "hello",
             audioSeconds: 1.0,
@@ -46,7 +46,7 @@ final class SessionCoordinatorTranscriptStoreTests: XCTestCase {
         resultText: String,
         audioSeconds: Double,
         processingSeconds: Double,
-        store: TranscriptStore?
+        store: SQLiteTranscriptStore?
     ) throws -> SessionCoordinator {
         let buffer = try PCMBuffer(
             samples: Array(repeating: 0, count: 16_000),
@@ -85,7 +85,7 @@ final class SessionCoordinatorTranscriptStoreTests: XCTestCase {
     }
 
     private func waitUntilStoreHasEntries(
-        _ store: TranscriptStore,
+        _ store: SQLiteTranscriptStore,
         minimum: Int
     ) async throws {
         for _ in 0..<100 {
@@ -96,7 +96,7 @@ final class SessionCoordinatorTranscriptStoreTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(10))
         }
 
-        XCTFail("TranscriptStore never reached \(minimum) entries")
+        XCTFail("SQLiteTranscriptStore never reached \(minimum) entries")
     }
 
     private func makeTempDirectory() throws -> URL {

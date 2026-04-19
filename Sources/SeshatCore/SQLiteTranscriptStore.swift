@@ -233,32 +233,13 @@ public actor SQLiteTranscriptStore {
         from jsonlURL: URL,
         logger: SeshatLogger
     ) throws -> [TranscriptEntry] {
-        let data = try Data(contentsOf: jsonlURL)
-        guard !data.isEmpty else {
-            return []
-        }
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
-        var entries: [TranscriptEntry] = []
-        for line in data.split(separator: 0x0A, omittingEmptySubsequences: true) {
-            let lineData = Data(line)
-
-            do {
-                let entry = try decoder.decode(TranscriptEntry.self, from: lineData)
-                entries.append(entry)
-            } catch {
-                let renderedLine = String(decoding: lineData, as: UTF8.self)
-                logger.error(
-                    "Skipping corrupt transcript line during SQLite migration: \(renderedLine)",
-                    error: error
-                )
+        try TranscriptStoreJSONL.loadAllPersistedEntries(
+            from: jsonlURL,
+            logger: logger,
+            onCorruptLine: { renderedLine in
                 testingEventSink?(.skippedCorruptJSONLLine(renderedLine))
             }
-        }
-
-        return entries
+        )
     }
 
     private static func insert(_ entry: TranscriptEntry, into db: Database) throws {

@@ -5,7 +5,7 @@ import SeshatCore
 public actor SessionCoordinator {
     private let capture: any AudioCapturing
     private let transcriber: any Transcribing
-    private let transcriptStore: TranscriptStore?
+    private let transcriptStore: SQLiteTranscriptStore?
     private let logger: SeshatLogger
     private let postProcessor = PostProcessor()
     private let signposter = OSSignposter(subsystem: SeshatLogger.subsystem, category: "prepare")
@@ -29,7 +29,7 @@ public actor SessionCoordinator {
         capture: any AudioCapturing,
         transcriber: any Transcribing,
         logger: SeshatLogger,
-        transcriptStore: TranscriptStore? = nil
+        transcriptStore: SQLiteTranscriptStore? = nil
     ) {
         self.capture = capture
         self.transcriber = transcriber
@@ -224,7 +224,7 @@ public actor SessionCoordinator {
         do {
             try await transcriptStore.append(entry)
         } catch {
-            logger.error("Failed to persist transcript to TranscriptStore", error: error)
+            logger.error("Failed to persist transcript to SQLiteTranscriptStore", error: error)
         }
     }
 
