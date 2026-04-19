@@ -19,12 +19,16 @@ final class PasteInjectorTests: XCTestCase {
 
     func testPromptsAccessibilityWhenNotTrustedAndLeavesTranscriptOnClipboard() {
         let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
         var promptCount = 0
         var shortcutPostCount = 0
-        let injector = PasteInjector.live(
+        let injector = PasteInjector(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
-            restoreDelay: 0.01,
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { false },
             requestAccessibilityPrompt: { promptCount += 1 },
@@ -43,12 +47,16 @@ final class PasteInjectorTests: XCTestCase {
 
     func testDoesNotPromptWhenAlreadyTrusted() {
         let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
         var promptCount = 0
         var shortcutPostCount = 0
-        let injector = PasteInjector.live(
+        let injector = PasteInjector(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
-            restoreDelay: 0.01,
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: { promptCount += 1 },
@@ -76,7 +84,6 @@ final class PasteInjectorTests: XCTestCase {
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
-            restoreDelay: 0.01,
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
@@ -105,7 +112,6 @@ final class PasteInjectorTests: XCTestCase {
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.nitkrar.seshat"
             ),
-            restoreDelay: 0.01,
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
@@ -124,14 +130,18 @@ final class PasteInjectorTests: XCTestCase {
 
     func testEmptyTranscriptIsNoop() {
         let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
         pasteboard.clearContents()
         _ = pasteboard.setString("prior", forType: .string)
         var promptCount = 0
         var shortcutPostCount = 0
-        let injector = PasteInjector.live(
+        let injector = PasteInjector(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
-            restoreDelay: 0.01,
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { false },
             requestAccessibilityPrompt: { promptCount += 1 },
@@ -148,35 +158,48 @@ final class PasteInjectorTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "prior")
     }
 
-    func testSchedulesClipboardRestoreWhenTrusted() {
+    func testPasteReadsRestoreDelayPreferencePerCall() {
         let pasteboard = makePasteboard()
-        var scheduledAction: (() -> Void)?
-        var shortcutPostCount = 0
-        let injector = PasteInjector.live(
+        let defaults = isolatedDefaults()
+        var scheduledRestores: [(delay: TimeInterval, action: @MainActor () -> Void)] = []
+        let injector = PasteInjector(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
-            restoreDelay: 0.01,
-            scheduleRestore: { _, action in
-                scheduledAction = action
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            scheduleRestore: { delay, action in
+                scheduledRestores.append((delay: delay, action: action))
             },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
-            pasteShortcutPoster: { _ in
-                shortcutPostCount += 1
-                return true
-            }
+            pasteShortcutPoster: { _ in true }
         )
 
         pasteboard.clearContents()
-        _ = pasteboard.setString("original", forType: .string)
+        _ = pasteboard.setString("original one", forType: .string)
+        PasteRestoreDelay.persist(to: defaults, PasteRestoreDelay(seconds: 0.2))
 
-        injector.paste("transcript")
+        injector.paste("transcript one")
 
-        XCTAssertEqual(shortcutPostCount, 1)
-        XCTAssertEqual(pasteboard.string(forType: .string), "transcript")
-        XCTAssertNotNil(scheduledAction)
-        scheduledAction?()
-        XCTAssertEqual(pasteboard.string(forType: .string), "original")
+        XCTAssertEqual(scheduledRestores.count, 1)
+        XCTAssertEqual(scheduledRestores[0].delay, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcript one")
+        scheduledRestores[0].action()
+        XCTAssertEqual(pasteboard.string(forType: .string), "original one")
+
+        pasteboard.clearContents()
+        _ = pasteboard.setString("original two", forType: .string)
+        PasteRestoreDelay.persist(to: defaults, PasteRestoreDelay(seconds: 1.4))
+
+        injector.paste("transcript two")
+
+        XCTAssertEqual(scheduledRestores.count, 2)
+        XCTAssertEqual(scheduledRestores[1].delay, 1.4, accuracy: 0.0001)
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcript two")
+        scheduledRestores[1].action()
+        XCTAssertEqual(pasteboard.string(forType: .string), "original two")
     }
 }
 

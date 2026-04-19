@@ -64,7 +64,6 @@ public struct PasteInjector: PasteInjecting {
     private let defaults: UserDefaults
     private let frontmostAppProvider: any FrontmostAppProviding
     private let selfBundleIdentifier: String
-    private let restoreDelay: TimeInterval
     private let scheduleRestore: RestoreScheduler
     private let isAccessibilityTrusted: @MainActor () -> Bool
     private let requestAccessibilityPrompt: @MainActor () -> Void
@@ -78,7 +77,6 @@ public struct PasteInjector: PasteInjecting {
         defaults: UserDefaults = .standard,
         frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
         selfBundleIdentifier: String = PasteInjector.seshatBundleIdentifier,
-        restoreDelay: TimeInterval = 0.25,
         scheduleRestore: @escaping RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 Task { @MainActor in
@@ -100,7 +98,6 @@ public struct PasteInjector: PasteInjecting {
         self.defaults = defaults
         self.frontmostAppProvider = frontmostAppProvider
         self.selfBundleIdentifier = selfBundleIdentifier
-        self.restoreDelay = restoreDelay
         self.scheduleRestore = scheduleRestore
         self.isAccessibilityTrusted = isAccessibilityTrusted
         self.requestAccessibilityPrompt = requestAccessibilityPrompt
@@ -116,7 +113,6 @@ public struct PasteInjector: PasteInjecting {
         defaults: UserDefaults = .standard,
         frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
         selfBundleIdentifier: String = PasteInjector.seshatBundleIdentifier,
-        restoreDelay: TimeInterval = 0.25,
         scheduleRestore: @escaping RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 Task { @MainActor in
@@ -137,7 +133,6 @@ public struct PasteInjector: PasteInjecting {
             defaults: defaults,
             frontmostAppProvider: frontmostAppProvider,
             selfBundleIdentifier: selfBundleIdentifier,
-            restoreDelay: restoreDelay,
             scheduleRestore: scheduleRestore,
             isAccessibilityTrusted: isAccessibilityTrusted,
             requestAccessibilityPrompt: requestAccessibilityPrompt,
@@ -149,6 +144,7 @@ public struct PasteInjector: PasteInjecting {
     func paste(_ text: String) -> PasteRoutingDecision {
         guard !text.isEmpty else { return .pasteAtCursor }
 
+        let restoreDelay = PasteRestoreDelay.resolve(from: defaults).seconds
         let route = PasteRoutingDecider(
             defaults: defaults,
             frontmostAppProvider: frontmostAppProvider,
