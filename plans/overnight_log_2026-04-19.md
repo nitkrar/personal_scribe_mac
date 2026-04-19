@@ -139,3 +139,4 @@ _(high-level progression)_
 | 01:43 | 2 | **Poll tick — quiet.** 3.A dispatcher handed off to Codex `task-mo51fkp8-bkdfv6` ~5 min ago; real work underway, no commits yet. 3.I reviewer `a1efd5e2ee716750b` still running. Both below stall threshold. |
 | 01:46 | Review | 3.I reviewer PASS (ACCEPT). MUST-FIX is history-bisect hazard (not code) — parked for user decision. SHOULD-FIX #2 (runbook expansion) applied as `4e6a819`. SF-1 (mixed-key semantics) deferred. Wave 1 now fully reviewed; Wave 2 (3.A) still in flight. |
 | 01:48 | 2 | **Poll tick — quiet.** 3.A Codex `task-mo51fkp8-bkdfv6` running ~10 min, no commits yet, below stall threshold. |
+| 01:53 | 2 | **Poll tick.** 3.A three commits landed in rapid succession: A.1 `7e9eee1` ModeDescriptor registry, A.2 `a03576c` settings window shell, A.3 `2872ec1` visibility invariant (test_applyVisibilityConfig_rejectsBothHidden). Agent progressing cleanly, more stages ahead (5 tabs + runbook + menu wire-up). |
