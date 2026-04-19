@@ -10,15 +10,15 @@ import SeshatSession
 
 @MainActor
 public final class GlobalHotkeyMonitor {
-    internal typealias DeferredActionCanceller = @MainActor () -> Void
-    internal typealias DeferredActionScheduler = @MainActor (
+    public typealias DeferredActionCanceller = @MainActor () -> Void
+    public typealias DeferredActionScheduler = @MainActor (
         _ delay: TimeInterval,
         _ action: @escaping @MainActor () -> Void
     ) -> DeferredActionCanceller
 
     private static let leftOptionKeyCode: UInt16 = 58
     private static let rightOptionKeyCode: UInt16 = 61
-    private static let doubleTapWindow: TimeInterval = 0.4
+    public static let doubleTapWindow: TimeInterval = 0.4
     private static let recordingModifierMask: NSEvent.ModifierFlags = [
         .command,
         .control,
@@ -49,7 +49,7 @@ public final class GlobalHotkeyMonitor {
         onTrigger: @escaping @MainActor () -> Void,
         emergencyQuitRequested: @escaping @MainActor () -> Void = {},
         recordingHotkey: HotkeyPreference = HotkeyPreference.resolve(),
-        tapWindow: TimeInterval = Self.doubleTapWindow,
+        tapWindow: TimeInterval = GlobalHotkeyMonitor.doubleTapWindow,
         scheduleDeferredTrigger: @escaping DeferredActionScheduler = { delay, action in
             let workItem = DispatchWorkItem {
                 Task { @MainActor in

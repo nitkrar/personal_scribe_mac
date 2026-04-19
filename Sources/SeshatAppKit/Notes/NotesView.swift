@@ -73,7 +73,7 @@ struct NotesView: View {
     private var sidebarColumn: some View {
         let palette = SeshatTheme.Palette.for(scheme: colorScheme)
 
-        VStack(alignment: .leading, spacing: Layout.columnSpacing) {
+        return VStack(alignment: .leading, spacing: Layout.columnSpacing) {
             TextField(searchFieldPrompt, text: searchFieldBinding)
                 .textFieldStyle(.roundedBorder)
 

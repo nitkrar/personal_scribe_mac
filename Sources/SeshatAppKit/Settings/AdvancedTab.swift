@@ -91,7 +91,7 @@ public struct AdvancedTab: View {
         }
     }
 
-    private static func presentDirectoryPicker(currentBaseDirectory: URL?) -> URL? {
+    internal static func presentDirectoryPicker(currentBaseDirectory: URL?) -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -179,9 +179,7 @@ final class AdvancedTabViewModel: ObservableObject {
                 return "Base directory changed. No existing models, modes, or recordings needed moving."
             }
 
-            let formattedDirectories =
-                ListFormatter.localizedString(byJoining: movedSubdirs) ??
-                movedSubdirs.joined(separator: ", ")
+            let formattedDirectories = ListFormatter.localizedString(byJoining: movedSubdirs)
             let formattedBytes = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
             return "Moved \(formattedDirectories) (\(formattedBytes))."
         }
