@@ -88,21 +88,12 @@ public final class PermissionServiceAdapter: PermissionService {
     }
 
     // `objectWillChange` fires before the wrapped service mutates its
-    // `@Published` storage, so prefer the projected `statuses` publisher.
+    // `@Published` storage, so defer the snapshot read to the next runloop
+    // tick to pick up the post-change value.
     private static func makeObservation<Service: PermissionService>(
         for service: Service,
         onChange: @escaping @MainActor ([Permission: PermissionStatus]) -> Void
     ) -> AnyCancellable {
-        if let statusesPublisher = publishedStatusesPublisher(for: service) {
-            return statusesPublisher.sink { statuses in
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        onChange(statuses)
-                    }
-                }
-            }
-        }
-
         return service.objectWillChange.sink { _ in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -110,24 +101,6 @@ public final class PermissionServiceAdapter: PermissionService {
                 }
             }
         }
-    }
-
-    private static func publishedStatusesPublisher<Service: PermissionService>(
-        for service: Service
-    ) -> AnyPublisher<[Permission: PermissionStatus], Never>? {
-        var mirror: Mirror? = Mirror(reflecting: service)
-        while let currentMirror = mirror {
-            for child in currentMirror.children {
-                guard let publishedStatuses = child.value as? Published<[Permission: PermissionStatus]> else {
-                    continue
-                }
-
-                return publishedStatuses.projectedValue.eraseToAnyPublisher()
-            }
-            mirror = currentMirror.superclassMirror
-        }
-
-        return nil
     }
 }
 

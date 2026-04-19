@@ -173,7 +173,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         let label = statusItemLabel(for: .idle)
         button.toolTip = label
-        button.accessibilityLabel = label
+        button.setAccessibilityLabel(label)
     }
 
     private func updateStatusItemAppearance(for sessionState: SessionState) {
@@ -206,7 +206,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
         let label = statusItemLabel(for: sessionState)
         button.toolTip = label
-        button.accessibilityLabel = label
+        button.setAccessibilityLabel(label)
 
         // If the menu is currently showing, rebuild so the
         // Record/Stop title tracks state live.
