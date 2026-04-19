@@ -30,93 +30,77 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 ## Proposed API / contracts
 ### Types (enums, structs)
 - `OutputMode`
-  `paste`, `copy`, `both`.
-  Consumer-facing policy enum. Stage 2 uses `paste` for the post-transcript hook and `copy` for the current `MenuBarSceneModel.copyLatestTranscript()` helper. `both` is part of the locked public contract but is not consumed on trunk today.
+  `batch`, `streaming`.
+  Consumer-facing policy enum from the locked master prompt. Stage 1 only ships the batch path, but the streaming vocabulary stays reserved so future work does not silently rename the surface again.
 - `OutputTarget`
   `frontmostApp`, `clipboardOnly`, `selfFrontmost`.
-  Internal routing result produced by the paste path after evaluating frontmost app and paste preferences. This replaces the legacy `PasteRoutingDecision` shape once Stage 3 lands.
+  Routing result produced by the batch path after evaluating frontmost app and paste preferences. `selfFrontmost` means "route to clipboard instead of synthetic paste."
 - `OutputDelivery`
   `paste`, `typeEvents`, `clipboardOnly`.
-  Internal transport descriptor. `paste` covers the current batch clipboard-plus-`Cmd+V` path. `typeEvents` is reserved for the still-deferred streaming transport choice. `clipboardOnly` records a successful non-pasted fallback.
+  Delivery descriptor. Stage 1 uses `paste` and `clipboardOnly`; `typeEvents` remains reserved vocabulary for future streaming work.
+- `OutputResult`
+  Batch delivery outcome returned by `deliverBatch(text:)`.
+  Stage 1 carries the actual delivery result (`delivered(target:delivery:)`), empty-input no-op, and hard pasteboard-write failure.
 - `OutputError`
-  Layer-owned error domain for the `async throws` contract.
-  Minimum cases: `clipboardWriteFailed`, `clipboardOnlyFallback`, `streamingTransportDecisionRequired`, `copyUnavailable`.
-  `clipboardOnlyFallback` is explicitly non-fatal to the session pipeline: it means the text was copied successfully, but a synthetic paste did not occur.
+  Stage 1 keeps only `clipboardWriteFailed` as the explicit hard failure for batch output.
 
 ### Protocols
 - `OutputService: Sendable`
-  `@MainActor` surface owned by this layer.
-  Required entry points: `paste(text:) async throws`, `copy(text:) async throws`, `beginStream() -> any OutputStreamHandle`.
-  `paste(text:)` is the batch post-transcript path.
-  `copy(text:)` is the direct clipboard-write path for manual copy or paste-last style actions.
-  `beginStream()` reserves the streaming hook now even though no consumer adopts it in this refactor.
-- `OutputStreamHandle: Sendable`
-  `append(_ chunk: String)` and `finalize()`.
-  One handle instance represents one streaming output session. `append(_:)` consumes partial text updates; `finalize()` closes the session and releases any retained clipboard or transport state.
+  `@MainActor` class surface owned by this layer.
+  Required entry point: `deliverBatch(text: String) async -> OutputResult`.
 
-### Errors
-- `OutputError`
-  `clipboardWriteFailed` is the hard failure for pasteboard writes.
-  `clipboardOnlyFallback` is the handled fallback case when batch paste becomes clipboard-only.
-  `streamingTransportDecisionRequired` is the guardrail until the backlog decision is approved.
-  `copyUnavailable` is reserved for any future pasteboard-unavailable path that should not be silently swallowed.
+### Implementations
+- `ClipboardBatchOutput`
+  Writes the pasteboard, posts synthetic `Cmd+V`, restores after the configured delay, and returns an `OutputResult` that distinguishes pasted vs clipboard-only delivery.
+- `StreamedTypingOutput`
+  Deferred. Not shipped in Stage 1.
+
+### Deferred streaming note
+- Streaming API intentionally deferred — see `plans/backlog/pipeline-streaming-defer.md`. Layer 5 does not expose `beginStream()` or `OutputStreamHandle` in Stage 1.
+- Any dormant partial-delivery surface remains outside Layer 5 until the stream-build slice resolves ownership and transport.
 
 ## Proposed live implementation
-`AppKitOutputService` should be the only public live conformer and should be a `@MainActor final class`. It owns one `PasteOutputService`, one `CopyOutputService`, and one streaming-handle factory. Stage 1 keeps all of that in `Sources/SeshatAppKit/Output/*` so other layer Stage 1 work can land in parallel without collisions.
+`ClipboardBatchOutput` is the only live `OutputService` conformer in Stage 1. It absorbs the old `PasteOutputService` plus `CopyOutputService` split, keeps the current clipboard save or restore behavior, keeps `PasteMode` plus `PasteRestoreDelay` reads inside the batch path, and restores the prior clipboard contents if a clipboard-only write fails.
 
-`PasteOutputService` is the temporary bridge from Layer 5 to the existing batch behavior. In Stage 1 it wraps the current `PasteInjector` semantics instead of editing current consumers. In Stage 2 it becomes the only batch paste path that `SessionCoordinator` and `MenuBarSceneModel` can reach. In Stage 3 the legacy `PasteInjector` surface and call sites disappear; either its logic has been fully absorbed into `PasteOutputService`, or `PasteInjector.swift` is deleted after the wrapper no longer needs it.
-
-`CopyOutputService` is the only raw pasteboard writer after Stage 2. No menu-bar or composition file should retain its own `NSPasteboard.general` write closure once the swap is done. `CopyOutputService` remains small and synchronous internally, but the protocol stays `async throws` so consumers see one consistent interface.
-
-`SessionCoordinator` becomes the owner of batch post-transcript output in Stage 2. The coordinator already owns "transcription succeeded, `mostRecentResult` is ready, persistence is done" at `Sources/SeshatSession/SessionCoordinator.swift:200-214`; Layer 5 should move the primary output hook there so output does not depend on `MenuBarSceneModel` observation timing. Output delivery remains best-effort: successful transcription must still publish `.idle` and keep `mostRecentResult` even if output falls back to clipboard or throws a non-fatal output error.
+`SessionCoordinator` becomes the owner of batch post-transcript output in Stage 2. The coordinator already owns "transcription succeeded, `mostRecentResult` is ready, persistence is done" at `Sources/SeshatSession/SessionCoordinator.swift:200-214`; Layer 5 should move the primary output hook there so output does not depend on `MenuBarSceneModel` observation timing. Output delivery remains best-effort: successful transcription must still publish `.idle` and keep `mostRecentResult` even if output falls back to clipboard or returns `.failed(.clipboardWriteFailed)`.
 
 ### New files (explicit Stage 1 list)
 - `Sources/SeshatCore/Output/OutputMode.swift`
 - `Sources/SeshatCore/Output/OutputTarget.swift`
 - `Sources/SeshatCore/Output/OutputDelivery.swift`
 - `Sources/SeshatCore/Output/OutputError.swift`
-- `Sources/SeshatCore/Output/OutputStreamHandle.swift`
+- `Sources/SeshatCore/Output/OutputResult.swift`
 - `Sources/SeshatCore/Output/OutputService.swift`
-- `Sources/SeshatAppKit/Output/PasteOutputService.swift`
-- `Sources/SeshatAppKit/Output/CopyOutputService.swift`
-- `Sources/SeshatAppKit/Output/AppKitOutputService.swift`
-- `Sources/SeshatAppKit/Output/StreamingOutputHandle.swift`
-
-### Streaming hook design notes
-- The streaming hook is first-class in the public contract now, not a later additive patch. Stage 1 must land `beginStream()` and a concrete handle type even though Stage 2 does not wire a streaming consumer yet.
-- The live transport decision remains deferred exactly as the master prompt requires. The plan must carry both options forward: incremental synthetic typing via `CGEvent`, and incremental clipboard updates plus repeated `Cmd+V`.
-- Incremental `CGEvent` typing avoids clipboard churn and may produce cleaner "typed text" undo behavior, but it is the riskier Unicode and input-method path and depends more heavily on AX and event-synthesis reliability.
-- Repeated clipboard and `Cmd+V` preserves arbitrary Unicode through the pasteboard and reuses existing batch logic, but it churns clipboard state, complicates restore timing, and likely creates chunk-level undo groups.
-- The implementation must author `plans/backlog/streaming-output-delivery-mechanism.md` during Stage 1.3. That ticket is the required decision gate before any live streaming consumer is allowed to adopt `beginStream()`.
+- `Sources/SeshatAppKit/Output/ClipboardBatchOutput.swift`
 
 ## Migration of existing call sites
 ### Stage 1 — Build in parallel
 | Stage step | Depends on | Can run in parallel with | Summary |
 |---|---|---|---|
 | `1.1` | none | layers `1`, `2`, `3`, `4`, `6`, `7`, `8`, `9` Stage 1 | Add `Sources/SeshatCore/Output/*` contracts and core tests only. |
-| `1.2` | `1.1` | layers `1`, `2`, `3`, `4`, `6`, `7`, `8`, `9` Stage 1 | Add `PasteOutputService` and `CopyOutputService` in `Sources/SeshatAppKit/Output/*` with wrapper tests; no consumer touches. |
-| `1.3` | `1.1`, `1.2` | layers `1`, `2`, `3`, `4`, `6`, `7`, `8`, `9` Stage 1 | Add `AppKitOutputService`, concrete stream handle, and backlog handoff; still no consumer touches. |
+| `1.2` | `1.1` | layers `1`, `2`, `3`, `4`, `6`, `7`, `8`, `9` Stage 1 | Add `ClipboardBatchOutput` and batch output tests in `Sources/SeshatAppKit/Output/*`; no consumer touches. |
+| `1.3` | `1.1`, `1.2` | layers `1`, `2`, `3`, `4`, `6`, `7`, `8`, `9` Stage 1 | Update the Layer 5 plan to record the locked batch-only Stage 1 contract and the streaming deferral note. |
 
 ### Step 1.1 — Define the core output contracts in new `SeshatCore/Output` files
 | Change | Before | After |
 |---|---|---|
-| Contract ownership | No dedicated output contract in `SeshatCore`; output semantics leak from `PasteInjector` and menu-bar closures. | `SeshatCore` owns the output vocabulary: `OutputMode`, `OutputTarget`, `OutputDelivery`, `OutputError`, `OutputStreamHandle`, and `OutputService`. |
-| Batch vs streaming surface | Batch paste exists only as `PasteInjecting.paste(_:)`; streaming has no seam. | One `@MainActor` service exposes `paste(text:)`, `copy(text:)`, and `beginStream()`. |
-| Consumer policy | `SeshatPasteMode` only models paste-at-cursor vs clipboard-only. | Layer 5 adds `OutputMode` for consumer policy while still reading the Layer 3-managed paste preferences inside the live paste path. |
+| Contract ownership | No dedicated output contract in `SeshatCore`; output semantics leak from `PasteInjector` and menu-bar closures. | `SeshatCore` owns the output vocabulary: `OutputMode`, `OutputTarget`, `OutputDelivery`, `OutputResult`, `OutputError`, and `OutputService`. |
+| Batch surface | Batch paste exists only as `PasteInjecting.paste(_:)`. | One `@MainActor` service exposes `deliverBatch(text:) async -> OutputResult`. |
+| Streaming surface | Layer 5 had no approved batch result type, and the prompt drift was unresolved. | Layer 5 keeps streaming vocabulary only; it does not expose a public streaming handle in Stage 1. |
 
 #### Files touched (exhaustive) — path:line-range — what changes
-- `Sources/SeshatCore/Output/OutputMode.swift:1-20` — add the locked `paste`, `copy`, `both` enum.
-- `Sources/SeshatCore/Output/OutputTarget.swift:1-25` — add the internal route enum that replaces `PasteRoutingDecision` after Stage 3.
-- `Sources/SeshatCore/Output/OutputDelivery.swift:1-25` — add the internal transport enum with `paste`, `typeEvents`, `clipboardOnly`.
-- `Sources/SeshatCore/Output/OutputError.swift:1-40` — add the layer-owned error domain for non-fatal clipboard-only fallback and real failures.
-- `Sources/SeshatCore/Output/OutputStreamHandle.swift:1-30` — add the stream-handle contract.
-- `Sources/SeshatCore/Output/OutputService.swift:1-30` — add the `@MainActor` `OutputService` protocol with the locked methods.
-- `Tests/SeshatCoreTests/Output/OutputContractsTests.swift:1-140` — add contract tests that pin enum cases, protocol surface, and the stream-handle method names.
+- `Sources/SeshatCore/Output/OutputMode.swift` — lock the enum to `batch` and `streaming`.
+- `Sources/SeshatCore/Output/OutputTarget.swift` — keep the routing vocabulary that replaces `PasteRoutingDecision` after consumer migration.
+- `Sources/SeshatCore/Output/OutputDelivery.swift` — keep `paste`, `typeEvents`, and `clipboardOnly`.
+- `Sources/SeshatCore/Output/OutputError.swift` — keep `clipboardWriteFailed` as the Stage 1 hard failure.
+- `Sources/SeshatCore/Output/OutputResult.swift` — add the batch outcome type.
+- `Sources/SeshatCore/Output/OutputService.swift` — add the `@MainActor` `deliverBatch(text:)` contract.
+- `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` — pin the enum cases, `OutputResult`, and the single-method `OutputService` surface.
 
 #### Scope — IN
 - Define the public and internal layer vocabulary only.
 - Preserve the locked `OutputMode` spelling exactly.
-- Reserve the streaming hook now even though no trunk consumer adopts it in Stage 2.
+- Keep the streaming vocabulary without exposing a Layer 5 streaming API in Stage 1.
 
 #### Scope — OUT
 - No AppKit implementation yet.
@@ -124,89 +108,70 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 - No edits outside `Sources/SeshatCore/Output/*` and `Tests/SeshatCoreTests/Output/*`.
 
 #### Acceptance tests — Tests/... — test name + what it asserts + clause it ties to
-- `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` — `testOutputModeHasPasteCopyBoth`; ties to `Proposed API / contracts > Types`.
-- `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` — `testOutputServiceExposesPasteCopyAndBeginStreamOnly`; ties to `Proposed API / contracts > Protocols`.
-- `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` — `testOutputStreamHandleSupportsAppendAndFinalize`; ties to `Streaming hook design notes` bullet 1.
+- `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` — `testOutputModeHasBatchAndStreaming`; ties to `Proposed API / contracts > Types`.
+- `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` — `testOutputResultRepresentsDeliveredFailedAndIgnoredInputOutcomes`; ties to `Proposed API / contracts > Types`.
+- `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` — `testOutputServiceExposesDeliverBatchOnly`; ties to `Proposed API / contracts > Protocols`.
 
 #### Validation checklist (implementer ticks box-by-box)
-- [ ] `Sources/SeshatCore/Output/OutputMode.swift:1-20` declares exactly `paste`, `copy`, and `both`, matching `Proposed API / contracts > Types`.
-- [ ] `Sources/SeshatCore/Output/OutputService.swift:1-30` exposes `paste(text:) async throws`, `copy(text:) async throws`, and `beginStream() -> any OutputStreamHandle`, matching `Proposed API / contracts > Protocols`.
-- [ ] `Sources/SeshatCore/Output/OutputStreamHandle.swift:1-30` keeps `append(_ chunk: String)` and `finalize()`, matching `Streaming hook design notes` bullet 1.
-- [ ] `Tests/SeshatCoreTests/Output/OutputContractsTests.swift:1-140` pins the contract without importing AppKit behavior, matching `Test strategy` unit-test bullet 1.
-- [ ] The touched surface is limited to `Sources/SeshatCore/Output/OutputMode.swift:1-20`, `Sources/SeshatCore/Output/OutputTarget.swift:1-25`, `Sources/SeshatCore/Output/OutputDelivery.swift:1-25`, `Sources/SeshatCore/Output/OutputError.swift:1-40`, `Sources/SeshatCore/Output/OutputStreamHandle.swift:1-30`, `Sources/SeshatCore/Output/OutputService.swift:1-30`, and `Tests/SeshatCoreTests/Output/OutputContractsTests.swift:1-140`, matching `Stage 1 — Build in parallel`.
+- [ ] `Sources/SeshatCore/Output/OutputMode.swift` declares exactly `batch` and `streaming`, matching `Proposed API / contracts > Types`.
+- [ ] `Sources/SeshatCore/Output/OutputService.swift` exposes only `deliverBatch(text:) async -> OutputResult`, matching `Proposed API / contracts > Protocols`.
+- [ ] No `Sources/SeshatCore/Output/OutputStreamHandle.swift` file exists in Stage 1, matching `Deferred streaming note`.
+- [ ] `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` pins the contract without importing AppKit behavior, matching `Test strategy` unit-test bullet 1.
 
-### Step 1.2 — Add `PasteOutputService` and `CopyOutputService` in new `SeshatAppKit/Output` files
+### Step 1.2 — Add `ClipboardBatchOutput` in new `SeshatAppKit/Output` files
 | Change | Before | After |
 |---|---|---|
-| Batch paste implementation | `PasteInjector` is the only batch output surface and sits outside a layer contract. | `PasteOutputService` wraps the current `PasteInjector` behavior behind the Layer 5 contract. |
-| Clipboard writes | `SeshatAppMain` and `SeshatApp` own raw `NSPasteboard.general` closures. | `CopyOutputService` becomes the only new direct pasteboard writer. |
+| Batch paste implementation | `PasteInjector` is the only batch output surface and sits outside a layer contract. | `ClipboardBatchOutput` wraps the current batch behavior behind the Layer 5 contract. |
+| Clipboard-only delivery | Clipboard-only behavior is split between paste routing and a separate copy service. | One batch implementation handles both pasted and clipboard-only outcomes via `OutputResult`. |
 | Regression coverage | Paste behavior is tested only through `PasteInjectorTests`. | New output tests port those cases to the Layer 5 surface before any consumer swap. |
 
 #### Files touched (exhaustive) — path:line-range — what changes
-- `Sources/SeshatAppKit/Output/PasteOutputService.swift:1-180` — add the `PasteInjector` wrapper with the same routing, restore-delay, and AX-prompt behavior.
-- `Sources/SeshatAppKit/Output/CopyOutputService.swift:1-60` — add the pasteboard writer wrapper used by `copy(text:)`.
-- `Tests/SeshatAppKitTests/Output/PasteOutputServiceTests.swift:1-240` — port the current paste regression cases from `Tests/SeshatAppKitTests/PasteInjectorTests.swift:20-203`.
-- `Tests/SeshatAppKitTests/Output/CopyOutputServiceTests.swift:1-120` — add copy-path tests for clipboard writes and empty-input behavior.
+- `Sources/SeshatAppKit/Output/ClipboardBatchOutput.swift` — add the `PasteInjector` wrapper with the same routing, restore-delay, and AX-prompt behavior, plus clipboard restore on write failure.
+- `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift` — port the current paste regression cases from `Tests/SeshatAppKitTests/PasteInjectorTests.swift` and add the clipboard-only write-failure restore case.
 
 #### Scope — IN
 - Preserve current batch behavior exactly before any consumer changes.
 - Keep `PasteInjector.swift` untouched in Stage 1; the new wrapper lands beside it.
-- Make `CopyOutputService` the only new raw pasteboard writer introduced by Layer 5.
+- Fold the old copy-only path into the batch implementation instead of shipping a separate public copy service.
 
 #### Scope — OUT
 - No edits to `MenuBarSceneModel`, `SeshatAppMain`, `SeshatApp`, or `SessionCoordinator` yet.
-- No output-service composition file yet. That is Step 1.3.
+- No Layer 5 streaming implementation.
 - No command-mode wiring yet.
 
 #### Acceptance tests — Tests/... — test name + what it asserts + clause it ties to
-- `Tests/SeshatAppKitTests/Output/PasteOutputServiceTests.swift` — `testPromptsAccessibilityWhenNotTrustedAndLeavesTranscriptOnClipboard`; ties to `Sources/SeshatAppKit/Paste/PasteInjector.swift:168-171` and `Why this layer exists` paragraph 2.
-- `Tests/SeshatAppKitTests/Output/PasteOutputServiceTests.swift` — `testPasteReturnsClipboardOnlyWhenModeIsClipboardOnly`; ties to `Sources/SeshatCore/SeshatPasteMode.swift:3-27`.
-- `Tests/SeshatAppKitTests/Output/PasteOutputServiceTests.swift` — `testPasteReadsRestoreDelayPreferencePerCall`; ties to `Sources/SeshatCore/PasteRestoreDelay.swift:3-62` and `Tests/SeshatAppKitTests/ManualSettingsVerification.md:8-13`.
-- `Tests/SeshatAppKitTests/Output/CopyOutputServiceTests.swift` — `testCopyWritesPlainStringToPasteboard`; ties to `Proposed live implementation` paragraph 3.
+- `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift` — `testPromptsAccessibilityWhenNotTrustedAndLeavesTranscriptOnClipboard`; ties to `Sources/SeshatAppKit/Paste/PasteInjector.swift:168-171` and `Why this layer exists` paragraph 2.
+- `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift` — `testDeliverBatchReturnsClipboardOnlyWhenModeIsClipboardOnly`; ties to `Sources/SeshatCore/SeshatPasteMode.swift:3-27`.
+- `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift` — `testDeliverBatchReadsRestoreDelayPreferencePerCall`; ties to `Sources/SeshatCore/PasteRestoreDelay.swift:3-62` and `Tests/SeshatAppKitTests/ManualSettingsVerification.md:8-13`.
+- `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift` — `testClipboardOnlyWriteFailureRestoresExistingPasteboardContents`; ties to the Stage 1 review finding about clipboard preservation on batch-write failure.
 
 #### Validation checklist (implementer ticks box-by-box)
-- [ ] `Sources/SeshatAppKit/Output/PasteOutputService.swift:1-180` preserves the existing batch routing semantics without modifying `Sources/SeshatAppKit/Paste/PasteInjector.swift:7-227`, matching `Proposed live implementation` paragraph 2 and `Stage 1 — Build in parallel`.
-- [ ] `Sources/SeshatAppKit/Output/CopyOutputService.swift:1-60` is the only new direct `NSPasteboard` writer, matching `Proposed live implementation` paragraph 3.
-- [ ] `Tests/SeshatAppKitTests/Output/PasteOutputServiceTests.swift:1-240` covers the behaviors currently pinned by `Tests/SeshatAppKitTests/PasteInjectorTests.swift:20-203`, matching `Test strategy` regression-guard bullets.
-- [ ] `Tests/SeshatAppKitTests/Output/CopyOutputServiceTests.swift:1-120` proves direct copy behavior without requiring `MenuBarSceneModel`, matching `Stage 1 — Build in parallel`.
-- [ ] The touched surface is limited to `Sources/SeshatAppKit/Output/PasteOutputService.swift:1-180`, `Sources/SeshatAppKit/Output/CopyOutputService.swift:1-60`, `Tests/SeshatAppKitTests/Output/PasteOutputServiceTests.swift:1-240`, and `Tests/SeshatAppKitTests/Output/CopyOutputServiceTests.swift:1-120`, matching `Stage 1 — Build in parallel`.
+- [ ] `Sources/SeshatAppKit/Output/ClipboardBatchOutput.swift` preserves the existing batch routing semantics without modifying `Sources/SeshatAppKit/Paste/PasteInjector.swift`, matching `Proposed live implementation`.
+- [ ] `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift` covers the behaviors currently pinned by `Tests/SeshatAppKitTests/PasteInjectorTests.swift`, matching `Test strategy` regression-guard bullets.
+- [ ] No `Sources/SeshatAppKit/Output/CopyOutputService.swift`, `Sources/SeshatAppKit/Output/AppKitOutputService.swift`, or `Sources/SeshatAppKit/Output/StreamingOutputHandle.swift` file exists in Stage 1, matching `Deferred streaming note`.
 
-### Step 1.3 — Add the live facade and stream-handle seam without wiring any consumer
+### Step 1.3 — Update the plan and defer note
 | Change | Before | After |
 |---|---|---|
-| Live service composition | No single live output service exists. | `AppKitOutputService` composes paste, copy, and streaming responsibilities behind one `OutputService`. |
-| Streaming hook | No trunk type can consume partial text updates. | `StreamingOutputHandle` exists now and is testable before any streaming transcription slice lands. |
-| Transport decision | Transport choice is implicit and untracked. | The refactor carries a concrete backlog ticket and an explicit decision gate. |
+| Layer 5 API section | The plan diverges from the locked master prompt. | The plan records the `deliverBatch(text:) async -> OutputResult` contract and the `ClipboardBatchOutput` implementation. |
+| Streaming note | Layer 5 still claims a public `beginStream()` surface. | The plan explicitly records that streaming is deferred and not exposed by Layer 5 in Stage 1. |
 
 #### Files touched (exhaustive) — path:line-range — what changes
-- `Sources/SeshatAppKit/Output/AppKitOutputService.swift:1-140` — add the public live `OutputService` conformer that delegates to paste and copy units.
-- `Sources/SeshatAppKit/Output/StreamingOutputHandle.swift:1-120` — add the concrete handle implementation and the transport-decision seam.
-- `Tests/SeshatAppKitTests/Output/AppKitOutputServiceTests.swift:1-160` — add facade-level tests.
-- `Tests/SeshatAppKitTests/Output/StreamingOutputHandleTests.swift:1-180` — add append and finalize sequencing tests and "not wired to a live consumer yet" guards.
-- `plans/backlog/streaming-output-delivery-mechanism.md:1-80` — author the required decision ticket comparing incremental `CGEvent` typing vs repeated clipboard and `Cmd+V`.
+- `plans/central/LAYER_5_output.md` — replace the divergent API description with the locked batch-only Stage 1 contract.
 
 #### Scope — IN
-- Land a concrete live facade in the new `Output/` directory.
-- Reserve the live stream handle now.
-- Author the backlog ticket during implementation as the transport-decision gate.
+- Align the plan with the locked master prompt and the Stage 1 review.
+- Keep the streaming deferral note pointed at `plans/backlog/pipeline-streaming-defer.md`.
 
 #### Scope — OUT
-- No modifications to current call sites yet.
-- No streaming consumer adoption.
-- No silent transport choice; the backlog ticket is mandatory.
-
-#### Acceptance tests — Tests/... — test name + what it asserts + clause it ties to
-- `Tests/SeshatAppKitTests/Output/AppKitOutputServiceTests.swift` — `testPasteDelegatesToPasteOutputService`; ties to `Proposed live implementation` paragraph 1.
-- `Tests/SeshatAppKitTests/Output/AppKitOutputServiceTests.swift` — `testCopyDelegatesToCopyOutputService`; ties to `Proposed live implementation` paragraph 3.
-- `Tests/SeshatAppKitTests/Output/StreamingOutputHandleTests.swift` — `testAppendConsumesPartialChunksInOrderUntilFinalize`; ties to `Streaming hook design notes` bullets 1-4.
-- `Tests/SeshatAppKitTests/Output/StreamingOutputHandleTests.swift` — `testLiveStreamPathRequiresBacklogDecisionBeforeConsumerAdoption`; ties to `Streaming hook design notes` bullet 5.
+- No new code.
+- No change to the backlog's unresolved stream-build ownership question.
 
 #### Validation checklist (implementer ticks box-by-box)
-- [ ] `Sources/SeshatAppKit/Output/AppKitOutputService.swift:1-140` is the only public live conformer, matching `Proposed live implementation` paragraph 1.
-- [ ] `Sources/SeshatAppKit/Output/StreamingOutputHandle.swift:1-120` accepts partial chunks before `finalize()`, matching `Streaming hook design notes` bullet 1.
-- [ ] `plans/backlog/streaming-output-delivery-mechanism.md:1-80` compares both transport options and records the decision gate, matching `Streaming hook design notes` bullets 2-5.
-- [ ] `Tests/SeshatAppKitTests/Output/StreamingOutputHandleTests.swift:1-180` proves append and finalize ordering without wiring a live consumer, matching `Stage 1 — Build in parallel`.
-- [ ] The touched surface is limited to `Sources/SeshatAppKit/Output/AppKitOutputService.swift:1-140`, `Sources/SeshatAppKit/Output/StreamingOutputHandle.swift:1-120`, `Tests/SeshatAppKitTests/Output/AppKitOutputServiceTests.swift:1-160`, `Tests/SeshatAppKitTests/Output/StreamingOutputHandleTests.swift:1-180`, and `plans/backlog/streaming-output-delivery-mechanism.md:1-80`, matching `Stage 1 — Build in parallel`.
+- [ ] The API section matches `plans/CENTRAL_LAYERS_PROMPT.md:268-276` for `OutputMode`, `OutputTarget`, `OutputDelivery`, `OutputService.deliverBatch(text:)`, and `ClipboardBatchOutput`.
+- [ ] The plan states that Layer 5 does not expose `beginStream()` or `OutputStreamHandle` in Stage 1, matching `plans/backlog/pipeline-streaming-defer.md`.
+
+> Note: the Stage 2 / Stage 3 migration tables below predate this Stage 1 contract correction. Until those sections are rewritten, interpret `OutputService` as the batch-only `deliverBatch(text:)` surface, `ClipboardBatchOutput` as the sole Stage 1 live implementation, and any references to `copy(text:)`, `beginStream()`, `OutputStreamHandle`, `PasteOutputService`, `CopyOutputService`, or `AppKitOutputService` as stale.
 
 ### Stage 2 — Swap
 | Stage step | Depends on | Summary |
@@ -297,7 +262,7 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 | Change | Before | After |
 |---|---|---|
 | Command-mode output | Trunk has classifier and response-card stubs only. | Layer 5 records the current state as "no live output consumer" unless a real call site has landed before execution begins. |
-| Future adoption rule | A future output call site could bypass Layer 5. | Any real command-mode output seam must inject `OutputService`, not `PasteOutputService`, `CopyOutputService`, or raw pasteboard writes. |
+| Future adoption rule | A future output call site could bypass Layer 5. | Any real command-mode output seam must inject `OutputService`, not raw pasteboard writes or legacy `PasteInjecting` seams. |
 
 #### Files touched (exhaustive) — path:line-range — what changes
 - `Sources/SeshatCore/IntentClassifier.swift:20-51` — audit only; no edit unless a real output consumer landed here before execution starts.
@@ -339,7 +304,7 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 | Alternate shell raw clipboard writer | `Sources/SeshatAppKit/SeshatApp.swift:19`, `Sources/SeshatAppKit/SeshatApp.swift:37`, `Sources/SeshatAppKit/SeshatApp.swift:56-60` | Same reason as `SeshatAppMain`; delete the duplicate seam. |
 | Legacy protocol and type surface | `Sources/SeshatAppKit/Paste/PasteInjector.swift:7-52` | `PasteRoutingDecision` and `PasteInjecting` should not survive after Layer 5 owns output. |
 | Legacy test seam `SilentPaster` | `Tests/SeshatAppKitTests/AppEntryPointTests.swift:47-50`, `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift:172-175` | Tests should use Layer 5 fakes instead of the deleted protocol. |
-| Legacy `PasteInjectorTests` file | `Tests/SeshatAppKitTests/PasteInjectorTests.swift:1-209` | Coverage has moved to `Tests/SeshatAppKitTests/Output/PasteOutputServiceTests.swift`. |
+| Legacy `PasteInjectorTests` file | `Tests/SeshatAppKitTests/PasteInjectorTests.swift:1-209` | Coverage has moved to `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift`. |
 
 ### Step 3.1 — Delete legacy output surfaces after every consumer has swapped
 | Change | Before | After |
@@ -349,7 +314,7 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 | Test surface | Tests still reference the pre-Layer-5 output seam. | Tests use only Layer 5 output fakes and output-specific test files. |
 
 #### Files touched (exhaustive) — path:line-range — what changes
-- `Sources/SeshatAppKit/Paste/PasteInjector.swift:1-227` — delete the file once `PasteOutputService` fully owns the behavior.
+- `Sources/SeshatAppKit/Paste/PasteInjector.swift:1-227` — delete the file once `ClipboardBatchOutput` fully owns the behavior.
 - `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:16-18,24-27,120-144` — remove any leftover old output state or helper code.
 - `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:25-26,39-40,75-82,197-200` — remove the old output seam from composition.
 - `Sources/SeshatAppKit/SeshatApp.swift:19-20,37-38,56-60` — remove the alternate-shell clipboard seam.
@@ -369,7 +334,7 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 - No additional consumer changes beyond the explicit delete inventory.
 
 #### Acceptance tests — Tests/... — test name + what it asserts + clause it ties to
-- `Tests/SeshatAppKitTests/Output/PasteOutputServiceTests.swift` — ported batch output coverage remains green after the old file disappears.
+- `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift` — ported batch output coverage remains green after the old file disappears.
 - `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift` — copy helper tests remain green without raw clipboard closures.
 - `Tests/SeshatSessionTests/SessionCoordinatorOutputTests.swift` — post-transcript output remains green after the legacy seam deletion.
 - `Tests/SeshatAppKitTests/ManualPillOverlayVerification.md` — keep `MV-B1-7` and `MV-B1-8` passing after the delete step.
@@ -383,17 +348,16 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 - [ ] After deleting `Sources/SeshatAppKit/Paste/PasteInjector.swift:1-227`, `Tests/SeshatAppKitTests/PasteInjectorTests.swift:1-209`, `Tests/SeshatAppKitTests/AppEntryPointTests.swift:17-26,46-50`, and `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift:116-125,171-175`, `rg -n '\\bPasteInjector\\b|\\bPasteInjecting\\b|\\bPasteRoutingDecision\\b|clipboardWriter' Sources Tests` returns zero hits outside historical plan docs, matching `Stage 3 delete inventory`.
 
 ## Test strategy
-- Unit tests: add `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` to pin the Layer 5 contract; add `Tests/SeshatAppKitTests/Output/PasteOutputServiceTests.swift`, `Tests/SeshatAppKitTests/Output/CopyOutputServiceTests.swift`, and `Tests/SeshatAppKitTests/Output/StreamingOutputHandleTests.swift` to pin batch and streaming behavior; add `Tests/SeshatSessionTests/SessionCoordinatorOutputTests.swift` to pin the new post-transcript hook.
+- Unit tests: add `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` to pin the Layer 5 contract; add `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift` to pin batch behavior and the clipboard-preservation failure case; add `Tests/SeshatSessionTests/SessionCoordinatorOutputTests.swift` to pin the new post-transcript hook.
 - Integration tests: update `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift:17-50,104-140` and `Tests/SeshatAppKitTests/AppEntryPointTests.swift:9-31` so the live composition path uses the new output service.
-- Fakes for the new protocols: add `RecordingOutputService`, `ThrowingOutputService`, and `RecordingOutputStreamHandle` test doubles; do not keep `PasteInjecting` fakes after Stage 3.
+- Fakes for the new protocols: add `RecordingOutputService` and `FailingOutputService` test doubles that return `OutputResult`; do not keep `PasteInjecting` fakes after Stage 3.
 - Regression guards the layer must preserve: port the current behaviors from `Tests/SeshatAppKitTests/PasteInjectorTests.swift:20-203`; preserve `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:264-424` semantics for exactly-once output and missing-transcript no-op; keep `Tests/SeshatAppKitTests/ManualSettingsVerification.md:8-13` and `Tests/SeshatAppKitTests/ManualPillOverlayVerification.md:84-96` current checks live.
 - Manual verification additions: extend `Tests/SeshatAppKitTests/ManualPillOverlayVerification.md` with an explicit AX-untrusted clipboard-only fallback case, because the current runbook covers self-frontmost and clipboard-only mode but not the missing-AX route at `Sources/SeshatAppKit/Paste/PasteInjector.swift:168-171`.
 
 ## Open design questions (surface — do not resolve)
-- [QUESTION] The locked public signature is `paste(text:) async throws`, but the current pill notice path needs to distinguish clipboard-only fallback from a true paste. Should Layer 5 surface that as a handled `OutputError.clipboardOnlyFallback`, or does main-session want a different approved outcome channel before implementation starts?
-- [QUESTION] `OutputMode.both` is locked in, but trunk has no current consumer for it. What is the required sequencing and final clipboard state when `both` interacts with `PasteRestoreDelay`?
+- [QUESTION] The locked Stage 1 contract is `deliverBatch(text:) async -> OutputResult`, but trunk still has an unused manual `copyLatestTranscript()` helper. If a future explicit copy action must bypass paste-at-cursor preferences, does Layer 5 need an approved caller-specified clipboard-only API, or should that remain out of scope for this layer?
 - [QUESTION] The brief names a `MenuBarSceneModel` "paste-last-transcript" consumer, but trunk only has an unused `copyLatestTranscript()` helper at `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:120-128` and no status-item dispatch for it in `Sources/SeshatAppKit/MenuBar/StatusItemController.swift:114-130` and `Sources/SeshatAppKit/MenuBar/StatusItemMenuModel.swift:39-45,112-133`. Should Layer 5 swap only the helper, or is a new menu action expected in the same slice?
-- [QUESTION] `beginStream()` is locked to exist, but the master prompt leaves the transport choice deferred. Must the first live `beginStream()` implementation stay intentionally unreachable until `plans/backlog/streaming-output-delivery-mechanism.md` is reviewed, or may it ship behind a compile-time or internal decision gate so long as Stage 2 still keeps all consumers batch-only?
+- [QUESTION] Streaming ownership remains deferred by `plans/backlog/pipeline-streaming-defer.md`. When the stream build lands, should the live partial-output implementation sit alongside `ClipboardBatchOutput` in Layer 5 or stay exclusively in Layer 7?
 
 ## Validation checklist (implementer ticks box-by-box)
 - [ ] Every file in `New files (explicit Stage 1 list)` exists under `Sources/SeshatCore/Output/*` or `Sources/SeshatAppKit/Output/*`, matching `Stage 1 — Build in parallel`.
@@ -407,12 +371,12 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 - [ ] All acceptance tests named in this plan pass.
 
 ## Backlog tickets authored
-- `plans/backlog/streaming-output-delivery-mechanism.md` — document incremental `CGEvent` typing vs repeated clipboard and `Cmd+V`, including undo grouping, rate limiting, Unicode fidelity, clipboard churn, and AX or event-synthesis constraints.
+- `plans/backlog/pipeline-streaming-defer.md` — authoritative Stage 1 defer note for streaming output ownership and public API scope. Layer 5 stays batch-only until the stream-build slice resolves it.
 
 ## Inter-layer dependencies
 - **Requires**: layer `1` because the paste path should consume the centralized permission story instead of keeping raw AX and TCC branching forever.
 - **Requires**: layer `3` because the live paste path must read the centralized `PasteMode` and `PasteRestoreDelay` preferences.
-- **Blocks**: none inside layers `1`-`9`; the streaming-transcription slice outside this refactor should build on the Stage 1 stream handle instead of inventing a second output seam.
+- **Blocks**: none inside layers `1`-`9`; any future streaming-transcription slice should first resolve `plans/backlog/pipeline-streaming-defer.md` instead of inventing a second output seam.
 
 ## Commit style
 `trunk: layer 5.<n>: <verb-led subject>`. Test + fix in same commit.

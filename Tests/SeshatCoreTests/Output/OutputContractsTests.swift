@@ -3,8 +3,8 @@ import XCTest
 
 @MainActor
 final class OutputContractsTests: XCTestCase {
-    func testOutputModeHasPasteCopyBoth() {
-        XCTAssertEqual(OutputMode.allCases, [.paste, .copy, .both])
+    func testOutputModeHasBatchAndStreaming() {
+        XCTAssertEqual(OutputMode.allCases, [.batch, .streaming])
     }
 
     func testOutputTargetCasesStayLocked() {
@@ -18,78 +18,48 @@ final class OutputContractsTests: XCTestCase {
     func testOutputErrorCasesStayLocked() {
         let errors: [OutputError] = [
             .clipboardWriteFailed,
-            .clipboardOnlyFallback,
-            .streamingTransportDecisionRequired,
-            .copyUnavailable,
         ]
 
         XCTAssertEqual(
             errors,
             [
                 .clipboardWriteFailed,
-                .clipboardOnlyFallback,
-                .streamingTransportDecisionRequired,
-                .copyUnavailable,
             ]
         )
     }
 
-    func testOutputServiceExposesPasteCopyAndBeginStreamOnly() async throws {
-        let service = RecordingOutputService()
-
-        try await service.paste(text: "pasted text")
-        try await service.copy(text: "copied text")
-        let handle = service.beginStream()
-        handle.append("chunk")
-        handle.finalize()
-
-        XCTAssertEqual(service.pastedTexts, ["pasted text"])
-        XCTAssertEqual(service.copiedTexts, ["copied text"])
-        XCTAssertEqual(service.handle.appendedChunks, ["chunk"])
-        XCTAssertEqual(service.handle.finalizeCount, 1)
+    func testOutputResultRepresentsDeliveredFailedAndIgnoredInputOutcomes() {
+        XCTAssertEqual(
+            OutputResult.delivered(target: .frontmostApp, delivery: .paste),
+            .delivered(target: .frontmostApp, delivery: .paste)
+        )
+        XCTAssertEqual(OutputResult.ignoredEmptyInput, .ignoredEmptyInput)
+        XCTAssertEqual(OutputResult.failed(.clipboardWriteFailed), .failed(.clipboardWriteFailed))
     }
 
-    func testOutputStreamHandleSupportsAppendAndFinalize() {
-        let handle = RecordingOutputStreamHandle()
+    func testOutputServiceExposesDeliverBatchOnly() async {
+        let service = RecordingOutputService(
+            result: .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
+        )
 
-        handle.append("hello")
-        handle.append(" world")
-        handle.finalize()
+        let result = await service.deliverBatch(text: "batched text")
 
-        XCTAssertEqual(handle.appendedChunks, ["hello", " world"])
-        XCTAssertEqual(handle.finalizeCount, 1)
+        XCTAssertEqual(service.receivedTexts, ["batched text"])
+        XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
     }
 }
 
 @MainActor
 private final class RecordingOutputService: OutputService, @unchecked Sendable {
-    private(set) var pastedTexts: [String] = []
-    private(set) var copiedTexts: [String] = []
-    let handle = RecordingOutputStreamHandle()
+    private(set) var receivedTexts: [String] = []
+    private let result: OutputResult
 
-    func paste(text: String) async throws {
-        pastedTexts.append(text)
+    init(result: OutputResult) {
+        self.result = result
     }
 
-    func copy(text: String) async throws {
-        copiedTexts.append(text)
-    }
-
-    func beginStream() -> any OutputStreamHandle {
-        handle
-    }
-}
-
-@MainActor
-private final class RecordingOutputStreamHandle: OutputStreamHandle, @unchecked Sendable {
-    private(set) var appendedChunks: [String] = []
-    private(set) var finalizeCount = 0
-
-    func append(_ chunk: String) {
-        appendedChunks.append(chunk)
-    }
-
-    func finalize() {
-        finalizeCount += 1
+    func deliverBatch(text: String) async -> OutputResult {
+        receivedTexts.append(text)
+        return result
     }
 }

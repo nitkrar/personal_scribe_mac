@@ -1,6 +1,4 @@
 @MainActor
-public protocol OutputService: Sendable {
-    func paste(text: String) async throws
-    func copy(text: String) async throws
-    func beginStream() -> any OutputStreamHandle
+public protocol OutputService: AnyObject, Sendable {
+    func deliverBatch(text: String) async -> OutputResult
 }

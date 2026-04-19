@@ -3,13 +3,10 @@ import ApplicationServices
 import Foundation
 import SeshatCore
 
-@MainActor
-protocol PasteOutputServing: Sendable {
-    func paste(text: String) async throws
-}
+typealias PasteboardStringWriter = @MainActor (NSPasteboard, String) -> Bool
 
 @MainActor
-final class PasteOutputService: PasteOutputServing, @unchecked Sendable {
+public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
     private static let seshatBundleIdentifier = "com.nitkrar.seshat"
 
     private let logger: SeshatLogger
@@ -21,13 +18,18 @@ final class PasteOutputService: PasteOutputServing, @unchecked Sendable {
     private let isAccessibilityTrusted: @MainActor () -> Bool
     private let requestAccessibilityPrompt: @MainActor () -> Void
     private let pasteShortcutPoster: @MainActor () -> Bool
+    private let writeString: PasteboardStringWriter
+
+    public convenience init() {
+        self.init(logger: SeshatLogger(category: SeshatLogCategory.ui))
+    }
 
     init(
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
         pasteboard: NSPasteboard = .general,
         defaults: UserDefaults = .standard,
         frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
-        selfBundleIdentifier: String = PasteOutputService.seshatBundleIdentifier,
+        selfBundleIdentifier: String = ClipboardBatchOutput.seshatBundleIdentifier,
         scheduleRestore: @escaping PasteInjector.RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 Task { @MainActor in
@@ -40,7 +42,10 @@ final class PasteOutputService: PasteOutputServing, @unchecked Sendable {
             let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
         },
-        pasteShortcutPoster: @escaping PasteInjector.PasteShortcutPoster = PasteInjector.postPasteShortcut
+        pasteShortcutPoster: @escaping PasteInjector.PasteShortcutPoster = PasteInjector.postPasteShortcut,
+        writeString: @escaping PasteboardStringWriter = { pasteboard, text in
+            pasteboard.setString(text, forType: .string)
+        }
     ) {
         self.logger = logger
         self.pasteboard = pasteboard
@@ -53,10 +58,13 @@ final class PasteOutputService: PasteOutputServing, @unchecked Sendable {
         self.pasteShortcutPoster = {
             pasteShortcutPoster(logger)
         }
+        self.writeString = writeString
     }
 
-    func paste(text: String) async throws {
-        guard !text.isEmpty else { return }
+    public func deliverBatch(text: String) async -> OutputResult {
+        guard !text.isEmpty else {
+            return .ignoredEmptyInput
+        }
 
         let restoreDelay = PasteRestoreDelay.resolve(from: defaults).seconds
         let target = resolveTarget()
@@ -64,25 +72,25 @@ final class PasteOutputService: PasteOutputServing, @unchecked Sendable {
 
         pasteboard.clearContents()
 
-        guard pasteboard.setString(text, forType: .string) else {
-            logger.info("PasteOutputService: failed to write transcript to pasteboard; restoring previous clipboard contents")
+        guard writeString(pasteboard, text) else {
+            logger.info("ClipboardBatchOutput: failed to write transcript to pasteboard; restoring previous clipboard contents")
             restorePasteboard(savedItems)
-            throw OutputError.clipboardWriteFailed
+            return .failed(.clipboardWriteFailed)
         }
 
         guard target == .frontmostApp else {
-            logger.info("PasteOutputService: leaving transcript on clipboard (\(String(describing: target)))")
-            throw OutputError.clipboardOnlyFallback
+            logger.info("ClipboardBatchOutput: leaving transcript on clipboard (\(String(describing: target)))")
+            return .delivered(target: target, delivery: .clipboardOnly)
         }
 
         guard isAccessibilityTrusted() else {
-            logger.info("PasteOutputService: Accessibility permission not granted; triggering system prompt and leaving transcript on clipboard for manual Cmd+V")
+            logger.info("ClipboardBatchOutput: Accessibility permission not granted; triggering system prompt and leaving transcript on clipboard for manual Cmd+V")
             requestAccessibilityPrompt()
-            throw OutputError.clipboardOnlyFallback
+            return .delivered(target: target, delivery: .clipboardOnly)
         }
 
         guard pasteShortcutPoster() else {
-            throw OutputError.clipboardOnlyFallback
+            return .delivered(target: target, delivery: .clipboardOnly)
         }
 
         scheduleRestore(restoreDelay) { [pasteboard] in
@@ -91,6 +99,8 @@ final class PasteOutputService: PasteOutputServing, @unchecked Sendable {
                 pasteboard.writeObjects(savedItems)
             }
         }
+
+        return .delivered(target: target, delivery: .paste)
     }
 
     private func resolveTarget() -> OutputTarget {

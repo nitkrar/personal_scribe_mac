@@ -4,8 +4,8 @@ import SeshatCore
 @testable import SeshatAppKit
 
 @MainActor
-final class PasteOutputServiceTests: XCTestCase {
-    private let suiteName = "SeshatTestsPasteOutputService"
+final class ClipboardBatchOutputTests: XCTestCase {
+    private let suiteName = "SeshatTestsClipboardBatchOutput"
 
     private func makePasteboard() -> NSPasteboard {
         NSPasteboard(name: NSPasteboard.Name(rawValue: "seshat.output.test.\(UUID().uuidString)"))
@@ -22,7 +22,7 @@ final class PasteOutputServiceTests: XCTestCase {
         let defaults = isolatedDefaults()
         var promptCount = 0
         var shortcutPostCount = 0
-        let service = PasteOutputService(
+        let service = ClipboardBatchOutput(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
             defaults: defaults,
@@ -38,21 +38,20 @@ final class PasteOutputServiceTests: XCTestCase {
             }
         )
 
-        await assertThrowsOutputError(.clipboardOnlyFallback) {
-            try await service.paste(text: "hello world")
-        }
+        let result = await service.deliverBatch(text: "hello world")
 
+        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .clipboardOnly))
         XCTAssertEqual(promptCount, 1)
         XCTAssertEqual(shortcutPostCount, 0)
         XCTAssertEqual(pasteboard.string(forType: .string), "hello world")
     }
 
-    func testDoesNotPromptWhenAlreadyTrusted() async throws {
+    func testDeliversPasteWhenAccessibilityIsTrusted() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
         var promptCount = 0
         var shortcutPostCount = 0
-        let service = PasteOutputService(
+        let service = ClipboardBatchOutput(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
             defaults: defaults,
@@ -68,18 +67,19 @@ final class PasteOutputServiceTests: XCTestCase {
             }
         )
 
-        try await service.paste(text: "already trusted")
+        let result = await service.deliverBatch(text: "already trusted")
 
+        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertEqual(promptCount, 0)
         XCTAssertEqual(shortcutPostCount, 1)
     }
 
-    func testPasteReturnsClipboardOnlyWhenModeIsClipboardOnly() async {
+    func testDeliverBatchReturnsClipboardOnlyWhenModeIsClipboardOnly() async {
         let defaults = isolatedDefaults()
         SeshatPasteMode.clipboardOnly.persist(to: defaults)
         let pasteboard = makePasteboard()
         var shortcutPostCount = 0
-        let service = PasteOutputService(
+        let service = ClipboardBatchOutput(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
             defaults: defaults,
@@ -95,20 +95,19 @@ final class PasteOutputServiceTests: XCTestCase {
             }
         )
 
-        await assertThrowsOutputError(.clipboardOnlyFallback) {
-            try await service.paste(text: "clipboard only")
-        }
+        let result = await service.deliverBatch(text: "clipboard only")
 
+        XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
         XCTAssertEqual(shortcutPostCount, 0)
         XCTAssertEqual(pasteboard.string(forType: .string), "clipboard only")
     }
 
-    func testPasteReturnsClipboardOnlyWhenFrontmostAppIsSeshat() async {
+    func testDeliverBatchReturnsClipboardOnlyWhenFrontmostAppIsSeshat() async {
         let defaults = isolatedDefaults()
         SeshatPasteMode.pasteAtCursor.persist(to: defaults)
         let pasteboard = makePasteboard()
         var shortcutPostCount = 0
-        let service = PasteOutputService(
+        let service = ClipboardBatchOutput(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
             defaults: defaults,
@@ -124,22 +123,21 @@ final class PasteOutputServiceTests: XCTestCase {
             }
         )
 
-        await assertThrowsOutputError(.clipboardOnlyFallback) {
-            try await service.paste(text: "self frontmost")
-        }
+        let result = await service.deliverBatch(text: "self frontmost")
 
+        XCTAssertEqual(result, .delivered(target: .selfFrontmost, delivery: .clipboardOnly))
         XCTAssertEqual(shortcutPostCount, 0)
         XCTAssertEqual(pasteboard.string(forType: .string), "self frontmost")
     }
 
-    func testEmptyTranscriptIsNoop() async throws {
+    func testEmptyTranscriptIsNoop() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
         pasteboard.clearContents()
         _ = pasteboard.setString("prior", forType: .string)
         var promptCount = 0
         var shortcutPostCount = 0
-        let service = PasteOutputService(
+        let service = ClipboardBatchOutput(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
             defaults: defaults,
@@ -155,18 +153,19 @@ final class PasteOutputServiceTests: XCTestCase {
             }
         )
 
-        try await service.paste(text: "")
+        let result = await service.deliverBatch(text: "")
 
+        XCTAssertEqual(result, .ignoredEmptyInput)
         XCTAssertEqual(promptCount, 0)
         XCTAssertEqual(shortcutPostCount, 0)
         XCTAssertEqual(pasteboard.string(forType: .string), "prior")
     }
 
-    func testPasteReadsRestoreDelayPreferencePerCall() async throws {
+    func testDeliverBatchReadsRestoreDelayPreferencePerCall() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
         var scheduledRestores: [(delay: TimeInterval, action: @MainActor () -> Void)] = []
-        let service = PasteOutputService(
+        let service = ClipboardBatchOutput(
             logger: SeshatLogger(category: SeshatLogCategory.ui),
             pasteboard: pasteboard,
             defaults: defaults,
@@ -185,8 +184,9 @@ final class PasteOutputServiceTests: XCTestCase {
         _ = pasteboard.setString("original one", forType: .string)
         PasteRestoreDelay.persist(to: defaults, PasteRestoreDelay(seconds: 0.2))
 
-        try await service.paste(text: "transcript one")
+        let firstResult = await service.deliverBatch(text: "transcript one")
 
+        XCTAssertEqual(firstResult, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertEqual(scheduledRestores.count, 1)
         XCTAssertEqual(scheduledRestores[0].delay, 0.2, accuracy: 0.0001)
         XCTAssertEqual(pasteboard.string(forType: .string), "transcript one")
@@ -197,8 +197,9 @@ final class PasteOutputServiceTests: XCTestCase {
         _ = pasteboard.setString("original two", forType: .string)
         PasteRestoreDelay.persist(to: defaults, PasteRestoreDelay(seconds: 1.4))
 
-        try await service.paste(text: "transcript two")
+        let secondResult = await service.deliverBatch(text: "transcript two")
 
+        XCTAssertEqual(secondResult, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertEqual(scheduledRestores.count, 2)
         XCTAssertEqual(scheduledRestores[1].delay, 1.4, accuracy: 0.0001)
         XCTAssertEqual(pasteboard.string(forType: .string), "transcript two")
@@ -206,18 +207,62 @@ final class PasteOutputServiceTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "original two")
     }
 
-    private func assertThrowsOutputError(
-        _ expected: OutputError,
-        when operation: () async throws -> Void
-    ) async {
-        do {
-            try await operation()
-            XCTFail("Expected \(expected) to be thrown")
-        } catch let error as OutputError {
-            XCTAssertEqual(error, expected)
-        } catch {
-            XCTFail("Expected OutputError \(expected), got \(error)")
-        }
+    func testFallsBackToClipboardWhenPasteShortcutCannotBePosted() async {
+        let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
+        var shortcutPostCount = 0
+        let service = ClipboardBatchOutput(
+            logger: SeshatLogger(category: SeshatLogCategory.ui),
+            pasteboard: pasteboard,
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in
+                shortcutPostCount += 1
+                return false
+            }
+        )
+
+        let result = await service.deliverBatch(text: "shortcut fallback")
+
+        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .clipboardOnly))
+        XCTAssertEqual(shortcutPostCount, 1)
+        XCTAssertEqual(pasteboard.string(forType: .string), "shortcut fallback")
+    }
+
+    func testClipboardOnlyWriteFailureRestoresExistingPasteboardContents() async {
+        let defaults = isolatedDefaults()
+        SeshatPasteMode.clipboardOnly.persist(to: defaults)
+        let pasteboard = makePasteboard()
+        pasteboard.clearContents()
+        _ = pasteboard.setString("existing value", forType: .string)
+        var shortcutPostCount = 0
+        let service = ClipboardBatchOutput(
+            logger: SeshatLogger(category: SeshatLogCategory.ui),
+            pasteboard: pasteboard,
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in
+                shortcutPostCount += 1
+                return true
+            },
+            writeString: { _, _ in false }
+        )
+
+        let result = await service.deliverBatch(text: "new value")
+
+        XCTAssertEqual(result, .failed(.clipboardWriteFailed))
+        XCTAssertEqual(shortcutPostCount, 0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "existing value")
     }
 }
 
