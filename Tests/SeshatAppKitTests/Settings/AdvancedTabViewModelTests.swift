@@ -30,7 +30,8 @@ final class AdvancedTabViewModelTests: XCTestCase {
         }
         XCTAssertTrue(message.contains("models"))
         XCTAssertTrue(message.contains("recordings"))
-        XCTAssertEqual(await migrator.recordedDestinations(), [selectedBase])
+        let recordedDestinations = await migrator.recordedDestinations()
+        XCTAssertEqual(recordedDestinations, [selectedBase])
     }
 
     func testChangeBaseDirectory_reportsErrorMessageOnFailure() async {
@@ -54,7 +55,8 @@ final class AdvancedTabViewModelTests: XCTestCase {
             return XCTFail("Expected a failure message after migration fails.")
         }
         XCTAssertEqual(message, "Existing recordings folder blocked the move.")
-        XCTAssertEqual(await migrator.recordedDestinations(), [selectedBase])
+        let recordedDestinations = await migrator.recordedDestinations()
+        XCTAssertEqual(recordedDestinations, [selectedBase])
     }
 }
 

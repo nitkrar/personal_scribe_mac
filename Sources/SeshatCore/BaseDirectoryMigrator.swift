@@ -43,7 +43,19 @@ extension BaseDirectoryMigrationError: LocalizedError {
     }
 }
 
-public actor BaseDirectoryMigrator: BaseDirectoryMigrating {
+/// `@unchecked Sendable` is safe here: all three stored properties
+/// are Apple-documented thread-safe references:
+///   • `FileManager.default` is documented thread-safe for the methods
+///     we call (`fileExists`, `createDirectory`, `moveItem`, `removeItem`,
+///     `attributesOfItem`, `enumerator`). Instance methods called on a
+///     shared singleton are safe per Apple's docs.
+///   • `UserDefaults` is documented thread-safe for `object(forKey:)`,
+///     `set(_:forKey:)`, and `removeObject(forKey:)` — the only three
+///     APIs used via this migrator's `SeshatConfig` helpers.
+///   • `[String: String]` is value-typed and captured by copy.
+/// No mutable state lives on the struct; the one `let` properties are
+/// fully initialised in `init` and never replaced.
+public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable {
     private static let managedSubdirectories = ["models", "modes", "recordings"]
 
     private let fileManager: FileManager
@@ -52,7 +64,7 @@ public actor BaseDirectoryMigrator: BaseDirectoryMigrating {
 
     public init(
         fileManager: FileManager = .default,
-        defaults: sending UserDefaults = .standard,
+        defaults: UserDefaults = .standard,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
         self.fileManager = fileManager

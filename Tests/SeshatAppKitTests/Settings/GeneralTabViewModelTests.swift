@@ -1,4 +1,5 @@
 import XCTest
+import SeshatCore
 @testable import SeshatAppKit
 
 @MainActor

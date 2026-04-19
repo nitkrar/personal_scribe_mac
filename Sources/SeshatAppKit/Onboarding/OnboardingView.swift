@@ -22,7 +22,7 @@ struct OnboardingView: View {
         .padding(.top, 14)
         .padding(.horizontal, 22)
         .padding(.bottom, 16)
-        .frame(minWidth: 520, minHeight: 360, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(minWidth: 520, maxWidth: .infinity, minHeight: 360, maxHeight: .infinity, alignment: .top)
         .background(backgroundView)
         .preferredColorScheme(.dark)
     }

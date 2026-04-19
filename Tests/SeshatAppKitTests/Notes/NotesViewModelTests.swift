@@ -36,7 +36,8 @@ final class NotesViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedEntryID, newer.id)
         XCTAssertEqual(viewModel.searchQuery, "moon")
         XCTAssertTrue(viewModel.isSearching)
-        XCTAssertEqual(await reader.recordedSearchQueries(), ["moon"])
+        let recordedQueries = await reader.recordedSearchQueries()
+        XCTAssertEqual(recordedQueries, ["moon"])
     }
 
     func testSelectUpdatesSelectedEntryID() async {
@@ -71,8 +72,10 @@ final class NotesViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedEntryID, newer.id)
         XCTAssertEqual(viewModel.searchQuery, "")
         XCTAssertFalse(viewModel.isSearching)
-        XCTAssertEqual(await reader.recordedSearchQueries(), ["moon"])
-        XCTAssertEqual(await reader.allCallCount(), 1)
+        let recordedQueries2 = await reader.recordedSearchQueries()
+        XCTAssertEqual(recordedQueries2, ["moon"])
+        let allCallCount = await reader.allCallCount()
+        XCTAssertEqual(allCallCount, 1)
     }
 
     private func makeEntry(index: Int, text: String) -> TranscriptEntry {
