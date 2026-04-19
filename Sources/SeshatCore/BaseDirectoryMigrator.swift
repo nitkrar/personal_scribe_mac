@@ -52,7 +52,7 @@ public actor BaseDirectoryMigrator: BaseDirectoryMigrating {
 
     public init(
         fileManager: FileManager = .default,
-        defaults: UserDefaults = .standard,
+        defaults: sending UserDefaults = .standard,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
         self.fileManager = fileManager
