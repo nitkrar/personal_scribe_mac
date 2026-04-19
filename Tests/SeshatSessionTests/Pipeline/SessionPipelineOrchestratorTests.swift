@@ -39,11 +39,9 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         let stream = await orchestrator.snapshotStream()
         let observedTask = Task { () -> [PipelineSnapshot] in
-            var snapshots: [PipelineSnapshot] = []
-            for await snapshot in stream.prefix(8) {
-                snapshots.append(snapshot)
+            await Self.collectSnapshots(from: stream) { snapshot in
+                snapshot.sessionState == .idle && snapshot.lastCompletedResult != nil
             }
-            return snapshots
         }
 
         await orchestrator.toggleCapture()
@@ -167,11 +165,9 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         let stream = await orchestrator.snapshotStream()
         let observedTask = Task { () -> [PipelineSnapshot] in
-            var snapshots: [PipelineSnapshot] = []
-            for await snapshot in stream.prefix(3) {
-                snapshots.append(snapshot)
+            await Self.collectSnapshots(from: stream) { snapshot in
+                snapshot.sessionState == .error(.recordingTooShort)
             }
-            return snapshots
         }
 
         await orchestrator.toggleCapture()
@@ -183,7 +179,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         }
 
         XCTAssertEqual(
-            observed.map(\.sessionState),
+            deduplicatedSessionStates(from: observed),
             [.idle, .recording, .error(.recordingTooShort)]
         )
         let transcribeCount0 = await transcriber.transcribeCallCount()
@@ -211,11 +207,9 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         let stream = await orchestrator.snapshotStream()
         let observedTask = Task { () -> [PipelineSnapshot] in
-            var snapshots: [PipelineSnapshot] = []
-            for await snapshot in stream.prefix(8) {
-                snapshots.append(snapshot)
+            await Self.collectSnapshots(from: stream) { snapshot in
+                snapshot.sessionState == .idle && snapshot.lastCompletedResult != nil
             }
-            return snapshots
         }
         let toggles = Task {
             await orchestrator.toggleCapture()
@@ -624,6 +618,14 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         return stages
     }
 
+    private func deduplicatedSessionStates(from snapshots: [PipelineSnapshot]) -> [SessionState] {
+        var states: [SessionState] = []
+        for state in snapshots.map(\.sessionState) where states.last != state {
+            states.append(state)
+        }
+        return states
+    }
+
     private func progressSnapshotsByRevision(
         from snapshots: [PipelineSnapshot]
     ) -> [Int: TranscriptProgress] {
@@ -632,6 +634,20 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             revisions[progress.revision] = progress
         }
         return revisions
+    }
+
+    private static func collectSnapshots(
+        from stream: AsyncStream<PipelineSnapshot>,
+        until isTerminal: @escaping @Sendable (PipelineSnapshot) -> Bool
+    ) async -> [PipelineSnapshot] {
+        var snapshots: [PipelineSnapshot] = []
+        for await snapshot in stream {
+            snapshots.append(snapshot)
+            if isTerminal(snapshot) {
+                break
+            }
+        }
+        return snapshots
     }
 
     private func waitUntilStoreHasEntries(
