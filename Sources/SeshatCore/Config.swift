@@ -16,11 +16,27 @@ public enum SeshatConfig {
     ///   3. `~/Library/Application Support/Seshat/` (default)
     ///
     /// `testingBaseDirectoryOverride` takes precedence over all three for XCTest.
-    public static func baseDirectory() throws -> URL {
+    public static func baseDirectory(
+        defaults: UserDefaults = .standard,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws -> URL {
         try directoryLock.withLock {
-            let directory = resolvedBaseDirectory()
+            let directory = resolvedBaseDirectory(defaults: defaults, environment: environment)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             return directory.standardizedFileURL
+        }
+    }
+
+    public static func setBaseDirectoryOverride(
+        _ directory: URL?,
+        defaults: UserDefaults = .standard
+    ) {
+        directoryLock.withLock {
+            if let directory {
+                defaults.set(directory.standardizedFileURL.path, forKey: userDefaultsKey)
+            } else {
+                defaults.removeObject(forKey: userDefaultsKey)
+            }
         }
     }
 
@@ -69,16 +85,19 @@ public enum SeshatConfig {
         return directory
     }
 
-    private static func resolvedBaseDirectory() -> URL {
+    private static func resolvedBaseDirectory(
+        defaults: UserDefaults,
+        environment: [String: String]
+    ) -> URL {
         if let override = testingBaseDirectoryOverride {
             return override.appendingPathComponent("Seshat", isDirectory: true).standardizedFileURL
         }
 
-        if let envPath = ProcessInfo.processInfo.environment[envVarName], !envPath.isEmpty {
+        if let envPath = environment[envVarName], !envPath.isEmpty {
             return URL(fileURLWithPath: envPath, isDirectory: true).standardizedFileURL
         }
 
-        if let userPath = UserDefaults.standard.string(forKey: userDefaultsKey), !userPath.isEmpty {
+        if let userPath = defaults.string(forKey: userDefaultsKey), !userPath.isEmpty {
             return URL(fileURLWithPath: userPath, isDirectory: true).standardizedFileURL
         }
 
