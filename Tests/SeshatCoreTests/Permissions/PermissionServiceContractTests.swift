@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 @testable import SeshatCore
@@ -5,9 +6,18 @@ import XCTest
 @MainActor
 final class PermissionServiceContractTests: XCTestCase {
     func testPermissionServiceContractExposesLockedOperations() async {
-        let service: any PermissionService = StubPermissionService()
+        let stub = StubPermissionService()
+        let service: any PermissionService = stub
 
         XCTAssertEqual(service.status(for: .microphone), .pending)
+        XCTAssertEqual(
+            service.statuses,
+            [
+                .microphone: .pending,
+                .inputMonitoring: .granted,
+                .accessibility: .pending,
+            ]
+        )
         XCTAssertEqual(
             service.statusSnapshot(),
             [
@@ -35,19 +45,48 @@ final class PermissionServiceContractTests: XCTestCase {
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         )
     }
+
+    func testPermissionServiceObservableContractPublishesStatusesThroughExistential() {
+        let stub = StubPermissionService()
+        let service: any PermissionService = stub
+        let expectedStatuses: [Permission: PermissionStatus] = [
+            .microphone: .granted,
+            .inputMonitoring: .granted,
+            .accessibility: .granted,
+        ]
+        var changeCount = 0
+        let cancellable = observeObjectWillChange(for: service) {
+            changeCount += 1
+        }
+
+        stub.refreshedStatuses = expectedStatuses
+
+        service.refresh()
+        _ = cancellable
+
+        XCTAssertEqual(changeCount, 1)
+        XCTAssertEqual(service.statuses, expectedStatuses)
+    }
 }
 
 @MainActor
-private final class StubPermissionService: PermissionService, @unchecked Sendable {
+private final class StubPermissionService: PermissionService {
+    @Published private(set) var statuses: [Permission: PermissionStatus]
+
+    var refreshedStatuses: [Permission: PermissionStatus]
+
+    init() {
+        let initialStatuses: [Permission: PermissionStatus] = [
+            .microphone: .pending,
+            .inputMonitoring: .granted,
+            .accessibility: .pending,
+        ]
+        self.statuses = initialStatuses
+        self.refreshedStatuses = initialStatuses
+    }
+
     func status(for permission: Permission) -> PermissionStatus {
-        switch permission {
-        case .microphone:
-            return .pending
-        case .inputMonitoring:
-            return .granted
-        case .accessibility:
-            return .pending
-        }
+        statuses[permission] ?? .pending
     }
 
     func request(_ permission: Permission) async -> RequestOutcome {
@@ -60,14 +99,12 @@ private final class StubPermissionService: PermissionService, @unchecked Sendabl
     }
 
     func statusSnapshot() -> [Permission: PermissionStatus] {
-        Dictionary(
-            uniqueKeysWithValues: Permission.allCases.map { permission in
-                (permission, status(for: permission))
-            }
-        )
+        statuses
     }
 
-    func refresh() {}
+    func refresh() {
+        statuses = refreshedStatuses
+    }
 
     func systemSettingsDeepLink(for permission: Permission) -> URL {
         switch permission {
@@ -83,6 +120,18 @@ private final class StubPermissionService: PermissionService, @unchecked Sendabl
             return URL(
                 string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
             )!
+        }
+    }
+}
+
+@MainActor
+private func observeObjectWillChange<Service: PermissionService>(
+    for service: Service,
+    onChange: @escaping @MainActor () -> Void
+) -> AnyCancellable {
+    service.objectWillChange.sink { _ in
+        MainActor.assumeIsolated {
+            onChange()
         }
     }
 }

@@ -4,7 +4,7 @@ import Foundation
 import SeshatCore
 
 @MainActor
-final class AppKitPermissionService: ObservableObject, PermissionService, @unchecked Sendable {
+final class AppKitPermissionService: ObservableObject, PermissionService {
     @Published private(set) var statuses: [Permission: PermissionStatus] = [:]
 
     private let microphone: MicrophonePermissionClient

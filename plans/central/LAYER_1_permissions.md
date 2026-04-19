@@ -4,7 +4,7 @@
 > **Do NOT diverge from this plan. Silent divergence is the cardinal sin. To deviate, surface the proposed divergence in a commit-message comment AND in the hand-off report; wait for main-session confirmation. Paraphrasing the contract is divergence. Renaming a protocol the plan specifies is divergence. Choosing a different storage format than the plan specifies is divergence.**
 
 ## Why this layer exists
-Permission handling is split across mic-only, Input Monitoring-only, and onboarding-only types today. `Sources/SeshatCore/Protocols.swift:38-40` exposes only `MicrophonePermissionRequesting`, `Sources/SeshatCore/PermissionStatus.swift:6-44` owns only `InputMonitoringPermissionState` plus `PermissionProbing`, and `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:9-63` re-implements three-permission request semantics with different truth tables. That fragmentation leaks into the menu bar, onboarding, paste, hotkey, and app-entry surfaces, so each site decides for itself when to prompt, when to deep-link to System Settings, and what "pending" means.
+Permission handling is split across mic-only, Input Monitoring-only, and onboarding-only types today. `Sources/SeshatCore/Protocols.swift:38-40` exposes only `MicrophonePermissionRequesting`, `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:6-44` owns only `InputMonitoringPermissionState` plus `PermissionProbing`, and `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:9-63` re-implements three-permission request semantics with different truth tables. That fragmentation leaks into the menu bar, onboarding, paste, hotkey, and app-entry surfaces, so each site decides for itself when to prompt, when to deep-link to System Settings, and what "pending" means.
 
 Layer 1 centralizes those facts into one observable permission service with one refreshable snapshot and one set of deep links. That is required to fix the current Accessibility mismatch between `OnboardingViewModel` and `OnboardingWindowController`, preserve the clipboard fallback already implemented in `PasteInjector`, and unblock Layer 4's state store plus Layer 9's TCC-link centralization per `plans/CENTRAL_LAYERS_PROMPT.md:160-180`.
 
@@ -12,7 +12,7 @@ Layer 1 centralizes those facts into one observable permission service with one 
 | File | Line(s) | What lives there |
 |---|---|---|
 | `Sources/SeshatCore/Protocols.swift` | `38-40` | `MicrophonePermissionRequesting` only models microphone access. |
-| `Sources/SeshatCore/PermissionStatus.swift` | `6-44` | `InputMonitoringPermissionState`, `PermissionProbing`, and `IOHIDPermissionProbe`; note `IOHIDCheckAccess` remains `.notDetermined` until after a monitor-install attempt (`22-25`). |
+| `Sources/SeshatCore/InputMonitoringPermissionProbe.swift` | `6-44` | `InputMonitoringPermissionState`, `PermissionProbing`, and `IOHIDPermissionProbe`; note `IOHIDCheckAccess` remains `.notDetermined` until after a monitor-install attempt (`22-25`). |
 | `Sources/SeshatAppKit/MenuBar/MicrophonePermissionState.swift` | `3-7` | `MicrophonePermissionState` duplicates microphone status with its own `.notYetRequested` case. |
 | `Sources/SeshatAppKit/Permissions/AppKitMicrophonePermissionRequester.swift` | `4-56` | Mic-only live requester maps `AVAuthorizationStatus` and prompts only when not determined. |
 | `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift` | `9-63` | `OnboardingPermissionProbing` plus `PermissionRequester` re-implement microphone, Input Monitoring, and Accessibility requests; untrusted AX currently maps to `.denied` (`38-40`). |
@@ -40,6 +40,11 @@ Layer 1 centralizes those facts into one observable permission service with one 
 | `Tests/SeshatAppKitTests/ManualOnboardingVerification.md` | `12-25` | Manual runbook already treats AX as optional and clipboard fallback as required UX. |
 | `Tests/SeshatAppKitTests/ManualStatusItemVerification.md` | `13-26` | Manual runbook exists for status-item behavior and is the right place to add activation-refresh checks. |
 
+Note: Stage 1 renamed the legacy `Sources/SeshatCore/PermissionStatus.swift` to `InputMonitoringPermissionProbe.swift` to resolve a SwiftPM basename collision with the new `Sources/SeshatCore/Permissions/PermissionStatus.swift`. Contents unchanged; scheduled for Stage 3 deletion.
+
+## Divergences from Stage 1 isolation
+Commit `93ce06c` bundled stale-test refreshes for `Tests/SeshatAppKitTests/DevelopmentComposition.swift`, `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift`, `Tests/SeshatAppKitTests/PillOverlayViewModelTests.swift`, `Tests/SeshatCoreTests/Preferences/PreferenceTests.swift`, and `Tests/SeshatSessionTests/SessionCoordinatorPreparationTests.swift` to unblock the Wave A build. This fix-forward divergence is documented here and will NOT recur in Layer 1 Stage 2 or Stage 3.
+
 ## Proposed API / contracts
 The following locked decisions are restated verbatim and apply to every step in this layer:
 
@@ -49,7 +54,7 @@ The following locked decisions are restated verbatim and apply to every step in 
 - Service is @MainActor, not just Sendable.
 - refresh() triggered on NSApplication.didBecomeActiveNotification; one @Published dictionary exposing all three permissions; NO per-permission AsyncStream.
 - Accessibility (AX) maps to .pending when AXIsProcessTrusted() is false — NEVER to .denied.
-- Stage 3 deletions (exact list): MicrophonePermissionState, InputMonitoringPermissionState, OnboardingPermissionOutcome, PermissionProbing, OnboardingPermissionProbing, AppKitMicrophonePermissionRequester, SeshatOnboardingCompleted, OnboardingState.swift, PermissionStatus.swift.
+- Stage 3 deletions (exact list): MicrophonePermissionState, InputMonitoringPermissionState, OnboardingPermissionOutcome, PermissionProbing, OnboardingPermissionProbing, AppKitMicrophonePermissionRequester, SeshatOnboardingCompleted, OnboardingState.swift, InputMonitoringPermissionProbe.swift.
 - Stage 2 call-site migrations (exact list): PasteInjector, GlobalHotkeyMonitor, MenuBarSceneModel, the onboarding flow, StatusItemController, SeshatAppMain.
 - Naming: rename at creation time — NO 'Seshat' prefix on new types.
 - AX is optional everywhere (locked decision #6 in prompt).
@@ -70,7 +75,7 @@ The following locked decisions are restated verbatim and apply to every step in 
 ## Proposed live implementation
 `AppKitPermissionService` lives in `Sources/SeshatAppKit/Permissions/` and is an `@MainActor final class` that conforms to `PermissionService` and `ObservableObject`. It owns one published `[Permission: PermissionStatus]` dictionary, seeds that dictionary from `refresh()` during initialization, and registers exactly one `NSApplication.didBecomeActiveNotification` observer so returning from System Settings re-reads all three permissions automatically. `status(for:)` and `statusSnapshot()` use the same direct OS probes that `refresh()` uses, so the synchronous read path and the published snapshot cannot drift.
 
-Microphone status/request semantics come from `AVCaptureDevice.authorizationStatus(for: .audio)` and `AVCaptureDevice.requestAccess(for: .audio)`, replacing the current mic-only requester at `Sources/SeshatAppKit/Permissions/AppKitMicrophonePermissionRequester.swift:4-56`. Input Monitoring status/request semantics remain grounded in `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)` and `IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)`, preserving the current caveat in `Sources/SeshatCore/PermissionStatus.swift:16-25` that a reliable denied/granted verdict appears only after a monitor-install attempt. Accessibility status/request semantics use `AXIsProcessTrusted()` and `AXIsProcessTrustedWithOptions`, but untrusted AX maps to `PermissionStatus.pending`, never `.denied`, so paste fallback and optional-AX onboarding remain truthful. System Settings deep links for microphone, Input Monitoring, and Accessibility are owned here rather than spread across `MenuBarSceneModel`, `StatusItemController`, or onboarding. `Sources/SeshatAudio/AVAudioCaptureService.swift:39-45` stays unchanged as defense-in-depth.
+Microphone status/request semantics come from `AVCaptureDevice.authorizationStatus(for: .audio)` and `AVCaptureDevice.requestAccess(for: .audio)`, replacing the current mic-only requester at `Sources/SeshatAppKit/Permissions/AppKitMicrophonePermissionRequester.swift:4-56`. Input Monitoring status/request semantics remain grounded in `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)` and `IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)`, preserving the current caveat in `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:16-25` that a reliable denied/granted verdict appears only after a monitor-install attempt. Accessibility status/request semantics use `AXIsProcessTrusted()` and `AXIsProcessTrustedWithOptions`, but untrusted AX maps to `PermissionStatus.pending`, never `.denied`, so paste fallback and optional-AX onboarding remain truthful. System Settings deep links for microphone, Input Monitoring, and Accessibility are owned here rather than spread across `MenuBarSceneModel`, `StatusItemController`, or onboarding. `Sources/SeshatAudio/AVAudioCaptureService.swift:39-45` stays unchanged as defense-in-depth.
 
 Stage 1 tests should be built around injected closures or tiny wrapper collaborators for AVFoundation, IOKit, AX, `NSWorkspace`, and `NotificationCenter`, so the service can be verified without real TCC prompts. Those fakes live in new test directories and do not require any Stage 1 edits to existing consumers.
 
@@ -80,7 +85,7 @@ Step numbering intentionally uses Stage `1.x`, `2.x`, and `3.x` to match `plans/
 ### Step 1.1 - Stage 1: Add the shared permission domain under `Sources/SeshatCore/Permissions/`
 | Change | Before | After |
 |---|---|---|
-| Shared domain contract | `Sources/SeshatCore/Protocols.swift:38-40` only defines `MicrophonePermissionRequesting`; `Sources/SeshatCore/PermissionStatus.swift:6-44` only defines IM status/probing. | New files in `Sources/SeshatCore/Permissions/*` define `Permission`, `PermissionStatus`, `RequestOutcome`, and `PermissionService`; legacy files remain untouched until Step 3.1. |
+| Shared domain contract | `Sources/SeshatCore/Protocols.swift:38-40` only defines `MicrophonePermissionRequesting`; `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:6-44` only defines IM status/probing. | New files in `Sources/SeshatCore/Permissions/*` define `Permission`, `PermissionStatus`, `RequestOutcome`, and `PermissionService`; legacy files remain untouched until Step 3.1. |
 | Stage-1 tests | `Tests/SeshatCoreTests/PermissionStatusTests.swift:4-33` only covers the IM-only surface. | New files in `Tests/SeshatCoreTests/Permissions/*` pin the unified contract in isolation, without migrating any consumer yet. |
 
 Acceptance tests: new `Tests/SeshatCoreTests/Permissions/*` contract tests, while `Tests/SeshatCoreTests/PermissionStatusTests.swift:4-33` remains untouched until Stage 3.1.
@@ -88,10 +93,10 @@ Acceptance tests: new `Tests/SeshatCoreTests/Permissions/*` contract tests, whil
 Deps: no in-layer prerequisite; parallel with Layer 2 Stage 1, Layer 3 Stage 1, and Layer 9 Stage 1 because those stages claim different directories per `plans/CENTRAL_LAYERS_PROMPT.md:50-59`; blocks Step 1.2, every Step 2.x in this layer, Layer 4 Stage 1/2, and Layer 5 Stage 1 if that layer wants to compile against `PermissionService`.
 
 Validation checklist:
-- [ ] New runtime files live only under new Stage 1 directories, matching `plans/CENTRAL_LAYERS_PROMPT.md:44-59`, while `Sources/SeshatCore/Protocols.swift:38-40` and `Sources/SeshatCore/PermissionStatus.swift:6-44` remain untouched during Stage 1.
+- [ ] New runtime files live only under new Stage 1 directories, matching `plans/CENTRAL_LAYERS_PROMPT.md:44-59`, while `Sources/SeshatCore/Protocols.swift:38-40` and `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:6-44` remain untouched during Stage 1.
 - [ ] The new contract encodes `Permission`, `PermissionStatus`, and `RequestOutcome` exactly as locked above and as required by `plans/CENTRAL_LAYERS_PROMPT.md:160-177`.
 - [ ] `.skipped` stays outside the core contract, matching `plans/CENTRAL_LAYERS_PROMPT.md:175-177` and the current UI-only usage in `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:4-24`.
-- [ ] Legacy IM-only and mic-only surfaces are not deleted yet, matching the Stage 1 isolation rule in `plans/CENTRAL_LAYERS_PROMPT.md:44-46` and the current legacy files `Sources/SeshatCore/PermissionStatus.swift:6-44` and `Sources/SeshatAppKit/MenuBar/MicrophonePermissionState.swift:3-7`.
+- [ ] Legacy IM-only and mic-only surfaces are not deleted yet, matching the Stage 1 isolation rule in `plans/CENTRAL_LAYERS_PROMPT.md:44-46` and the current legacy files `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:6-44` and `Sources/SeshatAppKit/MenuBar/MicrophonePermissionState.swift:3-7`.
 
 ### Step 1.2 - Stage 1: Add `AppKitPermissionService` under `Sources/SeshatAppKit/Permissions/`
 | Change | Before | After |
@@ -135,8 +140,8 @@ Acceptance tests: update `Tests/SeshatAppKitTests/GlobalHotkeyMonitorTests.swift
 Deps: depends on Step 1.2; can run in parallel with Steps 2.1, 2.3, and 2.4; blocks Step 2.6 because app composition still constructs the hotkey monitor.
 
 Validation checklist:
-- [ ] `GlobalHotkeyMonitor` no longer depends on `PermissionProbing` from `Sources/SeshatCore/PermissionStatus.swift:12-44` and instead consumes unified `Permission.inputMonitoring`.
-- [ ] The "pending until after monitor install attempt" caveat from `Sources/SeshatCore/PermissionStatus.swift:16-25` and the log assertions in `Tests/SeshatAppKitTests/GlobalHotkeyMonitorTests.swift:286-322` are preserved exactly.
+- [ ] `GlobalHotkeyMonitor` no longer depends on `PermissionProbing` from `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:12-44` and instead consumes unified `Permission.inputMonitoring`.
+- [ ] The "pending until after monitor install attempt" caveat from `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:16-25` and the log assertions in `Tests/SeshatAppKitTests/GlobalHotkeyMonitorTests.swift:286-322` are preserved exactly.
 - [ ] This step does not silently add prompt-on-start behavior; it only swaps the status source for the named consumer, consistent with `plans/CENTRAL_LAYERS_PROMPT.md:164-166`.
 
 ### Step 2.3 - Stage 2: Migrate `MenuBarSceneModel`
@@ -201,14 +206,14 @@ Validation checklist:
 ### Step 3.1 - Stage 3: Global delete of legacy permission surfaces
 | Change | Before | After |
 |---|---|---|
-| Delete split permission legacy code | The old mic-only, IM-only, onboarding-only, and onboarding-completion permission surfaces still exist only as compatibility scaffolding after Steps 2.1-2.6. | Delete exactly `MicrophonePermissionState`, `InputMonitoringPermissionState`, `OnboardingPermissionOutcome`, `PermissionProbing`, `OnboardingPermissionProbing`, `AppKitMicrophonePermissionRequester`, `SeshatOnboardingCompleted`, `OnboardingState.swift`, and `PermissionStatus.swift` as the Layer 1 slice of the global deletion pass. |
+| Delete split permission legacy code | The old mic-only, IM-only, onboarding-only, and onboarding-completion permission surfaces still exist only as compatibility scaffolding after Steps 2.1-2.6. | Delete exactly `MicrophonePermissionState`, `InputMonitoringPermissionState`, `OnboardingPermissionOutcome`, `PermissionProbing`, `OnboardingPermissionProbing`, `AppKitMicrophonePermissionRequester`, `SeshatOnboardingCompleted`, `OnboardingState.swift`, and `InputMonitoringPermissionProbe.swift` as the Layer 1 slice of the global deletion pass. |
 
 Acceptance tests: re-run the Layer 1 suite named in the Test strategy after the deletions; no legacy-only test may remain as the only proof of behavior.
 
 Deps: depends on every Step 2.x in this plan; also depends on the Step 2.4 onboarding-flow question being resolved before deleting `SeshatOnboardingCompleted` / `OnboardingState.swift`; blocks no later Layer 1 work because this is the final deletion pass.
 
 Validation checklist:
-- [ ] Delete exactly `MicrophonePermissionState`, `InputMonitoringPermissionState`, `OnboardingPermissionOutcome`, `PermissionProbing`, `OnboardingPermissionProbing`, `AppKitMicrophonePermissionRequester`, `SeshatOnboardingCompleted`, `OnboardingState.swift`, and `PermissionStatus.swift`, matching the locked decision and `plans/CENTRAL_LAYERS_PROMPT.md:171`.
+- [ ] Delete exactly `MicrophonePermissionState`, `InputMonitoringPermissionState`, `OnboardingPermissionOutcome`, `PermissionProbing`, `OnboardingPermissionProbing`, `AppKitMicrophonePermissionRequester`, `SeshatOnboardingCompleted`, `OnboardingState.swift`, and `InputMonitoringPermissionProbe.swift`, matching the locked decision and `plans/CENTRAL_LAYERS_PROMPT.md:171`.
 - [ ] Every Stage 2 consumer named at `plans/CENTRAL_LAYERS_PROMPT.md:172` and in Steps 2.1-2.6 has already stopped referencing those symbols; the current references are in `Sources/SeshatAppKit/Paste/PasteInjector.swift:68-171`, `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift:34-129`, `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:8-118`, `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:4-68`, `Sources/SeshatAppKit/MenuBar/StatusItemController.swift:31-267`, and `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:9-245`.
 - [ ] `Sources/SeshatAudio/AVAudioCaptureService.swift:39-45` still survives unchanged after the deletion pass, matching `plans/CENTRAL_LAYERS_PROMPT.md:67-68,175-177`.
 

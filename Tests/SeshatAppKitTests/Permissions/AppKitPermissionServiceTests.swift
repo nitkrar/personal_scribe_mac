@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import Combine
 import XCTest
@@ -175,6 +176,35 @@ final class AppKitPermissionServiceTests: XCTestCase {
         XCTAssertEqual(snapshots.count, 1)
         XCTAssertEqual(
             snapshots.first,
+            [
+                .microphone: .granted,
+                .inputMonitoring: .granted,
+                .accessibility: .granted,
+            ]
+        )
+    }
+
+    func testLiveDidBecomeActiveNotificationRefreshesStatusesSynchronously() {
+        let fixture = Fixture()
+        let service = AppKitPermissionService(
+            microphone: fixture.microphone.client,
+            inputMonitoring: fixture.inputMonitoring.client,
+            accessibility: fixture.accessibility.client,
+            urlOpener: fixture.urlOpener.opener,
+            activationObserver: .live
+        )
+
+        fixture.microphone.authorizationStatus = .authorized
+        fixture.inputMonitoring.status = .granted
+        fixture.accessibility.isTrusted = true
+
+        NotificationCenter.default.post(
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
+
+        XCTAssertEqual(
+            service.statuses,
             [
                 .microphone: .granted,
                 .inputMonitoring: .granted,

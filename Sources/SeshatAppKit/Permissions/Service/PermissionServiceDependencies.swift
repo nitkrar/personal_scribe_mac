@@ -100,7 +100,7 @@ struct ApplicationActivationObserver {
                 object: nil,
                 queue: .main
             ) { _ in
-                Task { @MainActor in
+                MainActor.assumeIsolated {
                     handler()
                 }
             }
