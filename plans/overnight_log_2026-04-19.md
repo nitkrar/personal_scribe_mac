@@ -234,3 +234,4 @@ _(high-level progression)_
 - E. `TranscriptReader.swift` is a `SeshatCore` type but its tests live in `Tests/SeshatAppKitTests/Notes/`. Misfiled but works. Move on next touch.
 
 **Zero sibling-lane collision.** Files touched only: `TranscriptReader.swift` (new), `Notes/*` (6 new), `SeshatAppMain.swift`, `StatusItemMenuModel.swift`, corresponding tests, and `ManualNotesVerification.md`.
+| 02:34 | 3b | **Poll tick.** 3.H at H.1 `121983a` (PasteRestoreDelay resolver). H.2 in progress (PasteInjector + tests uncommitted). Under stall. |
