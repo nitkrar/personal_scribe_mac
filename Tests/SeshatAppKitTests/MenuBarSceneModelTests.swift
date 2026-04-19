@@ -85,31 +85,16 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(requestCount, 1)
     }
 
-    func testHandleRecordButtonTapDoesNotToggleWhenPromptReturnsFalse() async throws {
+    func testHandleRecordButtonTapTogglesEvenWhenPermissionsDeniedOrIncomplete() async throws {
+        // Regression guard for 2026-04-19 fix: menu-bar record path used
+        // to route to openOnboardingRequested when mic was denied, IM
+        // was denied, or onboarding was incomplete. User explicitly
+        // asked for the gate removed — clicks should always try to
+        // toggle the coordinator; failure surfaces through the session
+        // state stream (OS mic prompt, coordinator.error etc.), not via
+        // silent onboarding-window reroutes.
         let coordinator = try makeCoordinator()
         let requester = TestPermissionRequester(result: false)
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: requester,
-            permissionStateProvider: { .notYetRequested },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
-
-        await model.handleRecordButtonTap()
-
-        let sessionState = await coordinator.state()
-        let requestCount = await requester.callCount()
-        XCTAssertEqual(model.permissionState, .denied)
-        XCTAssertEqual(sessionState, .idle)
-        XCTAssertEqual(requestCount, 1)
-    }
-
-    func testHandleRecordButtonTapRequestsOnboardingInsteadOfTogglingWhenPermissionDenied() async throws {
-        let coordinator = try makeCoordinator()
-        let requester = TestPermissionRequester(result: true)
         var openOnboardingRequestCount = 0
         let model = MenuBarSceneModel(
             coordinator: coordinator,
@@ -118,32 +103,6 @@ final class MenuBarSceneModelTests: XCTestCase {
             clipboardWriter: { _ in },
             pasteInjector: { _ in .pasteAtCursor },
             openSettings: {},
-            openOnboardingRequested: {
-                openOnboardingRequestCount += 1
-            },
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
-
-        await model.handleRecordButtonTap()
-
-        let sessionState = await coordinator.state()
-        let requestCount = await requester.callCount()
-        XCTAssertEqual(sessionState, .idle)
-        XCTAssertEqual(requestCount, 0)
-        XCTAssertEqual(openOnboardingRequestCount, 1)
-    }
-
-    func testHandleRecordButtonTapRequestsOnboardingWhenCriticalPermissionGateFails() async throws {
-        let coordinator = try makeCoordinator()
-        let requester = TestPermissionRequester(result: true)
-        var openOnboardingRequestCount = 0
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: requester,
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
             areCriticalPermissionsGranted: { false },
             openOnboardingRequested: {
                 openOnboardingRequestCount += 1
@@ -154,38 +113,10 @@ final class MenuBarSceneModelTests: XCTestCase {
         await model.handleRecordButtonTap()
 
         let sessionState = await coordinator.state()
-        let requestCount = await requester.callCount()
-        XCTAssertEqual(sessionState, .idle)
-        XCTAssertEqual(requestCount, 0)
-        XCTAssertEqual(openOnboardingRequestCount, 1)
-    }
-
-    func testHandleRecordButtonTapRequestsOnboardingWhenOnboardingIncompleteAndMicrophoneNotYetRequested() async throws {
-        let coordinator = try makeCoordinator()
-        let requester = TestPermissionRequester(result: true)
-        var openOnboardingRequestCount = 0
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: requester,
-            permissionStateProvider: { .notYetRequested },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            areCriticalPermissionsGranted: { false },
-            openOnboardingRequested: {
-                openOnboardingRequestCount += 1
-            },
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
-
-        await model.handleRecordButtonTap()
-
-        let sessionState = await coordinator.state()
-        let requestCount = await requester.callCount()
-        XCTAssertEqual(model.permissionState, .notYetRequested)
-        XCTAssertEqual(sessionState, .idle)
-        XCTAssertEqual(requestCount, 0)
-        XCTAssertEqual(openOnboardingRequestCount, 1)
+        XCTAssertEqual(sessionState, .recording,
+                       "Coordinator toggle must fire even when permissions are denied")
+        XCTAssertEqual(openOnboardingRequestCount, 0,
+                       "Menu click must NOT route to onboarding anymore")
     }
 
     func testSettingsMenuActionRaisesOpenSettingsRequestedSignal() async throws {
@@ -242,21 +173,10 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(openNotesRequestCount, 1)
     }
 
-    func testHistoryMenuItemIsDisabledWhenOnboardingIsIncomplete() {
-        let model = StatusItemMenuModel.make(
-            sessionState: .idle,
-            micPermission: .granted,
-            inputMonitoringPermission: .granted,
-            isOnboardingComplete: false
-        )
-
-        guard case let .action(history) = model.items[2] else {
-            return XCTFail("Expected History action at index 2")
-        }
-
-        XCTAssertEqual(history.id, .openHistory)
-        XCTAssertFalse(history.isEnabled)
-    }
+    // testHistoryMenuItemIsDisabledWhenOnboardingIsIncomplete was
+    // deleted when the onboarding gate was removed; equivalent
+    // positive-behaviour assertion now lives in
+    // StatusItemMenuModelTests.testSettingsAndHistoryAlwaysEnabledRegardlessOfOnboardingState.
 
     func testStartObservingPublishesRecordingAfterCoordinatorToggle() async throws {
         let coordinator = try makeCoordinator()

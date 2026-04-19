@@ -99,27 +99,21 @@ final class MenuBarSceneModel: ObservableObject {
     func handleRecordButtonTap() async {
         logger.info("Record button tapped")
 
-        guard areCriticalPermissionsGranted() else {
-            logger.info("Record button tapped while critical permissions are incomplete; reopening onboarding.")
-            openOnboardingRequested()
-            return
-        }
-
+        // No permissions gating — menu items should always work. If
+        // permissions are missing, the record path surfaces the failure
+        // visibly (OS prompt for mic, SessionCoordinator → .error for
+        // IM-denied, etc.) rather than silently routing the click to an
+        // onboarding window. User explicitly asked for this behaviour
+        // (2026-04-19) after a `defaults delete` left menu items stuck
+        // in an onboarding-required state.
         switch permissionState {
-        case .granted:
+        case .granted, .denied:
             await coordinator.toggle()
         case .notYetRequested:
             let granted = await permissionRequester.requestAccess()
             permissionState = granted ? .granted : .denied
             logger.info("Microphone permission request completed: \(granted)")
-            if granted, areCriticalPermissionsGranted() {
-                await coordinator.toggle()
-            } else {
-                openOnboardingRequested()
-            }
-        case .denied:
-            logger.info("Record button tapped while permission denied; reopening onboarding.")
-            openOnboardingRequested()
+            await coordinator.toggle()
         }
     }
 
