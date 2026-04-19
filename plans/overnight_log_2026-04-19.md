@@ -37,8 +37,39 @@ _(any design-inflection that waits for the user)_
 
 | Item | Surfaced at | Summary | Analysis file |
 |---|---|---|---|
+| **Bisect hazard between D.5 (`e50170a`) and I.1 (`cee52d8`)** | 01:46 (3.I reviewer finding MF-1) | D.5 wire-up added `emergencyQuitRequested:` to the `GlobalHotkeyMonitor` constructor call, but that parameter was only added to the type in I.1. Main builds now; range `e50170a..cee52d8` does NOT build. **User decision:** accept + document (current state) OR rebase to swap order (destructive but cleaner). | Review findings log § `3.I reviewer` → MUST-FIX MF-1 |
+| **3.I mixed-key triple-tap semantics** | 01:46 (3.I reviewer finding SF-1) | Current code treats `left-right-left` taps within window as a valid triple-tap (fires quit). Not explicitly decided in brief. User's call: intentional (add locking test) or change to require same-key (restrictive). | Review findings log § `3.I reviewer` → SHOULD-FIX SF-1 |
+| **3.I BACKLOG scope drift (`5288b7e`)** | 01:36 (committed on codex's behalf) | Codex added a Stage A/B speaker-verification entry to BACKLOG.md without authorization. Well-formed content but off-scope for 3.I. Isolated single-file commit, trivial `git revert 5288b7e` if user doesn't want it; keep as-is if useful. | Commit `5288b7e` |
 
 ## Review findings log
+
+### 3.I reviewer — agent `a1efd5e2ee716750b` at 01:46
+
+**Verdict:** ACCEPT. One MUST-FIX is a history-integrity finding (not a code bug); two SHOULD-FIX are polish.
+
+**MUST-FIX parked for user decision (PROMINENT):**
+- **MF-1 Bisect hazard between `e50170a` (D.5) and `cee52d8` (I.1).** D.5 wire-up added `emergencyQuitRequested:` to the `GlobalHotkeyMonitor(...)` constructor call — but that parameter was only ADDED to the type in I.1. Main builds now (at `cee52d8` and later), but `git bisect` across the range `e50170a..cee52d8` (exclusive of cee52d8) will hit unbuildable commits. Remediation options:
+  - (a) **Accept + document (DONE here)** — bisect hazard limited to that 6-commit window; future commits land on buildable history; user probably never bisects there.
+  - (b) **Rewrite history** via interactive rebase to swap cee52d8 before e50170a OR squash them. Destructive on local-only history; user asleep and history-rewrite decisions belong to them.
+  - **Decision:** Option (a) for now — documented here. User picks in morning whether to rebase.
+
+**SHOULD-FIX applied autonomously:**
+- **SF-2 ManualHotkeyVerification runbook expansion** — original was one checkbox; reviewer correctly flagged that as insufficient compensating control for a global-NSEvent-monitoring slice. Expanded to MV-HK-1..6 covering regression baseline (double-tap toggle, single press, out-of-window) + new triple-tap-quit (both option keys, slow-third-tap boundary). Committed as `4e6a819`.
+
+**SHOULD-FIX deferred to morning:**
+- **SF-1 Mixed left/right option in same triple-tap sequence is not tested.** Current code tracks `tapCount` globally (Set of pressed key codes, single counter), so `left-right-left` within window would fire emergency quit. Reviewer says "probably fine for panic-mashing, but capture as intentional decision with a test." Judgment call on what the intended semantics are — user's call.
+
+**ACCEPT-WITH-RATIONALE (no action, logged for transparency):**
+- A-1 Third-tap-suppresses-toggle invariant SATISFIED — `testTripleTapCancelsPendingToggleAndRequestsEmergencyQuit` asserts both `toggleCount == 0` AND `emergencyQuitCount == 1`. Double-lock: `cancelPendingToggle()` nils the token, and `firePendingToggle` guards on token match.
+- A-2 No wall-clock, no `Task.sleep` in tests. Timing comes from `event.timestamp` + virtualized `DeferredActionScheduler`. Race-free by construction.
+- A-3 `tapWindow` defaults to `Self.doubleTapWindow = 0.4` — no new constant.
+- A-4 Composition wire-up correctly calls `NSApplication.shared.terminate(nil)` at `AppComposition.swift:57-58` (landed in D.5 `e50170a`, not I.1 — see MF-1).
+- A-5 All existing double-tap tests (`testSinglePressDoesNotTrigger`, `testDoubleTapWithinWindowTriggersOnce`, `testDoubleTapOutsideWindowDoesNotTrigger`, lifecycle tests, permission-warning tests) still green by reading.
+- A-6 `DeferredActionSchedulerSpy` is `@MainActor`-isolated, stores `ScheduledAction` records, synchronous `fireScheduledActions()`. Idiomatic, no race.
+- A-7 BACKLOG drift commit `5288b7e` is a single-file, well-formed, clean `git revert` target.
+- A-8 Scope-discipline PASS for I.1 itself: touches only hotkey subsystem + its tests/docs. BACKLOG drift isolated to `5288b7e`.
+
+**Reviewer note on compilation:** read-verified. Can't confirm `swift test` picks up new `ScheduledAction` class without module-cache weirdness. User should run `swift test --filter GlobalHotkeyMonitorTests` from main repo path in the morning.
 
 ### Slice B reviewer — agent `a669026b3f1ced090` at 01:33
 
@@ -106,3 +137,4 @@ _(high-level progression)_
 | 01:38 | 1 | **Poll tick.** 3.I task `task-mo514rly-u1h31v` still no commits after 2 resume attempts spanning 80+ min. Council-decided to commit on behalf. Split into two commits: `cee52d8` (I.1 hotkey + tests + runbook) + `5288b7e` (flagged BACKLOG scope-drift). Dispatched 3.I reviewer (`a1efd5e2ee716750b`). |
 | 01:38 | 2 | **Wave 2 fired.** 3.A (Settings window) dispatched as codex `a9eda3f19c2be7dc8` with skip-build-test baked in from go. Owns `Sources/SeshatAppKit/Settings/*`, `Sources/SeshatCore/ModeDescriptor.swift`, composition tweaks. |
 | 01:43 | 2 | **Poll tick — quiet.** 3.A dispatcher handed off to Codex `task-mo51fkp8-bkdfv6` ~5 min ago; real work underway, no commits yet. 3.I reviewer `a1efd5e2ee716750b` still running. Both below stall threshold. |
+| 01:46 | Review | 3.I reviewer PASS (ACCEPT). MUST-FIX is history-bisect hazard (not code) — parked for user decision. SHOULD-FIX #2 (runbook expansion) applied as `4e6a819`. SF-1 (mixed-key semantics) deferred. Wave 1 now fully reviewed; Wave 2 (3.A) still in flight. |
