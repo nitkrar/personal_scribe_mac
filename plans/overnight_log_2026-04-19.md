@@ -138,3 +138,4 @@ _(high-level progression)_
 | 01:38 | 2 | **Wave 2 fired.** 3.A (Settings window) dispatched as codex `a9eda3f19c2be7dc8` with skip-build-test baked in from go. Owns `Sources/SeshatAppKit/Settings/*`, `Sources/SeshatCore/ModeDescriptor.swift`, composition tweaks. |
 | 01:43 | 2 | **Poll tick — quiet.** 3.A dispatcher handed off to Codex `task-mo51fkp8-bkdfv6` ~5 min ago; real work underway, no commits yet. 3.I reviewer `a1efd5e2ee716750b` still running. Both below stall threshold. |
 | 01:46 | Review | 3.I reviewer PASS (ACCEPT). MUST-FIX is history-bisect hazard (not code) — parked for user decision. SHOULD-FIX #2 (runbook expansion) applied as `4e6a819`. SF-1 (mixed-key semantics) deferred. Wave 1 now fully reviewed; Wave 2 (3.A) still in flight. |
+| 01:48 | 2 | **Poll tick — quiet.** 3.A Codex `task-mo51fkp8-bkdfv6` running ~10 min, no commits yet, below stall threshold. |
