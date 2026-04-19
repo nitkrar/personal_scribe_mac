@@ -22,7 +22,7 @@ Legend: ✅ done / 🔧 in flight / — not started / ⛔ blocked / N/A not need
 |---|---|---|---|---|---|---|---|
 | **1 Permissions** | ✅ `38ca52f` | ✅ `9c322d9` NEEDS REV | ✅ `64d7999` | ✅ `c12d2c7` NEEDS REV (1C/3M/1m) | ✅ `39e655e` | ⛔ held | — |
 | **2 Storage** | ✅ `f1518a7` | ✅ `748acc6` NEEDS REV | ✅ `8cfc844` | ✅ `677f70b` NEEDS REV (0/1M/0/1n) | ✅ `367862b` | ⛔ not dispatched | — |
-| **3 Settings** | ✅ `3a93392` | ✅ `020935d` NEEDS REV | ✅ `dd9a44c` | ✅ `ecd8c70` APPROVE-W-NITS (0/0/1m/1n) | N/A | ✅ `5b6e023` | — |
+| **3 Settings** | ✅ `3a93392` | ✅ `020935d` NEEDS REV | ✅ `dd9a44c` | ✅ `ecd8c70` APPROVE-W-NITS (0/0/1m/1n) | N/A | ✅ `5b6e023` | ✅ APPROVED-W-FUPS (0/0/1m/1n) |
 | **4 AppStore** | ✅ `f7ed814` | — never done | 🔧 in flight (worktree, Candidate A) | — | — | ⛔ blocked on S1 + L1 S2 | — |
 | **5 Output** | ✅ `7c43e53` | ✅ `6c5483a` NEEDS REV | ✅ `23247a6` | ✅ `7872a52` NEEDS REV (0/2H/2M/0) | ✅ `624f91f` | ⛔ held (API changed, re-review needed) | — |
 | **6 Model selection** | ✅ `e3852c9` | — reviewer wedged | ✅ `23725ce` | ✅ `a7c024a` APPROVED-W-FOLLOWUPS (0/0/0/2 low) | ✅ `d85e627` | ✅ `a3a0ba8` | — |
