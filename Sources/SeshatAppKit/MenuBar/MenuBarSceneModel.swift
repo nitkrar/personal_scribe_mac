@@ -10,7 +10,7 @@ final class MenuBarSceneModel: ObservableObject {
     @Published var preparationProgress: ModelDownloadProgress?
 
     private let coordinator: SessionCoordinator
-    private let permissionService: PermissionServiceAdapter
+    private let permissionService: any PermissionService
     private let clipboardWriter: @MainActor (String) -> Void
     private let pasteInjector: @MainActor (String) -> PasteRoutingDecision
     private let openURL: @MainActor (URL) -> Void
@@ -24,7 +24,7 @@ final class MenuBarSceneModel: ObservableObject {
     private(set) var observationTaskCreationCount = 0
 
     var permissionState: MicrophonePermissionState {
-        permissionService.status(for: .microphone).microphonePermissionState
+        (permissionService.statuses[.microphone] ?? .pending).microphonePermissionState
     }
 
     init(
@@ -34,7 +34,7 @@ final class MenuBarSceneModel: ObservableObject {
         clipboardWriter: @escaping @MainActor (String) -> Void,
         pasteInjector: @escaping @MainActor (String) -> PasteRoutingDecision = { _ in .pasteAtCursor },
         openSettings: @escaping @MainActor () -> Void,
-        permissionService: PermissionServiceAdapter? = nil,
+        permissionService: (any PermissionService)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         areCriticalPermissionsGranted: @escaping @MainActor () -> Bool = { true },
         openOnboardingRequested: @escaping @MainActor () -> Void = {},
@@ -44,23 +44,35 @@ final class MenuBarSceneModel: ObservableObject {
     ) {
         _ = areCriticalPermissionsGranted
         _ = openOnboardingRequested
-        self.coordinator = coordinator
-        self.permissionService = permissionService
+        let resolvedPermissionService = permissionService
             ?? Self.makeCompatibilityPermissionService(
                 permissionRequester: permissionRequester,
                 permissionStateProvider: permissionStateProvider
             )
+        self.coordinator = coordinator
+        self.permissionService = resolvedPermissionService
         self.clipboardWriter = clipboardWriter
         self.pasteInjector = pasteInjector
         self.openURL = openURL ?? { _ in openSettings() }
         self.onClipboardOnlyCopy = onClipboardOnlyCopy
         self.onObservationCancelled = onObservationCancelled
         self.logger = logger
-        self.permissionObservation = self.permissionService.$statuses
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
+        self.permissionObservation = Self.observePermissionChanges(for: resolvedPermissionService) { [weak self] in
+            self?.objectWillChange.send()
+        }
+    }
+
+    private static func observePermissionChanges<Service: PermissionService>(
+        for service: Service,
+        onChange: @escaping @MainActor () -> Void
+    ) -> AnyCancellable {
+        service.objectWillChange.sink { _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    onChange()
+                }
             }
+        }
     }
 
     func startObserving() {
@@ -116,7 +128,7 @@ final class MenuBarSceneModel: ObservableObject {
         // onboarding window. User explicitly asked for this behaviour
         // (2026-04-19) after a `defaults delete` left menu items stuck
         // in an onboarding-required state.
-        switch permissionService.status(for: .microphone) {
+        switch permissionService.statuses[.microphone] ?? .pending {
         case .granted, .denied:
             await coordinator.toggle()
         case .pending:

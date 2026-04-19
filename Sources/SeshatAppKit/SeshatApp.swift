@@ -15,7 +15,7 @@ struct SeshatApp {
     init(
         coordinator: SessionCoordinator,
         permissionRequester: any MicrophonePermissionRequesting,
-        permissionService: PermissionServiceAdapter? = nil,
+        permissionService: (any PermissionService)? = nil,
         permissionStateProvider: (@MainActor () -> MicrophonePermissionState)? = nil,
         clipboardWriter: @escaping @MainActor (String) -> Void = SeshatApp.defaultClipboardWriter,
         openSettings: @escaping @MainActor () -> Void = SeshatApp.defaultOpenSettings,

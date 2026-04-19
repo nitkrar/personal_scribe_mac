@@ -28,7 +28,7 @@ import SeshatSession
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let sceneModel: MenuBarSceneModel
-    private let permissionService: PermissionServiceAdapter
+    private let permissionService: any PermissionService
     private let openHistory: @MainActor () -> Void
     private let openSettings: @MainActor () -> Void
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
@@ -40,7 +40,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     init(
         sceneModel: MenuBarSceneModel,
-        permissionService: PermissionServiceAdapter? = nil,
+        permissionService: (any PermissionService)? = nil,
         imPermissionProbe: any PermissionProbing = IOHIDPermissionProbe(),
         openHistory: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "History"),
         openSettings: @escaping @MainActor () -> Void = {},
@@ -52,12 +52,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) {
-        self.sceneModel = sceneModel
-        self.permissionService = permissionService
+        let resolvedPermissionService = permissionService
             ?? Self.makeCompatibilityPermissionService(
                 sceneModel: sceneModel,
                 imPermissionProbe: imPermissionProbe
             )
+        self.sceneModel = sceneModel
+        self.permissionService = resolvedPermissionService
         self.openHistory = openHistory
         self.openSettings = openSettings
         self.isOnboardingCompleteProvider = isOnboardingCompleteProvider
@@ -89,18 +90,29 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 self?.updateStatusItemAppearance(for: newState)
             }
 
-        permissionStatusesCancellable = self.permissionService.$statuses
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                // If the menu is currently open, rebuild it so permission
-                // warnings appear/disappear after prompts or Settings changes.
-                guard let self else { return }
-                if self.statusItem.menu?.numberOfItems ?? 0 > 0 {
-                    self.rebuildMenu()
-                }
+        permissionStatusesCancellable = Self.observePermissionChanges(for: resolvedPermissionService) { [weak self] in
+            // If the menu is currently open, rebuild it so permission
+            // warnings appear/disappear after prompts or Settings changes.
+            guard let self else { return }
+            if self.statusItem.menu?.numberOfItems ?? 0 > 0 {
+                self.rebuildMenu()
             }
+        }
 
         updateStatusItemAppearance(for: sceneModel.state)
+    }
+
+    private static func observePermissionChanges<Service: PermissionService>(
+        for service: Service,
+        onChange: @escaping @MainActor () -> Void
+    ) -> AnyCancellable {
+        service.objectWillChange.sink { _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    onChange()
+                }
+            }
+        }
     }
 
     isolated deinit {
@@ -206,7 +218,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func rebuildMenu() {
         guard let menu = statusItem.menu else { return }
 
-        let permissions = permissionService.statusSnapshot()
+        let permissions = permissionService.statuses
         let model = StatusItemMenuModel.makeUnified(
             sessionState: sceneModel.state,
             micPermission: permissions[.microphone] ?? .pending,

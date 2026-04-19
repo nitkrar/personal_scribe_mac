@@ -18,15 +18,12 @@ struct SeshatAppMain: App {
     @StateObject private var settingsWindowController: SettingsWindowControllerHost
 
     init() {
-        let permissionService = PermissionServiceAdapter(
-            wrapping: AppComposition.makePermissionService()
-        )
+        let permissionService: any PermissionService = AppComposition.makePermissionService()
         self.init(
             coordinator: AppComposition.sessionCoordinator,
             permissionRequester: AppComposition.makeMicrophonePermissionRequester(),
             permissionService: permissionService,
             clipboardWriter: SeshatAppMain.defaultClipboardWriter,
-            pasteInjector: PasteInjector(permissionService: permissionService),
             openSettings: SeshatAppMain.defaultOpenSettings,
             overlayPanelBuilder: AppKitPillOverlayPanelBuilder(),
             defaults: .standard,
@@ -38,9 +35,9 @@ struct SeshatAppMain: App {
     init(
         coordinator: SessionCoordinator,
         permissionRequester: any MicrophonePermissionRequesting,
-        permissionService: PermissionServiceAdapter? = nil,
+        permissionService: (any PermissionService)? = nil,
         clipboardWriter: @escaping @MainActor (String) -> Void = SeshatAppMain.defaultClipboardWriter,
-        pasteInjector: any PasteInjecting = PasteInjector(),
+        pasteInjector: (any PasteInjecting)? = nil,
         openSettings: @escaping @MainActor () -> Void = SeshatAppMain.defaultOpenSettings,
         overlayPanelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
         defaults: UserDefaults = .standard,
@@ -57,11 +54,16 @@ struct SeshatAppMain: App {
                 inputMonitoringProbe: inputMonitoringProbe,
                 isAccessibilityTrusted: isAccessibilityTrusted
             )
+        let compatibilityPermissionService = Self.makeCompatibilityPermissionServiceAdapter(
+            wrapping: permissionService
+        )
+        let resolvedPasteInjector = pasteInjector
+            ?? PasteInjector(permissionService: compatibilityPermissionService)
         let startupCoordinator = startupCoordinator
             ?? AppComposition.makeStartupCoordinator(
                 coordinator: coordinator,
                 hotkeyMonitor: AppComposition.makeGlobalHotkeyMonitor(
-                    permissionService: permissionService,
+                    permissionService: compatibilityPermissionService,
                     coordinator: coordinator
                 )
             )
@@ -69,7 +71,7 @@ struct SeshatAppMain: App {
         let onboardingControllerHost = OnboardingWindowControllerHost(
             defaults: defaults,
             startupCoordinator: startupCoordinator,
-            permissionService: permissionService,
+            permissionService: compatibilityPermissionService,
             microphoneStateProvider: { .notYetRequested },
             inputMonitoringProbe: inputMonitoringProbe,
             isAccessibilityTrusted: isAccessibilityTrusted
@@ -84,7 +86,7 @@ struct SeshatAppMain: App {
             coordinator: coordinator,
             clipboardWriter: clipboardWriter,
             pasteInjector: { text in
-                pasteInjector.paste(text)
+                resolvedPasteInjector.paste(text)
             },
             openSettings: openSettings,
             permissionService: permissionService,
@@ -293,6 +295,22 @@ extension SeshatAppMain {
             }
         )
     }
+
+    private static func makeCompatibilityPermissionServiceAdapter(
+        wrapping permissionService: any PermissionService
+    ) -> PermissionServiceAdapter {
+        if let permissionService = permissionService as? PermissionServiceAdapter {
+            return permissionService
+        }
+
+        return wrapPermissionService(permissionService)
+    }
+
+    private static func wrapPermissionService<Service: PermissionService>(
+        _ permissionService: Service
+    ) -> PermissionServiceAdapter {
+        PermissionServiceAdapter(wrapping: permissionService)
+    }
 }
 
 /// `@StateObject` host for `StatusItemController`. SwiftUI requires
@@ -305,7 +323,7 @@ final class StatusItemControllerHost: ObservableObject {
 
     init(
         sceneModel: MenuBarSceneModel,
-        permissionService: PermissionServiceAdapter? = nil,
+        permissionService: (any PermissionService)? = nil,
         openHistory: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {

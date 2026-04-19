@@ -24,25 +24,37 @@ final class OnboardingViewModel: ObservableObject {
         accessibilityOutcome == .denied || accessibilityOutcome == .skipped
     }
 
-    private let permissionService: PermissionServiceAdapter
+    private let permissionService: any PermissionService
     private let persistCompletion: @MainActor () -> Void
     private var permissionObservation: AnyCancellable?
     private var didSkipAccessibility = false
 
     init(
-        permissionService: PermissionServiceAdapter? = nil,
+        permissionService: (any PermissionService)? = nil,
         permissionProbe: any OnboardingPermissionProbing = PermissionRequester(),
         persistCompletion: @escaping @MainActor () -> Void = {}
     ) {
-        self.permissionService = permissionService
+        let resolvedPermissionService = permissionService
             ?? Self.makeCompatibilityPermissionService(permissionProbe: permissionProbe)
+        self.permissionService = resolvedPermissionService
         self.persistCompletion = persistCompletion
         syncFromService()
-        self.permissionObservation = self.permissionService.$statuses
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.syncFromService()
+        self.permissionObservation = Self.observePermissionChanges(for: resolvedPermissionService) { [weak self] in
+            self?.syncFromService()
+        }
+    }
+
+    private static func observePermissionChanges<Service: PermissionService>(
+        for service: Service,
+        onChange: @escaping @MainActor () -> Void
+    ) -> AnyCancellable {
+        service.objectWillChange.sink { _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    onChange()
+                }
             }
+        }
     }
 
     func requestMicrophoneAccess() async {
@@ -83,10 +95,11 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     private func syncFromService() {
-        microphoneOutcome = permissionService.status(for: .microphone).onboardingOutcome
-        inputMonitoringOutcome = permissionService.status(for: .inputMonitoring).onboardingOutcome
+        let statuses = permissionService.statuses
+        microphoneOutcome = (statuses[.microphone] ?? .pending).onboardingOutcome
+        inputMonitoringOutcome = (statuses[.inputMonitoring] ?? .pending).onboardingOutcome
 
-        let accessibilityStatus = permissionService.status(for: .accessibility)
+        let accessibilityStatus = statuses[.accessibility] ?? .pending
         if accessibilityStatus == .granted {
             didSkipAccessibility = false
             accessibilityOutcome = .granted

@@ -26,8 +26,8 @@ public final class PermissionServiceAdapter: PermissionService {
         self.deepLinkProvider = { permission in
             service.systemSettingsDeepLink(for: permission)
         }
-        self.observation = service.objectWillChange.sink { [weak self] _ in
-            self?.statuses = service.statusSnapshot()
+        self.observation = Self.makeObservation(for: service) { [weak self] statuses in
+            self?.statuses = statuses
         }
     }
 
@@ -85,6 +85,49 @@ public final class PermissionServiceAdapter: PermissionService {
                 string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
             )!
         }
+    }
+
+    // `objectWillChange` fires before the wrapped service mutates its
+    // `@Published` storage, so prefer the projected `statuses` publisher.
+    private static func makeObservation<Service: PermissionService>(
+        for service: Service,
+        onChange: @escaping @MainActor ([Permission: PermissionStatus]) -> Void
+    ) -> AnyCancellable {
+        if let statusesPublisher = publishedStatusesPublisher(for: service) {
+            return statusesPublisher.sink { statuses in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        onChange(statuses)
+                    }
+                }
+            }
+        }
+
+        return service.objectWillChange.sink { _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    onChange(service.statusSnapshot())
+                }
+            }
+        }
+    }
+
+    private static func publishedStatusesPublisher<Service: PermissionService>(
+        for service: Service
+    ) -> AnyPublisher<[Permission: PermissionStatus], Never>? {
+        var mirror: Mirror? = Mirror(reflecting: service)
+        while let currentMirror = mirror {
+            for child in currentMirror.children {
+                guard let publishedStatuses = child.value as? Published<[Permission: PermissionStatus]> else {
+                    continue
+                }
+
+                return publishedStatuses.projectedValue.eraseToAnyPublisher()
+            }
+            mirror = currentMirror.superclassMirror
+        }
+
+        return nil
     }
 }
 
