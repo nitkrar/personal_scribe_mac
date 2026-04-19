@@ -113,14 +113,14 @@ struct StatusItemMenuModel: Equatable {
             id: .openHistory,
             title: "History",
             keyEquivalent: "",
-            isEnabled: isOnboardingComplete
+            isEnabled: true
         )))
 
         items.append(.action(ActionItem(
             id: .openSettings,
             title: "Settings",
             keyEquivalent: "",
-            isEnabled: isOnboardingComplete
+            isEnabled: true
         )))
 
         items.append(.separator)

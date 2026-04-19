@@ -35,7 +35,13 @@ final class StatusItemMenuModelTests: XCTestCase {
         assertHeader(model.items[0], "Long-form")
     }
 
-    func testIncompleteOnboardingDisablesSettingsItem() {
+    func testSettingsAndHistoryAlwaysEnabledRegardlessOfOnboardingState() {
+        // Regression guard: previously Settings + History were gated on
+        // isOnboardingComplete, which grey-ed them out after a
+        // `defaults delete com.nitkrar.seshat` reset (user stuck with
+        // no way to reopen onboarding). Menu items should always be
+        // enabled; routing into the Settings window handles the
+        // permissions-needed UX instead.
         let model = StatusItemMenuModel.make(
             sessionState: .idle,
             micPermission: .granted,
@@ -43,12 +49,17 @@ final class StatusItemMenuModelTests: XCTestCase {
             isOnboardingComplete: false
         )
 
+        guard case let .action(history) = model.items[2] else {
+            return XCTFail("Expected History action at index 2")
+        }
         guard case let .action(settings) = model.items[3] else {
             return XCTFail("Expected Settings action at index 3")
         }
 
+        XCTAssertEqual(history.id, .openHistory)
+        XCTAssertTrue(history.isEnabled)
         XCTAssertEqual(settings.id, .openSettings)
-        XCTAssertFalse(settings.isEnabled)
+        XCTAssertTrue(settings.isEnabled)
     }
 
     // MARK: - Recording-toggle title switching
