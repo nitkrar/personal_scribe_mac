@@ -465,6 +465,22 @@ final class MenuBarSceneModelTests: XCTestCase {
         )
 
         model.startObserving()
+        await Task.yield()
+
+        // Layer 6 Stage 2 moved preparation progress behind
+        // SessionCoordinator's rebroadcast stream, so the coordinator must
+        // enter the prepare path before menu-bar observation can receive
+        // transcriber snapshots.
+        let prepareTask = Task {
+            try await coordinator.prepareTranscriber()
+        }
+        defer {
+            transcriber.releasePrepare()
+        }
+
+        await waitUntil {
+            transcriber.prepareDidStart()
+        }
 
         transcriber.emit(
             .init(
@@ -502,6 +518,9 @@ final class MenuBarSceneModelTests: XCTestCase {
         await waitUntil {
             model.preparationProgress == nil
         }
+
+        transcriber.releasePrepare()
+        try await prepareTask.value
     }
 
     func testCanInstantiateSeshatAppWithCoordinatorAndPermissionRequester() async throws {
@@ -617,14 +636,44 @@ private struct GrantedInputMonitoringProbe: PermissionProbing {
 }
 
 private final class ProgressReportingTranscriber: @unchecked Sendable, Transcribing {
+    private let lock = NSLock()
     private let relay = ProgressRelay()
     private let result: TranscriptionResult
+    private var didStartPrepare = false
+    private var prepareContinuation: CheckedContinuation<Void, Never>?
+    private var releasePrepareEarly = false
 
     init(result: TranscriptionResult) {
         self.result = result
     }
 
-    func prepare() async throws {}
+    func prepare() async throws {
+        let shouldReturnImmediately = lock.withLock { () -> Bool in
+            didStartPrepare = true
+            if releasePrepareEarly {
+                releasePrepareEarly = false
+                return true
+            }
+            return false
+        }
+        guard !shouldReturnImmediately else { return }
+
+        await withCheckedContinuation { continuation in
+            let shouldResumeImmediately = lock.withLock { () -> Bool in
+                if releasePrepareEarly {
+                    releasePrepareEarly = false
+                    return true
+                }
+
+                prepareContinuation = continuation
+                return false
+            }
+
+            if shouldResumeImmediately {
+                continuation.resume()
+            }
+        }
+    }
 
     func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         relay.stream()
@@ -641,6 +690,24 @@ private final class ProgressReportingTranscriber: @unchecked Sendable, Transcrib
 
     func emit(_ progress: ModelDownloadProgress) {
         relay.emit(progress)
+    }
+
+    func prepareDidStart() -> Bool {
+        lock.withLock { didStartPrepare }
+    }
+
+    func releasePrepare() {
+        let continuation = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            if let prepareContinuation {
+                self.prepareContinuation = nil
+                return prepareContinuation
+            }
+
+            releasePrepareEarly = true
+            return nil
+        }
+
+        continuation?.resume()
     }
 }
 
