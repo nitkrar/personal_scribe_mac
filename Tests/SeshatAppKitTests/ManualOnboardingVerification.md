@@ -1,28 +1,25 @@
 # Onboarding Window — Manual Verification Runbook
 
-This slice changes first-run permission timing and the fallback path used
-when recording surfaces are tapped before Seshat has the required macOS
-permissions. XCTest covers the onboarding state machine and menu fallback
-logic, but the actual window lifecycle and TCC prompts still require
-runtime verification.
+This slice rewrites first-run onboarding from a stepped flow into a
+single-screen checklist. XCTest covers the checklist state model and
+completion actions, but the actual SwiftUI layout and macOS permission
+prompts still require runtime verification.
 
 ---
 
-## First launch
+## Single-screen first launch
 
-- [ ] **MV-OB-1** Fresh install / fresh defaults: launch Seshat and confirm the onboarding window appears immediately.
-- [ ] **MV-OB-2** While the onboarding window is open, clicking the pill or choosing `Start Recording` from the menu does not begin recording; the onboarding window remains the active path.
-- [ ] **MV-OB-3** Complete all onboarding panes with either Grant or Skip actions. The window closes only after the final pane resolves.
+- [ ] **MV-OB-1** Fresh install / fresh defaults: launch Seshat and confirm a single dark onboarding window appears with the centered quill logo, centered `Welcome to Seshat` heading, centered `Your personal AI scribe` subtitle, three checklist rows, the AI-model note, the reassurance caption, one full-width `Continue` button, and a `Skip setup` link.
+- [ ] **MV-OB-2** Without granting Microphone or Input Monitoring, confirm `Continue` is disabled and the hint `Grant Microphone and Input Monitoring to continue.` is visible.
+- [ ] **MV-OB-3** Click the `info.circle` button on each row and confirm the matching explanatory popover opens for Microphone Access, Input Monitoring, and Accessibility.
 
-## Permissions granted
+## Permission states
 
-- [ ] **MV-OB-4** Grant Microphone, Input Monitoring, and Accessibility in order. After the window closes, the pill tap starts recording normally and the first completed transcription pastes without showing a late Accessibility prompt.
+- [ ] **MV-OB-4** Grant Microphone and Input Monitoring. Confirm each granted row flips to a green check icon, each status changes to `Granted`, and `Continue` becomes enabled even if Accessibility is still unresolved.
+- [ ] **MV-OB-5** On the Accessibility row, use `Skip` or deny the macOS prompt. Confirm the row switches to a yellow warning state, shows `Skipped` or `Open Settings` as appropriate, and renders `Seshat will not be able to paste into other apps. Transcripts still copy to clipboard.`
+- [ ] **MV-OB-6** Deny Microphone or Input Monitoring and confirm the affected row shows `Open Settings` while `Continue` remains disabled.
 
-## Permissions incomplete fallback
+## Completion paths
 
-- [ ] **MV-OB-5** Deny Microphone during onboarding. After the window closes, the menu shows the `Permissions needed before recording` note and choosing `Start Recording` reopens onboarding instead of crashing or toggling recording.
-- [ ] **MV-OB-6** Skip or deny Input Monitoring, then click the pill. The app does not crash; it reopens onboarding instead of entering the recording path.
-
-## Re-grant path
-
-- [ ] **MV-OB-7** With onboarding already completed once, grant the previously missing permission(s) in System Settings, relaunch Seshat, and verify recording works on the next launch without showing onboarding first.
+- [ ] **MV-OB-7** With Microphone and Input Monitoring granted, click `Continue`. Confirm the window closes whether Accessibility is granted, denied, or skipped.
+- [ ] **MV-OB-8** Relaunch from a fresh-defaults state, click `Skip setup`, and confirm the window closes immediately and onboarding does not appear automatically on the next launch.
