@@ -144,6 +144,12 @@ final class GeneralTabViewModel: ObservableObject {
         self.defaults = defaults
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.pillVisibilityMode = PillVisibilityMode.resolve(from: defaults)
+        // Snapshot-at-init: isMenuBarVisible is NOT re-read while the
+        // Settings window is open. The General tab is the sole mutator
+        // in Phase 3, so the snapshot is always current. If a second
+        // path ever starts mutating menu-bar visibility (e.g. a hotkey
+        // to toggle it), refresh here on view appear or swap to a
+        // Published upstream source.
         self.isMenuBarVisible = menuBarVisibilityProvider()
         self.waveformDecayMode = WaveformDecayMode.resolve(from: defaults)
         self.pasteMode = SeshatPasteMode.resolve(from: defaults)
