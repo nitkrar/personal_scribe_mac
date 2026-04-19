@@ -46,6 +46,33 @@ final class DiskSpaceSnapshotTests: XCTestCase {
         }
     }
 
+    func testCaptureTreatsMissingBaseDirectoryAsEmptySnapshotWithoutCreatingDirectories() throws {
+        let existingParentDirectory = try makeTemporaryDirectory()
+        defer {
+            cleanup(existingParentDirectory)
+        }
+
+        let missingBaseDirectory = existingParentDirectory
+            .appendingPathComponent("missing-base", isDirectory: true)
+            .standardizedFileURL
+        let expectedVolumeAvailableBytes = try existingParentDirectory.resourceValues(
+            forKeys: [.volumeAvailableCapacityForImportantUsageKey]
+        ).volumeAvailableCapacityForImportantUsage
+
+        let snapshot = try DiskSpaceSnapshot.capture(
+            from: FixedStorageLocator(baseDirectory: missingBaseDirectory),
+            fileManager: fileManager,
+            capturedAt: Date(timeIntervalSince1970: 1_713_571_200)
+        )
+
+        XCTAssertFalse(fileManager.fileExists(atPath: missingBaseDirectory.path))
+        XCTAssertEqual(snapshot.baseDirectory, missingBaseDirectory)
+        XCTAssertEqual(Set(snapshot.usedBytesByDirectory.keys), Set(ManagedDirectory.allCases))
+        XCTAssertTrue(snapshot.usedBytesByDirectory.values.allSatisfy { $0 == 0 })
+        XCTAssertEqual(snapshot.totalUsedBytes, 0)
+        XCTAssertEqual(snapshot.volumeAvailableBytes, expectedVolumeAvailableBytes)
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try fileManager.createDirectory(at: url, withIntermediateDirectories: true)

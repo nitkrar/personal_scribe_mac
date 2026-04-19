@@ -48,12 +48,6 @@ public struct DiskSpaceSnapshot: Sendable, Equatable {
 }
 
 enum ManagedDirectoryByteCounter {
-    static func totalBytes(in directories: [URL], fileManager: FileManager) throws -> Int64 {
-        try directories.reduce(into: Int64.zero) { partialResult, directory in
-            partialResult += try totalBytes(in: directory, fileManager: fileManager)
-        }
-    }
-
     static func totalBytes(in directory: URL, fileManager: FileManager) throws -> Int64 {
         var isDirectory = ObjCBool(false)
         let exists = fileManager.fileExists(atPath: directory.path, isDirectory: &isDirectory)

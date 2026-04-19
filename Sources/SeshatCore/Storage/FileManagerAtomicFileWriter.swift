@@ -1,12 +1,28 @@
 import Foundation
 
-/// `@unchecked Sendable` is safe here because `FileManager` is the only stored reference and the
-/// implementation only uses Apple-documented thread-safe filesystem APIs.
+/// `@unchecked Sendable` is safe here because the stored `FileManager` is only used through
+/// Apple-documented thread-safe filesystem APIs and the injected attributes applier is immutable.
 public struct FileManagerAtomicFileWriter: AtomicFileWriter, @unchecked Sendable {
+    typealias AttributesApplier = (_ fileManager: FileManager, _ attributes: [FileAttributeKey: Any], _ path: String) throws -> Void
+
     private let fileManager: FileManager
+    private let applyAttributes: AttributesApplier
 
     public init(fileManager: FileManager = .default) {
+        self.init(
+            fileManager: fileManager,
+            applyAttributes: { fileManager, attributes, path in
+                try fileManager.setAttributes(attributes, ofItemAtPath: path)
+            }
+        )
+    }
+
+    init(
+        fileManager: FileManager,
+        applyAttributes: @escaping AttributesApplier
+    ) {
         self.fileManager = fileManager
+        self.applyAttributes = applyAttributes
     }
 
     public func replaceItem(
@@ -28,13 +44,11 @@ public struct FileManagerAtomicFileWriter: AtomicFileWriter, @unchecked Sendable
                     destinationURL,
                     withItemAt: temporaryURL,
                     backupItemName: nil,
-                    options: []
+                    options: [.usingNewMetadataOnly]
                 )
             } else {
                 try fileManager.moveItem(at: temporaryURL, to: destinationURL)
             }
-
-            try applyPermissionsIfRequested(permissions, to: destinationURL)
         } catch {
             cleanupTemporaryItem(at: temporaryURL)
             throw error
@@ -53,9 +67,10 @@ public struct FileManagerAtomicFileWriter: AtomicFileWriter, @unchecked Sendable
             return
         }
 
-        try fileManager.setAttributes(
+        try applyAttributes(
+            fileManager,
             [.posixPermissions: NSNumber(value: permissions)],
-            ofItemAtPath: url.path
+            url.path
         )
     }
 
