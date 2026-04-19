@@ -144,3 +144,24 @@ _(high-level progression)_
 | 02:03 | 2 | **Wave 2 CLOSED.** 3.A complete: A.1 `7e9eee1` ModeDescriptor registry, A.2 `a03576c` window shell, A.3 `2872ec1` visibility invariant, A.4 `db076e1` menu wire-up. All 5 tab files present, both test files present, ManualSettingsVerification.md present. Dispatched 3.A reviewer `ab60cb1b01dd108e7`. |
 | 02:04 | 3a | **Wave 3a fired (3 codex in parallel, holding 3.H for collision avoidance with 3.E on AdvancedTab).** 3.B NotesWindow as codex `a685f7416133c4a97` (Codex `task-mo529o83-8ulc11`), 3.E BaseDirectoryMigrator as `a9af089e774e3592d` (Codex `task-mo52a4wn-hlh56y`), 3.G Hotkey customization as `ae4709280bb9fb5a3`. File-ownership cross-checks baked into briefs. All with skip-build-test. Total running: 3 codex + 1 Claude reviewer = 4 agents (within cap). |
 | 02:09 | 3a | **Poll tick — quiet.** No new commits since Wave 3a dispatch ~5 min ago. 3.B/3.E/3.G all Codex-handed-off. 3.A reviewer still running. All under stall threshold. |
+
+### 3.A reviewer — agent `ab60cb1b01dd108e7` at 02:13
+
+**Verdict:** PASS with 4 SHOULD-FIX. No MUST-FIX.
+
+**SHOULD-FIX applied autonomously:**
+- **#2 Stale `isMenuBarVisible` snapshot at VM init** — added explicit doc comment in `Sources/SeshatAppKit/Settings/GeneralTab.swift:146-152` making the "Settings is sole writer in Phase 3" invariant explicit. Latent-bug-proofing for when a second mutation path lands. Committed as `0a032f3`.
+
+**SHOULD-FIX deferred to morning (file collisions with active Wave 3a codex agents):**
+- **#1** `testSettingsMenuActionRaisesOpenSettingsRequestedSignal` — test name says "signal" but implementation is a plain closure (`openSettings: @MainActor () -> Void`). Rename to `testOpenSettingsMenuActionInvokesOpenSettingsCallback` or add doc comment. File `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift` is being extended by 3.B for the History menu action — wait until 3.B lands.
+- **#3 Manual runbook thin** — `Tests/SeshatAppKitTests/ManualSettingsVerification.md` missing checks for AIModels-correct-model, Shortcuts-both-rows, Advanced-Open-in-Finder, window-reuse-on-reopen. 3.E and 3.G are both extending this file — batch the 3.A additions with theirs in a single morning housekeeping pass.
+- **#4 Late-bound closure forward-reference in composition** — `SeshatAppMain.init` uses `var showSettingsWindow = {}` then rebinds after constructing the host. Works but silently breaks if `var` becomes `let`. Comment or refactor. `SeshatAppMain.swift` is being touched by 3.B for the History window wire-up — wait until 3.B lands.
+
+**ACCEPT-WITH-RATIONALE (no action):**
+- Settings window uses `.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView` vs onboarding's `.titled, .fullSizeContentView` — intentional per lifecycle (Settings is reusable + resizable, onboarding is one-shot fixed).
+- `Tab` enum is internal (not public) — narrower surface is right.
+- A.3 replaces A.2's naive GeneralTab body wholesale — canonical TDD red-green motion; A.2 is scaffolding, A.3 adds the invariant with its failing test.
+- Visibility-error UX is inline-label-only, no toast/banner — out of 3.A scope.
+- Settings menu item is DISABLED (greyed) pre-onboarding, not hidden — reviewer chose disabled per standard macOS idiom.
+
+**Reviewer note on testing:** `swift build --build-tests` aborted locally with AMFI manifest-compilation kill (Santa worktree/Xcode env). Compile-correctness verified by static inspection only. User should run `swift test --filter 'ModeDescriptorTests|SettingsWindowControllerTests|GeneralTabViewModelTests|StatusItemMenuModelTests|MenuBarSceneModelTests'` from canonical main-repo path in the morning before claiming 3.A shipped.
