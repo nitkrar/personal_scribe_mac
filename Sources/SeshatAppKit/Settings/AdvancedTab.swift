@@ -4,16 +4,24 @@ import SeshatCore
 
 @MainActor
 public struct AdvancedTab: View {
-    private let baseDirectoryResult: Result<URL, Error>
+    @StateObject private var viewModel: AdvancedTabViewModel
     private let openInFinder: @MainActor (URL) -> Void
 
     public init(
         baseDirectoryResult: Result<URL, Error> = Result { try SeshatConfig.baseDirectory() },
+        migrator: any BaseDirectoryMigrating = BaseDirectoryMigrator(),
+        selectDirectory: @escaping @MainActor (URL?) -> URL? = Self.presentDirectoryPicker,
         openInFinder: @escaping @MainActor (URL) -> Void = {
             NSWorkspace.shared.activateFileViewerSelecting([$0])
         }
     ) {
-        self.baseDirectoryResult = baseDirectoryResult
+        _viewModel = StateObject(
+            wrappedValue: AdvancedTabViewModel(
+                baseDirectoryResult: baseDirectoryResult,
+                migrator: migrator,
+                selectDirectory: selectDirectory
+            )
+        )
         self.openInFinder = openInFinder
     }
 
@@ -23,7 +31,7 @@ public struct AdvancedTab: View {
                 title: "Advanced",
                 description: "Filesystem location for Seshat's app support data."
             ) {
-                switch baseDirectoryResult {
+                switch viewModel.baseDirectoryResult {
                 case .success(let baseDirectory):
                     SettingsCard {
                         SettingsMetadataRow(
@@ -31,10 +39,24 @@ public struct AdvancedTab: View {
                             value: baseDirectory.path
                         )
 
-                        HStack {
+                        if viewModel.isMigrating || viewModel.feedback != nil {
+                            Divider()
+                            migrationStatusView
+                        }
+
+                        HStack(spacing: SettingsLayout.inlineSpacing) {
                             Spacer()
-                            ActionButton(title: "Open in Finder") {
+                            ActionButton(
+                                title: "Open in Finder",
+                                variant: .secondary,
+                                isEnabled: !viewModel.isMigrating
+                            ) {
                                 openInFinder(baseDirectory)
+                            }
+                            ActionButton(title: "Change Base Directory…", isEnabled: !viewModel.isMigrating) {
+                                Task {
+                                    await viewModel.changeBaseDirectory()
+                                }
                             }
                         }
                     }
@@ -48,6 +70,120 @@ public struct AdvancedTab: View {
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var migrationStatusView: some View {
+        if viewModel.isMigrating {
+            HStack(spacing: SettingsLayout.inlineSpacing) {
+                ProgressView()
+                    .controlSize(.small)
+
+                Text("Migrating models, modes, and recordings…")
+                    .font(SeshatTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+            }
+        } else if let feedback = viewModel.feedback {
+            Label(feedback.message, systemImage: feedback.systemImage)
+                .font(SeshatTheme.Typography.caption.font)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private static func presentDirectoryPicker(currentBaseDirectory: URL?) -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Choose"
+        panel.message = "Select a new base directory for Seshat's models, modes, and recordings."
+        panel.directoryURL = currentBaseDirectory
+        return panel.runModal() == .OK ? panel.url?.standardizedFileURL : nil
+    }
+}
+
+@MainActor
+final class AdvancedTabViewModel: ObservableObject {
+    enum Feedback: Equatable {
+        case success(String)
+        case failure(String)
+
+        var message: String {
+            switch self {
+            case .success(let message), .failure(let message):
+                message
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .success:
+                "checkmark.circle.fill"
+            case .failure:
+                "exclamationmark.triangle.fill"
+            }
+        }
+    }
+
+    @Published private(set) var baseDirectoryResult: Result<URL, Error>
+    @Published private(set) var isMigrating = false
+    @Published private(set) var feedback: Feedback?
+
+    private let migrator: any BaseDirectoryMigrating
+    private let selectDirectory: @MainActor (URL?) -> URL?
+
+    init(
+        baseDirectoryResult: Result<URL, Error> = Result { try SeshatConfig.baseDirectory() },
+        migrator: any BaseDirectoryMigrating = BaseDirectoryMigrator(),
+        selectDirectory: @escaping @MainActor (URL?) -> URL?
+    ) {
+        self.baseDirectoryResult = baseDirectoryResult
+        self.migrator = migrator
+        self.selectDirectory = selectDirectory
+    }
+
+    func changeBaseDirectory() async {
+        guard !isMigrating else { return }
+        guard let selectedDirectory = selectDirectory(currentBaseDirectory) else { return }
+
+        isMigrating = true
+        feedback = nil
+        defer { isMigrating = false }
+
+        do {
+            let report = try await migrator.migrate(to: selectedDirectory)
+            baseDirectoryResult = .success(selectedDirectory.standardizedFileURL)
+            feedback = .success(Self.message(for: report))
+        } catch {
+            feedback = .failure(error.localizedDescription)
+        }
+    }
+
+    private var currentBaseDirectory: URL? {
+        switch baseDirectoryResult {
+        case .success(let directory):
+            directory
+        case .failure:
+            nil
+        }
+    }
+
+    private static func message(for report: MigrationReport) -> String {
+        switch report {
+        case .noOp:
+            return "Base directory already points to the selected folder."
+        case .migrated(let movedSubdirs, let totalBytes):
+            guard movedSubdirs.isEmpty == false else {
+                return "Base directory changed. No existing models, modes, or recordings needed moving."
+            }
+
+            let formattedDirectories =
+                ListFormatter.localizedString(byJoining: movedSubdirs) ??
+                movedSubdirs.joined(separator: ", ")
+            let formattedBytes = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+            return "Moved \(formattedDirectories) (\(formattedBytes))."
         }
     }
 }
