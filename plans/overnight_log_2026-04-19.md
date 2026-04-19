@@ -212,3 +212,25 @@ _(high-level progression)_
 **Zero sibling-lane collision.** Only touched: `HotkeyPreference.swift` (new), `GlobalHotkeyMonitor.swift`, `HotkeyRecorder.swift` (new), `ShortcutsTab.swift`, and corresponding tests + ManualSettingsVerification runbook section.
 | 02:29 | 3a | **Poll tick.** B.8 `9ca6e61` History wire-up, B.9 `57dcee8` runbook — **3.B COMPLETE**. **Wave 3a FULLY CLOSED** (3.B/3.E/3.G all done). 3.E and 3.G reviewers already PASS; 3.B reviewer `aefece7dfc56abb43` just dispatched. |
 | 02:30 | 3b | **Wave 3b fired (solo — last Phase 3 group modulo parked 3.F).** 3.H BUG-07 clipboard-clobber timing dispatched as codex `a165abf20dbe9670c`. Owns `Sources/SeshatCore/PasteRestoreDelay.swift` (new), `Sources/SeshatAppKit/Paste/PasteInjector.swift`, additive edits to `Sources/SeshatAppKit/Settings/GeneralTab.swift` + `ManualSettingsVerification.md`. Skip-build-test baked in. |
+
+### 3.B reviewer — agent `aefece7dfc56abb43` at 02:41
+
+**Verdict:** PASS with 5 SHOULD-FIX. No MUST-FIX. Contract met, sibling-collision clean, no forbidden symbols, no `Color(hex:` outside Theme, no direct `UserDefaults.standard` bypass, no `type`/`kind`/`intent` fields.
+
+**SHOULD-FIX applied autonomously:**
+- **#1 `NotesEditor.disabled(true)` blocks text selection.** User-visible critical: users can't copy transcripts out of the history window, which breaks the entire purpose of the surface. Replaced with `ScrollView { Text(displayText).textSelection(.enabled) }` — copy works, editing still impossible, Phase-3 "no edit persistence" design-lock still holds. Committed as `eeb4c0e`.
+
+**SHOULD-FIX deferred to morning (risk-manage during overnight):**
+- **#2 Search-field snap-back + no task cancellation.** `NotesView.swift:20-29` — binding `get` returns lagging `@Published var searchQuery` so fast typing visibly "snaps back"; rapid keystrokes also spawn overlapping uncancelled search tasks that can arrive out-of-order. Needs debounced local `@State` + Task-handle-per-search pattern. Non-trivial fix, morning task.
+- **#3 `SQLiteTranscriptReader.all()` does `count()` + `recent(limit:)` — two DB round-trips.** Low urgency at Phase-3 dogfood volumes. Optimize later — either extend `SQLiteTranscriptStore` with a bounded unbounded-ish `all()` or use `recent(limit: .max)` / sane cap.
+- **#4 `EmptyTranscriptReader` silently swallows SQLite init failure.** `SeshatAppMain.swift:186-192` — if DB fails to open, History shows "No transcripts yet" same as fresh install. Surface a diagnostic "History unavailable — see logs" empty-state string.
+- **#5 Asymmetric onboarding guard: `showNotesWindow` checks `isOnboardingCompleteProvider()`, `showSettingsWindow` doesn't.** `SeshatAppMain.swift:139-148`. Menu-model already disables both rows pre-onboarding, so the Notes closure guard is redundant belt-and-suspenders. Either add symmetric guard to Settings closure, or drop both and let the menu disablement be the single source.
+
+**ACCEPT-WITH-RATIONALE (no action):**
+- A. `NotesViewModel.loadRecent()` actually calls `.all()` under the hood — name drift, inline comment documents. Cosmetic rename to `loadAll()` or `reloadHistory()` on next touch.
+- B. Three stub `TranscriptReading` fakes across test files (`FakeTranscriptReader` / `NotesStubTranscriptReader` / `ScriptedTranscriptReader`). ≤30 lines each, distinct concerns. Consolidate on 4th consumer.
+- C. B.9 commit title says "for Search filters list" — runbook actually covers 5 sections. Cosmetic subject-line narrowing; body delivers.
+- D. `NotesContextPanel.showsAudioThumbnail` always false (no audio-URL threaded through `TranscriptEntry`). Consistent with Phase-3 design-lock — no audio playback surface yet.
+- E. `TranscriptReader.swift` is a `SeshatCore` type but its tests live in `Tests/SeshatAppKitTests/Notes/`. Misfiled but works. Move on next touch.
+
+**Zero sibling-lane collision.** Files touched only: `TranscriptReader.swift` (new), `Notes/*` (6 new), `SeshatAppMain.swift`, `StatusItemMenuModel.swift`, corresponding tests, and `ManualNotesVerification.md`.
