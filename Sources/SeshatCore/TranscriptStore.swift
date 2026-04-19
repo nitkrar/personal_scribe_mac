@@ -28,9 +28,18 @@ public actor TranscriptStoreJSONL {
     private var ring: RingBuffer<TranscriptEntry>
 
     public init(recordingsDirectory: URL, ringCapacity: Int = 500) throws {
+        let storageLocator = FixedBaseDirectoryStorageLocator(
+            baseDirectory: recordingsDirectory.deletingLastPathComponent(),
+            managedDirectoryOverrides: [.recordings: recordingsDirectory]
+        )
+        try self.init(storageLocator: storageLocator, ringCapacity: ringCapacity)
+    }
+
+    init(storageLocator: any StorageLocator, ringCapacity: Int = 500) throws {
         let normalizedCapacity = max(0, ringCapacity)
         let fileManager = FileManager.default
         let logger = SeshatLogger(category: SeshatLogCategory.app)
+        let recordingsDirectory = storageLocator.url(for: .recordings)
         let transcriptsFile = recordingsDirectory
             .appendingPathComponent("transcripts.jsonl", isDirectory: false)
             .standardizedFileURL

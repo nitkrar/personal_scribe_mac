@@ -21,7 +21,11 @@ public enum SeshatConfig {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) throws -> URL {
         try directoryLock.withLock {
-            let directory = resolvedBaseDirectory(defaults: defaults, environment: environment)
+            let directory = AppConfig.liveStorageLocator(
+                fileManager: .default,
+                defaults: defaults,
+                environment: environment
+            ).baseDirectory
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             return directory.standardizedFileURL
         }
@@ -31,36 +35,36 @@ public enum SeshatConfig {
         _ directory: URL?,
         defaults: UserDefaults = .standard
     ) {
-        directoryLock.withLock {
-            baseDirectoryPathPreference(defaults: defaults)
-                .persist(directory?.standardizedFileURL.path)
-        }
+        AppConfig.setBaseDirectoryOverride(directory, defaults: defaults)
     }
 
     public static func baseDirectoryPathPreference(
         defaults: UserDefaults = .standard
     ) -> Preference<String?> {
-        Preference(key: "BaseDirectoryPath", default: nil, defaults: defaults)
+        Preference(key: AppConfig.baseDirectoryUserDefaultsKey, default: nil, defaults: defaults)
     }
 
     public static func modelsDirectory() throws -> URL {
-        try subdirectory(named: "models")
+        try subdirectory(for: .models)
     }
 
     /// Reserved for future modes/ feature. Directory is created lazily.
     public static func modesDirectory() throws -> URL {
-        try subdirectory(named: "modes")
+        try subdirectory(for: .modes)
     }
 
     /// Reserved for future recordings/ feature. Directory is created lazily.
     public static func recordingsDirectory() throws -> URL {
-        try subdirectory(named: "recordings")
+        try subdirectory(for: .recordings)
     }
 
     /// Directory for a specific model's artifacts.
     public static func directory(for descriptor: ModelDescriptor) throws -> URL {
-        let models = try modelsDirectory()
-        let directory = models.appendingPathComponent(descriptor.id, isDirectory: true).standardizedFileURL
+        let storageLocator = AppConfig.liveStorageLocator()
+        let directory = storageLocator
+            .url(for: .models)
+            .appendingPathComponent(descriptor.id, isDirectory: true)
+            .standardizedFileURL
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
@@ -73,37 +77,59 @@ public enum SeshatConfig {
     // or `SESHAT_BASE_DIR` must clean up in `defer` and serialize in test code rather than changing
     // Package.swift parallelism preemptively; only disable parallel testing if the suite actually flakes.
     // Plan 00 D.1: test code mutates this from XCTest's default single-threaded path only.
-    public nonisolated(unsafe) static var testingBaseDirectoryOverride: URL?
+    public nonisolated(unsafe) static var testingBaseDirectoryOverride: URL? {
+        get { AppConfig.testingBaseDirectoryOverride }
+        set { AppConfig.testingBaseDirectoryOverride = newValue }
+    }
 
     // MARK: - Private
 
     private static let directoryLock = NSLock()
-    private static let envVarName = "SESHAT_BASE_DIR"
 
-    private static func subdirectory(named name: String) throws -> URL {
-        let base = try baseDirectory()
-        let directory = base.appendingPathComponent(name, isDirectory: true).standardizedFileURL
+    private static func subdirectory(for managedDirectory: ManagedDirectory) throws -> URL {
+        let storageLocator = AppConfig.liveStorageLocator()
+        let directory = storageLocator.url(for: managedDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
+}
 
-    private static func resolvedBaseDirectory(
-        defaults: UserDefaults,
-        environment: [String: String]
-    ) -> URL {
-        if let override = testingBaseDirectoryOverride {
-            return override.appendingPathComponent("Seshat", isDirectory: true).standardizedFileURL
+/// `@unchecked Sendable` is safe here because the stored `FileManager` is only used
+/// through Apple-documented thread-safe directory creation APIs.
+struct FixedBaseDirectoryStorageLocator: StorageLocator, @unchecked Sendable {
+    let baseDirectory: URL
+    private let fileManager: FileManager
+    private let managedDirectoryOverrides: [ManagedDirectory: URL]
+
+    init(
+        baseDirectory: URL,
+        fileManager: FileManager = .default,
+        managedDirectoryOverrides: [ManagedDirectory: URL] = [:]
+    ) {
+        self.baseDirectory = baseDirectory.standardizedFileURL
+        self.fileManager = fileManager
+        self.managedDirectoryOverrides = Dictionary(
+            uniqueKeysWithValues: managedDirectoryOverrides.map { entry in
+                (entry.key, entry.value.standardizedFileURL)
+            }
+        )
+    }
+
+    func url(for directory: ManagedDirectory) -> URL {
+        managedDirectoryOverrides[directory] ??
+            baseDirectory
+            .appendingPathComponent(directory.pathComponent, isDirectory: true)
+            .standardizedFileURL
+    }
+
+    func ensureDirectoriesExist() throws {
+        try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+
+        for directory in ManagedDirectory.allCases {
+            try fileManager.createDirectory(
+                at: url(for: directory),
+                withIntermediateDirectories: true
+            )
         }
-
-        if let envPath = environment[envVarName], !envPath.isEmpty {
-            return URL(fileURLWithPath: envPath, isDirectory: true).standardizedFileURL
-        }
-
-        if let userPath = baseDirectoryPathPreference(defaults: defaults).resolve(), !userPath.isEmpty {
-            return URL(fileURLWithPath: userPath, isDirectory: true).standardizedFileURL
-        }
-
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return appSupport.appendingPathComponent("Seshat", isDirectory: true).standardizedFileURL
     }
 }

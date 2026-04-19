@@ -51,13 +51,11 @@ extension BaseDirectoryMigrationError: LocalizedError {
 ///     shared singleton are safe per Apple's docs.
 ///   • `UserDefaults` is documented thread-safe for `object(forKey:)`,
 ///     `set(_:forKey:)`, and `removeObject(forKey:)` — the only three
-///     APIs used via this migrator's `SeshatConfig` helpers.
+///     APIs used via this migrator's `AppConfig` helpers.
 ///   • `[String: String]` is value-typed and captured by copy.
 /// No mutable state lives on the struct; the one `let` properties are
 /// fully initialised in `init` and never replaced.
 public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable {
-    private static let managedSubdirectories = ["models", "modes", "recordings"]
-
     private let fileManager: FileManager
     private let defaults: UserDefaults
     private let environment: [String: String]
@@ -74,22 +72,33 @@ public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable
 
     public func migrate(to newBase: URL) async throws -> MigrationReport {
         let destinationBase = newBase.standardizedFileURL
+        let sourceStorageLocator = AppConfig.liveStorageLocator(
+            fileManager: fileManager,
+            defaults: defaults,
+            environment: environment
+        )
+        let destinationStorageLocator = FixedBaseDirectoryStorageLocator(
+            baseDirectory: destinationBase,
+            fileManager: fileManager
+        )
+
         try validateWritableDestination(destinationBase)
 
-        let sourceBase = try SeshatConfig.baseDirectory(defaults: defaults, environment: environment)
+        let sourceBase = sourceStorageLocator.baseDirectory
         if sourceBase == destinationBase {
             return .noOp
         }
 
-        let presentSubdirectories = existingManagedSubdirectories(in: sourceBase)
-        let totalBytes = try totalBytes(in: presentSubdirectories.map {
-            sourceBase.appendingPathComponent($0, isDirectory: true)
-        })
+        let presentSubdirectories = existingManagedSubdirectories(using: sourceStorageLocator)
+        let totalBytes = try totalBytes(
+            in: presentSubdirectories,
+            using: sourceStorageLocator
+        )
 
-        var movedSubdirectories: [String] = []
+        var movedSubdirectories: [ManagedDirectory] = []
         for subdirectory in presentSubdirectories {
-            let sourceURL = sourceBase.appendingPathComponent(subdirectory, isDirectory: true)
-            let destinationURL = destinationBase.appendingPathComponent(subdirectory, isDirectory: true)
+            let sourceURL = sourceStorageLocator.url(for: subdirectory)
+            let destinationURL = destinationStorageLocator.url(for: subdirectory)
 
             do {
                 try fileManager.moveItem(at: sourceURL, to: destinationURL)
@@ -97,15 +106,19 @@ public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable
             } catch {
                 rollbackMovedSubdirectories(
                     named: movedSubdirectories,
-                    from: destinationBase,
-                    backTo: sourceBase
+                    from: destinationStorageLocator,
+                    backTo: sourceStorageLocator
                 )
-                throw BaseDirectoryMigrationError.partialFailure(failedSubdir: subdirectory)
+                throw BaseDirectoryMigrationError.partialFailure(failedSubdir: subdirectory.pathComponent)
             }
         }
 
-        SeshatConfig.setBaseDirectoryOverride(destinationBase, defaults: defaults)
-        return .migrated(movedSubdirs: presentSubdirectories, totalBytes: totalBytes)
+        AppConfig.setBaseDirectoryOverride(destinationBase, defaults: defaults)
+        try destinationStorageLocator.ensureDirectoriesExist()
+        return .migrated(
+            movedSubdirs: presentSubdirectories.map(\.pathComponent),
+            totalBytes: totalBytes
+        )
     }
 
     private func validateWritableDestination(_ destinationBase: URL) throws {
@@ -125,67 +138,44 @@ public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable
         }
     }
 
-    private func existingManagedSubdirectories(in base: URL) -> [String] {
-        Self.managedSubdirectories.filter { subdirectory in
-            let url = base.appendingPathComponent(subdirectory, isDirectory: true)
+    private func existingManagedSubdirectories(
+        using storageLocator: any StorageLocator
+    ) -> [ManagedDirectory] {
+        ManagedDirectory.allCases.filter { directory in
+            let url = storageLocator.url(for: directory)
             var isDirectory = ObjCBool(false)
             let exists = fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory)
             return exists && isDirectory.boolValue
         }
     }
 
-    private func totalBytes(in directories: [URL]) throws -> Int64 {
+    private func totalBytes(
+        in directories: [ManagedDirectory],
+        using storageLocator: any StorageLocator
+    ) throws -> Int64 {
         try directories.reduce(into: Int64.zero) { partialResult, directory in
-            partialResult += try totalBytes(in: directory)
-        }
-    }
-
-    private func totalBytes(in directory: URL) throws -> Int64 {
-        let resourceKeys: Set<URLResourceKey> = [
-            .isDirectoryKey,
-            .isRegularFileKey,
-            .totalFileAllocatedSizeKey,
-            .fileAllocatedSizeKey,
-            .totalFileSizeKey,
-            .fileSizeKey,
-        ]
-        let children = try fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: Array(resourceKeys),
-            options: []
-        )
-
-        return try children.reduce(into: Int64.zero) { partialResult, child in
-            let resourceValues = try child.resourceValues(forKeys: resourceKeys)
-            if resourceValues.isDirectory == true {
-                partialResult += try totalBytes(in: child)
-            } else if resourceValues.isRegularFile == true {
-                let childBytes =
-                    resourceValues.totalFileAllocatedSize ??
-                    resourceValues.fileAllocatedSize ??
-                    resourceValues.totalFileSize ??
-                    resourceValues.fileSize ??
-                    0
-                partialResult += Int64(childBytes)
-            }
+            partialResult += try ManagedDirectoryByteCounter.totalBytes(
+                in: storageLocator.url(for: directory),
+                fileManager: fileManager
+            )
         }
     }
 
     private func rollbackMovedSubdirectories(
-        named movedSubdirectories: [String],
-        from destinationBase: URL,
-        backTo sourceBase: URL
+        named movedSubdirectories: [ManagedDirectory],
+        from destinationStorageLocator: any StorageLocator,
+        backTo sourceStorageLocator: any StorageLocator
     ) {
         for subdirectory in movedSubdirectories.reversed() {
-            let movedURL = destinationBase.appendingPathComponent(subdirectory, isDirectory: true)
-            let originalURL = sourceBase.appendingPathComponent(subdirectory, isDirectory: true)
+            let movedURL = destinationStorageLocator.url(for: subdirectory)
+            let originalURL = sourceStorageLocator.url(for: subdirectory)
 
             do {
                 try fileManager.moveItem(at: movedURL, to: originalURL)
             } catch {
                 NSLog(
                     "BaseDirectoryMigrator rollback failed for %@: %@",
-                    subdirectory,
+                    subdirectory.pathComponent,
                     error.localizedDescription
                 )
             }

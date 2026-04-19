@@ -31,24 +31,36 @@ public actor SQLiteTranscriptStore {
     private let logger: SeshatLogger
 
     public init(recordingsDirectory: URL, ringCapacity: Int = 500) throws {
+        let storageLocator = FixedBaseDirectoryStorageLocator(
+            baseDirectory: recordingsDirectory.deletingLastPathComponent(),
+            managedDirectoryOverrides: [.recordings: recordingsDirectory]
+        )
+        try self.init(storageLocator: storageLocator, ringCapacity: ringCapacity)
+    }
+
+    init(
+        storageLocator: any StorageLocator,
+        ringCapacity: Int = 500,
+        atomicFileWriter: any AtomicFileWriter = FileManagerAtomicFileWriter()
+    ) throws {
         _ = max(0, ringCapacity)
 
         let fileManager = FileManager.default
         let logger = SeshatLogger(category: SeshatLogCategory.app)
+        let recordingsDirectory = storageLocator.url(for: .recordings)
         let databaseURL = recordingsDirectory
             .appendingPathComponent(Self.databaseFileName, isDirectory: false)
             .standardizedFileURL
         let jsonlURL = recordingsDirectory
             .appendingPathComponent(Self.jsonlFileName, isDirectory: false)
             .standardizedFileURL
-        let temporaryDatabaseURL = databaseURL.appendingPathExtension("tmp")
 
         try fileManager.createDirectory(at: recordingsDirectory, withIntermediateDirectories: true)
         try Self.bootstrapDatabaseIfNeeded(
             databaseURL: databaseURL,
             jsonlURL: jsonlURL,
-            temporaryDatabaseURL: temporaryDatabaseURL,
             fileManager: fileManager,
+            atomicFileWriter: atomicFileWriter,
             logger: logger
         )
 
@@ -204,8 +216,8 @@ public actor SQLiteTranscriptStore {
     private static func bootstrapDatabaseIfNeeded(
         databaseURL: URL,
         jsonlURL: URL,
-        temporaryDatabaseURL: URL,
         fileManager: FileManager,
+        atomicFileWriter: any AtomicFileWriter,
         logger: SeshatLogger
     ) throws {
         guard !fileManager.fileExists(atPath: databaseURL.path),
@@ -214,17 +226,26 @@ public actor SQLiteTranscriptStore {
             return
         }
 
-        try removeSQLiteArtifactsIfPresent(at: temporaryDatabaseURL, fileManager: fileManager)
+        var temporaryDatabaseURL: URL?
 
         do {
-            let temporaryQueue = try DatabaseQueue(path: temporaryDatabaseURL.path)
-            try Self.validateRuntimePrerequisites(on: temporaryQueue)
-            try Self.makeMigrator(jsonlImportURL: jsonlURL, logger: logger).migrate(temporaryQueue)
-            try Self.setPermissionsIfPresent(at: temporaryDatabaseURL, fileManager: fileManager)
-            try fileManager.moveItem(at: temporaryDatabaseURL, to: databaseURL)
+            try atomicFileWriter.replaceItem(at: databaseURL, permissions: 0o600) { candidateURL in
+                temporaryDatabaseURL = candidateURL
+
+                let temporaryQueue = try DatabaseQueue(path: candidateURL.path)
+                try Self.validateRuntimePrerequisites(on: temporaryQueue)
+                try Self.makeMigrator(jsonlImportURL: jsonlURL, logger: logger).migrate(temporaryQueue)
+                try Self.setPermissionsIfPresent(at: candidateURL, fileManager: fileManager)
+            }
+
+            if let temporaryDatabaseURL {
+                try? removeSQLiteArtifactsIfPresent(at: temporaryDatabaseURL, fileManager: fileManager)
+            }
             try Self.setPermissionsIfPresent(at: databaseURL, fileManager: fileManager)
         } catch {
-            try? removeSQLiteArtifactsIfPresent(at: temporaryDatabaseURL, fileManager: fileManager)
+            if let temporaryDatabaseURL {
+                try? removeSQLiteArtifactsIfPresent(at: temporaryDatabaseURL, fileManager: fileManager)
+            }
             throw error
         }
     }

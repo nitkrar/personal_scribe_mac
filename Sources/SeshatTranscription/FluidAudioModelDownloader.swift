@@ -15,9 +15,13 @@ internal struct PrivateModelDownloader: ModelDownloading {
         progress: @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws -> URL {
         let fileManager = FileManager.default
-        let baseDirectory = directory.deletingLastPathComponent()
+        let storageLocator = DownloaderModelStorageLocator(modelDirectory: directory)
+        let modelsDirectory = storageLocator.url(for: .models)
+        let modelDirectory = modelsDirectory
+            .appendingPathComponent(descriptor.id, isDirectory: true)
+            .standardizedFileURL
         let stagingDirectory = FluidAudioTranscriber.stagingDirectory(
-            base: baseDirectory,
+            base: modelsDirectory,
             descriptor: descriptor
         )
 
@@ -86,12 +90,46 @@ internal struct PrivateModelDownloader: ModelDownloading {
                 )
             }
 
-            try? fileManager.removeItem(at: directory)
-            try fileManager.moveItem(at: stagingDirectory, to: directory)
-            return directory
+            try? fileManager.removeItem(at: modelDirectory)
+            try fileManager.moveItem(at: stagingDirectory, to: modelDirectory)
+            return modelDirectory
         } catch {
             try? fileManager.removeItem(at: stagingDirectory)
             throw error
+        }
+    }
+}
+
+private struct DownloaderModelStorageLocator: StorageLocator {
+    let baseDirectory: URL
+    private let modelsDirectory: URL
+
+    init(modelDirectory: URL) {
+        let modelsDirectory = modelDirectory.deletingLastPathComponent().standardizedFileURL
+        self.modelsDirectory = modelsDirectory
+        self.baseDirectory = modelsDirectory.deletingLastPathComponent().standardizedFileURL
+    }
+
+    func url(for directory: ManagedDirectory) -> URL {
+        switch directory {
+        case .models:
+            modelsDirectory
+        default:
+            baseDirectory
+                .appendingPathComponent(directory.pathComponent, isDirectory: true)
+                .standardizedFileURL
+        }
+    }
+
+    func ensureDirectoriesExist() throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+
+        for directory in ManagedDirectory.allCases {
+            try fileManager.createDirectory(
+                at: url(for: directory),
+                withIntermediateDirectories: true
+            )
         }
     }
 }
