@@ -162,7 +162,7 @@ final class TranscriptStoreTests: XCTestCase {
         Self.configLock.lock()
         SeshatConfig.testingBaseDirectoryOverride = baseDirectory
         defer {
-            UserDefaults.standard.removeObject(forKey: "SeshatBaseDirectoryPath")
+            SeshatConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
             SeshatConfig.testingBaseDirectoryOverride = nil
             unsetenv("SESHAT_BASE_DIR")
             Self.configLock.unlock()

@@ -30,7 +30,7 @@ Reference mockups live at:
 
 ### Mode 1 — Always On
 
-Setup: set `defaults write com.nitkrar.seshat SeshatPillVisibilityMode "always-on"`
+Setup: set `defaults write com.nitkrar.seshat PillVisibilityMode "always-on"`
 and relaunch.
 
 - [ ] **MV-B1-1** At rest (no recording) the pill is VISIBLE at the
@@ -42,7 +42,7 @@ and relaunch.
 
 ### Mode 2 — Auto-show (default)
 
-Setup: `defaults delete com.nitkrar.seshat SeshatPillVisibilityMode` and
+Setup: `defaults delete com.nitkrar.seshat PillVisibilityMode` and
 relaunch — this exercises the first-launch default path.
 
 - [ ] **MV-B1-3** At rest the pill is HIDDEN. Only the menu bar status
@@ -52,7 +52,7 @@ relaunch — this exercises the first-launch default path.
 
 ### Mode 3 — Hidden
 
-Setup: `defaults write com.nitkrar.seshat SeshatPillVisibilityMode "hidden"`
+Setup: `defaults write com.nitkrar.seshat PillVisibilityMode "hidden"`
 and relaunch.
 
 - [ ] **MV-B1-4** The pill never appears, not even during recording or
@@ -63,8 +63,8 @@ and relaunch.
 
 ## Sprint 2 Lane B1 — Waveform decay coast-down
 
-Toggle `SeshatWaveformDecayMode` via
-`defaults write com.nitkrar.seshat SeshatWaveformDecayMode "…"`.
+Toggle `WaveformDecayMode` via
+`defaults write com.nitkrar.seshat WaveformDecayMode "…"`.
 
 - [ ] **MV-B1-5 (immediate default)** Record a loud sentence, then stop.
   The waveform SNAPS flat to zero on stop (this is the Sprint 1
@@ -78,7 +78,7 @@ Toggle `SeshatWaveformDecayMode` via
 
 ## Slice A — Clipboard-only fallback notice
 
-Leave `SeshatPasteMode` unset (default `"paste-at-cursor"`) unless a step
+Leave `PasteMode` unset (default `"paste-at-cursor"`) unless a step
 below tells you to change it.
 
 - [ ] **MV-B1-7 (self-frontmost fallback)** Start a recording by clicking
@@ -89,7 +89,7 @@ below tells you to change it.
   roughly 3 seconds, and the transcript pastes successfully into
   TextEdit with a manual `⌘V`.
 - [ ] **MV-B1-8 (clipboard-only mode)** Run
-  `defaults write com.nitkrar.seshat SeshatPasteMode "clipboard-only"`
+  `defaults write com.nitkrar.seshat PasteMode "clipboard-only"`
   and relaunch. Trigger dictation from another app while its text cursor
   is active (hotkey or menu path). Confirm Seshat never posts a
   synthetic paste, the same response card appears for roughly 3 seconds,

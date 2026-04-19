@@ -3,7 +3,7 @@ import Foundation
 
 /// Persisted recording-toggle hotkey configuration.
 ///
-/// Stored in `UserDefaults` at `SeshatRecordingHotkey`. The default remains
+/// Stored in `UserDefaults` at `RecordingHotkey`. The default remains
 /// the current shipping behaviour: double-tap right option with no extra
 /// modifiers.
 public struct HotkeyPreference: Codable, Sendable, Equatable {
@@ -11,7 +11,7 @@ public struct HotkeyPreference: Codable, Sendable, Equatable {
     public let tapCount: Int
     public let modifiers: NSEvent.ModifierFlags.RawValue
 
-    public static let userDefaultsKey = "SeshatRecordingHotkey"
+    public static let userDefaultsKey = "RecordingHotkey"
     public static let `default` = HotkeyPreference(
         keyCode: 61,
         tapCount: 2,
@@ -28,22 +28,20 @@ public struct HotkeyPreference: Codable, Sendable, Equatable {
         self.modifiers = modifiers
     }
 
+    public static func preference(defaults: UserDefaults = .standard) -> Preference<Self> {
+        Preference(key: userDefaultsKey, default: .default, defaults: defaults)
+    }
+
     public static func resolve(from defaults: UserDefaults = .standard) -> HotkeyPreference {
-        guard
-            let data = defaults.data(forKey: userDefaultsKey),
-            let preference = try? JSONDecoder().decode(HotkeyPreference.self, from: data),
-            preference.isSupported
-        else {
+        let preference = preference(defaults: defaults).resolve()
+        guard preference.isSupported else {
             return .default
         }
         return preference
     }
 
     public func persist(to defaults: UserDefaults = .standard) {
-        guard let data = try? JSONEncoder().encode(self) else {
-            return
-        }
-        defaults.set(data, forKey: Self.userDefaultsKey)
+        Self.preference(defaults: defaults).persist(self)
     }
 
     public var modifierFlags: NSEvent.ModifierFlags {

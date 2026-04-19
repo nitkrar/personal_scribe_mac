@@ -76,7 +76,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
     func testDeliverBatchReturnsClipboardOnlyWhenModeIsClipboardOnly() async {
         let defaults = isolatedDefaults()
-        SeshatPasteMode.clipboardOnly.persist(to: defaults)
+        PasteMode.preference(defaults: defaults).persist(.clipboardOnly)
         let pasteboard = makePasteboard()
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
@@ -104,7 +104,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
     func testDeliverBatchReturnsClipboardOnlyWhenFrontmostAppIsSeshat() async {
         let defaults = isolatedDefaults()
-        SeshatPasteMode.pasteAtCursor.persist(to: defaults)
+        PasteMode.preference(defaults: defaults).persist(.pasteAtCursor)
         let pasteboard = makePasteboard()
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
@@ -182,7 +182,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         pasteboard.clearContents()
         _ = pasteboard.setString("original one", forType: .string)
-        PasteRestoreDelay.persist(to: defaults, PasteRestoreDelay(seconds: 0.2))
+        PasteRestoreDelay.storedSeconds(defaults: defaults).persist(0.2)
 
         let firstResult = await service.deliverBatch(text: "transcript one")
 
@@ -195,7 +195,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         pasteboard.clearContents()
         _ = pasteboard.setString("original two", forType: .string)
-        PasteRestoreDelay.persist(to: defaults, PasteRestoreDelay(seconds: 1.4))
+        PasteRestoreDelay.storedSeconds(defaults: defaults).persist(1.4)
 
         let secondResult = await service.deliverBatch(text: "transcript two")
 
@@ -236,7 +236,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
     func testClipboardOnlyWriteFailureRestoresExistingPasteboardContents() async {
         let defaults = isolatedDefaults()
-        SeshatPasteMode.clipboardOnly.persist(to: defaults)
+        PasteMode.preference(defaults: defaults).persist(.clipboardOnly)
         let pasteboard = makePasteboard()
         pasteboard.clearContents()
         _ = pasteboard.setString("existing value", forType: .string)

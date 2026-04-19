@@ -13,7 +13,7 @@ final class SeshatConfigTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         SeshatConfig.testingBaseDirectoryOverride = baseDirectory
         defer {
-            UserDefaults.standard.removeObject(forKey: "SeshatBaseDirectoryPath")
+            SeshatConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
             SeshatConfig.testingBaseDirectoryOverride = nil
             unsetenv("SESHAT_BASE_DIR")
         }
@@ -45,7 +45,7 @@ final class SeshatConfigTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         setenv("SESHAT_BASE_DIR", override.path, 1)
         defer {
-            UserDefaults.standard.removeObject(forKey: "SeshatBaseDirectoryPath")
+            SeshatConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
             SeshatConfig.testingBaseDirectoryOverride = nil
             unsetenv("SESHAT_BASE_DIR")
         }
@@ -61,9 +61,9 @@ final class SeshatConfigTests: XCTestCase {
 
         let override = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        UserDefaults.standard.set(override.path, forKey: "SeshatBaseDirectoryPath")
+        SeshatConfig.baseDirectoryPathPreference(defaults: .standard).persist(override.path)
         defer {
-            UserDefaults.standard.removeObject(forKey: "SeshatBaseDirectoryPath")
+            SeshatConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
             SeshatConfig.testingBaseDirectoryOverride = nil
             unsetenv("SESHAT_BASE_DIR")
         }
@@ -71,5 +71,12 @@ final class SeshatConfigTests: XCTestCase {
         let baseDirectory = try SeshatConfig.baseDirectory()
 
         XCTAssertEqual(baseDirectory, override.standardizedFileURL)
+    }
+
+    func testBaseDirectoryPathPreferenceDropsSeshatPrefix() {
+        XCTAssertEqual(
+            SeshatConfig.baseDirectoryPathPreference(defaults: .standard).key,
+            "BaseDirectoryPath"
+        )
     }
 }

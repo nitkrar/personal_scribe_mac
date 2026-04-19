@@ -17,7 +17,7 @@ final class HotkeyRecorderTests: XCTestCase {
         let defaults = isolatedDefaults()
         let model = HotkeyRecorderModel(
             onConfirm: {
-                $0.persist(to: defaults)
+                HotkeyPreference.preference(defaults: defaults).persist($0)
             },
             onCancel: { }
         )

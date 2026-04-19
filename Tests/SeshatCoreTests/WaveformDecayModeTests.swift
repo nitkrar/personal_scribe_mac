@@ -31,7 +31,7 @@ final class WaveformDecayModeTests: XCTestCase {
     }
 
     func testUserDefaultsKey() {
-        XCTAssertEqual(WaveformDecayMode.userDefaultsKey, "SeshatWaveformDecayMode")
+        XCTAssertEqual(WaveformDecayMode.userDefaultsKey, "WaveformDecayMode")
     }
 
     // MARK: - Resolve
@@ -47,9 +47,12 @@ final class WaveformDecayModeTests: XCTestCase {
         XCTAssertEqual(WaveformDecayMode.resolve(from: defaults), .immediate)
     }
 
-    func testResolveAnimatedWhenPersisted() {
+    func testPreferenceResolveAnimatedWhenPersisted() {
         let defaults = isolatedDefaults()
-        WaveformDecayMode.animated.persist(to: defaults)
+        let preference = WaveformDecayMode.preference(defaults: defaults)
+        preference.persist(.animated)
+
+        XCTAssertEqual(preference.resolve(), .animated)
         XCTAssertEqual(WaveformDecayMode.resolve(from: defaults), .animated)
     }
 
@@ -57,7 +60,7 @@ final class WaveformDecayModeTests: XCTestCase {
 
     func testPersistRoundTripImmediate() {
         let defaults = isolatedDefaults()
-        WaveformDecayMode.immediate.persist(to: defaults)
+        WaveformDecayMode.preference(defaults: defaults).persist(.immediate)
         XCTAssertEqual(
             defaults.string(forKey: WaveformDecayMode.userDefaultsKey),
             "immediate"

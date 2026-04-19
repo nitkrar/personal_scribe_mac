@@ -1,11 +1,12 @@
 import XCTest
+import SeshatCore
 @testable import SeshatAppKit
 
 /// Tests for `PillVisibilityMode` — the three-way pill visibility toggle
 /// prescribed by
 /// `plans/seshat_agent_bundle/03_Surfaces/PillOverlayWindow/architecture.png`.
 ///
-/// Persistence contract: UserDefaults key `SeshatPillVisibilityMode`,
+/// Persistence contract: UserDefaults key `PillVisibilityMode`,
 /// default `"auto-show"` on first launch. This file tests the raw-value
 /// mapping, resolver behaviour, and default.
 final class PillVisibilityModeTests: XCTestCase {
@@ -35,7 +36,7 @@ final class PillVisibilityModeTests: XCTestCase {
     // MARK: - Persistence key
 
     func testUserDefaultsKey() {
-        XCTAssertEqual(PillVisibilityMode.userDefaultsKey, "SeshatPillVisibilityMode")
+        XCTAssertEqual(PillVisibilityMode.userDefaultsKey, "PillVisibilityMode")
     }
 
     // MARK: - Default on first launch
@@ -55,11 +56,15 @@ final class PillVisibilityModeTests: XCTestCase {
 
     func testPersistRoundTripAlwaysOn() {
         let defaults = isolatedDefaults()
-        PillVisibilityMode.alwaysOn.persist(to: defaults)
+        let preference = PillVisibilityMode.preference(defaults: defaults)
+
+        preference.persist(.alwaysOn)
+
         XCTAssertEqual(
             defaults.string(forKey: PillVisibilityMode.userDefaultsKey),
             "always-on"
         )
+        XCTAssertEqual(preference.resolve(), .alwaysOn)
         XCTAssertEqual(PillVisibilityMode.resolve(from: defaults), .alwaysOn)
     }
 

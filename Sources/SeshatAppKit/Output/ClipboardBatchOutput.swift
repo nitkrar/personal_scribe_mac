@@ -104,7 +104,7 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
     }
 
     private func resolveTarget() -> OutputTarget {
-        let pasteMode = SeshatPasteMode.resolve(from: defaults)
+        let pasteMode = PasteMode.resolve(from: defaults)
         if pasteMode == .clipboardOnly {
             return .clipboardOnly
         }

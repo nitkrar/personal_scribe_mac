@@ -32,7 +32,7 @@ private struct PasteRoutingDecider {
     let selfBundleIdentifier: String
 
     func resolve() -> PasteRoutingDecision {
-        let pasteMode = SeshatPasteMode.resolve(from: defaults)
+        let pasteMode = PasteMode.resolve(from: defaults)
         if pasteMode == .clipboardOnly {
             return .clipboardOnly(reason: .clipboardOnlyMode)
         }

@@ -11,31 +11,37 @@ final class PasteModeTests: XCTestCase {
     }
 
     func testDefaultIsPasteAtCursor() {
-        XCTAssertEqual(SeshatPasteMode.default, .pasteAtCursor)
+        XCTAssertEqual(PasteMode.default, .pasteAtCursor)
     }
 
     func testResolveReturnsDefaultWhenKeyAbsent() {
         let defaults = isolatedDefaults()
 
-        XCTAssertEqual(SeshatPasteMode.resolve(from: defaults), .pasteAtCursor)
+        XCTAssertEqual(PasteMode.resolve(from: defaults), .pasteAtCursor)
     }
 
-    func testPersistRoundTripClipboardOnly() {
+    func testPreferenceRoundTripsClipboardOnly() {
         let defaults = isolatedDefaults()
+        let preference = PasteMode.preference(defaults: defaults)
 
-        SeshatPasteMode.clipboardOnly.persist(to: defaults)
+        preference.persist(.clipboardOnly)
 
         XCTAssertEqual(
-            defaults.string(forKey: SeshatPasteMode.userDefaultsKey),
+            defaults.string(forKey: PasteMode.userDefaultsKey),
             "clipboard-only"
         )
-        XCTAssertEqual(SeshatPasteMode.resolve(from: defaults), .clipboardOnly)
+        XCTAssertEqual(preference.resolve(), .clipboardOnly)
+        XCTAssertEqual(PasteMode.resolve(from: defaults), .clipboardOnly)
     }
 
     func testResolveReturnsDefaultForUnrecognizedValue() {
         let defaults = isolatedDefaults()
-        defaults.set("legacy-value", forKey: SeshatPasteMode.userDefaultsKey)
+        defaults.set("legacy-value", forKey: PasteMode.userDefaultsKey)
 
-        XCTAssertEqual(SeshatPasteMode.resolve(from: defaults), .pasteAtCursor)
+        XCTAssertEqual(PasteMode.resolve(from: defaults), .pasteAtCursor)
+    }
+
+    func testUserDefaultsKeyDropsSeshatPrefix() {
+        XCTAssertEqual(PasteMode.userDefaultsKey, "PasteMode")
     }
 }

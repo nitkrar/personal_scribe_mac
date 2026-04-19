@@ -66,7 +66,7 @@ final class GeneralTabViewModelTests: XCTestCase {
 
     func testInitResolvesPersistedPasteRestoreDelay() {
         let defaults = isolatedDefaults()
-        PasteRestoreDelay.persist(to: defaults, .init(seconds: 1.8))
+        PasteRestoreDelay.storedSeconds(defaults: defaults).persist(1.8)
 
         let viewModel = GeneralTabViewModel(defaults: defaults)
 

@@ -1,4 +1,5 @@
 import Foundation
+import SeshatCore
 
 /// User-selectable visibility mode for the pill overlay.
 ///
@@ -22,10 +23,10 @@ import Foundation
 ///   (see PLAN_PHASES.md line 293).
 ///
 /// ## Persistence
-/// Stored in `UserDefaults` at `SeshatPillVisibilityMode`. On first
+/// Stored in `UserDefaults` at `PillVisibilityMode`. On first
 /// launch (key absent), the default is `.autoShow`, matching the mockup
 /// row labelled "Mode 2 — Auto-show (default)".
-public enum PillVisibilityMode: String, CaseIterable, Sendable, Equatable {
+public enum PillVisibilityMode: String, CaseIterable, Codable, Sendable, Equatable {
     case alwaysOn = "always-on"
     case autoShow = "auto-show"
     case hidden
@@ -33,26 +34,25 @@ public enum PillVisibilityMode: String, CaseIterable, Sendable, Equatable {
     /// The UserDefaults key used across the app. Centralised here so
     /// the Phase 3 Settings UI and the Phase 2 pill overlay agree on
     /// exactly one string.
-    public static let userDefaultsKey = "SeshatPillVisibilityMode"
+    public static let `default`: Self = .autoShow
+    public static let userDefaultsKey = "PillVisibilityMode"
+
+    public static func preference(defaults: UserDefaults = .standard) -> Preference<Self> {
+        Preference(key: userDefaultsKey, default: .default, defaults: defaults)
+    }
 
     /// Resolve the currently persisted mode, falling back to
     /// `.autoShow` if the key is missing or holds an unrecognised
     /// value (defensive: an older build might have written a legacy
     /// string).
     public static func resolve(from defaults: UserDefaults = .standard) -> PillVisibilityMode {
-        guard
-            let raw = defaults.string(forKey: userDefaultsKey),
-            let mode = PillVisibilityMode(rawValue: raw)
-        else {
-            return .autoShow
-        }
-        return mode
+        preference(defaults: defaults).resolve()
     }
 
     /// Persist the current mode. Calling `.persist(to:)` is equivalent
     /// to `defaults.set(rawValue, forKey: userDefaultsKey)` but keeps
     /// the key-name plumbing contained in this type.
     public func persist(to defaults: UserDefaults = .standard) {
-        defaults.set(rawValue, forKey: Self.userDefaultsKey)
+        Self.preference(defaults: defaults).persist(self)
     }
 }

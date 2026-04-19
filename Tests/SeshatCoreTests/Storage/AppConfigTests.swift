@@ -5,15 +5,15 @@ import XCTest
 final class AppConfigTests: XCTestCase {
     private static let stateLock = NSLock()
 
-    func testConstantsAndOverrideNamesMatchLegacyContract() {
+    func testConstantsAndOverrideNamesMatchCurrentContract() {
         XCTAssertEqual(AppConfig.sampleRate, 16_000)
         XCTAssertEqual(AppConfig.channelCount, 1)
         XCTAssertEqual(AppConfig.modelId, ModelRegistry.defaultModelId)
-        XCTAssertEqual(AppConfig.baseDirectoryUserDefaultsKey, "SeshatBaseDirectoryPath")
+        XCTAssertEqual(AppConfig.baseDirectoryUserDefaultsKey, "BaseDirectoryPath")
         XCTAssertEqual(AppConfig.baseDirectoryEnvironmentVariableName, "SESHAT_BASE_DIR")
     }
 
-    func testSetBaseDirectoryOverrideWritesAndClearsLegacyDefaultsKey() {
+    func testSetBaseDirectoryOverrideWritesAndClearsDefaultsKey() {
         let (suiteName, defaults) = isolatedDefaults()
         let override = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

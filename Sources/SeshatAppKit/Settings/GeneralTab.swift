@@ -109,8 +109,8 @@ public struct GeneralTab: View {
                     set: { viewModel.setPasteMode($0) }
                 )
             ) {
-                Text("Paste-at-cursor").tag(SeshatPasteMode.pasteAtCursor)
-                Text("Clipboard-only").tag(SeshatPasteMode.clipboardOnly)
+                Text("Paste-at-cursor").tag(PasteMode.pasteAtCursor)
+                Text("Clipboard-only").tag(PasteMode.clipboardOnly)
             }
 
             Divider()
@@ -150,7 +150,7 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var pillVisibilityMode: PillVisibilityMode
     @Published private(set) var isMenuBarVisible: Bool
     @Published private(set) var waveformDecayMode: WaveformDecayMode
-    @Published private(set) var pasteMode: SeshatPasteMode
+    @Published private(set) var pasteMode: PasteMode
     @Published private(set) var pasteRestoreDelay: PasteRestoreDelay
     @Published private(set) var visibilityError: VisibilityConfigError?
 
@@ -173,7 +173,7 @@ final class GeneralTabViewModel: ObservableObject {
         // Published upstream source.
         self.isMenuBarVisible = menuBarVisibilityProvider()
         self.waveformDecayMode = WaveformDecayMode.resolve(from: defaults)
-        self.pasteMode = SeshatPasteMode.resolve(from: defaults)
+        self.pasteMode = PasteMode.resolve(from: defaults)
         self.pasteRestoreDelay = PasteRestoreDelay.resolve(from: defaults)
     }
 
@@ -202,7 +202,7 @@ final class GeneralTabViewModel: ObservableObject {
         mode.persist(to: defaults)
     }
 
-    func setPasteMode(_ mode: SeshatPasteMode) {
+    func setPasteMode(_ mode: PasteMode) {
         pasteMode = mode
         mode.persist(to: defaults)
     }

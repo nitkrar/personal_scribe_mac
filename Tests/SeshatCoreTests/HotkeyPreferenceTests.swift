@@ -32,9 +32,10 @@ final class HotkeyPreferenceTests: XCTestCase {
             modifiers: NSEvent.ModifierFlags.command.union(.shift).rawValue
         )
 
-        preference.persist(to: defaults)
+        HotkeyPreference.preference(defaults: defaults).persist(preference)
 
         XCTAssertNotNil(defaults.data(forKey: HotkeyPreference.userDefaultsKey))
+        XCTAssertEqual(HotkeyPreference.preference(defaults: defaults).resolve(), preference)
         XCTAssertEqual(HotkeyPreference.resolve(from: defaults), preference)
     }
 
@@ -59,5 +60,9 @@ final class HotkeyPreferenceTests: XCTestCase {
         let decoded = try JSONDecoder().decode(HotkeyPreference.self, from: data)
 
         XCTAssertEqual(decoded, preference)
+    }
+
+    func testUserDefaultsKeyDropsSeshatPrefix() {
+        XCTAssertEqual(HotkeyPreference.userDefaultsKey, "RecordingHotkey")
     }
 }

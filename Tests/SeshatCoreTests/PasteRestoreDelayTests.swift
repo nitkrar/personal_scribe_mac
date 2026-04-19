@@ -20,16 +20,18 @@ final class PasteRestoreDelayTests: XCTestCase {
         XCTAssertEqual(PasteRestoreDelay.resolve(from: defaults).seconds, 0.5, accuracy: 0.0001)
     }
 
-    func testPersistRoundTrip() {
+    func testStoredSecondsPreferenceRoundTrip() {
         let defaults = isolatedDefaults()
+        let storedSeconds = PasteRestoreDelay.storedSeconds(defaults: defaults)
 
-        PasteRestoreDelay.persist(to: defaults, PasteRestoreDelay(seconds: 1.7))
+        storedSeconds.persist(1.7)
 
         XCTAssertEqual(
             defaults.double(forKey: PasteRestoreDelay.userDefaultsKey),
             1.7,
             accuracy: 0.0001
         )
+        XCTAssertEqual(storedSeconds.resolve(), 1.7, accuracy: 0.0001)
         XCTAssertEqual(PasteRestoreDelay.resolve(from: defaults).seconds, 1.7, accuracy: 0.0001)
     }
 
@@ -49,5 +51,9 @@ final class PasteRestoreDelayTests: XCTestCase {
         defaults.set("soon", forKey: PasteRestoreDelay.userDefaultsKey)
 
         XCTAssertEqual(PasteRestoreDelay.resolve(from: defaults).seconds, 0.5, accuracy: 0.0001)
+    }
+
+    func testUserDefaultsKeyDropsSeshatPrefix() {
+        XCTAssertEqual(PasteRestoreDelay.userDefaultsKey, "PasteRestoreDelaySeconds")
     }
 }

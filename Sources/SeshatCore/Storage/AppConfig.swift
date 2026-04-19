@@ -9,7 +9,7 @@ public enum AppConfig {
 
     public nonisolated(unsafe) static var testingBaseDirectoryOverride: URL?
 
-    static let baseDirectoryUserDefaultsKey = "SeshatBaseDirectoryPath"
+    static let baseDirectoryUserDefaultsKey = "BaseDirectoryPath"
     static let baseDirectoryEnvironmentVariableName = "SESHAT_BASE_DIR"
 
     private static let overrideLock = NSLock()
@@ -32,11 +32,8 @@ public enum AppConfig {
         defaults: UserDefaults = .standard
     ) {
         overrideLock.withLock {
-            if let directory {
-                defaults.set(directory.standardizedFileURL.path, forKey: baseDirectoryUserDefaultsKey)
-            } else {
-                defaults.removeObject(forKey: baseDirectoryUserDefaultsKey)
-            }
+            SeshatConfig.baseDirectoryPathPreference(defaults: defaults)
+                .persist(directory?.standardizedFileURL.path)
         }
     }
 
@@ -56,7 +53,7 @@ public enum AppConfig {
             return URL(fileURLWithPath: envPath, isDirectory: true).standardizedFileURL
         }
 
-        if let userPath = defaults.string(forKey: baseDirectoryUserDefaultsKey), !userPath.isEmpty {
+        if let userPath = SeshatConfig.baseDirectoryPathPreference(defaults: defaults).resolve(), !userPath.isEmpty {
             return URL(fileURLWithPath: userPath, isDirectory: true).standardizedFileURL
         }
 

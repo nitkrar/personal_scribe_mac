@@ -12,7 +12,7 @@ public enum SeshatConfig {
 
     /// Resolution order (first match wins):
     ///   1. `SESHAT_BASE_DIR` environment variable (dev/test convenience)
-    ///   2. `SeshatBaseDirectoryPath` UserDefaults key (user-facing override)
+    ///   2. `BaseDirectoryPath` UserDefaults key (user-facing override)
     ///   3. `~/Library/Application Support/Seshat/` (default)
     ///
     /// `testingBaseDirectoryOverride` takes precedence over all three for XCTest.
@@ -32,12 +32,15 @@ public enum SeshatConfig {
         defaults: UserDefaults = .standard
     ) {
         directoryLock.withLock {
-            if let directory {
-                defaults.set(directory.standardizedFileURL.path, forKey: userDefaultsKey)
-            } else {
-                defaults.removeObject(forKey: userDefaultsKey)
-            }
+            baseDirectoryPathPreference(defaults: defaults)
+                .persist(directory?.standardizedFileURL.path)
         }
+    }
+
+    public static func baseDirectoryPathPreference(
+        defaults: UserDefaults = .standard
+    ) -> Preference<String?> {
+        Preference(key: "BaseDirectoryPath", default: nil, defaults: defaults)
     }
 
     public static func modelsDirectory() throws -> URL {
@@ -64,9 +67,9 @@ public enum SeshatConfig {
 
     // MARK: - Legacy / test support
 
-    // The `UserDefaults("SeshatBaseDirectoryPath")` override path only takes effect when the app runs from the packaged `.app` bundle with `CFBundleIdentifier = com.nitkrar.seshat`. When running via `swift run`, the executable's bundle identifier is the SPM default (empty or `SeshatAppKit`), so `defaults write com.nitkrar.seshat SeshatBaseDirectoryPath …` from a terminal is a silent no-op for the dev binary. The env var `SESHAT_BASE_DIR` works in both contexts. Unit tests pass because xctest runs in its own process domain and the same `UserDefaults.standard` read/write happens in-process.
+    // The `UserDefaults("BaseDirectoryPath")` override path only takes effect when the app runs from the packaged `.app` bundle with `CFBundleIdentifier = com.nitkrar.seshat`. When running via `swift run`, the executable's bundle identifier is the SPM default (empty or `SeshatAppKit`), so `defaults write com.nitkrar.seshat BaseDirectoryPath …` from a terminal is a silent no-op for the dev binary. The env var `SESHAT_BASE_DIR` works in both contexts. Unit tests pass because xctest runs in its own process domain and the same `UserDefaults.standard` read/write happens in-process.
     //
-    // `testingBaseDirectoryOverride` is process-global. Tests that mutate it, `SeshatBaseDirectoryPath`,
+    // `testingBaseDirectoryOverride` is process-global. Tests that mutate it, `BaseDirectoryPath`,
     // or `SESHAT_BASE_DIR` must clean up in `defer` and serialize in test code rather than changing
     // Package.swift parallelism preemptively; only disable parallel testing if the suite actually flakes.
     // Plan 00 D.1: test code mutates this from XCTest's default single-threaded path only.
@@ -75,7 +78,6 @@ public enum SeshatConfig {
     // MARK: - Private
 
     private static let directoryLock = NSLock()
-    private static let userDefaultsKey = "SeshatBaseDirectoryPath"
     private static let envVarName = "SESHAT_BASE_DIR"
 
     private static func subdirectory(named name: String) throws -> URL {
@@ -97,7 +99,7 @@ public enum SeshatConfig {
             return URL(fileURLWithPath: envPath, isDirectory: true).standardizedFileURL
         }
 
-        if let userPath = defaults.string(forKey: userDefaultsKey), !userPath.isEmpty {
+        if let userPath = baseDirectoryPathPreference(defaults: defaults).resolve(), !userPath.isEmpty {
             return URL(fileURLWithPath: userPath, isDirectory: true).standardizedFileURL
         }
 
