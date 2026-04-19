@@ -236,6 +236,49 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(finals.count, 1)
     }
 
+    func testSnapshotStreamPublishesRecordingDurationDuringCapture() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.1),
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.2),
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.3),
+        ]
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturing(
+                buffers: buffers,
+                delayPerBuffer: .milliseconds(100)
+            )
+        )
+
+        let stream = await orchestrator.snapshotStream()
+        let observedTask = Task { () -> [PipelineSnapshot] in
+            var snapshots: [PipelineSnapshot] = []
+            for await snapshot in stream.prefix(5) {
+                snapshots.append(snapshot)
+            }
+            return snapshots
+        }
+
+        await orchestrator.toggleCapture()
+
+        let observed = try await withTimeout(.seconds(1)) {
+            await observedTask.value
+        }
+
+        await orchestrator.toggleCapture()
+
+        let recordingDurations = observed
+            .filter { $0.sessionState == .recording }
+            .compactMap(\.recordingDuration)
+        let expectedDurations = [
+            Duration.zero,
+            buffers[0].duration,
+            buffers[0].duration + buffers[1].duration,
+            buffers[0].duration + buffers[1].duration + buffers[2].duration,
+        ]
+
+        XCTAssertEqual(recordingDurations, expectedDurations)
+    }
+
     func testStopCompletesWhileBackgroundPrepareIsStillRunning() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
         let transcriber = SlowPrepareTranscriber(
@@ -406,8 +449,10 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         await orchestrator.toggleCapture()
         try await waitUntilStoreHasEntries(store, minimum: 1)
 
+        let count = await store.count()
         let entries = await store.recent(limit: 10)
 
+        XCTAssertEqual(count, 1)
         XCTAssertEqual(entries.count, 1)
         XCTAssertEqual(entries.first?.text, "Hello.")
         XCTAssertEqual(entries.first?.audioDuration ?? 0, 1.0, accuracy: 0.01)
@@ -522,6 +567,18 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)? = nil
     ) -> SessionPipelineOrchestrator {
         let contextProvider = StaticPipelineContextProvider(context: context)
+        if let persistenceHandler {
+            return SessionPipelineOrchestrator(
+                capture: capture,
+                transcriber: transcriber,
+                logger: SeshatLogger(category: SeshatLogCategory.session),
+                postProcessingPipeline: postProcessingPipeline,
+                outputSink: outputSink,
+                contextProvider: contextProvider,
+                persistenceHandler: persistenceHandler
+            )
+        }
+
         return SessionPipelineOrchestrator(
             capture: capture,
             transcriber: transcriber,
@@ -529,8 +586,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             logger: SeshatLogger(category: SeshatLogCategory.session),
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
-            contextProvider: contextProvider,
-            persistenceHandler: persistenceHandler
+            contextProvider: contextProvider
         )
     }
 

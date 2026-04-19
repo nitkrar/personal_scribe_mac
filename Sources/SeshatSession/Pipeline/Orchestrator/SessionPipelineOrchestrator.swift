@@ -4,7 +4,6 @@ import SeshatCore
 public actor SessionPipelineOrchestrator: SessionPipelining {
     private let capture: any AudioCapturing
     private let transcriber: any Transcribing
-    private let transcriptStore: SQLiteTranscriptStore?
     private let logger: SeshatLogger
     private let postProcessingPipeline: any PostProcessingPipeline
     private let outputSink: any PipelineOutputSink
@@ -42,7 +41,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.init(
             capture: capture,
             transcriber: transcriber,
-            transcriptStore: transcriptStore,
             logger: logger,
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
@@ -54,7 +52,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     init(
         capture: any AudioCapturing,
         transcriber: any Transcribing,
-        transcriptStore: SQLiteTranscriptStore?,
         logger: SeshatLogger,
         postProcessingPipeline: any PostProcessingPipeline,
         outputSink: any PipelineOutputSink,
@@ -64,7 +61,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         let initialContext = contextProvider.currentContext()
         self.capture = capture
         self.transcriber = transcriber
-        self.transcriptStore = transcriptStore
         self.logger = logger
         self.postProcessingPipeline = postProcessingPipeline
         self.outputSink = outputSink
@@ -390,7 +386,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         do {
             for try await buffer in stream {
                 bufferedAudio.append(buffer)
-                currentSnapshot.recordingDuration = (currentSnapshot.recordingDuration ?? .zero) + buffer.duration
+                publish { snapshot in
+                    snapshot.recordingDuration = (snapshot.recordingDuration ?? .zero) + buffer.duration
+                }
             }
         } catch {
             handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))

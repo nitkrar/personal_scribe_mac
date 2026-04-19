@@ -62,6 +62,7 @@ The public contract intentionally keeps `SessionState` unchanged so Layer 4 and 
 
 ### Protocols
 - `SessionPipelining: Sendable`
+  - Stage 1 note: under Swift 6, the shipped protocol is `SessionPipelining: Actor, Sendable` so the synchronous snapshot APIs remain actor-isolated. Treat the added `Actor` bound as the explicit Stage 1 contract deviation; the rest of the shape stays unchanged.
   - `toggleCapture() async`
   - `prepareTranscriber() async throws`
   - `snapshot() -> PipelineSnapshot`
