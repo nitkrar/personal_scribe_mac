@@ -119,6 +119,113 @@ final class DefaultModelServiceTests: XCTestCase {
         }
     }
 
+    func testIsDownloadedReturnsTrueForRegisteredDescriptorAndFalseForUnknownDescriptor() {
+        let target = BuiltInModelCatalog.parakeetTDTCTC110M
+        let shadowDescriptor = ModelDescriptor(
+            id: target.id,
+            displayName: "Shadow",
+            repository: "FluidInference/shadow",
+            revision: "shadow",
+            requiredRelativePaths: [],
+            approximateSizeBytes: 0,
+            engine: .parakeetTDT
+        )
+        let missingDescriptor = ModelDescriptor(
+            id: "missing-model",
+            displayName: "Missing",
+            repository: "FluidInference/missing",
+            revision: "missing",
+            requiredRelativePaths: [],
+            approximateSizeBytes: 0,
+            engine: .parakeetTDT
+        )
+        let service = DefaultModelService(
+            selectionPreference: Preference<ActiveModelDescriptor>(
+                key: DefaultModelService.preferenceKey,
+                default: BuiltInModelCatalog.defaultActiveDescriptor,
+                defaults: isolatedDefaults()
+            ),
+            isDownloaded: { descriptor in
+                descriptor == target
+            },
+            download: { _, _ in }
+        )
+
+        XCTAssertTrue(service.isDownloaded(shadowDescriptor))
+        XCTAssertFalse(service.isDownloaded(missingDescriptor))
+    }
+
+    func testDownloadPassesCanonicalDescriptorAndProgressThroughToHandler() async throws {
+        let target = BuiltInModelCatalog.parakeetTDTCTC110M
+        let shadowDescriptor = ModelDescriptor(
+            id: target.id,
+            displayName: "Shadow",
+            repository: "FluidInference/shadow",
+            revision: "shadow",
+            requiredRelativePaths: [],
+            approximateSizeBytes: 0,
+            engine: .parakeetTDT
+        )
+        let descriptorRecorder = LockedDescriptorRecorder()
+        let progressRecorder = LockedProgressRecorder()
+        let expectedSnapshots: [ModelDownloadProgress] = [
+            .init(
+                phase: .downloading,
+                fractionCompleted: 0.25,
+                receivedBytes: 25,
+                expectedBytes: 100
+            ),
+            .init(
+                phase: .finished,
+                fractionCompleted: 1,
+                receivedBytes: 100,
+                expectedBytes: 100
+            ),
+        ]
+        let service = DefaultModelService(
+            selectionPreference: Preference<ActiveModelDescriptor>(
+                key: DefaultModelService.preferenceKey,
+                default: BuiltInModelCatalog.defaultActiveDescriptor,
+                defaults: isolatedDefaults()
+            ),
+            isDownloaded: { _ in false },
+            download: { descriptor, progress in
+                descriptorRecorder.record(descriptor)
+                expectedSnapshots.forEach(progress)
+            }
+        )
+
+        try await service.download(shadowDescriptor) { snapshot in
+            progressRecorder.record(snapshot)
+        }
+
+        XCTAssertEqual(descriptorRecorder.descriptors, [target])
+        XCTAssertEqual(progressRecorder.snapshots, expectedSnapshots)
+    }
+
+    func testDownloadPropagatesHandlerError() async {
+        let service = DefaultModelService(
+            selectionPreference: Preference<ActiveModelDescriptor>(
+                key: DefaultModelService.preferenceKey,
+                default: BuiltInModelCatalog.defaultActiveDescriptor,
+                defaults: isolatedDefaults()
+            ),
+            isDownloaded: { _ in false },
+            download: { _, _ in
+                throw DownloadTestError.handlerFailure
+            }
+        )
+
+        do {
+            try await service.download(BuiltInModelCatalog.parakeetTDTCTC110M) { _ in }
+            XCTFail("Expected download to throw when the injected handler fails")
+        } catch let error as DownloadTestError {
+            XCTAssertEqual(error, .handlerFailure)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testDescriptorForModeFallsBackToDefaultVoiceModelAndPreservesAISelection() {
         let service = DefaultModelService(
             selectionPreference: Preference<ActiveModelDescriptor>(
@@ -156,4 +263,42 @@ private actor DownloadRecorder {
     func recordedDescriptors() -> [ModelDescriptor] {
         descriptors
     }
+}
+
+private final class LockedDescriptorRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [ModelDescriptor] = []
+
+    func record(_ descriptor: ModelDescriptor) {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.append(descriptor)
+    }
+
+    var descriptors: [ModelDescriptor] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}
+
+private final class LockedProgressRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [ModelDownloadProgress] = []
+
+    func record(_ snapshot: ModelDownloadProgress) {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.append(snapshot)
+    }
+
+    var snapshots: [ModelDownloadProgress] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}
+
+private enum DownloadTestError: Error, Equatable {
+    case handlerFailure
 }

@@ -4,7 +4,7 @@ import SeshatCore
 
 public actor ModelAwareFluidAudioTranscriber: Transcribing {
     private let descriptor: ModelDescriptor
-    private let runtimeVariant: FluidAudioRuntimeVariant
+    private let runtimeVariantResult: Result<FluidAudioRuntimeVariant, ModelSelectionError>
     private let storageLocator: any StorageLocator
     private let downloader: any ModelDownloading
     private let inference: any ModelAwareFluidAudioInferencing
@@ -20,13 +20,9 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
         storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.transcription)
     ) {
-        guard let runtimeVariant = try? FluidAudioRuntimeVariant(descriptor: descriptor) else {
-            preconditionFailure("Unsupported model descriptor: \(descriptor.id)")
-        }
-
         self.init(
             descriptor: descriptor,
-            runtimeVariant: runtimeVariant,
+            runtimeVariantResult: Self.resolveRuntimeVariant(for: descriptor),
             storageLocator: storageLocator,
             downloader: PrivateModelDownloader(descriptor: descriptor),
             inference: PrivateModelAwareFluidAudioInferenceClient(),
@@ -43,8 +39,28 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.transcription),
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
     ) {
+        self.init(
+            descriptor: descriptor,
+            runtimeVariantResult: .success(runtimeVariant),
+            storageLocator: storageLocator,
+            downloader: downloader,
+            inference: inference,
+            logger: logger,
+            logSink: logSink
+        )
+    }
+
+    private init(
+        descriptor: ModelDescriptor,
+        runtimeVariantResult: Result<FluidAudioRuntimeVariant, ModelSelectionError>,
+        storageLocator: any StorageLocator,
+        downloader: any ModelDownloading,
+        inference: any ModelAwareFluidAudioInferencing,
+        logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.transcription),
+        logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
+    ) {
         self.descriptor = descriptor
-        self.runtimeVariant = runtimeVariant
+        self.runtimeVariantResult = runtimeVariantResult
         self.storageLocator = storageLocator
         self.downloader = downloader
         self.inference = inference
@@ -62,8 +78,10 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
             return try await prepareTask.value
         }
 
+        let runtimeVariant = try resolvedRuntimeVariant()
+
         let task = Task {
-            try await self.performPrepare()
+            try await self.performPrepare(runtimeVariant: runtimeVariant)
         }
         prepareTask = task
 
@@ -81,6 +99,7 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
     public func download(
         progress: @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws {
+        _ = try resolvedRuntimeVariant()
         let modelDirectory = try modelDirectory()
 
         guard !Self.modelArtifactsAreValid(in: modelDirectory, descriptor: descriptor) else {
@@ -175,7 +194,21 @@ private extension ModelAwareFluidAudioTranscriber {
         expectedBytes: nil
     )
 
-    func performPrepare() async throws {
+    static func resolveRuntimeVariant(
+        for descriptor: ModelDescriptor
+    ) -> Result<FluidAudioRuntimeVariant, ModelSelectionError> {
+        do {
+            return .success(try FluidAudioRuntimeVariant(descriptor: descriptor))
+        } catch {
+            return .failure(.descriptorNotRegistered(id: descriptor.id))
+        }
+    }
+
+    func resolvedRuntimeVariant() throws -> FluidAudioRuntimeVariant {
+        try runtimeVariantResult.get()
+    }
+
+    func performPrepare(runtimeVariant: FluidAudioRuntimeVariant) async throws {
         let prepareInterval: StaticString = "ModelAwareFluidAudioTranscriber.performPrepare"
         let prepareState = signposter.beginInterval(prepareInterval)
         defer { signposter.endInterval(prepareInterval, prepareState) }
