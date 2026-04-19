@@ -38,6 +38,30 @@ _(any design-inflection that waits for the user)_
 
 ## Review findings log
 
+### Slice B reviewer — agent `a669026b3f1ced090` at 01:33
+
+**Verdict:** PASS with minor polish. No MUST-FIX. Contract fully met:
+- All file deliverables present with matching signatures
+- TDD held (named failing tests + fix in each commit)
+- No scope creep, no sibling collisions, no design-lock violations
+- `OnboardingState` is struct-backed Bool not String enum — accepted because `default` / `userDefaultsKey` / `resolve(from:)` / `persist(to:)` match the house-style call-site feel
+- `OnboardingPermissionProbing` is a new protocol separate from existing `PermissionProbing` — accepted because request-vs-probe semantics differ
+- `.denied` gate is enforced at `MenuBarSceneModel` layer (every record-button tap) not just relabelled menu row — accepted as cleaner than 3 per-surface relabels
+- `startupCoordinator.start()` deferred until after onboarding closes — beneficial deviation, gates hotkey monitor registration too
+
+**SHOULD-FIX applied autonomously:**
+- **#1 Tautological `else if` in `MenuBarSceneModel.swift:117`** → replaced with plain `else`. Committed as `f3516b2`.
+
+**SHOULD-FIX deferred to morning:**
+- **#2 Runbook entries terse** — `Tests/SeshatAppKitTests/ManualOnboardingVerification.md` MV-OB-1..7 are one-sentence each. Reviewer suggests adding expected log line / UI cue for MV-OB-5 / MV-OB-6 (dogfood-critical fallback paths) so a future run can distinguish "intentionally blocked" from "silently broken".
+- **#3 LSUIElement `NSApp.activate` reliability note** — `OnboardingWindowController.swift:47-57` activates the app for the window; reviewer notes `NSApp.activate(ignoringOtherApps:)` from an `LSUIElement` app occasionally no-ops on some macOS minor versions. Not a bug; worth a runbook cross-OS check.
+
+**ACCEPT-WITH-RATIONALE (no action):**
+- A. `OnboardingState` Bool-struct-mimicking-enum pattern (see above)
+- B. `OnboardingPermissionProbing` as a distinct protocol from `PermissionProbing` (request vs probe semantics)
+- C. Gate lives in `MenuBarSceneModel.handleRecordButtonTap`, not per-surface menu relabel
+- D. `startupCoordinator.start()` deferred until onboarding closes (beneficial scope)
+
 ### 3.D reviewer — agent `ad999b2e8d7802617` at 01:14
 
 **Verdict:** Ship. No MUST-FIX. All contract checks pass (tokenizer explicit, 4 runtime guards, schema shape preserved, migration atomic, no `type`/`kind` column, JSONL rename clean).
