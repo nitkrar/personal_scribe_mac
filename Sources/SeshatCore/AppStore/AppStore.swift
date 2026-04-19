@@ -96,7 +96,6 @@ public final class AppStore: ObservableObject {
             guard let self else { return }
             let stream = await self.makePermissionStatusStream()
             for await statuses in stream {
-                guard let self else { return }
                 await self.updateSnapshot { snapshot in
                     snapshot.permissions = statuses
                 }
@@ -416,15 +415,16 @@ private extension SessionState {
     }
 }
 
-private struct LiveAppStoreClock: AppStoreClock {
+public struct LiveAppStoreClock: AppStoreClock {
+    public init() {}
     private let clock = ContinuousClock()
     private let reference = ContinuousClock().now
 
-    func now() -> Duration {
+    public func now() -> Duration {
         reference.duration(to: clock.now)
     }
 
-    func sleep(for duration: Duration) async throws {
+    public func sleep(for duration: Duration) async throws {
         try await Task.sleep(for: duration)
     }
 }
