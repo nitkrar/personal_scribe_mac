@@ -176,6 +176,58 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertEqual(emergencyQuitCount, 0)
     }
 
+    func testMonitorReadsPreferenceForKeyCodeAndTapCount() throws {
+        var singleTapTriggerCount = 0
+        let singleTapMonitor = GlobalHotkeyMonitor(
+            onTrigger: {
+                singleTapTriggerCount += 1
+            },
+            recordingHotkey: HotkeyPreference(
+                keyCode: 15,
+                tapCount: 1,
+                modifiers: NSEvent.ModifierFlags.command.rawValue
+            )
+        )
+
+        singleTapMonitor.handle(event: try makeKeyDownEvent(
+            keyCode: 15,
+            modifierFlags: [.command],
+            characters: "r",
+            timestamp: 1.0
+        ))
+        singleTapMonitor.handle(event: try makeKeyDownEvent(
+            keyCode: 15,
+            modifierFlags: [],
+            characters: "r",
+            timestamp: 1.2
+        ))
+
+        XCTAssertEqual(singleTapTriggerCount, 1)
+
+        let scheduler = DeferredActionSchedulerSpy()
+        var doubleTapTriggerCount = 0
+        let doubleTapMonitor = GlobalHotkeyMonitor(
+            onTrigger: {
+                doubleTapTriggerCount += 1
+            },
+            recordingHotkey: HotkeyPreference(
+                keyCode: Self.leftOptionKeyCode,
+                tapCount: 2,
+                modifiers: 0
+            ),
+            scheduleDeferredTrigger: scheduler.schedule
+        )
+
+        try sendTap(to: doubleTapMonitor, at: 2.0, keyCode: Self.leftOptionKeyCode)
+        try sendTap(to: doubleTapMonitor, at: 2.2, keyCode: Self.leftOptionKeyCode)
+
+        XCTAssertEqual(doubleTapTriggerCount, 0)
+
+        scheduler.fireScheduledActions()
+
+        XCTAssertEqual(doubleTapTriggerCount, 1)
+    }
+
     func testThreeLeftOptionTapsInsideWindowRequestsEmergencyQuitWithoutToggle() throws {
         let scheduler = DeferredActionSchedulerSpy()
         var toggleCount = 0
@@ -187,6 +239,35 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
             emergencyQuitRequested: {
                 emergencyQuitCount += 1
             },
+            scheduleDeferredTrigger: scheduler.schedule
+        )
+
+        try sendTap(to: monitor, at: 1.0, keyCode: Self.leftOptionKeyCode)
+        try sendTap(to: monitor, at: 1.2, keyCode: Self.leftOptionKeyCode)
+        try sendTap(to: monitor, at: 1.35, keyCode: Self.leftOptionKeyCode)
+
+        scheduler.fireScheduledActions()
+
+        XCTAssertEqual(toggleCount, 0)
+        XCTAssertEqual(emergencyQuitCount, 1)
+    }
+
+    func testTripleTapEmergencyQuitStillFiresRegardlessOfRecordingHotkeyPreference() throws {
+        let scheduler = DeferredActionSchedulerSpy()
+        var toggleCount = 0
+        var emergencyQuitCount = 0
+        let monitor = GlobalHotkeyMonitor(
+            onTrigger: {
+                toggleCount += 1
+            },
+            emergencyQuitRequested: {
+                emergencyQuitCount += 1
+            },
+            recordingHotkey: HotkeyPreference(
+                keyCode: 15,
+                tapCount: 1,
+                modifiers: NSEvent.ModifierFlags.command.rawValue
+            ),
             scheduleDeferredTrigger: scheduler.schedule
         )
 
@@ -273,6 +354,28 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
                 context: nil,
                 characters: "",
                 charactersIgnoringModifiers: "",
+                isARepeat: false,
+                keyCode: keyCode
+            )
+        )
+    }
+
+    private func makeKeyDownEvent(
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags,
+        characters: String,
+        timestamp: TimeInterval
+    ) throws -> NSEvent {
+        try XCTUnwrap(
+            NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: modifierFlags,
+                timestamp: timestamp,
+                windowNumber: 0,
+                context: nil,
+                characters: characters,
+                charactersIgnoringModifiers: characters.lowercased(),
                 isARepeat: false,
                 keyCode: keyCode
             )

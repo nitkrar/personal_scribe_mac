@@ -19,9 +19,16 @@ public final class GlobalHotkeyMonitor {
     private static let leftOptionKeyCode: UInt16 = 58
     private static let rightOptionKeyCode: UInt16 = 61
     private static let doubleTapWindow: TimeInterval = 0.4
+    private static let recordingModifierMask: NSEvent.ModifierFlags = [
+        .command,
+        .control,
+        .option,
+        .shift,
+    ]
 
     private let onTrigger: @MainActor () -> Void
     private let emergencyQuitRequested: @MainActor () -> Void
+    private let recordingHotkey: HotkeyPreference
     private let tapWindow: TimeInterval
     private let scheduleDeferredTrigger: DeferredActionScheduler
     private let permissionProbe: any PermissionProbing
@@ -33,12 +40,15 @@ public final class GlobalHotkeyMonitor {
     private var pendingToggleDeadline: TimeInterval?
     private var pendingToggleToken: UUID?
     private var pendingToggleCancellation: DeferredActionCanceller?
-    private var tapCount = 0
-    private var lastTapTimestamp: TimeInterval?
+    private var optionTapCount = 0
+    private var lastOptionTapTimestamp: TimeInterval?
+    private var recordingTapCount = 0
+    private var lastRecordingTapTimestamp: TimeInterval?
 
     public init(
         onTrigger: @escaping @MainActor () -> Void,
         emergencyQuitRequested: @escaping @MainActor () -> Void = {},
+        recordingHotkey: HotkeyPreference = HotkeyPreference.resolve(),
         tapWindow: TimeInterval = Self.doubleTapWindow,
         scheduleDeferredTrigger: @escaping DeferredActionScheduler = { delay, action in
             let workItem = DispatchWorkItem {
@@ -57,6 +67,7 @@ public final class GlobalHotkeyMonitor {
     ) {
         self.onTrigger = onTrigger
         self.emergencyQuitRequested = emergencyQuitRequested
+        self.recordingHotkey = recordingHotkey
         self.tapWindow = tapWindow
         self.scheduleDeferredTrigger = scheduleDeferredTrigger
         self.permissionProbe = permissionProbe
@@ -75,7 +86,9 @@ public final class GlobalHotkeyMonitor {
         }
 
         resetState()
-        monitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+        monitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.flagsChanged, .keyDown]
+        ) { [weak self] event in
             Task { @MainActor [weak self] in
                 self?.handle(event: event)
             }
@@ -127,24 +140,47 @@ public final class GlobalHotkeyMonitor {
     }
 
     internal func handle(event: NSEvent) {
-        guard
-            event.type == .flagsChanged,
-            Self.isOptionKeyCode(event.keyCode)
-        else {
-            return
-        }
-
         flushPendingToggleIfExpired(at: event.timestamp)
 
-        guard handleOptionKeyEdge(for: event) else {
+        switch event.type {
+        case .flagsChanged:
+            handleFlagsChangedEvent(event)
+        case .keyDown:
+            handleKeyDownEvent(event)
+        default:
             return
         }
-
-        handleTap(at: event.timestamp)
     }
 
     private static func isOptionKeyCode(_ keyCode: UInt16) -> Bool {
         keyCode == Self.leftOptionKeyCode || keyCode == Self.rightOptionKeyCode
+    }
+
+    private func handleFlagsChangedEvent(_ event: NSEvent) {
+        guard
+            Self.isOptionKeyCode(event.keyCode),
+            handleOptionKeyEdge(for: event)
+        else {
+            return
+        }
+
+        if handleOptionTap(at: event.timestamp) {
+            return
+        }
+
+        handleRecordingHotkeyPress(
+            keyCode: event.keyCode,
+            modifierFlags: effectiveModifierFlags(for: event),
+            timestamp: event.timestamp
+        )
+    }
+
+    private func handleKeyDownEvent(_ event: NSEvent) {
+        handleRecordingHotkeyPress(
+            keyCode: event.keyCode,
+            modifierFlags: effectiveModifierFlags(for: event),
+            timestamp: event.timestamp
+        )
     }
 
     private func handleOptionKeyEdge(for event: NSEvent) -> Bool {
@@ -160,27 +196,66 @@ public final class GlobalHotkeyMonitor {
         return isPressed
     }
 
-    private func handleTap(at timestamp: TimeInterval) {
+    private func handleOptionTap(at timestamp: TimeInterval) -> Bool {
         if
-            let lastTapTimestamp,
-            timestamp - lastTapTimestamp <= tapWindow
+            let lastOptionTapTimestamp,
+            timestamp - lastOptionTapTimestamp <= tapWindow
         {
-            tapCount += 1
+            optionTapCount += 1
         } else {
-            tapCount = 1
+            optionTapCount = 1
         }
 
-        lastTapTimestamp = timestamp
+        lastOptionTapTimestamp = timestamp
 
-        switch tapCount {
-        case 2:
-            schedulePendingToggle(after: tapWindow, deadline: timestamp + tapWindow)
+        switch optionTapCount {
         case 3:
-            resetTapSequence()
+            resetTapSequences()
             emergencyQuitRequested()
+            return true
         default:
+            return false
+        }
+    }
+
+    private func handleRecordingHotkeyPress(
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags,
+        timestamp: TimeInterval
+    ) {
+        guard
+            keyCode == recordingHotkey.keyCode,
+            modifierFlags == recordingHotkey.modifierFlags
+        else {
             return
         }
+
+        if pendingToggleToken != nil {
+            return
+        }
+
+        guard recordingHotkey.tapCount > 1 else {
+            onTrigger()
+            return
+        }
+
+        if
+            let lastRecordingTapTimestamp,
+            timestamp - lastRecordingTapTimestamp <= tapWindow
+        {
+            recordingTapCount += 1
+        } else {
+            recordingTapCount = 1
+        }
+
+        self.lastRecordingTapTimestamp = timestamp
+
+        guard recordingTapCount == recordingHotkey.tapCount else {
+            return
+        }
+
+        schedulePendingToggle(after: tapWindow, deadline: timestamp + tapWindow)
+        resetRecordingTapSequence()
     }
 
     private func schedulePendingToggle(after delay: TimeInterval, deadline: TimeInterval) {
@@ -212,19 +287,18 @@ public final class GlobalHotkeyMonitor {
         }
 
         cancelPendingToggle()
-        tapCount = 0
-        lastTapTimestamp = nil
+        resetRecordingTapSequence()
         onTrigger()
     }
 
-    private func resetTapSequence() {
+    private func resetTapSequences() {
         cancelPendingToggle()
-        tapCount = 0
-        lastTapTimestamp = nil
+        resetOptionTapSequence()
+        resetRecordingTapSequence()
     }
 
     private func resetState() {
-        resetTapSequence()
+        resetTapSequences()
         pressedOptionKeyCodes.removeAll()
     }
 
@@ -233,5 +307,23 @@ public final class GlobalHotkeyMonitor {
         pendingToggleCancellation = nil
         pendingToggleDeadline = nil
         pendingToggleToken = nil
+    }
+
+    private func resetOptionTapSequence() {
+        optionTapCount = 0
+        lastOptionTapTimestamp = nil
+    }
+
+    private func resetRecordingTapSequence() {
+        recordingTapCount = 0
+        lastRecordingTapTimestamp = nil
+    }
+
+    private func effectiveModifierFlags(for event: NSEvent) -> NSEvent.ModifierFlags {
+        var modifierFlags = event.modifierFlags.intersection(Self.recordingModifierMask)
+        if event.type == .flagsChanged, Self.isOptionKeyCode(event.keyCode) {
+            modifierFlags.remove(.option)
+        }
+        return modifierFlags
     }
 }
