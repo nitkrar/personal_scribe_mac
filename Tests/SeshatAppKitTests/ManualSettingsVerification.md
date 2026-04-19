@@ -5,6 +5,10 @@
 - General-tab toggles persist across relaunch: change pill visibility, waveform decay, and paste mode, relaunch Seshat, and confirm the three selections remain at their last chosen values.
 - Both-hidden combination blocked with visible error state: hide the menu bar item, then try to set pill visibility to `Hidden`, and confirm the UI rejects the change with an inline explanation that one surface must remain visible.
 
+## Change recording hotkey
+
+- In `Shortcuts`, click `Change…` on `Record / stop dictation`, record a new shortcut, confirm `Cmd+Space` is rejected inline, click `Set`, confirm a restart-required note appears, relaunch Seshat, and verify the new recording shortcut works.
+
 ## Change base directory
 
 - Pick a new writable folder from `Advanced > Change Base Directory…` and confirm the tab shows an in-progress spinner followed by a success message naming the migrated subdirectories.

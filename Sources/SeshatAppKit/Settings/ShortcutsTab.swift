@@ -1,63 +1,122 @@
 import SwiftUI
+import SeshatCore
 
 @MainActor
 public struct ShortcutsTab: View {
-    private let shortcuts: [ShortcutDescriptor] = [
-        ShortcutDescriptor(
-            id: "record",
-            title: "Record / stop dictation",
-            shortcut: "Double-tap ⌥",
-            notes: "Starts a session from idle and stops the active session."
-        ),
-        ShortcutDescriptor(
-            id: "quit",
-            title: "Emergency quit",
-            shortcut: "Triple-tap ⌥",
-            notes: "Immediately exits Seshat when the monitor is active."
-        ),
-    ]
+    @StateObject private var viewModel: ShortcutsTabViewModel
+    @State private var isRecordingHotkeyRecorderPresented = false
 
-    public init() { }
+    public init(defaults: UserDefaults = .standard) {
+        _viewModel = StateObject(
+            wrappedValue: ShortcutsTabViewModel(defaults: defaults)
+        )
+    }
 
     public var body: some View {
         SettingsTabContainer {
             SettingsSection(
                 title: "Shortcuts",
-                description: "Reference for the currently fixed global hotkeys."
+                description: "Customize the recording toggle. Emergency quit remains fixed."
             ) {
                 VStack(alignment: .leading, spacing: SettingsLayout.itemSpacing) {
-                    ForEach(shortcuts) { shortcut in
-                        SettingsCard {
-                            HStack(alignment: .firstTextBaseline) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(shortcut.title)
-                                        .font(SeshatTheme.Typography.body.font.weight(.semibold))
-                                    Text(shortcut.notes)
-                                        .font(SeshatTheme.Typography.caption.font)
-                                        .foregroundStyle(.secondary)
-                                }
+                    shortcutCard(
+                        title: "Record / stop dictation",
+                        shortcut: HotkeyShortcutFormatter.displayString(for: viewModel.recordingHotkey),
+                        notes: "Starts a session from idle and stops the active session.",
+                        changeAction: {
+                            isRecordingHotkeyRecorderPresented = true
+                        },
+                        changeEnabled: true,
+                        footnoteIcon: "arrow.clockwise",
+                        footnote: viewModel.requiresRestartNotice
+                            ? "Restart required: relaunch Seshat before the new recording hotkey takes effect."
+                            : nil
+                    )
 
-                                Spacer(minLength: 0)
+                    shortcutCard(
+                        title: "Emergency quit",
+                        shortcut: "Triple-tap ⌥",
+                        notes: "Immediately exits Seshat when the monitor is active.",
+                        changeAction: {},
+                        changeEnabled: false,
+                        footnoteIcon: "info.circle",
+                        footnote: "Triple-tap option remains fixed in Phase 3.G."
+                    )
+                }
+            }
+        }
+        .sheet(isPresented: $isRecordingHotkeyRecorderPresented) {
+            HotkeyRecorder(
+                currentPreference: viewModel.recordingHotkey,
+                onConfirm: { preference in
+                    viewModel.setRecordingHotkey(preference)
+                    isRecordingHotkeyRecorderPresented = false
+                },
+                onCancel: {
+                    isRecordingHotkeyRecorderPresented = false
+                }
+            )
+        }
+    }
 
-                                Text(shortcut.shortcut)
-                                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                    .textSelection(.enabled)
-                            }
-                        }
-                    }
-
-                    Text("Shortcut customization lands in Phase 3.G.")
+    @ViewBuilder
+    private func shortcutCard(
+        title: String,
+        shortcut: String,
+        notes: String,
+        changeAction: @escaping () -> Void,
+        changeEnabled: Bool,
+        footnoteIcon: String,
+        footnote: String?
+    ) -> some View {
+        SettingsCard {
+            HStack(alignment: .top, spacing: SettingsLayout.itemSpacing) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(SeshatTheme.Typography.body.font.weight(.semibold))
+                    Text(notes)
                         .font(SeshatTheme.Typography.caption.font)
                         .foregroundStyle(.secondary)
                 }
+
+                Spacer(minLength: 0)
+
+                VStack(alignment: .trailing, spacing: SettingsLayout.inlineSpacing) {
+                    Text(shortcut)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .textSelection(.enabled)
+
+                    Button("Change…", action: changeAction)
+                        .disabled(changeEnabled == false)
+                }
+            }
+
+            if let footnote {
+                Divider()
+
+                Label(footnote, systemImage: footnoteIcon)
+                    .font(SeshatTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
             }
         }
     }
 }
 
-private struct ShortcutDescriptor: Identifiable {
-    let id: String
-    let title: String
-    let shortcut: String
-    let notes: String
+@MainActor
+final class ShortcutsTabViewModel: ObservableObject {
+    @Published private(set) var recordingHotkey: HotkeyPreference
+    @Published private(set) var requiresRestartNotice = false
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.recordingHotkey = HotkeyPreference.resolve(from: defaults)
+    }
+
+    func setRecordingHotkey(_ preference: HotkeyPreference) {
+        recordingHotkey = preference
+        preference.persist(to: defaults)
+        requiresRestartNotice = true
+    }
 }
