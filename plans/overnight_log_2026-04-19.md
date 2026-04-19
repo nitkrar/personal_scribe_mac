@@ -19,6 +19,7 @@ _(for any conflict resolved without the user)_
 
 | Time | Question | Codex view | Claude view | My view | Decision | Reasoning |
 |---|---|---|---|---|---|---|
+| 01:22 | Slice B has been silent 23 min + dispatcher can't inject skip-build-test because underlying Codex `task-mo4ywo7d-heq41z` is still running. Kill and restart with skip-build directive? Or wait? | Forwarder reports task in-flight — no introspection, can't discriminate "genuinely working" from "silently blocked" | The task hasn't been cancelled by the runtime — if Santa were killing its subprocess calls, the task would still consume an alive slot. Window UI is a big multi-file Swift chunk; 23 min is plausible for that phase. | Lean toward wait. Kill-and-restart loses all in-progress uncommitted work and would need a fresh brief. | **Wait one tick.** Re-evaluate at 01:25. If still B.3 at next tick, escalate to kill-and-restart option with council re-review then. | Lower-risk choice under ambiguity. "Still running" from the runtime is the only signal we have; it's weak but tilts against destructive action. |
 
 ## Skipped-build-test instances
 _(every time I told a codex agent to skip build/test)_
