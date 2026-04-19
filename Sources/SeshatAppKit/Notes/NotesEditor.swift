@@ -31,13 +31,19 @@ struct NotesEditor: View {
                     .foregroundStyle(palette.secondaryText)
                     .padding(Layout.contentPadding)
             } else {
-                TextEditor(text: .constant(displayText))
-                    .font(SeshatTheme.Typography.body.font)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.clear)
-                    .disabled(true)
-                    .opacity(1)
-                    .padding(Layout.editorPadding)
+                // Read-only surface: `TextEditor.disabled(true)` suppresses
+                // text selection on macOS, which defeats the purpose of a
+                // history viewer (users can't copy their own transcripts
+                // back out). Use selectable `Text` inside a `ScrollView`
+                // instead — copy works, editing cannot happen, and the
+                // Phase-3 "no edit persistence" design-lock still holds.
+                ScrollView {
+                    Text(displayText)
+                        .font(SeshatTheme.Typography.body.font)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(Layout.editorPadding)
+                }
             }
         }
         .overlay(
