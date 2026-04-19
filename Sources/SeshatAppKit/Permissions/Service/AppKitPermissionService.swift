@@ -11,7 +11,7 @@ final class AppKitPermissionService: ObservableObject, PermissionService, @unche
     private let inputMonitoring: InputMonitoringPermissionClient
     private let accessibility: AccessibilityPermissionClient
     private let urlOpener: PermissionURLOpener
-    private let activationObservation: ActivationObservation
+    private var activationObservation: ActivationObservation!
 
     init(
         microphone: MicrophonePermissionClient = .live,

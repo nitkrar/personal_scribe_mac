@@ -226,11 +226,11 @@ final class PillOverlayViewModelTests: XCTestCase {
     }
 
     func testTransitionSequenceIdleRecordingTranscribingIdleError() async {
-        // Sprint 2 redesign inserted a transient `.done` state between
-        // a successful `transcribing → idle` handoff. This test now
-        // asserts the new sequence:
-        //   recording → transcribing → done → hidden (error)
-        // The `.done` visibility replaces the former direct `.idle`.
+        // Error sessions render a visible error pill (fix per 16b5055 —
+        // prior behaviour routed errors through `.hidden`, which looked
+        // like the pill had crashed). The pill falls through to idle
+        // after `errorDisplayDuration`; this test stops before that.
+        //   recording → transcribing → done → error(message)
         let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
         var emitted: [PillOverlayViewModel.Visibility] = []
         let expectation = expectation(description: "Collect published visibility updates")
@@ -254,8 +254,12 @@ final class PillOverlayViewModelTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 1.0)
         withExtendedLifetime(cancellable) {}
 
-        XCTAssertEqual(viewModel.visibility, .hidden)
-        XCTAssertEqual(emitted, [.recording, .transcribing, .done, .hidden])
+        let expectedErrorMessage = PillOverlayViewModel.pillMessage(for: .audioEngineFailure)
+        XCTAssertEqual(viewModel.visibility, .error(message: expectedErrorMessage))
+        XCTAssertEqual(
+            emitted,
+            [.recording, .transcribing, .done, .error(message: expectedErrorMessage)]
+        )
     }
 
     func testTranscribingToIdleShowsDoneConfirmation() {

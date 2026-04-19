@@ -6,7 +6,7 @@ import SeshatTestSupport
 final class SessionCoordinatorPreparationTests: XCTestCase {
     func testStopCompletesWhileBackgroundPrepareIsStillRunning() async throws {
         let buffer = try PCMBuffer(
-            samples: Array(repeating: 0.25, count: 1_600),
+            samples: Array(repeating: 0.25, count: 16_000),
             timestamp: ContinuousClock().now
         )
         let transcriber = SlowPrepareTranscriber(

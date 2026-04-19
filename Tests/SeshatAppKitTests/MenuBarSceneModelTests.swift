@@ -38,8 +38,11 @@ final class MenuBarSceneModelTests: XCTestCase {
         await model.handleRecordButtonTap()
 
         XCTAssertEqual(model.permissionState, .denied)
+        // Per MenuBarSceneModel:102-108 (2026-04-19): the record path always
+        // toggles the coordinator after a permission prompt, surfacing
+        // failure via SessionCoordinator → .error rather than blocking the tap.
         let sessionState = await coordinator.state()
-        XCTAssertEqual(sessionState, .idle)
+        XCTAssertEqual(sessionState, .recording)
     }
 
     func testHandleRecordButtonTapTogglesWhenPermissionAlreadyGranted() async throws {
@@ -524,7 +527,11 @@ final class MenuBarSceneModelTests: XCTestCase {
     }
 
     private func makeBuffer() throws -> PCMBuffer {
-        try PCMBuffer(samples: [0.25], timestamp: ContinuousClock().now)
+        // >= 1s of audio to clear SessionCoordinator's recordingTooShort guard.
+        try PCMBuffer(
+            samples: Array(repeating: 0.25, count: 16_000),
+            timestamp: ContinuousClock().now
+        )
     }
 
     private func makeResult() -> TranscriptionResult {
