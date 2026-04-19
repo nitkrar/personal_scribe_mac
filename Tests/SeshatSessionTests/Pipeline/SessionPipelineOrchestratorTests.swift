@@ -13,7 +13,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         let initialSnapshot = await iterator.next()
 
         XCTAssertEqual(initialSnapshot, PipelineSnapshot(context: context))
-        XCTAssertEqual(await orchestrator.snapshot(), PipelineSnapshot(context: context))
+        let liveSnapshot = await orchestrator.snapshot()
+        XCTAssertEqual(liveSnapshot, PipelineSnapshot(context: context))
     }
 
     func testToggleCapturePublishesStagesProgressAndFinalResult() async throws {
@@ -98,8 +99,10 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                 ),
             ]
         )
-        XCTAssertEqual(await sink.resetCount(), 1)
-        XCTAssertNil(await orchestrator.latestStageFailureForTesting())
+        let sinkResetCount1 = await sink.resetCount()
+        XCTAssertEqual(sinkResetCount1, 1)
+        let stageFailure1 = await orchestrator.latestStageFailureForTesting()
+        XCTAssertNil(stageFailure1)
     }
 
     func testCaptureFailurePublishesTypedStageFailureAndNextToggleRetries() async throws {
@@ -144,7 +147,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             [.idle, .recording, .error(.audioEngineFailure), .idle, .recording]
         )
         XCTAssertEqual(observed.map(\.activeStage), [nil, .capture, .capture, nil, .capture])
-        XCTAssertEqual(await sink.resetCount(), 2)
+        let sinkResetCount2 = await sink.resetCount()
+        XCTAssertEqual(sinkResetCount2, 2)
     }
 
     func testShortRecordingPublishesRecordingTooShortWithoutCallingTranscriber() async throws {
@@ -182,8 +186,10 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             observed.map(\.sessionState),
             [.idle, .recording, .error(.recordingTooShort)]
         )
-        XCTAssertEqual(await transcriber.transcribeCallCount(), 0)
-        XCTAssertNil(await orchestrator.latestStageFailureForTesting())
+        let transcribeCount0 = await transcriber.transcribeCallCount()
+        XCTAssertEqual(transcribeCount0, 0)
+        let stageFailure2 = await orchestrator.latestStageFailureForTesting()
+        XCTAssertNil(stageFailure2)
     }
 
     func testRepeatedToggleDuringTranscribingIsIgnoredAndFinalResultSurvives() async throws {
@@ -265,7 +271,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         XCTAssertEqual(snapshot.sessionState, .idle)
         XCTAssertEqual(snapshot.lastCompletedResult?.text, "Hello.")
-        XCTAssertEqual(await transcriber.transcribeCallCount(), 1)
+        let transcribeCount1 = await transcriber.transcribeCallCount()
+        XCTAssertEqual(transcribeCount1, 1)
     }
 
     func testAudioLevelStreamRepublishesLevelsDuringRecording() async throws {
@@ -285,7 +292,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         let levelStream = await orchestrator.audioLevelStream()
         var iterator = levelStream.makeAsyncIterator()
 
-        XCTAssertEqual(await iterator.next(), 0.0)
+        let firstLevel = await iterator.next()
+        XCTAssertEqual(firstLevel, 0.0)
 
         await orchestrator.toggleCapture()
 
@@ -367,7 +375,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         let first = await iterator.next()
         let second = await iterator.next()
 
-        XCTAssertEqual(await tracker.prepareCallCount(), 1)
+        let prepareCount = await tracker.prepareCallCount()
+        XCTAssertEqual(prepareCount, 1)
         XCTAssertEqual(first?.phase, .downloading)
         XCTAssertEqual(first?.fractionCompleted, 0.4)
         XCTAssertEqual(second?.phase, .finished)

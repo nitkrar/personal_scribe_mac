@@ -22,12 +22,12 @@ public final class SQLiteMetricsService: MetricsService, @unchecked Sendable {
     private var pendingRefreshReason: MetricsRefreshReason?
     private var isObserving = false
 
-    public init(
+    public convenience init(
         databaseURL: URL,
         notificationCenter: NotificationCenter = .default,
         calendar: Calendar = .current,
         referenceDateProvider: @escaping @Sendable () -> Date = Date.init,
-        recentLimit: Int = Self.defaultRecentLimit,
+        recentLimit: Int = SQLiteMetricsService.defaultRecentLimit,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.app)
     ) throws {
         let reader = try SQLiteMetricsReader(
@@ -49,7 +49,7 @@ public final class SQLiteMetricsService: MetricsService, @unchecked Sendable {
         notificationCenter: NotificationCenter = .default,
         calendar: Calendar = .current,
         referenceDateProvider: @escaping @Sendable () -> Date = Date.init,
-        recentLimit: Int = Self.defaultRecentLimit,
+        recentLimit: Int = SQLiteMetricsService.defaultRecentLimit,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.app)
     ) {
         self.reader = reader

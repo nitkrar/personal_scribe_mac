@@ -31,10 +31,13 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding
     ) {
-        let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)? = transcriptStore.map { store in
-            { entry in
+        let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
+        if let store = transcriptStore {
+            persistenceHandler = { (entry: TranscriptEntry) async throws -> Void in
                 try await store.append(entry)
             }
+        } else {
+            persistenceHandler = nil
         }
         self.init(
             capture: capture,

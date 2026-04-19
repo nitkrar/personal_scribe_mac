@@ -17,7 +17,7 @@ public final class DefaultModelService: ModelService {
     ) async throws -> Void
     private let logger: SeshatLogger
 
-    public init(
+    public convenience init(
         storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
         defaults: UserDefaults = .standard,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.session)

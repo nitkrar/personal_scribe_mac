@@ -46,10 +46,15 @@ final class ModelAwareTranscriberTests: XCTestCase {
 
         try await transcriber.prepare()
 
-        XCTAssertEqual(await downloader.ensureCallCount, 0)
-        XCTAssertEqual(await inference.loadCallCount(), 1)
-        XCTAssertEqual(await inference.loadedVariants(), [.parakeetTDTCTC110M])
-        XCTAssertEqual(await inference.loadedDirectories(), [modelDirectory])
+        let ensureCallCount = await downloader.ensureCallCount
+        let loadCallCount = await inference.loadCallCount()
+        let loadedVariants = await inference.loadedVariants()
+        let loadedDirectories = await inference.loadedDirectories()
+
+        XCTAssertEqual(ensureCallCount, 0)
+        XCTAssertEqual(loadCallCount, 1)
+        XCTAssertEqual(loadedVariants, [.parakeetTDTCTC110M])
+        XCTAssertEqual(loadedDirectories, [modelDirectory])
     }
 
     func testPrepareRetriesCorruptDownloadOnceThenSucceeds() async throws {
@@ -71,8 +76,11 @@ final class ModelAwareTranscriberTests: XCTestCase {
 
         try await transcriber.prepare()
 
-        XCTAssertEqual(await downloader.attemptCount(), 2)
-        XCTAssertEqual(await inference.loadCallCount(), 1)
+        let attemptCount = await downloader.attemptCount()
+        let loadCallCount = await inference.loadCallCount()
+
+        XCTAssertEqual(attemptCount, 2)
+        XCTAssertEqual(loadCallCount, 1)
     }
 
     func testPrepareResetsProgressToIdleAfterDownloadFailure() async {
@@ -152,8 +160,11 @@ final class ModelAwareTranscriberTests: XCTestCase {
         async let second: Void = transcriber.prepare()
         _ = try await (first, second)
 
-        XCTAssertEqual(await downloader.ensureCallCount, 1)
-        XCTAssertEqual(await inference.loadCallCount(), 1)
+        let ensureCallCount = await downloader.ensureCallCount
+        let loadCallCount = await inference.loadCallCount()
+
+        XCTAssertEqual(ensureCallCount, 1)
+        XCTAssertEqual(loadCallCount, 1)
     }
 
     private func temporaryRootDirectory() throws -> URL {

@@ -235,7 +235,7 @@ private extension ModelAwareFluidAudioTranscriber {
             do {
                 _ = try await downloader.ensureModelAvailable(
                     at: modelDirectory,
-                    progress: { snapshot in
+                    progress: { [progressBroadcaster] snapshot in
                         let current = progressBroadcaster.currentSnapshot
                         let normalized = Self.normalizedProgress(snapshot, current: current)
                         progressBroadcaster.update(normalized)

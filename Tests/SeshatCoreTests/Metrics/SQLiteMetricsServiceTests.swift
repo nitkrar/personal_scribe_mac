@@ -49,7 +49,8 @@ final class SQLiteMetricsServiceTests: XCTestCase {
         XCTAssertFalse(service.isRefreshing)
 
         try await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(await reader.loadRequestCount(), 0)
+        let initialLoadCount = await reader.loadRequestCount()
+        XCTAssertEqual(initialLoadCount, 0)
 
         service.startObserving()
 
@@ -58,7 +59,7 @@ final class SQLiteMetricsServiceTests: XCTestCase {
         }
         await reader.completeNextLoad(with: .success(initialSnapshot))
         try await waitForCondition(description: "initial load publish") {
-            service.lastRefreshReason == .initialLoad
+            await service.lastRefreshReason == .initialLoad
         }
 
         XCTAssertEqual(service.rollups, initialSnapshot.rollups)
@@ -67,7 +68,8 @@ final class SQLiteMetricsServiceTests: XCTestCase {
         XCTAssertFalse(service.isRefreshing)
 
         try await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(await reader.loadRequestCount(), 1)
+        let postObserveLoadCount = await reader.loadRequestCount()
+        XCTAssertEqual(postObserveLoadCount, 1)
 
         notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
 
@@ -76,7 +78,7 @@ final class SQLiteMetricsServiceTests: XCTestCase {
         }
         await reader.completeNextLoad(with: .success(commitSnapshot))
         try await waitForCondition(description: "commit snapshot publish") {
-            service.lastRefreshReason == .transcriptCommit
+            await service.lastRefreshReason == .transcriptCommit
         }
 
         XCTAssertEqual(service.rollups, commitSnapshot.rollups)
@@ -85,7 +87,8 @@ final class SQLiteMetricsServiceTests: XCTestCase {
         service.stopObserving()
         notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
         try await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(await reader.loadRequestCount(), 2)
+        let postStopLoadCount = await reader.loadRequestCount()
+        XCTAssertEqual(postStopLoadCount, 2)
     }
 
     func testServicePreservesLastGoodSnapshotWhenReadFails() async throws {
@@ -198,7 +201,8 @@ final class SQLiteMetricsServiceTests: XCTestCase {
         _ = await overlappingWindowFocus.value
         _ = await overlappingCommit.value
 
-        XCTAssertEqual(await reader.loadRequestCount(), 2)
+        let overlappingLoadCount = await reader.loadRequestCount()
+        XCTAssertEqual(overlappingLoadCount, 2)
         XCTAssertEqual(service.rollups, secondSnapshot.rollups)
         XCTAssertEqual(service.lastRefreshReason, .transcriptCommit)
         XCTAssertFalse(service.isRefreshing)

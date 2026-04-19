@@ -67,16 +67,19 @@ final class PipelineContractTests: XCTestCase {
 
         let snapshotStream = await pipeline.snapshotStream()
         var snapshotIterator = snapshotStream.makeAsyncIterator()
-        XCTAssertEqual(await snapshotIterator.next(), expectedSnapshot)
+        let firstSnapshot = await snapshotIterator.next()
+        XCTAssertEqual(firstSnapshot, expectedSnapshot)
 
         let levelStream = await pipeline.audioLevelStream()
         var levelIterator = levelStream.makeAsyncIterator()
-        XCTAssertEqual(await levelIterator.next(), 0.25)
+        let firstLevel = await levelIterator.next()
+        XCTAssertEqual(firstLevel, 0.25)
 
         let progressStream = await pipeline.modelDownloadProgress()
         var progressIterator = progressStream.makeAsyncIterator()
+        let firstProgress = await progressIterator.next()
         XCTAssertEqual(
-            await progressIterator.next(),
+            firstProgress,
             ModelDownloadProgress(
                 phase: .finished,
                 fractionCompleted: 1.0,

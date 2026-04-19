@@ -6,59 +6,47 @@ final class PostProcessingPipelineTests: XCTestCase {
     private let pipeline = DefaultPostProcessingPipeline()
 
     func testEmptyInputReturnsEmpty() async throws {
-        XCTAssertEqual(try await pipeline.run("", context: makeContext()), "")
-        XCTAssertEqual(try await pipeline.run("   \n  ", context: makeContext()), "")
+        let emptyOutput = try await pipeline.run("", context: makeContext())
+        XCTAssertEqual(emptyOutput, "")
+        let whitespaceOutput = try await pipeline.run("   \n  ", context: makeContext())
+        XCTAssertEqual(whitespaceOutput, "")
     }
 
     func testRemovesCommonFillers() async throws {
-        XCTAssertEqual(
-            try await pipeline.run("um hello uh world", context: makeContext()),
-            "Hello world."
-        )
+        let output = try await pipeline.run("um hello uh world", context: makeContext())
+        XCTAssertEqual(output, "Hello world.")
     }
 
     func testRemovesHedges() async throws {
-        XCTAssertEqual(
-            try await pipeline.run("you know i think sort of it works", context: makeContext()),
-            "I think it works."
-        )
+        let output = try await pipeline.run("you know i think sort of it works", context: makeContext())
+        XCTAssertEqual(output, "I think it works.")
     }
 
     func testPreservesTerminalPunctuation() async throws {
-        XCTAssertEqual(
-            try await pipeline.run("hello!", context: makeContext()),
-            "Hello!"
-        )
+        let output = try await pipeline.run("hello!", context: makeContext())
+        XCTAssertEqual(output, "Hello!")
     }
 
     func testAddsMissingPeriod() async throws {
-        XCTAssertEqual(
-            try await pipeline.run("hello", context: makeContext()),
-            "Hello."
-        )
+        let output = try await pipeline.run("hello", context: makeContext())
+        XCTAssertEqual(output, "Hello.")
     }
 
     func testCollapsesInternalWhitespace() async throws {
-        XCTAssertEqual(
-            try await pipeline.run("hello    world", context: makeContext()),
-            "Hello world."
-        )
+        let output = try await pipeline.run("hello    world", context: makeContext())
+        XCTAssertEqual(output, "Hello world.")
     }
 
     func testIsDeterministic() async throws {
         let input = "um hello uh world"
-
-        XCTAssertEqual(
-            try await pipeline.run(input, context: makeContext()),
-            try await pipeline.run(input, context: makeContext())
-        )
+        let first = try await pipeline.run(input, context: makeContext())
+        let second = try await pipeline.run(input, context: makeContext())
+        XCTAssertEqual(first, second)
     }
 
     func testDoesNotCorruptProperNouns() async throws {
-        XCTAssertEqual(
-            try await pipeline.run("my name is Matthew", context: makeContext()),
-            "My name is Matthew."
-        )
+        let output = try await pipeline.run("my name is Matthew", context: makeContext())
+        XCTAssertEqual(output, "My name is Matthew.")
     }
 
     func testPipelinePassesContextThroughCustomStages() async throws {

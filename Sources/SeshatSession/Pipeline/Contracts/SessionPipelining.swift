@@ -1,6 +1,6 @@
 import SeshatCore
 
-public protocol SessionPipelining: Sendable {
+public protocol SessionPipelining: Actor, Sendable {
     func toggleCapture() async
     func prepareTranscriber() async throws
     func snapshot() -> PipelineSnapshot

@@ -17,7 +17,7 @@ public actor SQLiteMetricsReader: MetricsReading {
         window: MetricsWindow,
         recentLimit: Int
     ) async throws -> MetricsSnapshot {
-        let payload = try dbQueue.read { db in
+        let payload = try await dbQueue.read { db in
             let windowRows = try MetricsTranscriptRow.fetchAll(
                 db,
                 sql: """
@@ -96,7 +96,7 @@ public actor SQLiteMetricsReader: MetricsReading {
             return []
         }
 
-        let rows = try dbQueue.read { db in
+        let rows = try await dbQueue.read { db in
             try MetricsTranscriptRow.fetchAll(
                 db,
                 sql: """

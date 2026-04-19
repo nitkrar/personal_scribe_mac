@@ -10,11 +10,11 @@ final class ModelBoundTranscriberProviderTests: XCTestCase {
             baseDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
-        var factoryCallCount = 0
+        let factoryCallCount = AtomicIntBox()
         let provider = ModelBoundTranscriberProvider(
             storageLocator: storageLocator,
             transcriberFactory: { descriptor in
-                factoryCallCount += 1
+                factoryCallCount.increment()
                 return ModelAwareFluidAudioTranscriber(
                     descriptor: descriptor,
                     storageLocator: storageLocator
@@ -25,7 +25,7 @@ final class ModelBoundTranscriberProviderTests: XCTestCase {
         let first = provider.transcriber(for: BuiltInModelCatalog.parakeetTDTCTC110M)
         let second = provider.transcriber(for: BuiltInModelCatalog.parakeetTDTCTC110M)
 
-        XCTAssertEqual(factoryCallCount, 1)
+        XCTAssertEqual(factoryCallCount.value, 1)
         XCTAssertTrue((first as AnyObject) === (second as AnyObject))
     }
 
@@ -34,11 +34,11 @@ final class ModelBoundTranscriberProviderTests: XCTestCase {
             baseDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
-        var factoryCallCount = 0
+        let factoryCallCount = AtomicIntBox()
         let provider = ModelBoundTranscriberProvider(
             storageLocator: storageLocator,
             transcriberFactory: { descriptor in
-                factoryCallCount += 1
+                factoryCallCount.increment()
                 return ModelAwareFluidAudioTranscriber(
                     descriptor: descriptor,
                     storageLocator: storageLocator
@@ -49,7 +49,7 @@ final class ModelBoundTranscriberProviderTests: XCTestCase {
         let first = provider.transcriber(for: BuiltInModelCatalog.parakeetTDT06Bv2)
         let second = provider.transcriber(for: BuiltInModelCatalog.parakeetTDTCTC110M)
 
-        XCTAssertEqual(factoryCallCount, 2)
+        XCTAssertEqual(factoryCallCount.value, 2)
         XCTAssertFalse((first as AnyObject) === (second as AnyObject))
     }
 }
@@ -64,4 +64,21 @@ private struct TestStorageLocator: StorageLocator {
     }
 
     func ensureDirectoriesExist() throws {}
+}
+
+private final class AtomicIntBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value: Int = 0
+
+    func increment() {
+        lock.lock()
+        defer { lock.unlock() }
+        _value += 1
+    }
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _value
+    }
 }

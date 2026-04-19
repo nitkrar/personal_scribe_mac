@@ -76,10 +76,15 @@ final class DefaultModelServiceTests: XCTestCase {
             }
         )
 
-        let updates = Task {
-            var iterator = service.$activeDescriptor.values.makeAsyncIterator()
-            _ = await iterator.next()
-            return await iterator.next()
+        let updates = Task { () -> ActiveModelDescriptor? in
+            var seen = 0
+            for await value in service.$activeDescriptor.values {
+                seen += 1
+                if seen == 2 {
+                    return value
+                }
+            }
+            return nil
         }
         await Task.yield()
 
