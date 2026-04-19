@@ -236,3 +236,21 @@ _(high-level progression)_
 **Zero sibling-lane collision.** Files touched only: `TranscriptReader.swift` (new), `Notes/*` (6 new), `SeshatAppMain.swift`, `StatusItemMenuModel.swift`, corresponding tests, and `ManualNotesVerification.md`.
 | 02:34 | 3b | **Poll tick.** 3.H at H.1 `121983a` (PasteRestoreDelay resolver). H.2 in progress (PasteInjector + tests uncommitted). Under stall. |
 | 02:39 | 3b | **3.H COMPLETE.** H.1 `121983a`, H.2 `f3704a7`, H.3 `060e759`, H.4 `4471f22`. **Phase 3 scope FULLY SHIPPED modulo parked 3.F.** Dispatched 3.H reviewer `a9849e627cff91b91` — last reviewer of the night. |
+
+### 3.H reviewer — agent `a9849e627cff91b91` at 02:44
+
+**Verdict:** PASS CLEAN. Zero MUST-FIX. Zero SHOULD-FIX.
+
+Only one ACCEPT-WITH-RATIONALE: `PasteRestoreDelay.persist` is a `static func persist(to:_:)` while `PasteMode.persist` / `WaveformDecayMode.persist` are instance methods. This is a brief-sanctioned divergence (the brief explicitly specified the static two-arg signature since `seconds` is a numeric arg not a self-encoded case). If the house ever standardises on instance-level `persist`, this is where the drift lives.
+
+All 11 contract checks PASS:
+- `PasteRestoreDelay` default = 0.5; clamp 0.05→0.1, 10.0→5.0; invalid decode → default
+- `persist` clamps on WRITE — no out-of-range value ever on disk
+- `PasteInjector.paste(_:)` reads `PasteRestoreDelay.resolve(from: defaults).seconds` per call, not cached at init (verified by test which persists 0.2, asserts 0.2, persists 1.4, asserts 1.4)
+- Slider step 0.1 across 0.1–5.0
+- Runbook covers 4 contract scenarios
+- Zero sibling-lane collisions
+- No `Color(hex:` outside Theme, no `UserDefaults.standard.*` bypass, no `type`/`kind`/`intent` fields
+- GeneralTab edits strictly additive, existing bindings untouched
+
+**No action required. Ship as-is.**
