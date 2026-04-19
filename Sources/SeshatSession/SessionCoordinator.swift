@@ -182,6 +182,19 @@ public actor SessionCoordinator {
 
         let replayBuffers = bufferedAudio
         bufferedAudio.removeAll(keepingCapacity: true)
+
+        // FluidAudio requires at least 1 second of 16 kHz audio; feeding
+        // shorter buffers surfaces as "Invalid audio data" mid-transcribe
+        // which then routes to `.error` → pill vanishes silently. Guard
+        // at the coordinator layer so the user sees a "too short" signal
+        // instead of a disappearing pill.
+        let bufferedDuration = replayBuffers.reduce(Duration.zero) { $0 + $1.duration }
+        if bufferedDuration < .milliseconds(1_000) {
+            logger.info("Recording too short (\(bufferedDuration)); skipping transcription")
+            publish(.error(.recordingTooShort))
+            return
+        }
+
         publish(.transcribing)
 
         do {

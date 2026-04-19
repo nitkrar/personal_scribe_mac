@@ -39,6 +39,7 @@ public struct PillOverlayView: View {
     static let doneSize = CGSize(width: 80, height: 28)
     static let downloadingSize = CGSize(width: 240, height: 36)
     static let loadingSize = CGSize(width: 140, height: 36)
+    static let errorSize = CGSize(width: 220, height: 36)
 
     static let cornerRadius: CGFloat = 14
 
@@ -63,6 +64,8 @@ public struct PillOverlayView: View {
                 downloadingPill(fraction: fraction)
             case .loading:
                 loadingPill
+            case .error(let message):
+                errorPill(message: message)
             }
         }
         .animation(
@@ -200,6 +203,29 @@ public struct PillOverlayView: View {
         .frame(width: Self.loadingSize.width, height: Self.loadingSize.height)
         .modifier(PillChrome(palette: palette))
     }
+
+    // MARK: - Error
+
+    private func errorPill(message: String) -> some View {
+        let palette = SeshatTheme.Palette.for(scheme: colorScheme)
+
+        return HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(palette.statusRecording)
+
+            Text(message)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(palette.pillForegroundText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .padding(.horizontal, 12)
+        .frame(width: Self.errorSize.width, height: Self.errorSize.height)
+        .modifier(PillChrome(palette: palette))
+        .accessibilityElement()
+        .accessibilityLabel("Seshat error: \(message)")
+    }
 }
 
 /// Shared rounded-rectangle chrome for every pill variant. Dark navy
@@ -278,6 +304,8 @@ private func previewModel(visibility: PillOverlayViewModel.Visibility) -> PillOv
             receivedBytes: 100,
             expectedBytes: 100
         ))
+    case .error:
+        m.apply(sessionState: .error(.recordingTooShort), preparationProgress: nil)
     }
     return m
 }

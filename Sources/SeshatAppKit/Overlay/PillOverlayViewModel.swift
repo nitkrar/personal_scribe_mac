@@ -31,6 +31,11 @@ public final class PillOverlayViewModel: ObservableObject {
         /// transition (checkmark). Auto-clears after ~1 second to the
         /// mode's normal idle visibility.
         case done
+        /// Brief error surface for failed sessions (short recording,
+        /// transcription failure, etc.). Auto-clears after ~1.5 seconds
+        /// to the mode's normal idle visibility. The associated message
+        /// is user-facing copy derived from `SeshatError`.
+        case error(message: String)
     }
 
     @Published public private(set) var visibility: Visibility
@@ -65,6 +70,9 @@ public final class PillOverlayViewModel: ObservableObject {
 
     /// How long to hold `.done` before returning to normal idle.
     static let doneConfirmationDuration: Duration = .milliseconds(1_000)
+
+    /// How long to hold `.error` before returning to normal idle.
+    static let errorDisplayDuration: Duration = .milliseconds(1_500)
 
     public init(visibilityMode: PillVisibilityMode = .autoShow) {
         self.visibilityMode = visibilityMode
@@ -103,6 +111,29 @@ public final class PillOverlayViewModel: ObservableObject {
                     sessionState: self.lastSessionState,
                     preparationProgress: self.lastPreparationProgress
                 )
+            }
+            return
+        }
+
+        // Session error → brief visible pill with message, then fall
+        // through to the mode's normal idle. Previously `.error`
+        // routed through computeVisibility → `.hidden`, which made
+        // transcription failures look like the pill had crashed.
+        if case .error(let seshatError) = sessionState {
+            let message = Self.pillMessage(for: seshatError)
+            visibility = .error(message: message)
+            SeshatLogger(category: SeshatLogCategory.ui).info(
+                "PillOverlayViewModel.apply — state=\(sessionState) (error display) mode=\(visibilityMode) → visibility=error(\(message))"
+            )
+            doneConfirmationTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: Self.errorDisplayDuration)
+                guard !Task.isCancelled, let self else { return }
+                self.visibility = self.computeVisibility(
+                    mode: self.visibilityMode,
+                    sessionState: .idle,
+                    preparationProgress: self.lastPreparationProgress
+                )
+                self.lastSessionState = .idle
             }
             return
         }
@@ -155,10 +186,15 @@ public final class PillOverlayViewModel: ObservableObject {
             return transcribingVisibility(for: preparationProgress)
         }
 
-        // Session error state → hidden. Error UX lives in the menu
-        // bar (permission / mic error surfaces) rather than the pill.
+        // `.error` session states are handled synchronously in apply(...)
+        // so they surface as a brief `.error(message:)` pill instead of
+        // collapsing to hidden. If we're computing visibility outside
+        // that synchronous path (e.g. `setVisibilityMode` re-derive while
+        // an error happens to be the cached lastSessionState), fall
+        // through to idle-like behaviour rather than re-raising the
+        // error banner.
         if case .error = sessionState {
-            return .hidden
+            return idleVisibility(for: mode, progress: preparationProgress)
         }
 
         // Otherwise, `.hidden` mode wins.
@@ -214,6 +250,27 @@ public final class PillOverlayViewModel: ObservableObject {
             return .downloading(fractionCompleted: progress.fractionCompleted)
         case .loading:
             return .loading
+        }
+    }
+
+    /// User-facing copy surfaced in `.error(message:)`. Kept short so
+    /// the error pill stays legible at recording-pill width.
+    static func pillMessage(for error: SeshatError) -> String {
+        switch error {
+        case .recordingTooShort:
+            return "Too short — try again"
+        case .transcriptionFailure:
+            return "Transcription failed"
+        case .micPermissionDenied:
+            return "Microphone permission needed"
+        case .audioEngineFailure, .resampleFailure:
+            return "Recording failed"
+        case .modelLoadFailure, .modelDownloadFailure:
+            return "Model unavailable"
+        case .cancelled:
+            return "Cancelled"
+        case .invalidState:
+            return "Session error"
         }
     }
 }

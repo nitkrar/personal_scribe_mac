@@ -43,12 +43,24 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .transcribing)
     }
 
-    func testErrorMapsToHidden() {
-        let viewModel = PillOverlayViewModel()
+    func testErrorSessionStateSurfacesAsVisibleErrorPillWithMessage() {
+        // Previously .error mapped to .hidden, which made transcription
+        // failures look like the pill had crashed. The fix surfaces the
+        // error as a brief visible `.error(message:)` pill. Here we
+        // verify for two representative SeshatError cases.
+        let vmA = PillOverlayViewModel()
+        vmA.apply(sessionState: .error(.audioEngineFailure), preparationProgress: nil)
+        XCTAssertEqual(
+            vmA.visibility,
+            .error(message: PillOverlayViewModel.pillMessage(for: .audioEngineFailure))
+        )
 
-        viewModel.apply(sessionState: .error(.audioEngineFailure), preparationProgress: nil)
-
-        XCTAssertEqual(viewModel.visibility, .hidden)
+        let vmB = PillOverlayViewModel()
+        vmB.apply(sessionState: .error(.recordingTooShort), preparationProgress: nil)
+        XCTAssertEqual(
+            vmB.visibility,
+            .error(message: PillOverlayViewModel.pillMessage(for: .recordingTooShort))
+        )
     }
 
     func testDownloadingProgressOverridesIdleState() {

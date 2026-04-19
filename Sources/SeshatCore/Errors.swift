@@ -9,6 +9,7 @@ public enum SeshatError: Error, Sendable, Equatable {
     case modelDownloadFailure
     case cancelled
     case invalidState
+    case recordingTooShort
 }
 
 extension SeshatError: LocalizedError {
@@ -30,6 +31,8 @@ extension SeshatError: LocalizedError {
             "The operation was cancelled."
         case .invalidState:
             "The session entered an invalid state."
+        case .recordingTooShort:
+            "Recording too short."
         }
     }
 
@@ -51,6 +54,8 @@ extension SeshatError: LocalizedError {
             "The operation was stopped before it finished."
         case .invalidState:
             "A shared component detected an impossible transition or misuse."
+        case .recordingTooShort:
+            "The transcriber needs at least one second of audio."
         }
     }
 
@@ -68,6 +73,8 @@ extension SeshatError: LocalizedError {
             "Retry the operation if you still need it."
         case .invalidState:
             "Reset the session and try again."
+        case .recordingTooShort:
+            "Hold the hotkey or record for at least one second before releasing."
         }
     }
 }
