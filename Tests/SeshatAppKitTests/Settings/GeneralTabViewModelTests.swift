@@ -62,4 +62,23 @@ final class GeneralTabViewModelTests: XCTestCase {
         XCTAssertEqual(PillVisibilityMode.resolve(from: defaults), .alwaysOn)
         XCTAssertFalse(menuBarVisible)
     }
+
+    func testInitResolvesPersistedPasteRestoreDelay() {
+        let defaults = isolatedDefaults()
+        PasteRestoreDelay.persist(to: defaults, .init(seconds: 1.8))
+
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        XCTAssertEqual(viewModel.pasteRestoreDelay.seconds, 1.8, accuracy: 0.0001)
+    }
+
+    func testSetPasteRestoreDelaySecondsPersistsAndUpdatesState() {
+        let defaults = isolatedDefaults()
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        viewModel.setPasteRestoreDelaySeconds(2.4)
+
+        XCTAssertEqual(viewModel.pasteRestoreDelay.seconds, 2.4, accuracy: 0.0001)
+        XCTAssertEqual(PasteRestoreDelay.resolve(from: defaults).seconds, 2.4, accuracy: 0.0001)
+    }
 }

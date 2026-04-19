@@ -112,6 +112,26 @@ public struct GeneralTab: View {
                 Text("Paste-at-cursor").tag(SeshatPasteMode.pasteAtCursor)
                 Text("Clipboard-only").tag(SeshatPasteMode.clipboardOnly)
             }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                Text("Clipboard restore delay")
+                    .font(SeshatTheme.Typography.body.font.weight(.medium))
+
+                Text(viewModel.pasteRestoreDelayDescription)
+                    .font(SeshatTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+
+                Slider(
+                    value: Binding(
+                        get: { viewModel.pasteRestoreDelay.seconds },
+                        set: { viewModel.setPasteRestoreDelaySeconds($0) }
+                    ),
+                    in: 0.1...5.0,
+                    step: 0.1
+                )
+            }
         }
     }
 }
@@ -131,6 +151,7 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var isMenuBarVisible: Bool
     @Published private(set) var waveformDecayMode: WaveformDecayMode
     @Published private(set) var pasteMode: SeshatPasteMode
+    @Published private(set) var pasteRestoreDelay: PasteRestoreDelay
     @Published private(set) var visibilityError: VisibilityConfigError?
 
     private let defaults: UserDefaults
@@ -153,6 +174,7 @@ final class GeneralTabViewModel: ObservableObject {
         self.isMenuBarVisible = menuBarVisibilityProvider()
         self.waveformDecayMode = WaveformDecayMode.resolve(from: defaults)
         self.pasteMode = SeshatPasteMode.resolve(from: defaults)
+        self.pasteRestoreDelay = PasteRestoreDelay.resolve(from: defaults)
     }
 
     var visibilityErrorMessage: String? {
@@ -183,5 +205,18 @@ final class GeneralTabViewModel: ObservableObject {
     func setPasteMode(_ mode: SeshatPasteMode) {
         pasteMode = mode
         mode.persist(to: defaults)
+    }
+
+    func setPasteRestoreDelaySeconds(_ seconds: TimeInterval) {
+        PasteRestoreDelay.persist(to: defaults, .init(seconds: seconds))
+        pasteRestoreDelay = PasteRestoreDelay.resolve(from: defaults)
+    }
+
+    var pasteRestoreDelayDescription: String {
+        "After paste, wait \(Self.formatSeconds(pasteRestoreDelay.seconds))s before restoring your clipboard"
+    }
+
+    private static func formatSeconds(_ seconds: TimeInterval) -> String {
+        String(format: "%.1f", seconds)
     }
 }
