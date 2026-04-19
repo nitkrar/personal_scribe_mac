@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-import SeshatCore
+@testable import SeshatCore
 import SeshatTranscription
 @testable import SeshatSession
 
