@@ -210,3 +210,5 @@ _(high-level progression)_
 - Codex honored skip-build-test. Main session should `swift test` in morning.
 
 **Zero sibling-lane collision.** Only touched: `HotkeyPreference.swift` (new), `GlobalHotkeyMonitor.swift`, `HotkeyRecorder.swift` (new), `ShortcutsTab.swift`, and corresponding tests + ManualSettingsVerification runbook section.
+| 02:29 | 3a | **Poll tick.** B.8 `9ca6e61` History wire-up, B.9 `57dcee8` runbook — **3.B COMPLETE**. **Wave 3a FULLY CLOSED** (3.B/3.E/3.G all done). 3.E and 3.G reviewers already PASS; 3.B reviewer `aefece7dfc56abb43` just dispatched. |
+| 02:30 | 3b | **Wave 3b fired (solo — last Phase 3 group modulo parked 3.F).** 3.H BUG-07 clipboard-clobber timing dispatched as codex `a165abf20dbe9670c`. Owns `Sources/SeshatCore/PasteRestoreDelay.swift` (new), `Sources/SeshatAppKit/Paste/PasteInjector.swift`, additive edits to `Sources/SeshatAppKit/Settings/GeneralTab.swift` + `ManualSettingsVerification.md`. Skip-build-test baked in. |
