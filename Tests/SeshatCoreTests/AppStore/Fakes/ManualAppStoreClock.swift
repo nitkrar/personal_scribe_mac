@@ -57,7 +57,11 @@ final class ManualAppStoreClock: @unchecked Sendable, AppStoreClock {
         }
     }
 
-    func advance(by duration: Duration) {
+    func advance(by duration: Duration) async {
+        let yieldIterations = 10
+
+        await yieldUntilSleepersStabilize(maxIterations: yieldIterations)
+
         let readyContinuations = withLock { () -> [CheckedContinuation<Void, Error>] in
             currentTime = currentTime + duration
 
@@ -72,6 +76,28 @@ final class ManualAppStoreClock: @unchecked Sendable, AppStoreClock {
 
         for continuation in readyContinuations {
             continuation.resume()
+        }
+
+        if readyContinuations.isEmpty == false {
+            await yieldUntilSleepersStabilize(maxIterations: yieldIterations)
+        }
+    }
+
+    private func yieldUntilSleepersStabilize(maxIterations: Int) async {
+        var observedChange = false
+        var previousSleeperCount = withLock { sleepers.count }
+
+        for _ in 0..<maxIterations {
+            await Task.yield()
+
+            let currentSleeperCount = withLock { sleepers.count }
+            if currentSleeperCount != previousSleeperCount {
+                observedChange = true
+            } else if observedChange {
+                return
+            }
+
+            previousSleeperCount = currentSleeperCount
         }
     }
 
