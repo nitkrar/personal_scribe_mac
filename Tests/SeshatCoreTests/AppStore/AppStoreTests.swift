@@ -228,6 +228,51 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
     }
 
+    func testInitialVisibilityModeReplayDoesNotClobberDoneTransient() async {
+        let session = FakeAppStoreSessionProvider()
+        let visibilityModeProvider = DeferredInitialYieldVisibilityModeProvider(
+            initialVisibilityMode: .hidden
+        )
+        let clock = ManualAppStoreClock()
+        let store = AppStore(
+            session: session,
+            permissions: FakePermissionService(),
+            activeModeSource: FakeActiveModeProvider(),
+            visibilityModeSource: visibilityModeProvider,
+            clock: clock
+        )
+
+        store.start()
+        await waitUntil {
+            visibilityModeProvider.hasSubscriber
+        }
+
+        session.emitState(.transcribing)
+        await waitUntil {
+            store.snapshot.pillVisibility == .transcribing
+        }
+
+        session.emitState(.idle)
+        await waitUntil {
+            store.snapshot.pillVisibility == .done
+        }
+
+        visibilityModeProvider.emitInitialReplay()
+        await Task.yield()
+        XCTAssertEqual(store.snapshot.pillVisibility, .done)
+
+        clock.advance(by: .milliseconds(999))
+        await Task.yield()
+        XCTAssertEqual(store.snapshot.pillVisibility, .done)
+
+        clock.advance(by: .milliseconds(1))
+        await waitUntil {
+            store.snapshot.pillVisibility == .hidden
+        }
+
+        XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
+    }
+
     func testErrorVisibilityIsTransientAfterErrorState() async {
         let session = FakeAppStoreSessionProvider()
         let clock = ManualAppStoreClock()
@@ -343,5 +388,40 @@ final class AppStoreTests: XCTestCase {
         }
 
         XCTFail("Timed out waiting for condition")
+    }
+}
+
+private final class DeferredInitialYieldVisibilityModeProvider: @unchecked Sendable, AppStoreVisibilityModeProviding {
+    private var currentMode: AppStoreVisibilityMode
+    private var continuation: AsyncStream<AppStoreVisibilityMode>.Continuation?
+    private(set) var hasSubscriber = false
+    private var hasEmittedInitialReplay = false
+
+    init(initialVisibilityMode: AppStoreVisibilityMode) {
+        currentMode = initialVisibilityMode
+    }
+
+    func currentVisibilityMode() -> AppStoreVisibilityMode {
+        currentMode
+    }
+
+    func visibilityModeStream() -> AsyncStream<AppStoreVisibilityMode> {
+        AsyncStream { continuation in
+            self.hasSubscriber = true
+            self.continuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.hasSubscriber = false
+                self?.continuation = nil
+            }
+        }
+    }
+
+    func emitInitialReplay() {
+        guard !hasEmittedInitialReplay else {
+            return
+        }
+
+        hasEmittedInitialReplay = true
+        continuation?.yield(currentMode)
     }
 }

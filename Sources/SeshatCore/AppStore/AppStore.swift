@@ -181,6 +181,7 @@ public final class AppStore: ObservableObject {
     }
 
     private func handleVisibilityModeChange(_ visibilityMode: AppStoreVisibilityMode) {
+        guard visibilityMode != currentVisibilityMode else { return }
         currentVisibilityMode = visibilityMode
         cancelPillTransition()
         rederivePillVisibility()
