@@ -20,7 +20,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         window.setContentSize(NSSize(width: 520, height: 360))
         window.styleMask = [.titled, .fullSizeContentView]
         window.isReleasedWhenClosed = false
-        window.title = "Welcome to Seshat"
+        window.title = "Welcome to \(AppBrand.displayName)"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.standardWindowButton(.closeButton)?.isHidden = true

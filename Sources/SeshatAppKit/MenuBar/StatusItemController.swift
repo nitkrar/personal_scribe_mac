@@ -159,7 +159,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             logger.error("StatusBarIcon asset missing from Bundle.module — falling back to text glyph")
         }
 
-        button.toolTip = "Seshat"
+        let label = statusItemLabel(for: .idle)
+        button.toolTip = label
+        button.accessibilityLabel = label
     }
 
     private func updateStatusItemAppearance(for sessionState: SessionState) {
@@ -185,14 +187,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         switch sessionState {
         case .recording:
             button.contentTintColor = .systemRed
-            button.toolTip = "Seshat — recording"
         case .transcribing:
             button.contentTintColor = .systemOrange
-            button.toolTip = "Seshat — transcribing"
         case .idle, .error:
             button.contentTintColor = nil
-            button.toolTip = "Seshat"
         }
+        let label = statusItemLabel(for: sessionState)
+        button.toolTip = label
+        button.accessibilityLabel = label
 
         // If the menu is currently showing, rebuild so the
         // Record/Stop title tracks state live.
@@ -247,6 +249,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         performMenuAction(id)
+    }
+
+    private func statusItemLabel(for sessionState: SessionState) -> String {
+        switch sessionState {
+        case .recording:
+            return "\(AppBrand.displayName) — recording"
+        case .transcribing:
+            return "\(AppBrand.displayName) — transcribing"
+        case .idle, .error:
+            return AppBrand.displayName
+        }
     }
 
     // MARK: - Default handlers

@@ -1,4 +1,5 @@
 import AppKit
+import SeshatCore
 import SwiftUI
 
 @MainActor
@@ -23,7 +24,7 @@ final class SettingsWindowController: NSWindowController {
         )
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.isReleasedWhenClosed = false
-        window.title = "Seshat Settings"
+        window.title = "\(AppBrand.displayName) Settings"
 
         super.init(window: window)
     }

@@ -1,4 +1,5 @@
 import Foundation
+import SeshatCore
 
 struct BuildInfo: Equatable, Sendable {
     let version: String
@@ -19,6 +20,6 @@ struct BuildInfo: Equatable, Sendable {
     }
 
     var displayString: String {
-        "Seshat \(version) · \(shortSHA)"
+        "\(AppBrand.displayName) \(version) · \(shortSHA)"
     }
 }

@@ -68,14 +68,12 @@ public struct PasteInjector: PasteInjecting {
     private let permissionService: PermissionServiceAdapter
     private let pasteShortcutPoster: @MainActor () -> Bool
 
-    private static let seshatBundleIdentifier = "com.nitkrar.seshat"
-
     init(
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
         pasteboard: NSPasteboard = .general,
         defaults: UserDefaults = .standard,
         frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
-        selfBundleIdentifier: String = PasteInjector.seshatBundleIdentifier,
+        selfBundleIdentifier: String = AppBrand.bundleIdentifier,
         permissionService: PermissionServiceAdapter,
         scheduleRestore: @escaping RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -103,7 +101,7 @@ public struct PasteInjector: PasteInjecting {
         pasteboard: NSPasteboard = .general,
         defaults: UserDefaults = .standard,
         frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
-        selfBundleIdentifier: String = PasteInjector.seshatBundleIdentifier,
+        selfBundleIdentifier: String = AppBrand.bundleIdentifier,
         scheduleRestore: @escaping RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 Task { @MainActor in
@@ -139,7 +137,7 @@ public struct PasteInjector: PasteInjecting {
         pasteboard: NSPasteboard = .general,
         defaults: UserDefaults = .standard,
         frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
-        selfBundleIdentifier: String = PasteInjector.seshatBundleIdentifier,
+        selfBundleIdentifier: String = AppBrand.bundleIdentifier,
         permissionService: PermissionServiceAdapter,
         scheduleRestore: @escaping RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -168,7 +166,7 @@ public struct PasteInjector: PasteInjecting {
         pasteboard: NSPasteboard = .general,
         defaults: UserDefaults = .standard,
         frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
-        selfBundleIdentifier: String = PasteInjector.seshatBundleIdentifier,
+        selfBundleIdentifier: String = AppBrand.bundleIdentifier,
         scheduleRestore: @escaping RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 Task { @MainActor in

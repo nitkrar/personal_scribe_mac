@@ -20,7 +20,7 @@ final class NotesWindowController: NSWindowController {
         )
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.isReleasedWhenClosed = false
-        window.title = "Seshat History"
+        window.title = "\(AppBrand.displayName) History"
 
         super.init(window: window)
     }

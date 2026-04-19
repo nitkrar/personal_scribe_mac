@@ -86,7 +86,7 @@ public struct PillOverlayView: View {
         .frame(width: Self.idleSize.width, height: Self.idleSize.height)
         .modifier(PillChrome(palette: palette))
         .accessibilityElement()
-        .accessibilityLabel("Seshat idle — double-tap right Option to record")
+        .accessibilityLabel("\(AppBrand.displayName) idle — double-tap right Option to record")
     }
 
     // MARK: - Recording
@@ -122,7 +122,7 @@ public struct PillOverlayView: View {
         .frame(width: Self.recordingSize.width, height: Self.recordingSize.height)
         .modifier(PillChrome(palette: palette))
         .accessibilityElement()
-        .accessibilityLabel("Seshat recording — tap to stop")
+        .accessibilityLabel("\(AppBrand.displayName) recording — tap to stop")
     }
 
     // MARK: - Transcribing
@@ -142,7 +142,7 @@ public struct PillOverlayView: View {
         .frame(width: Self.transcribingSize.width, height: Self.transcribingSize.height)
         .modifier(PillChrome(palette: palette))
         .accessibilityElement()
-        .accessibilityLabel("Seshat transcribing")
+        .accessibilityLabel("\(AppBrand.displayName) transcribing")
     }
 
     // MARK: - Done
@@ -224,7 +224,7 @@ public struct PillOverlayView: View {
         .frame(width: Self.errorSize.width, height: Self.errorSize.height)
         .modifier(PillChrome(palette: palette))
         .accessibilityElement()
-        .accessibilityLabel("Seshat error: \(message)")
+        .accessibilityLabel("\(AppBrand.displayName) error: \(message)")
     }
 }
 

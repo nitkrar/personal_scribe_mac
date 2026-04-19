@@ -128,7 +128,7 @@ struct StatusItemMenuModel: Equatable {
 
         items.append(.action(ActionItem(
             id: .quit,
-            title: "Quit Seshat",
+            title: "Quit \(AppBrand.displayName)",
             keyEquivalent: "q",
             isEnabled: true
         )))

@@ -7,8 +7,6 @@ typealias PasteboardStringWriter = @MainActor (NSPasteboard, String) -> Bool
 
 @MainActor
 public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
-    private static let seshatBundleIdentifier = "com.nitkrar.seshat"
-
     private let logger: SeshatLogger
     private let pasteboard: NSPasteboard
     private let defaults: UserDefaults
@@ -29,7 +27,7 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         pasteboard: NSPasteboard = .general,
         defaults: UserDefaults = .standard,
         frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
-        selfBundleIdentifier: String = ClipboardBatchOutput.seshatBundleIdentifier,
+        selfBundleIdentifier: String = AppBrand.bundleIdentifier,
         scheduleRestore: @escaping PasteInjector.RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 Task { @MainActor in

@@ -1,3 +1,4 @@
+import SeshatCore
 import SwiftUI
 
 struct OnboardingView: View {
@@ -40,7 +41,7 @@ struct OnboardingView: View {
             }
             .frame(maxWidth: .infinity)
 
-            Text("Welcome to Seshat")
+            Text("Welcome to \(AppBrand.displayName)")
                 .font(SeshatTheme.Typography.display.font)
                 .foregroundStyle(palette.primaryText)
 
@@ -57,7 +58,7 @@ struct OnboardingView: View {
                 index: 1,
                 title: "Microphone Access",
                 oneLiner: "Capture audio for transcription.",
-                popoverCopy: "Seshat only uses the microphone while you are actively recording. Audio never leaves your device — transcription runs locally via Parakeet-TDT.",
+                popoverCopy: "\(AppBrand.displayName) only uses the microphone while you are actively recording. Audio never leaves your device — transcription runs locally via Parakeet-TDT.",
                 outcome: viewModel.microphoneOutcome,
                 isOptional: false,
                 showsConnector: true,
@@ -74,7 +75,7 @@ struct OnboardingView: View {
                 index: 2,
                 title: "Input Monitoring",
                 oneLiner: "Detect the global double-tap ⌥ hotkey.",
-                popoverCopy: "Input Monitoring lets Seshat see option-key taps even when another app is focused. Without it, the hotkey will not work.",
+                popoverCopy: "Input Monitoring lets \(AppBrand.displayName) see option-key taps even when another app is focused. Without it, the hotkey will not work.",
                 outcome: viewModel.inputMonitoringOutcome,
                 isOptional: false,
                 showsConnector: true,
@@ -91,7 +92,7 @@ struct OnboardingView: View {
                 index: 3,
                 title: "Accessibility",
                 oneLiner: "Paste transcripts into the current app.",
-                popoverCopy: "Accessibility lets Seshat paste transcripts into the app you were typing in. Without Accessibility, Seshat still copies every transcript to your clipboard — you can paste manually with ⌘V.",
+                popoverCopy: "Accessibility lets \(AppBrand.displayName) paste transcripts into the app you were typing in. Without Accessibility, \(AppBrand.displayName) still copies every transcript to your clipboard — you can paste manually with ⌘V.",
                 outcome: viewModel.accessibilityOutcome,
                 isOptional: true,
                 showsConnector: false,
@@ -251,7 +252,7 @@ struct OnboardingView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if isOptional && viewModel.showsAccessibilityWarning {
-                    Text("Seshat will not be able to paste into other apps. Transcripts still copy to clipboard.")
+                    Text("\(AppBrand.displayName) will not be able to paste into other apps. Transcripts still copy to clipboard.")
                         .font(SeshatTheme.Typography.caption.font)
                         .foregroundStyle(warningColor)
                         .fixedSize(horizontal: false, vertical: true)

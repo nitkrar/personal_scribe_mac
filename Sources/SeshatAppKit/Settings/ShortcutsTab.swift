@@ -29,14 +29,14 @@ public struct ShortcutsTab: View {
                         changeEnabled: true,
                         footnoteIcon: "arrow.clockwise",
                         footnote: viewModel.requiresRestartNotice
-                            ? "Restart required: relaunch Seshat before the new recording hotkey takes effect."
+                            ? "Restart required: relaunch \(AppBrand.displayName) before the new recording hotkey takes effect."
                             : nil
                     )
 
                     shortcutCard(
                         title: "Emergency quit",
                         shortcut: "Triple-tap ⌥",
-                        notes: "Immediately exits Seshat when the monitor is active.",
+                        notes: "Immediately exits \(AppBrand.displayName) when the monitor is active.",
                         changeAction: {},
                         changeEnabled: false,
                         footnoteIcon: "info.circle",

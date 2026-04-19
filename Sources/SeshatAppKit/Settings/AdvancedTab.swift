@@ -29,7 +29,7 @@ public struct AdvancedTab: View {
         SettingsTabContainer {
             SettingsSection(
                 title: "Advanced",
-                description: "Filesystem location for Seshat's app support data."
+                description: "Filesystem location for \(AppBrand.displayName)'s app support data."
             ) {
                 switch viewModel.baseDirectoryResult {
                 case .success(let baseDirectory):
@@ -98,7 +98,7 @@ public struct AdvancedTab: View {
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
         panel.prompt = "Choose"
-        panel.message = "Select a new base directory for Seshat's models, modes, and recordings."
+        panel.message = "Select a new base directory for \(AppBrand.displayName)'s models, modes, and recordings."
         panel.directoryURL = currentBaseDirectory
         return panel.runModal() == .OK ? panel.url?.standardizedFileURL : nil
     }
