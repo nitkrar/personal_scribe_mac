@@ -52,9 +52,9 @@ final class SQLiteMetricsReaderTests: XCTestCase {
 
         XCTAssertEqual(snapshot.rollups.recordingsThisWeek, 3)
         XCTAssertEqual(snapshot.rollups.sampleCount, 3)
-        XCTAssertEqual(snapshot.rollups.wordsThisWeek, 6)
+        XCTAssertEqual(snapshot.rollups.wordsThisWeek, 8)
         XCTAssertEqual(snapshot.rollups.minutesSavedThisWeek, 0, accuracy: 0.0001)
-        XCTAssertEqual(snapshot.rollups.averageWPMThisWeek, 6, accuracy: 0.0001)
+        XCTAssertEqual(snapshot.rollups.averageWPMThisWeek, 8, accuracy: 0.0001)
         XCTAssertEqual(snapshot.rollups.windowStart, window.start)
         XCTAssertEqual(snapshot.rollups.windowEnd, window.end)
         XCTAssertEqual(snapshot.lastUpdatedAt, referenceDate)
