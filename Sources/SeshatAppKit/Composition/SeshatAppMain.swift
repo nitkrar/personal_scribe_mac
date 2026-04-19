@@ -15,6 +15,7 @@ struct SeshatAppMain: App {
     @StateObject private var pillController: PillOverlayController
     @StateObject private var statusItemController: StatusItemControllerHost
     @StateObject private var onboardingController: OnboardingWindowControllerHost
+    @StateObject private var notesWindowController: NotesWindowControllerHost
     @StateObject private var settingsWindowController: SettingsWindowControllerHost
 
     init() {
@@ -42,6 +43,9 @@ struct SeshatAppMain: App {
         defaults: UserDefaults = .standard,
         inputMonitoringProbe: any PermissionProbing = IOHIDPermissionProbe(),
         isAccessibilityTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
+        notesWindowControllerFactory: @escaping @MainActor () -> NotesWindowController = {
+            NotesWindowController(transcriptReader: SeshatAppMain.defaultTranscriptReader())
+        },
         startupCoordinator: AppStartupCoordinator? = nil
     ) {
         let startupCoordinator = startupCoordinator
@@ -104,9 +108,16 @@ struct SeshatAppMain: App {
         clipboardOnlyNotice = {
             pillController.showClipboardOnlyNotice()
         }
+        let notesWindowControllerHost = NotesWindowControllerHost(
+            controllerFactory: notesWindowControllerFactory
+        )
+        var showNotesWindow: @MainActor () -> Void = {}
         var showSettingsWindow: @MainActor () -> Void = {}
         let statusItemControllerHost = StatusItemControllerHost(
             sceneModel: sceneModel,
+            openHistory: {
+                showNotesWindow()
+            },
             openSettings: {
                 showSettingsWindow()
             },
@@ -128,6 +139,13 @@ struct SeshatAppMain: App {
         showSettingsWindow = {
             settingsWindowControllerHost.showWindow(nil)
         }
+        showNotesWindow = {
+            guard isOnboardingCompleteProvider() else {
+                return
+            }
+
+            notesWindowControllerHost.showWindow(nil)
+        }
         _sceneModel = StateObject(wrappedValue: sceneModel)
         _pillController = StateObject(
             wrappedValue: pillController
@@ -137,6 +155,9 @@ struct SeshatAppMain: App {
         )
         _onboardingController = StateObject(
             wrappedValue: onboardingControllerHost
+        )
+        _notesWindowController = StateObject(
+            wrappedValue: notesWindowControllerHost
         )
         _settingsWindowController = StateObject(
             wrappedValue: settingsWindowControllerHost
@@ -160,6 +181,19 @@ struct SeshatAppMain: App {
 }
 
 private extension SeshatAppMain {
+    static func defaultTranscriptReader(
+        logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
+    ) -> any TranscriptReading {
+        do {
+            let recordingsDirectory = try SeshatConfig.recordingsDirectory()
+            let store = try SQLiteTranscriptStore(recordingsDirectory: recordingsDirectory)
+            return SQLiteTranscriptReader(store: store)
+        } catch {
+            logger.error("NotesWindow transcript reader init failed; falling back to empty history", error: error)
+            return EmptyTranscriptReader()
+        }
+    }
+
     static let defaultClipboardWriter: @MainActor (String) -> Void = { text in
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -187,6 +221,7 @@ final class StatusItemControllerHost: ObservableObject {
 
     init(
         sceneModel: MenuBarSceneModel,
+        openHistory: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
             SeshatOnboardingCompleted.resolve().rawValue
@@ -194,6 +229,7 @@ final class StatusItemControllerHost: ObservableObject {
     ) {
         self.controller = StatusItemController(
             sceneModel: sceneModel,
+            openHistory: openHistory,
             openSettings: openSettings,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider
         )
@@ -205,5 +241,19 @@ final class StatusItemControllerHost: ObservableObject {
 
     func setMenuBarVisible(_ isVisible: Bool) {
         controller.setStatusItemVisible(isVisible)
+    }
+}
+
+private struct EmptyTranscriptReader: TranscriptReading {
+    func recent(limit: Int) async -> [TranscriptEntry] {
+        []
+    }
+
+    func search(query: String) async -> [TranscriptEntry] {
+        []
+    }
+
+    func all() async -> [TranscriptEntry] {
+        []
     }
 }

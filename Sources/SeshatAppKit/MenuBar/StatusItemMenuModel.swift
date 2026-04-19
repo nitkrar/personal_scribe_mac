@@ -113,7 +113,7 @@ struct StatusItemMenuModel: Equatable {
             id: .openHistory,
             title: "History",
             keyEquivalent: "",
-            isEnabled: true
+            isEnabled: isOnboardingComplete
         )))
 
         items.append(.action(ActionItem(

@@ -215,6 +215,49 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(openSettingsRequestCount, 1)
     }
 
+    func testHistoryMenuActionRaisesOpenNotesRequestedSignal() async throws {
+        _ = NSApplication.shared
+        let coordinator = try makeCoordinator()
+        let model = MenuBarSceneModel(
+            coordinator: coordinator,
+            permissionRequester: TestPermissionRequester(result: true),
+            permissionStateProvider: { .granted },
+            clipboardWriter: { _ in },
+            pasteInjector: { _ in .pasteAtCursor },
+            openSettings: {},
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
+        )
+        var openNotesRequestCount = 0
+        let controller = StatusItemController(
+            sceneModel: model,
+            imPermissionProbe: GrantedInputMonitoringProbe(),
+            openHistory: {
+                openNotesRequestCount += 1
+            },
+            openSettings: {}
+        )
+
+        controller.performMenuAction(.openHistory)
+
+        XCTAssertEqual(openNotesRequestCount, 1)
+    }
+
+    func testHistoryMenuItemIsDisabledWhenOnboardingIsIncomplete() {
+        let model = StatusItemMenuModel.make(
+            sessionState: .idle,
+            micPermission: .granted,
+            inputMonitoringPermission: .granted,
+            isOnboardingComplete: false
+        )
+
+        guard case let .action(history) = model.items[2] else {
+            return XCTFail("Expected History action at index 2")
+        }
+
+        XCTAssertEqual(history.id, .openHistory)
+        XCTAssertFalse(history.isEnabled)
+    }
+
     func testStartObservingPublishesRecordingAfterCoordinatorToggle() async throws {
         let coordinator = try makeCoordinator()
         let model = MenuBarSceneModel(
