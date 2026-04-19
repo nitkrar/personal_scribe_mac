@@ -91,7 +91,7 @@ public struct AdvancedTab: View {
         }
     }
 
-    internal static func presentDirectoryPicker(currentBaseDirectory: URL?) -> URL? {
+    public static func presentDirectoryPicker(currentBaseDirectory: URL?) -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
