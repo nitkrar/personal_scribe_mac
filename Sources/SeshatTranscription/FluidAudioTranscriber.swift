@@ -113,7 +113,10 @@ public actor FluidAudioTranscriber: Transcribing {
             let loadInterval: StaticString = "inference.loadModel"
             let loadState = signposter.beginInterval(loadInterval)
             do {
-                try await inference.loadModel(from: modelDirectory)
+                try await inference.loadModel(
+                    from: modelDirectory,
+                    runtimeVariant: try FluidAudioRuntimeVariant(descriptor: descriptor)
+                )
                 signposter.endInterval(loadInterval, loadState)
             } catch {
                 signposter.endInterval(loadInterval, loadState)

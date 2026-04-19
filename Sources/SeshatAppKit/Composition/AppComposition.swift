@@ -12,13 +12,15 @@ public enum AppComposition {
         let capture = AVAudioCaptureService(
             logger: SeshatLogger(category: SeshatLogCategory.audio)
         )
-        let transcriber = FluidAudioTranscriber(
-            logger: SeshatLogger(category: SeshatLogCategory.transcription)
+        let modelService = DefaultModelService(
+            logger: SeshatLogger(category: SeshatLogCategory.session)
         )
+        let transcriberProvider = ModelBoundTranscriberProvider()
 
         return SessionCoordinator(
             capture: capture,
-            transcriber: transcriber,
+            modelService: modelService,
+            transcriberProvider: transcriberProvider,
             logger: logger,
             transcriptStore: makeTranscriptStore()
         )

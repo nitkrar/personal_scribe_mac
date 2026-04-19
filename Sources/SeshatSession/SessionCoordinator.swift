@@ -4,17 +4,22 @@ import SeshatCore
 
 public actor SessionCoordinator {
     private let capture: any AudioCapturing
-    private let transcriber: any Transcribing
+    private let fixedTranscriber: (any Transcribing)?
+    private let modelService: (any ModelService)?
+    private let transcriberProvider: (any ModelBoundTranscriberProviding)?
     private let transcriptStore: SQLiteTranscriptStore?
     private let logger: SeshatLogger
     private let postProcessor = PostProcessor()
     private let signposter = OSSignposter(subsystem: SeshatLogger.subsystem, category: "prepare")
+    private let downloadProgressBroadcaster = SessionDownloadProgressBroadcaster()
 
     private var currentState: SessionState = .idle
     private var mostRecentResult: TranscriptionResult?
     private var stateContinuations: [UUID: AsyncStream<SessionState>.Continuation] = [:]
     private var bufferedAudio: [PCMBuffer] = []
     private var captureTask: Task<Void, Never>?
+    private var downloadProgressObservationTask: Task<Void, Never>?
+    private var recordingSessionTranscriber: (any Transcribing)?
 
     // Step 2.10: additive audio-level multiplexing. Subscribes to the capture
     // service's per-session level stream and fans values out to all
@@ -32,7 +37,24 @@ public actor SessionCoordinator {
         transcriptStore: SQLiteTranscriptStore? = nil
     ) {
         self.capture = capture
-        self.transcriber = transcriber
+        self.fixedTranscriber = transcriber
+        self.modelService = nil
+        self.transcriberProvider = nil
+        self.transcriptStore = transcriptStore
+        self.logger = logger
+    }
+
+    public init(
+        capture: any AudioCapturing,
+        modelService: any ModelService,
+        transcriberProvider: any ModelBoundTranscriberProviding,
+        logger: SeshatLogger,
+        transcriptStore: SQLiteTranscriptStore? = nil
+    ) {
+        self.capture = capture
+        self.fixedTranscriber = nil
+        self.modelService = modelService
+        self.transcriberProvider = transcriberProvider
         self.transcriptStore = transcriptStore
         self.logger = logger
     }
@@ -105,11 +127,12 @@ public actor SessionCoordinator {
         let intervalName: StaticString = "SessionCoordinator.prepareTranscriber"
         let state = signposter.beginInterval(intervalName)
         defer { signposter.endInterval(intervalName, state) }
+        let transcriber = await resolvedTranscriberForPreparation()
         try await transcriber.prepare()
     }
 
     public func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        transcriber.modelDownloadProgress()
+        downloadProgressBroadcaster.stream()
     }
 
     private func removeContinuation(id: UUID) {
@@ -140,6 +163,7 @@ public actor SessionCoordinator {
 
         do {
             let stream = try await capture.start()
+            let transcriber = await resolveRecordingSessionTranscriber()
             // Step 2.10: subscribe to capture's level stream before flipping
             // to .recording so any early emissions reach UI consumers.
             let levelStream = await capture.audioLevelStream()
@@ -155,7 +179,7 @@ public actor SessionCoordinator {
             }
 
             publish(.recording)
-            prepareTranscriberInBackground()
+            prepareTranscriberInBackground(using: transcriber)
             captureTask = Task {
                 await self.consumeCaptureStream(stream)
             }
@@ -173,6 +197,9 @@ public actor SessionCoordinator {
         // cached level settles to 0 before the UI observes .transcribing.
         await audioLevelTask?.value
         audioLevelTask = nil
+        defer {
+            recordingSessionTranscriber = nil
+        }
 
         if case .error = currentState {
             logger.info("Capture stream failed while stop was in flight; preserving error state")
@@ -182,6 +209,7 @@ public actor SessionCoordinator {
 
         let replayBuffers = bufferedAudio
         bufferedAudio.removeAll(keepingCapacity: true)
+        let transcriber = await transcriberForStopPath()
 
         // FluidAudio requires at least 1 second of 16 kHz audio; feeding
         // shorter buffers surfaces as "Invalid audio data" mid-transcribe
@@ -275,8 +303,7 @@ public actor SessionCoordinator {
         return fallback
     }
 
-    private func prepareTranscriberInBackground() {
-        let transcriber = transcriber
+    private func prepareTranscriberInBackground(using transcriber: any Transcribing) {
         let logger = logger
 
         Task.detached(priority: .background) {
@@ -287,6 +314,124 @@ public actor SessionCoordinator {
             } catch {
                 logger.error("Background transcriber preparation failed", error: error)
             }
+        }
+    }
+
+    private func resolvedTranscriberForPreparation() async -> any Transcribing {
+        if let recordingSessionTranscriber {
+            observeDownloadProgress(for: recordingSessionTranscriber)
+            return recordingSessionTranscriber
+        }
+
+        return await resolvedActiveTranscriber()
+    }
+
+    private func resolveRecordingSessionTranscriber() async -> any Transcribing {
+        if let fixedTranscriber {
+            recordingSessionTranscriber = fixedTranscriber
+            observeDownloadProgress(for: fixedTranscriber)
+            return fixedTranscriber
+        }
+
+        let descriptor = await activeVoiceModel()
+        let transcriber = resolvedModelBoundTranscriber(for: descriptor)
+        recordingSessionTranscriber = transcriber
+        observeDownloadProgress(for: transcriber)
+        return transcriber
+    }
+
+    private func transcriberForStopPath() async -> any Transcribing {
+        if let recordingSessionTranscriber {
+            return recordingSessionTranscriber
+        }
+
+        return await resolvedActiveTranscriber()
+    }
+
+    private func resolvedActiveTranscriber() async -> any Transcribing {
+        if let fixedTranscriber {
+            observeDownloadProgress(for: fixedTranscriber)
+            return fixedTranscriber
+        }
+
+        let descriptor = await activeVoiceModel()
+        let transcriber = resolvedModelBoundTranscriber(for: descriptor)
+        observeDownloadProgress(for: transcriber)
+        return transcriber
+    }
+
+    private func activeVoiceModel() async -> ModelDescriptor {
+        guard let modelService else {
+            preconditionFailure("SessionCoordinator model-service path requires a ModelService")
+        }
+
+        return await MainActor.run {
+            modelService.activeDescriptor.voiceModel
+        }
+    }
+
+    private func resolvedModelBoundTranscriber(
+        for descriptor: ModelDescriptor
+    ) -> any Transcribing {
+        guard let transcriberProvider else {
+            preconditionFailure("SessionCoordinator model-service path requires a transcriber provider")
+        }
+
+        return transcriberProvider.transcriber(for: descriptor)
+    }
+
+    private func observeDownloadProgress(for transcriber: any Transcribing) {
+        downloadProgressObservationTask?.cancel()
+        let broadcaster = downloadProgressBroadcaster
+
+        downloadProgressObservationTask = Task {
+            for await progress in transcriber.modelDownloadProgress() {
+                if Task.isCancelled {
+                    return
+                }
+
+                broadcaster.update(progress)
+            }
+        }
+    }
+}
+
+private final class SessionDownloadProgressBroadcaster: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuations: [UUID: AsyncStream<ModelDownloadProgress>.Continuation] = [:]
+    private var snapshot = ModelDownloadProgress(
+        phase: .idle,
+        fractionCompleted: 0,
+        receivedBytes: 0,
+        expectedBytes: nil
+    )
+
+    func stream() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { continuation in
+            let identifier = UUID()
+            let initial = lock.withLock { () -> ModelDownloadProgress in
+                continuations[identifier] = continuation
+                return snapshot
+            }
+
+            continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
+                _ = self.lock.withLock {
+                    self.continuations.removeValue(forKey: identifier)
+                }
+            }
+            continuation.yield(initial)
+        }
+    }
+
+    func update(_ snapshot: ModelDownloadProgress) {
+        let continuations = lock.withLock { () -> [AsyncStream<ModelDownloadProgress>.Continuation] in
+            self.snapshot = snapshot
+            return Array(self.continuations.values)
+        }
+
+        for continuation in continuations {
+            continuation.yield(snapshot)
         }
     }
 }

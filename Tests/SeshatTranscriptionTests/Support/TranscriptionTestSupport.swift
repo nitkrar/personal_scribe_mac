@@ -95,6 +95,7 @@ actor StubModelDownloader: ModelDownloading {
 actor StubInferenceClient: FluidAudioInferencing {
     private(set) var loadCallCount = 0
     private(set) var transcribeCallCount = 0
+    private(set) var loadedRuntimeVariants: [FluidAudioRuntimeVariant] = []
     private(set) var lastReceivedSampleCount = 0
     private(set) var lastFirstSample: Float?
     private(set) var lastLastSample: Float?
@@ -116,9 +117,13 @@ actor StubInferenceClient: FluidAudioInferencing {
         self.result = result
     }
 
-    func loadModel(from directory: URL) async throws {
+    func loadModel(
+        from directory: URL,
+        runtimeVariant: FluidAudioRuntimeVariant
+    ) async throws {
         _ = directory
         loadCallCount += 1
+        loadedRuntimeVariants.append(runtimeVariant)
 
         if let loadError {
             throw loadError

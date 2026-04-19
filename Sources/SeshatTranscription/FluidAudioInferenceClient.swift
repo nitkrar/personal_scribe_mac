@@ -3,7 +3,10 @@ import FluidAudio
 import SeshatCore
 
 protocol FluidAudioInferencing: Sendable {
-    func loadModel(from directory: URL) async throws
+    func loadModel(
+        from directory: URL,
+        runtimeVariant: FluidAudioRuntimeVariant
+    ) async throws
     func transcribe(samples: [Float]) async throws -> FluidAudioInferenceResult
 }
 
@@ -22,8 +25,14 @@ internal actor PrivateFluidAudioInferenceClient: FluidAudioInferencing {
         self.managerFactory = managerFactory
     }
 
-    func loadModel(from directory: URL) async throws {
-        let models = try await AsrModels.load(from: directory, version: .v2)
+    func loadModel(
+        from directory: URL,
+        runtimeVariant: FluidAudioRuntimeVariant
+    ) async throws {
+        let models = try await AsrModels.load(
+            from: directory,
+            version: runtimeVariant.asrModelVersion
+        )
         try await resolvedManager().loadModels(models)
     }
 
