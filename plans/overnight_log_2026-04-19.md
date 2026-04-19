@@ -189,3 +189,23 @@ _(high-level progression)_
 
 **Reviewer note:** did not run `swift test` (Santa worktree AMFI kill). Verified by reading.
 | 02:24 | 3a | **Poll tick.** Massive progress: B.4 `fb1a61c` editor, B.5 `6fcc146` context panel, B.6 `e946a96` view, B.7 `deabd91` window controller, G.3 `1fd2a53` recorder, G.4 `3f911af` ShortcutsTab integration. **3.G COMPLETE** (G.1-G.4 all landed + runbook section). Dispatched 3.G reviewer `abf511491f73ba8c7`. 3.B at B.7 with B.8 menu wire-up uncommitted (SeshatAppMain + StatusItemMenuModel + MenuBarSceneModelTests dirty). |
+
+### 3.G reviewer — agent `abf511491f73ba8c7` at 02:29
+
+**Verdict:** PASS with 5 SHOULD-FIX. No MUST-FIX. Triple-tap emergency-quit invariant preserved — all three regression tests (`testTripleTapCancelsPendingToggleAndRequestsEmergencyQuit`, two-key-specific tests, plus new `testTripleTapEmergencyQuitStillFiresRegardlessOfRecordingHotkeyPreference`) hold.
+
+**SHOULD-FIX all deferred (no MUST-FIX, 3.B still actively editing codebase):**
+- **#1 Only 1 of 8 reserved chords explicitly tested.** `testRejectsCommandSpaceWithReason` covers Cmd+Space; Cmd+Tab/Shift+Space/Q/W/C/V/X have production-side rejection code but no regression test. Table-driven test would close this.
+- **#2 Transient "rejected" UX flash during valid chord capture.** `HotkeyRecorder.swift:170-184` — `captureModifierChange` briefly renders "Modifier-only shortcuts not supported" between the Cmd-down and R-down edges. State self-corrects on keyDown but there's a flash. Debounce or defer the rejected state.
+- **#3 Plain-letter hotkey is NOT rejected — LATENT FOOTGUN (escalated to parked items).** `HotkeyRecorder.swift:186-202` — `captureKeyPress` accepts a keycode with zero modifiers. With `tapCount: 1`, binding to plain "A" would fire the recording toggle on every time the user types "A". Likely user-visible data-corrupting bug.
+- **#4 Cmd+Shift+Q etc. not in blocklist.** `HotkeyRecorder.swift:230-248` — blocklist matches `modifiers == [.command]` strictly; Cmd+Shift+Q still triggers system Quit in many apps. Widen to `modifiers.contains(.command)` for the letter chords.
+- **#5 `HotkeyShortcutFormatter.displayString` doesn't distinguish left vs right option.** Both keyCode 58 and 61 render as `⌥` in the Settings panel — if user rebinds to left-option-single-tap, visually indistinguishable from the default.
+
+**ACCEPT-WITH-RATIONALE (no action):**
+- `HotkeyPreference` is a struct not enum — the reference artifacts are finite-case enums; hotkey is multi-field record. Semantic contract (default/key/resolve/persist) preserved. Appropriate divergence.
+- `isSupported` guard allows `tapCount ∈ 1...2`, decoded preferences outside this range fall back to default. Reasonable defensive behavior.
+- Default param `HotkeyPreference.resolve()` on monitor init — evaluates at `AppComposition.hotkeyMonitor` first-access (static let), which is exactly the "read at init, restart required" contract.
+- `HotkeyRecorderEventMonitor` uses `addLocalMonitorForEvents` scoped via `.onAppear` / `.onDisappear`. No global leak.
+- Codex honored skip-build-test. Main session should `swift test` in morning.
+
+**Zero sibling-lane collision.** Only touched: `HotkeyPreference.swift` (new), `GlobalHotkeyMonitor.swift`, `HotkeyRecorder.swift` (new), `ShortcutsTab.swift`, and corresponding tests + ManualSettingsVerification runbook section.
