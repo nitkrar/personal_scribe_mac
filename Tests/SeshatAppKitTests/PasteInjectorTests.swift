@@ -17,7 +17,7 @@ final class PasteInjectorTests: XCTestCase {
         return defaults
     }
 
-    func testPromptsAccessibilityWhenNotTrustedAndLeavesTranscriptOnClipboard() {
+    func testPromptsAccessibilityWhenNotTrustedAndLeavesTranscriptOnClipboard() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
         var promptCount = 0
@@ -39,6 +39,13 @@ final class PasteInjectorTests: XCTestCase {
         )
 
         injector.paste("hello world")
+
+        // L1 Stage 2 (2026-04-20): PasteInjector now dispatches the
+        // accessibility request via Task { await permissionService.request(...) }.
+        // Let the detached Task run before asserting the prompt fired.
+        for _ in 0..<50 where promptCount == 0 {
+            await Task.yield()
+        }
 
         XCTAssertEqual(promptCount, 1)
         XCTAssertEqual(shortcutPostCount, 0)
