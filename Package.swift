@@ -40,7 +40,7 @@ let package = Package(
         ),
         .package(
             url: "https://github.com/groue/GRDB.swift.git",
-            from: "7.10.0"
+            exact: "7.10.0"
         ),
     ],
     targets: [

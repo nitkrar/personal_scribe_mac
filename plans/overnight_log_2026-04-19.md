@@ -33,6 +33,30 @@ _(any design-inflection that waits for the user)_
 | Item | Surfaced at | Summary | Analysis file |
 |---|---|---|---|
 
+## Review findings log
+
+### 3.D reviewer — agent `ad999b2e8d7802617` at 01:14
+
+**Verdict:** Ship. No MUST-FIX. All contract checks pass (tokenizer explicit, 4 runtime guards, schema shape preserved, migration atomic, no `type`/`kind` column, JSONL rename clean).
+
+**SHOULD-FIX applied autonomously:**
+- **#1 GRDB pinning** — `Package.swift:41-44` used `from: "7.10.0"` instead of `exact: "7.10.0"`. Fixed to `exact:` to match the house-style reproducibility contract (FluidAudio already pinned `exact:`). One-line fix.
+
+**SHOULD-FIX deferred to morning:**
+- **#2 DECISION doc claims wrong trigger names** — `plans/DECISION_3D_sqlite_transcript_store.md:68-70` says `__transcripts_fts_ai/ad/au` but GRDB emits `transcripts_ai/ad/au` (no double underscore). Runtime is correct because it calls `t.synchronize(withTable:)` — doc-only drift. Requires verifying against GRDB FTS5 source to correct precisely; didn't want to guess in the dark.
+- **#3 DECISION doc "single write transaction" claim** — in `§3 step 4`, doc says single transaction; actual implementation uses per-migration transactions for schema + one for JSONL import. Functionally atomic (via tmp-file + rename), but doc language is misleading. Reword in morning.
+- **#4 BACKLOG.md line 38 stale** — still refers to `TranscriptStore` actor which was renamed to `TranscriptStoreJSONL` in D.5. Skipped because BACKLOG.md is currently dirty in working tree (Slice B agent or similar may be editing it); touching now risks conflict.
+- **#5 `ringCapacity` shim comment** — `SQLiteTranscriptStore.swift:33-34` accepts the parameter and drops it. Doc comment would help next reader. Low-value nit, deferred.
+
+**ACCEPT-WITH-RATIONALE (no action, logged for transparency):**
+- A. `nonisolated(unsafe) static var testingEventSink` on `SQLiteTranscriptStore` — mirrors house pattern in `Config.swift:57`; tests use `NSLock` to coordinate; not proliferating yet but flag if it does → `SeshatTestingHooks`.
+- B. D.1-D.3 landed without runtime guards (added in D.4). Mild TDD ordering smell; end state correct.
+- C. D.3's corrupt-line observation uses static event sink rather than injected callback. Testable but ties prod type to global var. Phase 4 cleanup candidate.
+- D. `AppComposition.makeTranscriptStore()` swallows init errors and returns `nil` (per doc comment: "losing history is preferable to blocking the app from starting"). Matches JSONL-era behaviour.
+- E. Migration runs 2 guards on tmp queue (version floor + ENABLE_FTS5) before schema is created; tokenizer audit happens on real `dbQueue` after open+migrate. Audit order correct; subtle but fine.
+
+**Note from reviewer:** did not run `swift test` — manifest compilation getting AMFI-killed in the reviewer's session (Santa again). Reviewer verified by reading; tests should pass. User: please run `swift test` on 3.D in the morning before relying on it.
+
 ## Wave timeline
 _(high-level progression)_
 
