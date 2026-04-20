@@ -261,11 +261,10 @@ final class AppStoreTests: XCTestCase {
         await Task.yield()
         XCTAssertEqual(store.snapshot.pillVisibility, .done)
 
-        clock.advance(by: .milliseconds(999))
-        await Task.yield()
+        await clock.advance(by: .milliseconds(999))
         XCTAssertEqual(store.snapshot.pillVisibility, .done)
 
-        clock.advance(by: .milliseconds(1))
+        await clock.advance(by: .milliseconds(1))
         await waitUntil {
             store.snapshot.pillVisibility == .hidden
         }
