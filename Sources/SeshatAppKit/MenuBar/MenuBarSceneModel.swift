@@ -4,6 +4,12 @@ import SeshatCore
 import SeshatSession
 
 @MainActor
+/// Compatibility-only adapter for the legacy `PasteInjecting` seam.
+///
+/// Do not use this in paths that make user-visible decisions from `OutputResult`:
+/// `PasteInjector.paste(_:)` can report `.pasteAtCursor` even when delivery
+/// fell back to leaving the transcript on the clipboard after AX or synthetic
+/// paste failures. Stage 3 should delete this shim with the legacy seam.
 private final class LegacyPasteInjectorOutputService: OutputService, @unchecked Sendable {
     private let pasteInjector: @MainActor (String) -> PasteRoutingDecision
 
