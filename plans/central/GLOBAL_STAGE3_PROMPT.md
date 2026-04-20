@@ -2,13 +2,13 @@
 
 ## What this file is
 
-A standalone prompt to hand to a fresh Claude Code session at `/Users/nitinkum/Projects/nitkrar/seshat`. The session's job is to **write the global Stage 3 deletion plan** — one markdown file aggregating the deletion surface across the 9 central-layer refactor layers, with ordering, chunking, verification gates, and commit conventions.
+A standalone prompt to hand to a fresh Claude Code session at the project repo path (pre-rename: `/Users/nitinkum/Projects/nitkrar/seshat`; post-rename: `/Users/nitinkum/Projects/nitkrar/personal_scribe`). The session's job is to **write the global Stage 3 deletion plan** — one markdown file aggregating the deletion surface across the 9 central-layer refactor layers, with ordering, chunking, verification gates, and commit conventions.
 
 **The session writes a plan. It does NOT execute deletions.** Stage 3 execution is user-triggered later, after every layer's Stage 2 has landed and the full test suite is green.
 
 ## How to use
 
-Paste this entire file as the first message in a new Claude Code session at `/Users/nitinkum/Projects/nitkrar/seshat` on branch `trunk`.
+Paste this entire file as the first message in a new Claude Code session at the project repo path on branch `trunk`.
 
 ## Critical discipline (baked into the plan)
 
@@ -20,9 +20,9 @@ Every delete chunk in your plan MUST list the exact symbol/file paths being remo
 
 ## Working directory
 
-`/Users/nitinkum/Projects/nitkrar/seshat`. Branch `trunk`.
+Project repo path on branch `trunk` (pre-rename `/Users/nitinkum/Projects/nitkrar/seshat`; post-rename `/Users/nitinkum/Projects/nitkrar/personal_scribe`).
 
-Out of scope for Stage 3 (do not touch): `plans/seshat manus resources/`, `plans/App UI design/`, `plans/app rename and branding_UI_Bundle.zip`, `/tmp/manus-rename-bundle/`. Those belong to the post-Stage-3 rename pass.
+Out of scope for Stage 3 (do not touch): `plans/seshat_agent_bundle/`, `plans/App UI design/`, `plans/app rename and branding_UI_Bundle.zip`, `/tmp/manus-rename-bundle/`. Those belong to the post-Stage-3 rename pass.
 
 ## Current state (read first)
 
@@ -34,9 +34,9 @@ Out of scope for Stage 3 (do not touch): `plans/seshat manus resources/`, `plans
 ## Locked decisions (do not re-open)
 
 1. **Stage 3 is behavior-neutral.** No UX change, no copy change, no animation tweak, no UserDefaults migration, no bundle ID change, no folder rename. Delete-only.
-2. **Stage 3 is NOT the rename pass.** Do not touch anything related to Ninimma, `PS*` prefix, `personal_scribe`, `com.nitkrar.personal_scribe`, or the `AppBrand.displayName` value. Those land in a separate post-Stage-3 rename phase.
-3. **SPM target names unchanged this phase.** `SeshatAppKit`, `SeshatCore`, `SeshatAudio`, `SeshatSession`, `SeshatTranscription`, `SeshatTestSupport` stay as-is. No `Package.swift` product/target edits except removing references to deleted files.
-4. **No UserDefaults key deletions** unless the layer plan explicitly lists the key in its Stage 3 section (e.g., `SeshatOnboardingCompleted` per Layer 1).
+2. **Stage 3 is NOT the rename pass.** Do not touch anything related to Ninimma, `PersonalScribe*` prefix, `personal_scribe`, `com.nitkrar.personal_scribe`, or the `AppBrand.displayName` value. Those land in a separate post-Stage-3 rename phase per `plans/rename/PLAN.md`.
+3. **SPM target names unchanged this phase.** The central-layers refactor phase keeps the pre-rename `SeshatAppKit`, `SeshatCore`, `SeshatAudio`, `SeshatSession`, `SeshatTranscription`, `SeshatTestSupport` names as-is. No `Package.swift` product/target edits except removing references to deleted files. (The rename pass itself moves them to `PersonalScribe*` in a separate phase.)
+4. **No UserDefaults key deletions** unless the layer plan explicitly lists the key in its Stage 3 section (e.g., `SeshatOnboardingCompleted` per Layer 1 — historical key name retained; the rename pass handles its migration to `OnboardingCompleted`).
 5. **One commit per chunk.** Subject format: `trunk: stage 3 — <layer-or-cross-layer-scope> delete <one-line summary>`. No squash.
 6. **Never skip hooks.** `git commit --no-verify` is forbidden.
 
@@ -46,7 +46,7 @@ Out of scope for Stage 3 (do not touch): `plans/seshat manus resources/`, `plans
 
 ### Procedure
 
-1. **Inventory new central-layer directories** (Stage 1 creations — confirm exact paths via `ls Sources/*/` and `ls Sources/*/*/`, don't trust this list blindly):
+1. **Inventory new central-layer directories** (Stage 1 creations — confirm exact paths via `ls Sources/*/` and `ls Sources/*/*/`, don't trust this list blindly). Paths listed below are pre-rename; post-rename replace the `Seshat*` module segments with `PersonalScribe*` per `plans/rename/INVENTORY.md`:
    - `Sources/SeshatCore/Permissions/` (Layer 1)
    - `Sources/SeshatCore/Storage/` + `Sources/SeshatAppKit/Storage/` (Layer 2)
    - `Sources/SeshatCore/Preferences/` (Layer 3)

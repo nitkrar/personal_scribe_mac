@@ -1,7 +1,7 @@
 # Sequencing Master
 
 ## Phase order
-- Execute Phase 0 completely before Phase 1. Phase 1 assumes the post-rename symbols and defaults-key spellings from [plans/PHASE_0_rename.md](/Users/nitinkum/Projects/nitkrar/seshat/plans/PHASE_0_rename.md).
+- Execute the rename pass completely before Phase 1. Phase 1 assumes the post-rename symbols and defaults-key spellings from [plans/rename/PLAN.md](/Users/nitinkum/Projects/nitkrar/seshat/plans/rename/PLAN.md) (which supersedes the earlier `plans/PHASE_0_rename.md`).
 - Execute Phase 1 service work (`1.1` through `1.6`) completely before any Phase 2 UI work. Phase 2 assumes the unified permission service is already live from [plans/PHASE_1_permission_service.md](/Users/nitinkum/Projects/nitkrar/seshat/plans/PHASE_1_permission_service.md).
 - Treat `1.7`, `1.8`, and `1.9` as sequencing placeholders only. They do not land on the Phase 1 branch; they transfer directly into Phase 2 steps `2.7`, `2.8`, and `2.10`.
 - Manus answers feed in only at the explicitly blocked steps:

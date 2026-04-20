@@ -15,15 +15,15 @@ Overview of the 9-layer parallel-build-then-swap-then-delete refactor on `trunk`
 
 | # | Layer | New central dir | Stage 2 status (current trunk) | Stage 3 approved rows | Notes |
 |---|---|---|---|---|---|
-| 1 | Permissions | `Sources/SeshatCore/Permissions/` | Fix-forward in flight (`phase-2 step 1.retry` cluster) | 0 — **snapshot stale**, re-inventory after fix lands | Every plan-listed Stage 3 symbol still has live refs in current draft |
-| 2 | Storage | `Sources/SeshatCore/Storage/` | Landed; duplicate `BaseDirectoryPath` owner remains (L2/L3 ambiguity) | 2 | `SeshatConfig.modesDirectory()` dead method; `SeshatConfigScaffoldingTests` test |
-| 3 | Preferences | `Sources/SeshatCore/Preferences/` | Landed `5b6e023` (bundled) | 1 | `typealias SeshatPasteMode = PasteMode` transitional shim |
-| 4 | AppStore | `Sources/SeshatCore/AppStore/` + `Sources/SeshatAppKit/AppStore/` | Partial — `AppKitActiveModeProvider` hardcoded; S2 review `REQUEST CHANGES` | 0 — candidate rows blocked on precursors | 2 blocked-on-precursor candidates flagged |
-| 5 | Output | `Sources/SeshatCore/Output/` + `Sources/SeshatAppKit/Output/` | Landed `7d52e70`; `PasteInjector`/`MenuBarSceneModel` compatibility seam still live | 0 — all candidates blocked on Stage 2 swap completion | 9 blocked `[QUESTION]` rows; 5 plan-stale items (`SilentPaster`, `OutputService.copy`, `CopyOutputService`, `PasteOutput`, `NotificationOutput` already gone) |
-| 6 | Model Selection | `Sources/SeshatCore/Models/Selection/` | Stage 2 UI/menu swaps not landed on trunk; core path done | 1 | `SeshatConfig.modelId` shim; 11 blocked `[QUESTION]` rows |
-| 7 | Pipeline | `Sources/SeshatSession/Pipeline/` | Landed through Step 1; scope-creep `a489d55` already deleted ~14 dead methods | 1 — **snapshot partially stale** | `SessionCoordinator.seconds(from:)` dead method; 8 blocked `[QUESTION]` rows |
-| 8 | Metrics | `Sources/SeshatCore/Metrics/` | Core landed; consumer wiring not landed (no Home-tab use) | 0 | No legacy ad-hoc rollup code on trunk to delete |
-| 9 | AppBrand | `Sources/SeshatCore/AppBrand/` | Landed | 2 | `BuildInfo` + `BuildInfoTests` — paired leaf |
+| 1 | Permissions | `Sources/PersonalScribeCore/Permissions/` | Fix-forward in flight (`phase-2 step 1.retry` cluster) | 0 — **snapshot stale**, re-inventory after fix lands | Every plan-listed Stage 3 symbol still has live refs in current draft |
+| 2 | Storage | `Sources/PersonalScribeCore/Storage/` | Landed; duplicate `BaseDirectoryPath` owner remains (L2/L3 ambiguity) | 2 | `PersonalScribeConfig.modesDirectory()` dead method; `PersonalScribeConfigScaffoldingTests` test |
+| 3 | Preferences | `Sources/PersonalScribeCore/Preferences/` | Landed `5b6e023` (bundled) | 1 | `typealias SeshatPasteMode = PasteMode` transitional shim (historical name retained in Stage 3 inventory for audit) |
+| 4 | AppStore | `Sources/PersonalScribeCore/AppStore/` + `Sources/PersonalScribeAppKit/AppStore/` | Partial — `AppKitActiveModeProvider` hardcoded; S2 review `REQUEST CHANGES` | 0 — candidate rows blocked on precursors | 2 blocked-on-precursor candidates flagged |
+| 5 | Output | `Sources/PersonalScribeCore/Output/` + `Sources/PersonalScribeAppKit/Output/` | Landed `7d52e70`; `PasteInjector`/`MenuBarSceneModel` compatibility seam still live | 0 — all candidates blocked on Stage 2 swap completion | 9 blocked `[QUESTION]` rows; 5 plan-stale items (`SilentPaster`, `OutputService.copy`, `CopyOutputService`, `PasteOutput`, `NotificationOutput` already gone) |
+| 6 | Model Selection | `Sources/PersonalScribeCore/Models/Selection/` | Stage 2 UI/menu swaps not landed on trunk; core path done | 1 | `PersonalScribeConfig.modelId` shim; 11 blocked `[QUESTION]` rows |
+| 7 | Pipeline | `Sources/PersonalScribeSession/Pipeline/` | Landed through Step 1; scope-creep `a489d55` already deleted ~14 dead methods | 1 — **snapshot partially stale** | `SessionCoordinator.seconds(from:)` dead method; 8 blocked `[QUESTION]` rows |
+| 8 | Metrics | `Sources/PersonalScribeCore/Metrics/` | Core landed; consumer wiring not landed (no Home-tab use) | 0 | No legacy ad-hoc rollup code on trunk to delete |
+| 9 | AppBrand | `Sources/PersonalScribeCore/AppBrand/` | Landed | 2 | `BuildInfo` + `BuildInfoTests` — paired leaf |
 | — | cross-layer | — | — | 0 | No cross-layer deletions ready on current trunk |
 
 **Totals**: 7 approved-now rows across 5 layers. Additional ~20 `[QUESTION]` rows blocked on Stage 2 precursors (see `STAGE_3_DELETION.md` §3).

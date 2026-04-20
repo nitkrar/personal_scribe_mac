@@ -2,23 +2,26 @@
 
 Snapshot of the decisions, patterns, and open items surfaced across today's multi-session central-layers refactor + rename-pass planning work. Durable rules live in the memory store under `~/.claude/projects/-Users-nitinkum-Projects-nitkrar-seshat/memory/`; this doc is a retrospective pointer for the next session.
 
+Historical note: the pre-rename baseline project identity was "Seshat" with Swift types prefixed `Seshat*`. Decisions and artefacts below use the post-rename names; references to the historical "Seshat" identity are preserved for audit trail.
+
 ## Naming decisions
 
-Decisions ordered most to least user-visible. All decisions captured in `project_ninimma_rename.md` memory + reflected in `plans/PHASE_0_rename.md`.
+Decisions ordered most to least user-visible. All decisions captured in `project_ninimma_rename.md` memory + reflected in `plans/rename/PLAN.md` (which supersedes the earlier `plans/PHASE_0_rename.md`).
 
-- **Types adopt `PS` prefix** (e.g., `SeshatConfig → PSConfig`, `SeshatTheme → PSTheme`, `SeshatLogger → PSLogger`, `SeshatApp → PSApp`). Earlier PHASE_0 revisions said prefix-less (`Config`, `Theme`, `AppLogger`); reverted because (a) generic names collide with SwiftUI/os types, (b) grep-uniqueness matters, (c) aligns with the locked product-code decision.
-- **UserDefaults keys stay unprefixed** (`BaseDirectoryPath`, not `SeshatBaseDirectoryPath`, not `PSBaseDirectoryPath`). Per-bundle-ID storage makes a prefix redundant.
-- **SPM target names unchanged in Stage A** — `SeshatCore`, `SeshatAppKit`, etc. Module rename lands in the deferred Stage B atomic rebrand alongside bundle-ID flip, folder migration, and display-name flip.
-- **Filename = type name**. `Config.swift → PSConfig.swift`, `Errors.swift → PSError.swift`, `Logger.swift → PSLogger.swift`, `SeshatApp.swift → PSApp.swift`. Broke the "errors/logger as namespace idiom" pattern for consistency with every other prefix-rename file move.
-- **Display brand "Ninimma"** stays confined to one place: `PSAppBrand.displayName`. Zero `"Seshat"` or `"Ninimma"` string literals elsewhere. Stage B atomic flip.
+- **Swift types adopt `PersonalScribe` prefix** (e.g., the pre-rename `SeshatConfig → PersonalScribeConfig` path became `PersonalScribeConfig`, `SeshatTheme → PersonalScribeTheme`, `SeshatLogger → PersonalScribeLogger`, `SeshatApp → PersonalScribeApp`). Earlier drafts said prefix-less (`Config`, `Theme`, `AppLogger`); reverted because (a) generic names collide with SwiftUI/os types, (b) grep-uniqueness matters, (c) aligns with the locked product-code decision.
+- **UserDefaults keys stay unprefixed** (`BaseDirectoryPath`, not `PersonalScribeBaseDirectoryPath`). Per-bundle-ID storage makes a prefix redundant; the new bundle ID `com.nitkrar.personal_scribe` namespaces them.
+- **SPM module / target names adopt the `PersonalScribe*` names** per the locked inventory (`PersonalScribeCore`, `PersonalScribeAppKit`, etc.); source directories rename to `Sources/PersonalScribe*/` in Phase 1.
+- **Filename = type name**. `Config.swift → PersonalScribeConfig.swift`, `Errors.swift → PersonalScribeError.swift`, `Logger.swift → PersonalScribeLogger.swift`, `SeshatApp.swift → PersonalScribeApp.swift`. Broke the "errors/logger as namespace idiom" pattern for consistency with every other prefix-rename file move.
+- **Display brand "Ninimma"** stays confined to one place: `PersonalScribeAppBrand.displayName = "Ninimma"`. Zero raw brand string literals elsewhere. Applied together with bundle-ID + folder flip per `plans/rename/PLAN.md` Phase 2.
 
 ## Architecture insights
 
-- **Rename pass splits into two stages** (decided 2026-04-20, was previously "one atomic commit").
-  - **Stage A — type prefix**: `Seshat* → PS*` on types only. Mechanical. No bundle-ID, no folder, no display flip. User-invisible. Can land anytime post-Stage-3 (or before, if prioritized — see tradeoff below).
-  - **Stage B — user-visible rebrand**: module target renames + bundle-ID flip + `Info.plist` + folder migration + assets + `PSAppBrand.displayName = "Ninimma"`. One release moment. Triggers macOS TCC permission reset (mic / input monitoring / accessibility) — user re-grants once, not repeatedly.
-- **Phase sequence**: PHASE_0 (rename) → PHASE_1 (permission-service unification) → PHASE_2 (unified UI bundle). PHASE_1 depends on Layer 1 Stage 2 being landed. PHASE_2 references the Manus bundle at `plans/App UI design/` + `/tmp/manus-rename-bundle/Ninimma_UI_Bundle/`.
-- **Rename-before-Stage-3 is viable** (surfaced today, not yet acted on). PHASE_0 is behavior-neutral; Stage 3 is behavior-neutral; either order works. Flipping to PHASE_0 first unblocks PHASE_1/PHASE_2 sooner at the cost of renaming code that Stage 3 will delete (minor mechanical waste) and needing a grep-pattern flip pass on in-flight Stage 3 inventory drafts. Current default: Stage 3 → PHASE_0. Open to flip if PHASE_1/PHASE_2 priority rises.
+- **Rename pass splits into phased stages** per `plans/rename/PLAN.md` (decided 2026-04-20, was previously "one atomic commit").
+  - **Phase 1 — Swift module + type rename**: `Seshat* → PersonalScribe*` on modules, directories, types. Mechanical. No bundle-ID, no folder, no display flip. User-invisible.
+  - **Phase 2 — user-visible rebrand**: `AppBrand.displayName = "Ninimma"` + bundle-ID flip to `com.nitkrar.personal_scribe` + `Info.plist` + `scripts/package.sh` + assets. Triggers macOS TCC permission reset (mic / input monitoring / accessibility) — user re-grants once, not repeatedly.
+  - **Phases 3–8**: UserDefaults migration, filesystem migration (`~/Library/Application Support/Seshat/ → personal_scribe/`), env var (`SESHAT_BASE_DIR → PERSONAL_SCRIBE_BASE_DIR`), docs sweep, plans sweep, cleanup.
+- **Phase sequence**: `plans/rename/PLAN.md` Phase 1–8 (rename) → PHASE_1 (permission-service unification) → PHASE_2 (unified UI bundle). PHASE_1 depends on Layer 1 Stage 2 being landed. PHASE_2 references the Manus bundle at `plans/App UI design/` + `/tmp/manus-rename-bundle/Ninimma_UI_Bundle/`.
+- **Rename-before-Stage-3 is viable** (surfaced today, not yet acted on). The rename plan is behavior-neutral; Stage 3 is behavior-neutral; either order works. Flipping to rename-first unblocks PHASE_1/PHASE_2 sooner at the cost of renaming code that Stage 3 will delete (minor mechanical waste) and needing a grep-pattern flip pass on in-flight Stage 3 inventory drafts. Current default: Stage 3 → rename. Open to flip if PHASE_1/PHASE_2 priority rises.
 - **Central-layers refactor is a moving target**. Scope-creep commit `a489d55` (labeled "L5 fix Step 1") actually deleted ~14 dead methods in `SessionCoordinator.swift` that belonged to the L7 Step 2 scope. Stage 3 inventory caught the drift via tree-wins methodology — plans lagged, code was ahead.
 
 ## Stage 3 inventory pattern (the methodology)
@@ -39,9 +42,9 @@ Key signal from L1: zero approved delete rows — every plan-listed Stage 3 symb
 
 ## Discipline / process calls
 
-- **Small-chunks review**. Proposed every non-trivial change before executing (the PHASE_0 edit flow: banner + flag → user confirms SeshatApp rename → filename alignment question → user confirms option (a) → full edit + commit). Avoided silent divergence.
-- **Commit what you changed, not the whole index**. Used targeted `git add plans/PHASE_0_rename.md` — other modified files (`Sources/SeshatAppKit/Composition/*`, `Tests/SeshatAppKitTests/*`, etc.) belong to the parallel Layer 1 fix session and stay untouched in my commits.
-- **Memory updates are retrospective**. `project_ninimma_rename.md` rewritten today to capture the staging split + PHASE_0 divergence flag. MEMORY.md index line updated to reflect Stage A / Stage B split.
+- **Small-chunks review**. Proposed every non-trivial change before executing (the rename edit flow: banner + flag → user confirms `SeshatApp → PersonalScribeApp` rename → filename alignment question → user confirms option (a) → full edit + commit). Avoided silent divergence.
+- **Commit what you changed, not the whole index**. Used targeted `git add plans/rename/PLAN.md` — other modified files (from the parallel Layer 1 fix session) stay untouched in my commits.
+- **Memory updates are retrospective**. `project_ninimma_rename.md` rewritten today to capture the staging split + rename plan divergence flag. MEMORY.md index line updated to reflect the phased rename split.
 - **Trunk HEAD shifts mid-session are survivable**. Multiple parallel sessions committing during the Stage 3 inventory run caused HEAD to move 5+ commits during dispatch. Tree-wins methodology + reproducible greps absorbed this cleanly — no re-dispatch needed except for L3 + L5 + L7.
 
 ## Open items (what's still in flight or queued)
@@ -57,6 +60,6 @@ Key signal from L1: zero approved delete rows — every plan-listed Stage 3 symb
 
 - Memory (durable rules): `~/.claude/projects/-Users-nitinkum-Projects-nitkrar-seshat/memory/`
 - Central-layers plans: `plans/central/LAYER_*.md`, `plans/central/GLOBAL_STAGE3_PROMPT.md`, `plans/CENTRAL_LAYERS_PROMPT.md` (locked reference)
-- Rename plans: `plans/PHASE_0_rename.md`, `plans/PHASE_1_permission_service.md`, `plans/PHASE_2_unified_ui.md`
+- Rename plan (active): `plans/rename/PLAN.md` + `plans/rename/INVENTORY.md` (supersedes the earlier `plans/PHASE_0_rename.md`); historical phase docs `plans/PHASE_1_permission_service.md`, `plans/PHASE_2_unified_ui.md` kept for audit trail
 - Heartbeat + probe: `plans/codex-heartbeat-contract.md`, `plans/central/agents_status.py`
 - In-flight Stage 3 drafts: `plans/central/drafts/stage3/` (uncommitted scratch; will be folded into the synthesis step then cleaned up)

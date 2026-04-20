@@ -2,7 +2,9 @@
 
 ## What this file is
 
-A standalone prompt to hand to a codex subagent (`codex-cc:codex-rescue`) to produce **9 implementation plan files** for the central-layer refactor of Seshat. The codex agent writes markdown plans, not code. Implementers (future codex + main-session) execute the plans verbatim.
+A standalone prompt to hand to a codex subagent (`codex-cc:codex-rescue`) to produce **9 implementation plan files** for the central-layer refactor of Ninimma (pre-rename: Seshat; see `plans/rename/PLAN.md`). The codex agent writes markdown plans, not code. Implementers (future codex + main-session) execute the plans verbatim.
+
+Historical reference note (added during rename pass): this file was authored before the `Seshat* → PersonalScribe*` + bundle-ID + folder rename and is preserved as a locked reference artifact. Symbol/module paths below use the pre-rename names. The rename pass applies the mapping per `plans/rename/INVENTORY.md` §1; this file's decisions/contracts remain load-bearing.
 
 ## How to use
 
@@ -18,7 +20,7 @@ Every step's validation checklist MUST reference specific `file:line` in produce
 
 ## Working directory
 
-`/Users/nitinkum/Projects/nitkrar/seshat`. Branch `trunk`. `plans/reviews/`, `plans/backlog/`, `plans/seshat manus resources/`, `plans/App UI design/` are all out-of-scope for the plan writer — read-only references only.
+Project repo path on branch `trunk` (pre-rename `/Users/nitinkum/Projects/nitkrar/seshat`; post-rename `/Users/nitinkum/Projects/nitkrar/personal_scribe`). `plans/reviews/`, `plans/backlog/`, `plans/seshat_agent_bundle/`, `plans/App UI design/` are all out-of-scope for the plan writer — read-only references only.
 
 ## Inputs to read before writing any plan
 
@@ -31,10 +33,10 @@ Committed source:
 - `Tests/**/*.swift` — to understand test seam patterns
 
 Reference docs / prior plans:
-- `plans/App UI design/Seshat UI Polish & Unified Window Implementation.md` — UI bundle spec
-- `plans/App UI design/Seshat Q4_Q5 Handoff Spec.md` — Manus resolutions
-- `plans/App UI design/SeshatTheme.swift` — drop-in theme file (replaces current)
-- `plans/PHASE_0_rename.md`, `plans/PHASE_1_permission_service.md`, `plans/PHASE_2_unified_ui.md`, `plans/SEQUENCING_MASTER.md` — earlier phase plans (may still be in-flight; if absent, produce this central-layers structure from scratch)
+- `plans/App UI design/Seshat UI Polish & Unified Window Implementation.md` — UI bundle spec (historical filename preserved; brand-era asset)
+- `plans/App UI design/Seshat Q4_Q5 Handoff Spec.md` — Manus resolutions (historical filename preserved)
+- `plans/App UI design/SeshatTheme.swift` — drop-in theme file (historical filename preserved; replaces current)
+- `plans/rename/PLAN.md` (supersedes `plans/PHASE_0_rename.md`), `plans/PHASE_1_permission_service.md`, `plans/PHASE_2_unified_ui.md`, `plans/SEQUENCING_MASTER.md` — earlier phase plans (may still be in-flight; if absent, produce this central-layers structure from scratch)
 - `BACKLOG.md` — especially the parked items (personal dictionary, streaming dictation, speaker verification, 7-stage post-processing) which pre-scope some of these layers
 
 ## Execution strategy: parallel-build then swap (IMPORTANT)

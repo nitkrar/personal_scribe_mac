@@ -1,20 +1,22 @@
-# Plan: Seshat Phases — Stability → Unified Architecture → Features → Intent
+# Plan: Ninimma Phases — Stability → Unified Architecture → Features → Intent
 
-**Authoritative plan for Seshat.** Supersedes and replaces any earlier week- or sprint-based plan files in `plans/` that may appear in git history.
+**Authoritative plan for Ninimma** (pre-rename baseline was "Seshat"; see `plans/rename/PLAN.md` for the brand / module rename executed post-Stage-3). Supersedes and replaces any earlier week- or sprint-based plan files in `plans/` that may appear in git history.
 
-**Goal:** Evolve Seshat in four product-state milestones — first to a stable daily-dictation tool, then to a visually-unified experience, then to a full-featured personal scribe with notes and settings, and finally to an intent-aware assistant. Phase gates are product-state milestones, never calendar dates.
+**Goal:** Evolve Ninimma in four product-state milestones — first to a stable daily-dictation tool, then to a visually-unified experience, then to a full-featured personal scribe with notes and settings, and finally to an intent-aware assistant. Phase gates are product-state milestones, never calendar dates.
 
 **Phase gate semantics:** Each phase has a definition-of-done. Do not start Phase N+1 work until Phase N's gate is met. Within a phase, tasks are grouped and may run in parallel where noted.
 
+**Rename-pass scope note (added during rename Phase 7):** Phase 1 below describes work that landed pre-rename under the "Seshat" brand; commit SHAs, `com.nitkrar.seshat` bundle ID, `SESHAT_BASE_DIR` env var, `~/Library/Application Support/Seshat/` path, `/Applications/Seshat.app` install path, and `Sources/Seshat*/` source paths are preserved as historical audit trail of the landed work. Phase 2+ sections and forward-looking prose use post-rename brand "Ninimma" / module names `PersonalScribe*` / bundle ID `com.nitkrar.personal_scribe` / env var `PERSONAL_SCRIBE_BASE_DIR` / path `~/Library/Application Support/personal_scribe/` per `plans/rename/INVENTORY.md`.
+
 **Architecture premise:**
-- Keep existing module layout: `SeshatCore`, `SeshatAudio`, `SeshatTranscription`, `SeshatSession`, `SeshatAppKit`. No new SPM targets.
+- Keep existing module layout: `PersonalScribeCore`, `PersonalScribeAudio`, `PersonalScribeTranscription`, `PersonalScribeSession`, `PersonalScribeAppKit`. No new SPM targets. (Pre-rename: `SeshatCore`, `SeshatAudio`, `SeshatTranscription`, `SeshatSession`, `SeshatAppKit`; historical citations below use the pre-rename names and remain load-bearing for audit trail.)
 - Bundle's design language (`AppState`, `AudioEngine`, `IntentClassifier`) is mapped onto existing types — no renames; add new types (`TranscriptStore`, `ModelRegistry`, foundations, intent stubs) in-place.
 - Existing code names are canonical; bundle names in the design doc are aspirational labels, not rename directives.
 
-**Source artifacts (read before implementing):**
+**Source artifacts (read before implementing; `plans/seshat_agent_bundle/` is reference-preserved under its brand-era path per `plans/rename/INVENTORY.md`):**
 - `BACKLOG.md` — Week 2 Known Issues table + next-session priorities.
 - `plans/seshat_agent_bundle/05_Docs/UX_Audit_Notes.md` — BUG-01 through BUG-10 + 6 GAPs.
-- `plans/seshat_agent_bundle/05_Docs/Seshat_UX_Redesign_Proposal.md` — 3-phase roadmap + Intent Layer future.
+- `plans/seshat_agent_bundle/05_Docs/Seshat_UX_Redesign_Proposal.md` — 3-phase roadmap + Intent Layer future (historical filename).
 - `plans/seshat_agent_bundle/05_Docs/Component_Inventory.md` — component dependency tiers.
 - `plans/seshat_agent_bundle/00_README/BUILD_ORDER.md` — sprint sequencing.
 - `plans/seshat_agent_bundle/01_Foundations/assets/colour_system.png` — dark + light palette.
@@ -32,7 +34,7 @@
 | **1** | Stability + foundational refactors | App is reliable for daily dictation: record → stop → auto-paste works every time. All BACKLOG P0/P1 resolved or explicitly deferred. Registry + base-dir refactor merged. In-memory history available via menu bar popover. Permission UX is informative, not silent. |
 | **2** | Unified architecture + visual identity | New design system (theme + quill logo + waveform + core components) shipped. Pill overlay supports the three visibility modes. Menu bar popover redesigned. Dark/light palette applied. Custom app icon in place. |
 | **3** | Features + polish | `NotesWindow` + `SettingsWindow` (Modes tab) + `OnboardingWindow`. SQLite-backed transcript history with FTS5 search. Base-dir migration UI. Hotkey customization. Second model descriptor (e.g. 110M) available. |
-| **4** | Intent layer + assistant | Intent classifier online. Command Mode response cards. Notes surface as personal knowledge base. llama.cpp / Apple Foundation Models integration. "Ask Seshat" query flow. |
+| **4** | Intent layer + assistant | Intent classifier online. Command Mode response cards. Notes surface as personal knowledge base. llama.cpp / Apple Foundation Models integration. "Ask Ninimma" query flow. |
 
 ---
 
@@ -293,7 +295,7 @@ The mockups are the spec. Phase 2 executors MUST NOT re-open design debate on an
 | UX audit BUG-10 (pill always-visible, no hide) | `plans/seshat_agent_bundle/03_Surfaces/PillOverlayWindow/architecture.png` (three rows: Always On / Auto-show / Hidden) | Three visibility modes user-selectable: **Always On** / **Auto-show (default)** / **Hidden**. Phase 2 persists choice in `UserDefaults` (key `SeshatPillVisibilityMode`, default `"auto-show"` on first launch); Settings UI for toggling lands in Phase 3. **Invariant — at least one user-reachable surface MUST always be visible.** The menu bar status item and the pill cannot both be hidden simultaneously. In Phase 2 the status item is always-visible (no toggle yet exists), so the invariant holds by construction. Phase 3 Settings UI, if it ever introduces a "hide menu bar" toggle, MUST refuse to apply it when pill mode = Hidden (and vice versa); show an inline explanation: *"One surface must stay visible so you can reach the app."* |
 | UX audit GAP-01 (no app icon) | `plans/seshat_agent_bundle/01_Foundations/assets/logo_dark.png`, `logo_light.png` | Diagonal quill mark; dark + light variants; menu-bar monochrome template variant. |
 | UX audit GAP-05 (no dark/light mode awareness) | `plans/seshat_agent_bundle/01_Foundations/assets/colour_system.png` + `plans/seshat_agent_bundle/03_Surfaces/PillOverlayWindow/light_mode_states.png` | Explicit hex palettes per theme; all Phase 2 surfaces support both; light-mode pill variants drawn. |
-| UX audit BUG-04 (MenuBarScene plain-text, no visual hierarchy) | `plans/seshat_agent_bundle/03_Surfaces/MenuBarMenu/IMPORTANT.md` (authoritative) | Replace `MenuBarExtra` + SwiftUI popover with **native `NSMenu`**. Items: active Mode name (non-interactive header), Start/Stop Recording ⌥⌘, History (opens NotesWindow), Settings (opens SettingsWindow), separator, Quit Seshat. No SwiftUI components inside the menu. Status item icon = static NSImage template from the quill mark. |
+| UX audit BUG-04 (MenuBarScene plain-text, no visual hierarchy) | `plans/seshat_agent_bundle/03_Surfaces/MenuBarMenu/IMPORTANT.md` (authoritative) | Replace `MenuBarExtra` + SwiftUI popover with **native `NSMenu`**. Items: active Mode name (non-interactive header), Start/Stop Recording ⌥⌘, History (opens NotesWindow), Settings (opens SettingsWindow), separator, Quit Ninimma. No SwiftUI components inside the menu. Status item icon = static NSImage template from the quill mark. |
 
 ### Bugs that still need plan-level discussion (no mockup answer)
 
@@ -342,7 +344,7 @@ These belong to whichever sprint's owning agent can pick them up:
 - **Status item icon animation:** on recording, swap the status item's NSImage from the idle quill template to an animated variant (or cycle between two frames). Static-image cycle is sufficient — do NOT attempt a live SwiftUI waveform inside the status item.
 - **`StatusPill` scope:** `StatusPill` is consumed by `SettingsWindow` (Phase 3) and `OnboardingWindow` (Phase 3) only. Do NOT use it in the menu bar — the menu bar is native `NSMenu` (no SwiftUI). Do NOT use it in the pill overlay — the pill uses `SeshatLogoView` + `WaveformView` + raw text. Per bundle v3 `Component_Inventory.md`.
 - **`SeshatLogoView` scope:** consumed by the pill overlay, `OnboardingWindow`, and `NotesWindow`. Do NOT instantiate in the menu bar — status item icon is a static template `NSImage` exported from the quill mark, NOT a live SwiftUI view. Per bundle v3 `03_Surfaces/MenuBarMenu/IMPORTANT.md`.
-- **Existing menu bar popover rewire** — replace inline `Text("Seshat — …")` + raw `Button` with a SwiftUI popover surface that imports `StatusPill` + `ActionButton` + the composite `TranscriptRow` preview. Owner: Sprint 2 / Agent 2 (after `TranscriptRow` is built).
+- **Existing menu bar popover rewire** — replace inline `Text("Ninimma — …")` (pre-rename: `Text("Seshat — …")`) + raw `Button` with a SwiftUI popover surface that imports `StatusPill` + `ActionButton` + the composite `TranscriptRow` preview. Owner: Sprint 2 / Agent 2 (after `TranscriptRow` is built).
 
 ## Key decisions to lock in at Phase 2 kickoff (not now)
 
@@ -385,7 +387,7 @@ Scope sketch only — revisit after Phase 3 ships and dogfood feedback on intent
 
 - `IntentClassifier` — NLEmbedding-based first, escalate to llama.cpp local LLM when ambiguous.
 - Command Mode pill response cards (query answer / action confirmation / dictation).
-- "Ask Seshat" query flow wired to `NotesWindow` FTS5 + embedding lookup.
+- "Ask Ninimma" query flow wired to `NotesWindow` FTS5 + embedding lookup.
 - llama.cpp embed, Apple Foundation Models integration, cloud Whisper optional.
 - Action Dispatcher (NSWorkspace + app-specific APIs).
 

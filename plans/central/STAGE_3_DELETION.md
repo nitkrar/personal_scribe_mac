@@ -2,6 +2,8 @@
 
 > **Do NOT diverge from this plan. Silent divergence is the cardinal sin. To deviate, surface the proposed divergence in a commit-message comment AND in the hand-off report; wait for main-session confirmation. Paraphrasing the contract is divergence. Deleting a symbol not listed here is divergence. Deleting in an order other than the one specified is divergence.**
 
+> Historical-reference note (added during rename pass): the tables, grep patterns, and symbol paths below were authored before the `Seshat* → PersonalScribe*` + folder rename and are preserved verbatim for Stage 3 audit traceability. Implementers running any remaining Stage 3 chunks post-rename must translate `SeshatCore/` → `PersonalScribeCore/`, `SeshatAppKit/` → `PersonalScribeAppKit/`, `SeshatSession/` → `PersonalScribeSession/`, and `SeshatConfig` → `AppConfig` / `PersonalScribeConfig` per the locked inventory at `plans/rename/INVENTORY.md` before running the greps. Stage 3 execution for the 7 approved rows completed 2026-04-20 (see §Execution status) so this note is primarily for future audit readers.
+
 ## Execution status (2026-04-20, post-execution)
 
 **DONE.** All 7 approved-now delete rows landed on trunk across 3 commits:
@@ -195,9 +197,9 @@ Example subjects:
 
 ## 8. Rename-pass decoupling
 
-*Do not rename modules, types, files, bundle IDs, UserDefaults keys, or brand strings during Stage 3. Those changes belong to the post-Stage-3 rename pass (staged as Stage A + Stage B per `project_ninimma_rename` memory).*
+*Do not rename modules, types, files, bundle IDs, UserDefaults keys, or brand strings during Stage 3. Those changes belong to the post-Stage-3 rename pass (staged per `project_ninimma_rename` memory).*
 
-Reviewers MUST flag any chunk that crosses this line. The PS-prefix type rename plan lives at `plans/PHASE_0_rename.md` and executes **after** Stage 3 (or before, if the order flip is approved — see session notes).
+Reviewers MUST flag any chunk that crosses this line. The `PersonalScribe`-prefix type rename plan lives at `plans/rename/PLAN.md` (which supersedes the drifted `plans/PHASE_0_rename.md`) and executes **after** Stage 3 (or before, if the order flip is approved — see session notes).
 
 ## Hand-off report
 

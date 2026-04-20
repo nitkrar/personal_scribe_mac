@@ -40,7 +40,9 @@ Verdict legend: C=critical, B=blocker, H=high, M=major, m=minor, n=nit.
 - **Layer 5 streaming** deferred: `plans/backlog/pipeline-streaming-defer.md`. L5 Stage 1 stripped its streaming surface; Layer 7's `PipelineOutputSink.deliverPartial` stays dormant until the stream-build slice.
 - **Layer 6 v3 descriptor**: placeholder `revision = "main"` pending user-supplied SHA. `defaultActiveDescriptor` stays on v2.
 - **Layer 7 `SessionPipelining`**: protocol now requires `Actor` conformers in addition to `Sendable` (Swift 6 isolation-safe — Stage 1 accepted deviation from plan text).
-- **Rename pass deferred post-Stage-3**: all 9 plans stay behavior-neutral. PS prefix, `personal_scribe` folder, Ninimma display name land in a separate future pass — not during Stages 1/2/3.
+- **Rename pass deferred post-Stage-3**: all 9 plans stay behavior-neutral. `PersonalScribe*` prefix, `personal_scribe` folder, Ninimma display name land in a separate future pass — not during Stages 1/2/3. See `plans/rename/PLAN.md`.
+
+Historical note: per-layer plan text in `plans/central/LAYER_*.md` and the per-layer reviews under `plans/central/reviews/` use the pre-rename `Seshat*` symbol names because those plans predate the rename pass; they are preserved for the Stage 3 audit trail. Post-rename equivalents live under the `PersonalScribe*` module tree.
 
 ## Known test failures on trunk (4)
 
