@@ -1,3 +1,4 @@
+import FluidAudio
 import Foundation
 import os.signpost
 import PersonalScribeCore
@@ -222,9 +223,7 @@ private extension ModelAwareFluidAudioTranscriber {
             try await ensureValidDownloadedModel(at: modelDirectory, externalProgress: nil)
         }
 
-        progressBroadcaster.update(
-            .init(phase: .loading, fractionCompleted: 1, receivedBytes: 0, expectedBytes: nil)
-        )
+        let progressBroadcaster = self.progressBroadcaster
 
         do {
             let loadInterval: StaticString = "modelAwareInference.loadModel"
@@ -232,7 +231,10 @@ private extension ModelAwareFluidAudioTranscriber {
             do {
                 try await inference.loadModel(
                     from: modelDirectory,
-                    runtimeVariant: runtimeVariant
+                    runtimeVariant: runtimeVariant,
+                    progressHandler: { snapshot in
+                        progressBroadcaster.update(Self.map(snapshot))
+                    }
                 )
                 signposter.endInterval(loadInterval, loadState)
             } catch {
@@ -245,6 +247,25 @@ private extension ModelAwareFluidAudioTranscriber {
         }
 
         progressBroadcaster.update(Self.finishedSnapshot(from: progressBroadcaster.currentSnapshot))
+    }
+
+    static func map(_ snapshot: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
+        switch snapshot.phase {
+        case .listing, .downloading:
+            return .init(
+                phase: .downloading,
+                fractionCompleted: snapshot.fractionCompleted,
+                receivedBytes: 0,
+                expectedBytes: nil
+            )
+        case .compiling:
+            return .init(
+                phase: .loading,
+                fractionCompleted: snapshot.fractionCompleted,
+                receivedBytes: 0,
+                expectedBytes: nil
+            )
+        }
     }
 
     func modelDirectory() throws -> URL {

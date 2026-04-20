@@ -1,4 +1,5 @@
 import Foundation
+import FluidAudio
 import os.signpost
 import PersonalScribeCore
 
@@ -92,9 +93,7 @@ public actor FluidAudioTranscriber: Transcribing {
             try await ensureValidDownloadedModel(at: modelDirectory)
         }
 
-        progressBroadcaster.update(
-            .init(phase: .loading, fractionCompleted: 1, receivedBytes: 0, expectedBytes: nil)
-        )
+        let progressBroadcaster = self.progressBroadcaster
 
         do {
             let loadInterval: StaticString = "inference.loadModel"
@@ -102,7 +101,10 @@ public actor FluidAudioTranscriber: Transcribing {
             do {
                 try await inference.loadModel(
                     from: modelDirectory,
-                    runtimeVariant: try FluidAudioRuntimeVariant(descriptor: descriptor)
+                    runtimeVariant: try FluidAudioRuntimeVariant(descriptor: descriptor),
+                    progressHandler: { snapshot in
+                        progressBroadcaster.update(Self.map(snapshot))
+                    }
                 )
                 signposter.endInterval(loadInterval, loadState)
             } catch {
@@ -117,6 +119,25 @@ public actor FluidAudioTranscriber: Transcribing {
         progressBroadcaster.update(
             .init(phase: .finished, fractionCompleted: 1, receivedBytes: 0, expectedBytes: nil)
         )
+    }
+
+    static func map(_ snapshot: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
+        switch snapshot.phase {
+        case .listing, .downloading:
+            return .init(
+                phase: .downloading,
+                fractionCompleted: snapshot.fractionCompleted,
+                receivedBytes: 0,
+                expectedBytes: nil
+            )
+        case .compiling:
+            return .init(
+                phase: .loading,
+                fractionCompleted: snapshot.fractionCompleted,
+                receivedBytes: 0,
+                expectedBytes: nil
+            )
+        }
     }
 
     public nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
