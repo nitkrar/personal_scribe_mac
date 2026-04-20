@@ -44,7 +44,7 @@ public struct SettingsView: View {
                 }
                 .tag(Tab.aiModels)
 
-            ModesTab()
+            LegacySettingsModesTab()
                 .tabItem {
                     Label("Modes", systemImage: "square.stack.3d.up")
                 }

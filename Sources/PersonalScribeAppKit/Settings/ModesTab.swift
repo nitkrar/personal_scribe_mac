@@ -1,8 +1,14 @@
 import SwiftUI
 import PersonalScribeCore
 
+/// Legacy read-only Modes tab inside the old TabView-based settings
+/// window. Retained until the unified-window `ModesTab` proves live
+/// and PHASE_2_unified_ui.md Step 2.10 retires this surface.
+///
+/// Renamed from `ModesTab` to avoid a top-level type-name collision
+/// with `UnifiedWindow/Tabs/ModesTab.swift` (M3.4).
 @MainActor
-public struct ModesTab: View {
+public struct LegacySettingsModesTab: View {
     private let modes: [ModeDescriptor]
     private let activeModeID: String
 
