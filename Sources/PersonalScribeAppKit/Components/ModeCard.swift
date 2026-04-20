@@ -17,6 +17,7 @@ public struct ModeCard: View {
     public let voiceModel: String
     public let aiModelPreset: String
     public let isActive: Bool
+    public let onSetActive: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -24,12 +25,14 @@ public struct ModeCard: View {
         modeName: String,
         voiceModel: String,
         aiModelPreset: String,
-        isActive: Bool = false
+        isActive: Bool = false,
+        onSetActive: (() -> Void)? = nil
     ) {
         self.modeName = modeName
         self.voiceModel = voiceModel
         self.aiModelPreset = aiModelPreset
         self.isActive = isActive
+        self.onSetActive = onSetActive
     }
 
     // Exposed for tests.
@@ -63,7 +66,14 @@ public struct ModeCard: View {
 
             Spacer(minLength: 0)
 
-            StatusPill(status: statusPillStatus, label: statusPillLabel)
+            if !isActive, let onSetActive {
+                Button("Set Active", action: onSetActive)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(PersonalScribeTheme.Status.link)
+            } else {
+                StatusPill(status: statusPillStatus, label: statusPillLabel)
+            }
         }
         .padding(.horizontal, PersonalScribeTheme.Spacing.rowPadding)
         .padding(.vertical, PersonalScribeTheme.Spacing.rowPadding)

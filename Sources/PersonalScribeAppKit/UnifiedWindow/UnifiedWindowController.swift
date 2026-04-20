@@ -30,7 +30,9 @@ final class UnifiedWindowController: NSWindowController {
         metricsReader: any MetricsReading,
         permissionService: any PermissionService,
         modes: [ModeDescriptor] = ModeRegistry.all,
-        activeModeProvider: @escaping @MainActor () -> ModeDescriptor? = { nil }
+        activeModeProvider: @escaping @MainActor () -> ModeDescriptor? = { nil },
+        activeModeStream: (@MainActor () -> AsyncStream<ModeDescriptor?>)? = nil,
+        setActiveMode: (@MainActor (ModeDescriptor) async -> Void)? = nil
     ) {
         self.defaults = defaults
         self.model = model
@@ -39,7 +41,9 @@ final class UnifiedWindowController: NSWindowController {
         self.transcriptionsViewModel = TranscriptionsTabViewModel(reader: transcriptReader)
         self.modesViewModel = ModesTabViewModel(
             modes: modes,
-            activeModeProvider: activeModeProvider
+            activeModeProvider: activeModeProvider,
+            activeModeStream: activeModeStream,
+            setActiveHandler: setActiveMode
         )
 
         let initialTint = WindowTint.resolve(from: defaults)

@@ -119,4 +119,61 @@ final class ModesTabViewModelTests: XCTestCase {
             "The default mode list must mirror ModeRegistry.all so the tab renders every registered mode."
         )
     }
+
+    // MARK: - setActive write path
+
+    func testSetActiveInvokesInjectedHandlerWithSelectedMode() async {
+        actor Recorder {
+            var received: [String] = []
+            func record(_ id: String) { received.append(id) }
+        }
+        let recorder = Recorder()
+
+        let viewModel = ModesTabViewModel(
+            modes: Self.allModes,
+            setActiveHandler: { mode in
+                await recorder.record(mode.id)
+            }
+        )
+
+        await viewModel.setActive(Self.commandMode)
+
+        let received = await recorder.received
+        XCTAssertEqual(received, [Self.commandMode.id])
+    }
+
+    // MARK: - activeModeStream subscription
+
+    func testViewModelPublishesActiveModeChangesFromStream() async {
+        let (stream, continuation) = AsyncStream<ModeDescriptor?>.makeStream()
+
+        let viewModel = ModesTabViewModel(
+            modes: Self.allModes,
+            activeModeProvider: { nil },
+            activeModeStream: { stream }
+        )
+
+        continuation.yield(Self.dictationMode)
+        for _ in 0..<500 {
+            if viewModel.activeModeID == Self.dictationMode.id { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(viewModel.activeModeID, Self.dictationMode.id)
+
+        continuation.yield(Self.commandMode)
+        for _ in 0..<500 {
+            if viewModel.activeModeID == Self.commandMode.id { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(viewModel.activeModeID, Self.commandMode.id)
+
+        continuation.yield(nil)
+        for _ in 0..<500 {
+            if viewModel.activeModeID == nil { break }
+            await Task.yield()
+        }
+        XCTAssertNil(viewModel.activeModeID)
+
+        continuation.finish()
+    }
 }

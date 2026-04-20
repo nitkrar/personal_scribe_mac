@@ -121,6 +121,7 @@ struct PersonalScribeAppMain: App {
         }()
         let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader()
         let appKitActiveModeProvider = AppComposition.activeModeProvider
+        let modelService = AppComposition.modelService
         let unifiedWindowControllerHost = UnifiedWindowControllerHost(
             controllerFactory: {
                 UnifiedWindowController(
@@ -129,7 +130,16 @@ struct PersonalScribeAppMain: App {
                     metricsReader: metricsReader,
                     permissionService: appPermissionService,
                     modes: ModeRegistry.all,
-                    activeModeProvider: { appKitActiveModeProvider.currentActiveMode() }
+                    activeModeProvider: { appKitActiveModeProvider.currentActiveMode() },
+                    activeModeStream: { appKitActiveModeProvider.activeModeStream() },
+                    setActiveMode: { mode in
+                        do {
+                            try await modelService.setActive(modelService.descriptor(for: mode))
+                        } catch {
+                            PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+                                .error("Failed to set active mode '\(mode.id)'", error: error)
+                        }
+                    }
                 )
             }
         )

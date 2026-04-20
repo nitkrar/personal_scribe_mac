@@ -36,7 +36,10 @@ struct ModesTab: View {
                         modeName: mode.name,
                         voiceModel: voiceModelName(for: mode),
                         aiModelPreset: aiModelPresetName(for: mode),
-                        isActive: viewModel.isActive(mode)
+                        isActive: viewModel.isActive(mode),
+                        onSetActive: viewModel.isActive(mode) ? nil : {
+                            Task { await viewModel.setActive(mode) }
+                        }
                     )
                 }
             }

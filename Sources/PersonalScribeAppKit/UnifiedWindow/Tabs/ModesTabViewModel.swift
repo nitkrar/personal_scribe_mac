@@ -20,18 +20,35 @@ public final class ModesTabViewModel: ObservableObject {
     /// green-dot / active-state indicator on each card.
     @Published public private(set) var activeModeID: String?
 
-    /// Closure used to read the current active mode from the app
-    /// state. Kept as a plain closure (no protocol dependency) so
-    /// tests can inject a mutable reference with no ceremony.
     private let activeModeProvider: @MainActor () -> ModeDescriptor?
+    private let setActiveHandler: (@MainActor (ModeDescriptor) async -> Void)?
+    private var streamObservationTask: Task<Void, Never>?
 
     public init(
         modes: [ModeDescriptor] = ModeRegistry.all,
-        activeModeProvider: @escaping @MainActor () -> ModeDescriptor? = { nil }
+        activeModeProvider: @escaping @MainActor () -> ModeDescriptor? = { nil },
+        activeModeStream: (@MainActor () -> AsyncStream<ModeDescriptor?>)? = nil,
+        setActiveHandler: (@MainActor (ModeDescriptor) async -> Void)? = nil
     ) {
         self.modes = modes
         self.activeModeProvider = activeModeProvider
+        self.setActiveHandler = setActiveHandler
         self.activeModeID = activeModeProvider()?.id
+
+        if let activeModeStream {
+            let stream = activeModeStream()
+            streamObservationTask = Task { [weak self] in
+                for await mode in stream {
+                    await MainActor.run { [weak self] in
+                        self?.activeModeID = mode?.id
+                    }
+                }
+            }
+        }
+    }
+
+    deinit {
+        streamObservationTask?.cancel()
     }
 
     /// Re-read `activeModeProvider` and republish `activeModeID` if it
@@ -49,5 +66,14 @@ public final class ModesTabViewModel: ObservableObject {
     public func isActive(_ mode: ModeDescriptor) -> Bool {
         guard let activeModeID else { return false }
         return mode.id == activeModeID
+    }
+
+    /// Flip the active mode via the injected `setActiveHandler`. The
+    /// stream subscription (`activeModeStream`) will then push the new
+    /// mode back into `activeModeID`, keeping the tab in lock-step with
+    /// the central AppStore.
+    public func setActive(_ mode: ModeDescriptor) async {
+        guard let setActiveHandler else { return }
+        await setActiveHandler(mode)
     }
 }
