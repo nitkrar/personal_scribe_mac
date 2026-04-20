@@ -27,6 +27,7 @@ public struct GeneralTab: View {
             ) {
                 VStack(alignment: .leading, spacing: SettingsLayout.itemSpacing) {
                     visibilityCard
+                    appearanceCard
                     behaviorCard
                 }
             }
@@ -134,6 +135,41 @@ public struct GeneralTab: View {
             }
         }
     }
+
+    private var appearanceCard: some View {
+        SettingsCard {
+            Text("Appearance")
+                .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+
+            Picker(
+                "Window tint",
+                selection: Binding(
+                    get: { viewModel.windowTint },
+                    set: { viewModel.setWindowTint($0) }
+                )
+            ) {
+                Text("Warm").tag(WindowTint.warm)
+                Text("Neutral").tag(WindowTint.neutral)
+                Text("Dark").tag(WindowTint.dark)
+            }
+            .pickerStyle(.segmented)
+
+            Divider()
+
+            Picker(
+                "Pill theme",
+                selection: Binding(
+                    get: { viewModel.pillAppearance },
+                    set: { viewModel.setPillAppearance($0) }
+                )
+            ) {
+                Text("Dark").tag(PillAppearance.dark)
+                Text("Light").tag(PillAppearance.light)
+                Text("System").tag(PillAppearance.system)
+            }
+            .pickerStyle(.segmented)
+        }
+    }
 }
 
 @MainActor
@@ -151,6 +187,8 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var isMenuBarVisible: Bool
     @Published private(set) var waveformDecayMode: WaveformDecayMode
     @Published private(set) var pasteMode: PasteMode
+    @Published private(set) var windowTint: WindowTint
+    @Published private(set) var pillAppearance: PillAppearance
     @Published private(set) var pasteRestoreDelay: PasteRestoreDelay
     @Published private(set) var visibilityError: VisibilityConfigError?
 
@@ -174,6 +212,8 @@ final class GeneralTabViewModel: ObservableObject {
         self.isMenuBarVisible = menuBarVisibilityProvider()
         self.waveformDecayMode = WaveformDecayMode.resolve(from: defaults)
         self.pasteMode = PasteMode.resolve(from: defaults)
+        self.windowTint = WindowTint.resolve(from: defaults)
+        self.pillAppearance = PillAppearance.resolve(from: defaults)
         self.pasteRestoreDelay = PasteRestoreDelay.resolve(from: defaults)
     }
 
@@ -205,6 +245,16 @@ final class GeneralTabViewModel: ObservableObject {
     func setPasteMode(_ mode: PasteMode) {
         pasteMode = mode
         mode.persist(to: defaults)
+    }
+
+    func setWindowTint(_ tint: WindowTint) {
+        windowTint = tint
+        tint.persist(to: defaults)
+    }
+
+    func setPillAppearance(_ appearance: PillAppearance) {
+        pillAppearance = appearance
+        appearance.persist(to: defaults)
     }
 
     func setPasteRestoreDelaySeconds(_ seconds: TimeInterval) {
