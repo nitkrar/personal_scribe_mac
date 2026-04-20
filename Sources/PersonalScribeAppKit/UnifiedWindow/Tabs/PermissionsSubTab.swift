@@ -46,6 +46,9 @@ struct PermissionsSubTab: View {
                 grantAction: { viewModel.grantAccess(for: .accessibility) }
             )
         }
+        .onAppear {
+            viewModel.refresh()
+        }
     }
 }
 

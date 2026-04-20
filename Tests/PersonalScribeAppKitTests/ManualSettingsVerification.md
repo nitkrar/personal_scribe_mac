@@ -12,6 +12,11 @@
 - `0.1s` fast restore: set the delay to `0.1s`, dictate into Slack, confirm the transcript pastes into the compose field, then press `Cmd+V` manually and confirm Slack pastes the clipboard content that existed before dictation.
 - `5.0s` slow restore: set the delay to `5.0s`, dictate into Slack, wait after the initial paste, and confirm the clipboard remains the transcribed text for the full five-second window before the pre-paste clipboard is restored.
 
+## Permissions sub-tab — fresh status on render
+
+- Fresh install mic accept refreshes correctly: install a build whose bundle ID has no existing TCC grants, launch, accept the microphone TCC prompt that appears on first launch, navigate to `Settings > Permissions`, and confirm the Microphone row shows the green dot + no "Grant Access" button (mic TCC dialogs are system-modal and do not fire `didBecomeActiveNotification`, so this exercises the `.onAppear` refresh path).
+- Returning to Permissions after a silent external change picks it up: with the app running, open `Settings > Permissions`, switch to a different sub-tab (General / Modes), then toggle a permission in System Settings from another window, return to `Permissions`, and confirm the row updates on the next tab render without needing to restart the app.
+
 ## Change recording hotkey
 
 - In `Shortcuts`, click `Change…` on `Record / stop dictation`, record a new shortcut, confirm `Cmd+Space` is rejected inline, click `Set`, confirm a restart-required note appears, relaunch `<AppBrand.displayName>`, and verify the new recording shortcut works.

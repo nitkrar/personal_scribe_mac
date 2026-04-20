@@ -83,6 +83,59 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.status(for: .accessibility), .pending)
     }
 
+    // MARK: - Refresh on tab reappear
+
+    /// Covers the mic-TCC-prompt case: the system-modal prompt never
+    /// deactivates the app, so `didBecomeActiveNotification` doesn't fire
+    /// and the wrapped service's `@Published statuses` stays stale.
+    /// `viewModel.refresh()` must pull the latest snapshot regardless.
+    func testRefreshReReadsLatestSnapshotFromService() {
+        let service = FakePermissionService(statuses: [
+            .microphone: .pending,
+            .inputMonitoring: .pending,
+            .accessibility: .pending,
+        ])
+        let viewModel = PermissionsSubTabViewModel(
+            permissionService: service,
+            openURL: { _ in }
+        )
+
+        XCTAssertEqual(viewModel.status(for: .microphone), .pending)
+
+        // Stage a fresh snapshot WITHOUT firing `objectWillChange` —
+        // simulates TCC state changing under the app's feet (e.g. mic
+        // prompt accepted while the app stayed active).
+        service.stageNextSnapshot([
+            .microphone: .granted,
+            .inputMonitoring: .pending,
+            .accessibility: .pending,
+        ])
+
+        XCTAssertEqual(
+            viewModel.status(for: .microphone),
+            .pending,
+            "view model should be stale until refresh() is called"
+        )
+
+        viewModel.refresh()
+
+        XCTAssertEqual(viewModel.status(for: .microphone), .granted)
+        XCTAssertEqual(viewModel.status(for: .inputMonitoring), .pending)
+        XCTAssertEqual(viewModel.status(for: .accessibility), .pending)
+    }
+
+    func testRefreshCallsThroughToServiceRefresh() {
+        let service = FakePermissionService()
+        let viewModel = PermissionsSubTabViewModel(
+            permissionService: service,
+            openURL: { _ in }
+        )
+
+        viewModel.refresh()
+
+        XCTAssertEqual(service.refreshCallCount, 1)
+    }
+
     // MARK: - grantAccess URL routing
 
     func testGrantAccessOpensMicrophoneSystemSettingsURL() {
@@ -151,6 +204,8 @@ private final class CapturedURLs {
 @MainActor
 private final class FakePermissionService: PermissionService {
     @Published private(set) var statuses: [Permission: PermissionStatus]
+    private(set) var refreshCallCount = 0
+    private var nextSnapshot: [Permission: PermissionStatus]?
 
     init(
         statuses: [Permission: PermissionStatus] = [
@@ -164,6 +219,15 @@ private final class FakePermissionService: PermissionService {
 
     func updateStatuses(_ newStatuses: [Permission: PermissionStatus]) {
         statuses = newStatuses
+    }
+
+    /// Store a snapshot the next `refresh()` will pick up WITHOUT
+    /// mutating `@Published statuses` — mirrors `AppKitPermissionService`,
+    /// where `statusSnapshot()` re-queries TCC live while the stored
+    /// `statuses` dict only updates when `refresh()` is called (or when
+    /// `didBecomeActiveNotification` triggers it).
+    func stageNextSnapshot(_ snapshot: [Permission: PermissionStatus]) {
+        nextSnapshot = snapshot
     }
 
     func status(for permission: Permission) -> PermissionStatus {
@@ -180,10 +244,16 @@ private final class FakePermissionService: PermissionService {
     }
 
     func statusSnapshot() -> [Permission: PermissionStatus] {
-        statuses
+        nextSnapshot ?? statuses
     }
 
-    func refresh() {}
+    func refresh() {
+        refreshCallCount += 1
+        if let nextSnapshot {
+            statuses = nextSnapshot
+            self.nextSnapshot = nil
+        }
+    }
 
     func systemSettingsDeepLink(for permission: Permission) -> URL {
         URL(string: "https://example.invalid/\(permission.rawValue)")!

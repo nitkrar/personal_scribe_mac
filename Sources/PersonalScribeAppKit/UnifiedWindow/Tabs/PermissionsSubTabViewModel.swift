@@ -45,6 +45,16 @@ final class PermissionsSubTabViewModel: ObservableObject {
         statuses[permission] ?? .pending
     }
 
+    /// Re-query TCC and publish the fresh snapshot. Call from
+    /// `PermissionsSubTab.onAppear` so navigating to the tab always
+    /// shows current state — the `didBecomeActiveNotification` observer
+    /// in `AppKitPermissionService` misses the mic TCC prompt accept
+    /// (system-modal; app never deactivates).
+    func refresh() {
+        permissionService.refresh()
+        statuses = permissionService.statusSnapshot()
+    }
+
     /// Open the Privacy pane in System Settings for `permission`. Uses
     /// `PermissionServiceAdapter.defaultSystemSettingsDeepLink(for:)`
     /// for every case — that helper already covers all three
