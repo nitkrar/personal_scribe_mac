@@ -7,6 +7,8 @@ import SeshatTranscription
 
 @MainActor
 public enum AppComposition {
+    private static let transcriptDatabaseFileName = "transcripts.sqlite"
+
     public static let sessionCoordinator: SessionCoordinator = {
         let logger = SeshatLogger(category: SeshatLogCategory.session)
         let capture = AVAudioCaptureService(
@@ -45,6 +47,20 @@ public enum AppComposition {
 
     public static func makeSessionCoordinator() -> SessionCoordinator {
         sessionCoordinator
+    }
+
+    public static func makeMetricsService() throws -> SQLiteMetricsService {
+        let databaseURL = AppConfig.liveStorageLocator()
+            .url(for: .recordings)
+            .appendingPathComponent(transcriptDatabaseFileName, isDirectory: false)
+            .standardizedFileURL
+
+        // TODO: consumer wiring in SeshatAppMain deferred until Phase 2 Home tab lands
+        return try SQLiteMetricsService(
+            databaseURL: databaseURL,
+            calendar: .current,
+            referenceDateProvider: Date.init
+        )
     }
 
     public static func makeGlobalHotkeyMonitor(
