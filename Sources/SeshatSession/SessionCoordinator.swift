@@ -573,7 +573,7 @@ private actor CoordinatorPipelineTranscriber: Transcribing {
         try await transcriber.prepare()
     }
 
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         progressBroadcaster.stream()
     }
 
