@@ -161,6 +161,19 @@ User-reported dogfood bugs after first `scripts/package.sh -ir` test-drive on 20
   - _Rationale — duration gating:_ 80%+ of dictation sessions are short solo memos where speaker tags are noise. Duration is a cheap ASR-agnostic signal that doesn't depend on Active-window context infra. Post-stop prompt preserves user consent on the added RAM hit.
 - SQLite note storage via GRDB.swift with FTS5 search (imports from existing JSONL — Phase 3)
 
+## Central-layers refactor — Stage 3 pending items (snapshot 2026-04-20)
+
+Behaviorally complete: Stage 2 consumer swaps landed for all 9 layers. Today's Stage 3 delete pass removed every tractable leaf shim (commits: `aed5406`, `f0d258e`, `45e94da`, `8eec6eb`, `620bb78`, `2191f09`, `b9f1c21`, `aa49763`). What remains is gated by one of: (a) Phase 3.F future features, (b) significant test migration, (c) bigger refactors — NOT mechanical delete work.
+
+- **`Sources/SeshatTranscription/FluidAudioTranscriber.swift` + its 9 test files** — legacy fixed-descriptor transcriber. Helpers already extracted to `ModelArtifactStaging.swift` (`aa49763`). Full deletion blocked on migrating ~16 test instances to `ModelAwareFluidAudioTranscriber(modelService:...)` (different init signature). Not a mechanical sed migration — each test needs a fake `ModelService`. Gating: test rewrite pass.
+- **`Sources/SeshatSession/SessionCoordinator.swift` bridge types** (`CoordinatorPipelineCapture`, `CoordinatorPipelineTranscriber`, `CoordinatorPipelineOutputSink`, `CoordinatorPipelineContextProvider`, `SessionDownloadProgressBroadcaster`, `CoordinatorPostProcessingPipeline`) — the Stage 2 shim architecture. Deleting them requires moving the canonical coordinator logic into `SessionPipelineOrchestrator` (L7.S3.1.x in the layer plan). Gating: `SessionPipelineOrchestrator` canonical move (structural refactor, not delete-and-fix).
+- **`Sources/SeshatCore/ModeDescriptor` raw `voiceModelID: String` / `aiModelID: String?` path** — replaced by `ActiveModelDescriptor { voiceModel, aiModelID }` in the new selection layer. Migration requires `Mode` state to store `ActiveModelDescriptor` directly rather than raw string IDs, plus corresponding SQLite/UI updates. Gating: `Mode` data model + `ModesTab` + persistence layer.
+- **L1 residuals** (`MicrophonePermissionRequesting` protocol on `Sources/SeshatCore/Protocols.swift:38`, `AppKitMicrophonePermissionRequester`, `PasteInjector.makeCompatibilityPermissionService`) — the `phase-2 step 1.retry` cluster covered the main permission migration. These last tendrils need consumer rewrites (not just file deletes). Gating: targeted consumer sweeps.
+- **L3/L2 cross-layer `BaseDirectoryPath` ownership** — `AppConfig.baseDirectoryUserDefaultsKey` constant now owns the key; `AppConfig.baseDirectoryPathPreference()` owns the preference (post-`620bb78`). No longer split. **Closed.**
+- **`AIModelsTab` model-switching UI** — explicitly Phase 3.F future feature per its own source comment (`// Model switching lands in Phase 3.F.`). NOT a Stage 2 gap, NOT a Stage 3 shim. Do not treat as pending refactor work.
+- **`ModesTab.swift:42` catalog lookup** — `BuiltInModelCatalog.descriptor(for: mode.voiceModelID)?.displayName` is a legitimate lookup-by-ID (displaying stored model name), not observation of the active model. No action needed.
+- **Rename pass (PHASE_0)** — deferred, plan drifted, type-table updated to PS prefix in `39847d1`. Separate phase: do NOT fold into Stage 3 execution.
+
 ## FluidAudio feature map — post-current-phase pickup
 
 Captured from FluidAudio README + showcase-app review on 2026-04-18. All items assume current Phase 2 visual/architecture work lands first. No fixed priority within this list; order depends on dogfood feedback.
