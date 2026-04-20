@@ -4,10 +4,6 @@ public enum SeshatConfig {
     public static let sampleRate: Double = 16_000
     public static let channelCount: Int = 1
 
-    // DEPRECATED shim — keeps existing callers compiling.
-    // Prefer ModelRegistry.defaultModelId and ModelDescriptor throughout new code.
-    public static let modelId: String = ModelRegistry.defaultModelId
-
     // MARK: - Base directory resolution
 
     /// Resolution order (first match wins):
@@ -46,11 +42,6 @@ public enum SeshatConfig {
 
     public static func modelsDirectory() throws -> URL {
         try subdirectory(for: .models)
-    }
-
-    /// Reserved for future modes/ feature. Directory is created lazily.
-    public static func modesDirectory() throws -> URL {
-        try subdirectory(for: .modes)
     }
 
     /// Reserved for future recordings/ feature. Directory is created lazily.
