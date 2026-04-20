@@ -7,7 +7,7 @@ file, use the Canvas or `Cmd+Option+Enter` to render a `#Preview`, and
 verify each line) against
 `plans/seshat_agent_bundle/02_Composites/component_map.png`.
 
-## TranscriptRow (`Sources/SeshatAppKit/Components/TranscriptRow.swift`)
+## TranscriptRow (`Sources/PersonalScribeAppKit/Components/TranscriptRow.swift`)
 - **Preview name:** `"TranscriptRow — variants"`
 - Verify:
   1. First row shows title "Product sync notes", timestamp "Just now",
@@ -25,7 +25,7 @@ verify each line) against
   6. Swap preview to `.light` — text contrast stays readable, surface
      fill becomes pale cream (`#FFFFFF`), border stays champagne.
 
-## ModeCard (`Sources/SeshatAppKit/Components/ModeCard.swift`)
+## ModeCard (`Sources/PersonalScribeAppKit/Components/ModeCard.swift`)
 - **Preview name:** `"ModeCard — active + inactive"`
 - Verify:
   1. First card ("Dictation") shows `Active` pill (green dot) at the
@@ -39,7 +39,7 @@ verify each line) against
   5. Swap to `.light` — surface becomes pure white, subtitle grey,
      active pill still visibly green.
 
-## AudioPlayerThumbnail (`Sources/SeshatAppKit/Components/AudioPlayerThumbnail.swift`)
+## AudioPlayerThumbnail (`Sources/PersonalScribeAppKit/Components/AudioPlayerThumbnail.swift`)
 - **Preview name:** `"AudioPlayerThumbnail — variants"`
 - Verify:
   1. First row (`durationSeconds: 12`) shows label `"0:12"` with a

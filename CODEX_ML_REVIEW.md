@@ -1,4 +1,4 @@
-# Seshat — Codex ML/On-Device Inference Second Opinion
+# Ninimma — Codex ML/On-Device Inference Second Opinion
 
 **Reviewer:** Codex (independent ML feasibility review)
 **Date:** 2026-04-16

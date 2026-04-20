@@ -1,4 +1,4 @@
-# Seshat — Project Guidelines
+# Ninimma — Project Guidelines
 
 Extends `~/Projects/nitkrar/CLAUDE.md` (local-first search, backward-compat APIs, don't break core functionality) and `~/.claude/CLAUDE.md` (global operating principles).
 

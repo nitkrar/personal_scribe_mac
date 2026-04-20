@@ -7,11 +7,11 @@ Verify that `FluidAudioTranscriber` downloads the pinned Parakeet v2 model on fi
 - Apple Silicon
 - macOS 14+
 - Working network connection
-- `SeshatConfig.testingBaseDirectoryOverride == nil`
+- `AppConfig.testingBaseDirectoryOverride == nil`
 - `ModelRegistry.parakeetTDT06Bv2.revision` is a real 40-character SHA
 
 ## Procedure
-1. Remove any prior model under `~/Library/Application Support/Seshat/models/parakeet-tdt-0.6b-v2`.
+1. Remove any prior model under `~/Library/Application Support/personal_scribe/models/parakeet-tdt-0.6b-v2`.
 2. Trigger `prepare()`.
 3. Confirm progress `idle -> downloading -> finished`.
 4. Feed a 16 kHz mono WAV speaking "hello world".
@@ -22,26 +22,26 @@ Verify that `FluidAudioTranscriber` downloads the pinned Parakeet v2 model on fi
    - `Decoder.mlmodelc/coremldata.bin`
    - `JointDecision.mlmodelc/coremldata.bin`
    - `parakeet_vocab.json`
-7. Confirm failures log through `SeshatLogger(category: SeshatLogCategory.transcription)`.
+7. Confirm failures log through `PersonalScribeLogger(category: PersonalScribeLogCategory.transcription)`.
 8. Confirm there is no production `print()` path in the transcription module.
 
 ## Phase 1 Step 1.1b — Launch signposts
 
-Signposts emitted under subsystem `com.nitkrar.seshat`, category `prepare`:
+Signposts emitted under subsystem `com.nitkrar.personal_scribe`, category `prepare`:
 - `SessionCoordinator.prepareTranscriber`
 - `FluidAudioTranscriber.performPrepare`
 - `inference.loadModel`
 
 ### Trace capture procedure
-1. Build and install the DMG to `/Applications/Seshat.app`.
+1. Build and install the DMG to `/Applications/Ninimma.app`.
 2. Quit any running instance.
 3. Capture a launch trace:
    ```
    xcrun xctrace record --template 'Logging' \
-     --output /tmp/seshat-launch.trace \
-     --launch -- /Applications/Seshat.app/Contents/MacOS/SeshatAppKit
+     --output /tmp/personal_scribe-launch.trace \
+     --launch -- /Applications/Ninimma.app/Contents/MacOS/PersonalScribeAppKit
    ```
-4. Open `/tmp/seshat-launch.trace` in Instruments (os_signpost lane).
+4. Open `/tmp/personal_scribe-launch.trace` in Instruments (os_signpost lane).
 5. Confirm all three intervals are visible with plausible durations.
 6. Record cold-launch durations below (milliseconds):
 

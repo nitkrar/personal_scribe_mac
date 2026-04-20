@@ -1,6 +1,6 @@
-# Seshat — Competitive Landscape
+# Ninimma — Competitive Landscape
 
-| | Wispr Flow | Scribe (khuur) | VoiceInk | open-wispr | **Seshat** |
+| | Wispr Flow | Scribe (khuur) | VoiceInk | open-wispr | **Ninimma** |
 |---|---|---|---|---|---|
 | **Local** | No (cloud) | Yes | Yes | Yes | **Yes** |
 | **Dictation** | Yes | Yes | Yes | Yes | **Yes** |
@@ -21,4 +21,4 @@ None of the existing apps combine all three pillars:
 
 3. **AI assistants** (ChatGPT, Claude) — smart but cloud-based, no local memory, no dictation integration.
 
-**Seshat's thesis:** Your voice is the most natural input. Every word you dictate should be captured, searchable, and useful — not just pasted and forgotten.
+**Ninimma's thesis:** Your voice is the most natural input. Every word you dictate should be captured, searchable, and useful — not just pasted and forgotten.

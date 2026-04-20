@@ -2,7 +2,7 @@
 
 Hotkey routing depends on global `NSEvent` monitoring and app lifecycle
 integration that XCTest cannot fully prove in-process. Run the checklist
-below after changes in `Sources/SeshatAppKit/Hotkeys/` or the hotkey
+below after changes in `Sources/PersonalScribeAppKit/Hotkeys/` or the hotkey
 composition wiring.
 
 ## Double-tap ⌥ recording toggle (regression baseline)
@@ -19,7 +19,7 @@ composition wiring.
 
 - [ ] **MV-HK-4** Triple-tap right Option within ~0.4s between taps —
   app quits within ~1s. No preceding toggle. Confirm by checking Dock:
-  Seshat is gone.
+  Ninimma is gone.
 - [ ] **MV-HK-5** Same as MV-HK-4 but on the LEFT Option key — should
   also quit. Both option keys are wired.
 - [ ] **MV-HK-6** Triple-tap with the third tap > 0.4s after the second

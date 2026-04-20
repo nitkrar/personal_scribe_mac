@@ -30,7 +30,7 @@ Reference mockups live at:
 
 ### Mode 1 — Always On
 
-Setup: set `defaults write com.nitkrar.seshat PillVisibilityMode "always-on"`
+Setup: set `defaults write com.nitkrar.personal_scribe PillVisibilityMode "always-on"`
 and relaunch.
 
 - [ ] **MV-B1-1** At rest (no recording) the pill is VISIBLE at the
@@ -42,7 +42,7 @@ and relaunch.
 
 ### Mode 2 — Auto-show (default)
 
-Setup: `defaults delete com.nitkrar.seshat PillVisibilityMode` and
+Setup: `defaults delete com.nitkrar.personal_scribe PillVisibilityMode` and
 relaunch — this exercises the first-launch default path.
 
 - [ ] **MV-B1-3** At rest the pill is HIDDEN. Only the menu bar status
@@ -52,7 +52,7 @@ relaunch — this exercises the first-launch default path.
 
 ### Mode 3 — Hidden
 
-Setup: `defaults write com.nitkrar.seshat PillVisibilityMode "hidden"`
+Setup: `defaults write com.nitkrar.personal_scribe PillVisibilityMode "hidden"`
 and relaunch.
 
 - [ ] **MV-B1-4** The pill never appears, not even during recording or
@@ -64,7 +64,7 @@ and relaunch.
 ## Sprint 2 Lane B1 — Waveform decay coast-down
 
 Toggle `WaveformDecayMode` via
-`defaults write com.nitkrar.seshat WaveformDecayMode "…"`.
+`defaults write com.nitkrar.personal_scribe WaveformDecayMode "…"`.
 
 - [ ] **MV-B1-5 (immediate default)** Record a loud sentence, then stop.
   The waveform SNAPS flat to zero on stop (this is the Sprint 1
@@ -82,16 +82,16 @@ Leave `PasteMode` unset (default `"paste-at-cursor"`) unless a step
 below tells you to change it.
 
 - [ ] **MV-B1-7 (self-frontmost fallback)** Start a recording by clicking
-  the pill or the menu-bar `Start Recording` item so Seshat is the
+  the pill or the menu-bar `Start Recording` item so Ninimma is the
   frontmost app. Speak a short sentence, stop, and confirm the text is
-  NOT pasted into Seshat itself. Instead, a response card appears above
+  NOT pasted into Ninimma itself. Instead, a response card appears above
   the pill reading `Copied to clipboard · ⌘V to paste`, dismisses after
   roughly 3 seconds, and the transcript pastes successfully into
   TextEdit with a manual `⌘V`.
 - [ ] **MV-B1-8 (clipboard-only mode)** Run
-  `defaults write com.nitkrar.seshat PasteMode "clipboard-only"`
+  `defaults write com.nitkrar.personal_scribe PasteMode "clipboard-only"`
   and relaunch. Trigger dictation from another app while its text cursor
-  is active (hotkey or menu path). Confirm Seshat never posts a
+  is active (hotkey or menu path). Confirm Ninimma never posts a
   synthetic paste, the same response card appears for roughly 3 seconds,
   and the transcript is available only via clipboard/manual `⌘V`.
 
@@ -121,6 +121,6 @@ below tells you to change it.
 - Manual checklist entries above are the only verification path for the
   SwiftUI `body` parts of `PillOverlayView`. Unit-tested pieces (view
   model visibility mapping, decay math, presenter `intendsToShow`, etc.)
-  live under `Tests/SeshatAppKitTests/` and `Tests/SeshatCoreTests/`.
+  live under `Tests/PersonalScribeAppKitTests/` and `Tests/PersonalScribeCoreTests/`.
 - Light-mode parity check: flip macOS Appearance to Light and repeat
   MV-B1-1 + MV-B1-5 to confirm palette resolution.

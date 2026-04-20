@@ -2,7 +2,7 @@
 
 Run this on a macOS 14+ Apple Silicon Mac after Plan 99 Step 4 passes.
 
-1. `swift run SeshatAppKit` - menu bar icon appears (SF Symbol "mic") in the status bar.
+1. `swift run PersonalScribeAppKit` - menu bar icon appears (SF Symbol "mic") in the status bar.
 2. First-launch permission flow:
    - Click the menu bar icon -> popover opens.
    - Click "Grant microphone access" -> macOS system dialog appears.
@@ -10,7 +10,7 @@ Run this on a macOS 14+ Apple Silicon Mac after Plan 99 Step 4 passes.
    - Popover state updates to "idle, ready to record".
 3. First-run model download:
    - Watch the popover for model-download progress (indeterminate or percent).
-   - Verify `~/Library/Application Support/Seshat/models/parakeet-tdt-0.6b-v2/` populates with:
+   - Verify `~/Library/Application Support/personal_scribe/models/parakeet-tdt-0.6b-v2/` populates with:
      - `Preprocessor.mlmodelc`
      - `Encoder.mlmodelc`
      - `Decoder.mlmodelc`

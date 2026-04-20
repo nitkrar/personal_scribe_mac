@@ -1,4 +1,4 @@
-# Seshat — Adversarial Review Synthesis
+# Ninimma — Adversarial Review Synthesis
 
 Six independent reviewers examined the proposal. This document distills their findings into actionable themes.
 

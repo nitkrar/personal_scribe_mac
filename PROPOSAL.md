@@ -1,4 +1,4 @@
-# Seshat — Your Private Voice Brain for Mac
+# Ninimma — Your Private Voice Brain for Mac
 
 ## Vision
 
@@ -8,17 +8,17 @@ A native macOS app that combines local voice dictation, personal note-taking, an
 
 **Target user:** Knowledge workers who write in English — people composing emails, Slack messages, documents, and notes throughout the day.
 
-**Dogfooding target:** By May 5 2026, using Seshat for daily dictation.
+**Dogfooding target:** By May 5 2026, using Ninimma for daily dictation.
 
 ---
 
 ## What Makes This Different?
 
-Existing apps solve one piece of the puzzle. Seshat brings all three together:
+Existing apps solve one piece of the puzzle. Ninimma brings all three together:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                      Seshat                          │
+│                      Ninimma                         │
 │                                                              │
 │   ┌─────────────┐   ┌──────────────┐   ┌────────────────┐  │
 │   │  DICTATION   │   │    NOTES     │   │   ASSISTANT    │  │
@@ -110,7 +110,7 @@ A layered intelligence system. Most features use dictionaries, embeddings, and r
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
-│                      Seshat App                           │
+│                      Ninimma App                          │
 │                    (Native Swift/SwiftUI)                          │
 ├────────────┬──────────────┬──────────────┬───────────────────────┤
 │  UI Layer  │ Audio Layer  │  Injection   │  Intelligence Layer   │
@@ -168,7 +168,7 @@ A layered intelligence system. Most features use dictionaries, embeddings, and r
 │                                      │                       │   │
 │                                      │ ~/Library/App         │   │
 │                                      │ Support/              │   │
-│                                      │ Seshat/       │   │
+│                                      │ personal_scribe/│   │
 │                                      └───────────────────────┘   │
 └───────────────────────────────────────────────────────────────────┘
 ```
@@ -206,12 +206,12 @@ Tier 3 is **only loaded on demand** and only available on 16GB+ machines.
 ### Data Storage
 
 ```
-~/Library/Application Support/Seshat/
+~/Library/Application Support/personal_scribe/
 ├── models/
 │   ├── parakeet-tdt-0.6b-v2/            (CoreML, downloaded on first run)
 │   ├── whisper-ggml/                     (v0.2+, downloaded on demand)
 │   └── llm/                              (v0.4+, optional)
-├── seshat.sqlite                 (notes + memory, single DB)
+├── personal_scribe.sqlite        (notes + memory, single DB)
 │   ├── table: notes                      (text, timestamps)
 │   ├── table: dictionary                 (v0.2+, learned words)
 │   ├── table: embeddings                 (v0.3+, note vectors)
@@ -266,7 +266,7 @@ With Parakeet at ~66MB RAM (vs Whisper's 500MB-6GB), 8GB machines get much more 
 
 ### Phase 1: Working Dictation (Week 1-3)
 
-**Goal:** By end of week 3, using Seshat for daily dictation.
+**Goal:** By end of week 3, using Ninimma for daily dictation.
 
 **Week 1 — Record and transcribe:**
 - [ ] SPM project setup
@@ -325,7 +325,7 @@ With Parakeet at ~66MB RAM (vs Whisper's 500MB-6GB), 8GB machines get much more 
 
 | # | Decision | Choice | Status |
 |---|---|---|---|
-| 1 | App Name | Seshat | Confirmed |
+| 1 | App Name | Ninimma | Confirmed |
 | 2 | License | MIT | Confirmed |
 | 3 | STT Engine | Parakeet-TDT 0.6B v2 via FluidAudio; whisper.cpp fallback | Confirmed |
 | 4 | LLM backend | llama.cpp (primary) / Apple FM (future upgrade) | Confirmed |

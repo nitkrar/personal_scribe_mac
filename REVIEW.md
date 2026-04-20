@@ -1,4 +1,4 @@
-# Adversarial Technical Review: Seshat Proposal
+# Adversarial Technical Review: Ninimma Proposal
 
 **Reviewer role:** Senior Systems Architect
 **Date:** 2026-04-15
@@ -213,7 +213,7 @@ Be honest with users about quality limitations. Implement RAG for note queries (
 
 The proposal does not mention sandboxing. This is a critical architectural decision.
 
-Seshat requires:
+Ninimma requires:
 - **Microphone access** (works in sandbox with entitlement)
 - **Accessibility permission** for CGEvent posting (requires the app to be in System Settings > Privacy > Accessibility — works outside sandbox, complex inside)
 - **Input Monitoring** for CGEventTap (requires System Settings > Privacy > Input Monitoring)

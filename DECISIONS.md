@@ -1,10 +1,10 @@
-# Seshat — Decision Log
+# Ninimma — Decision Log
 
 ## Confirmed Decisions
 
 | # | Decision | Choice | Why | Date |
 |---|---|---|---|---|
-| 1 | App name | Seshat | Not taken, communicates personal+private+scribe | 2026-04-15 |
+| 1 | App name | Ninimma | Not taken, communicates personal+private+scribe | 2026-04-15 |
 | 2 | License | MIT | Max adoption, can relicense while sole author | 2026-04-15 |
 | 3 | STT engine | Parakeet-TDT 0.6B v2 via FluidAudio (primary), whisper.cpp fallback for unsupported languages | 1.69% WER, ~80ms latency, ~66MB RAM, Silero VAD built-in, CC-BY-4.0, powers VoiceInk | 2026-04-16 |
 | 4 | LLM backend | llama.cpp (primary) + Apple Foundation Models (future upgrade path) | llama.cpp works now on macOS 14+; Apple FM requires macOS 26+ and is unshipped | 2026-04-16 |

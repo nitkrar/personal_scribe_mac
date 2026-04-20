@@ -6,15 +6,15 @@ below is what a reviewer runs in Xcode (open each source file, use
 the Canvas or `Cmd+Option+Enter` to render a `#Preview`, and verify
 each line).
 
-## SeshatTheme (`Sources/SeshatAppKit/Theme/SeshatTheme.swift`)
-1. No preview — inspect via `SeshatLogoView` / `WaveformView` previews
-   which render against `SeshatTheme.Palette.dark.appBackground`.
+## PersonalScribeTheme (`Sources/PersonalScribeAppKit/Theme/PersonalScribeTheme.swift`)
+1. No preview — inspect via `PersonalScribeLogoView` / `WaveformView` previews
+   which render against `PersonalScribeTheme.Palette.dark.appBackground`.
 2. Automated hex round-trip is covered by
-   `Tests/SeshatAppKitTests/Theme/SeshatThemeTests.swift` (every hex
+   `Tests/PersonalScribeAppKitTests/Theme/PersonalScribeThemeTests.swift` (every hex
    token from `colour_system.png` is asserted).
 
-## SeshatLogoView (`Sources/SeshatAppKit/Components/SeshatLogoView.swift`)
-- **Preview name:** `"Seshat Logo — all states"`
+## PersonalScribeLogoView (`Sources/PersonalScribeAppKit/Components/PersonalScribeLogoView.swift`)
+- **Preview name:** `"Ninimma Logo — all states"`
 - Verify against `plans/seshat_agent_bundle/01_Foundations/assets/logo_animation_states.png`:
   1. **Idle** tile shows a quill with a slow, low-amplitude wave.
   2. **Listening** tile shows a quill with a visibly faster, higher-amp wave.
@@ -26,7 +26,7 @@ each line).
   7. At `size: 96` the stroke looks substantial (not a hairline); at
      `size: 24` the quill is still recognisable.
 
-## WaveformView (`Sources/SeshatAppKit/Components/WaveformView.swift`)
+## WaveformView (`Sources/PersonalScribeAppKit/Components/WaveformView.swift`)
 - **Preview name:** `"Waveform — idle vs active"`
 - Verify:
   1. **Idle row** (audioLevel=0, isActive=false) shows a flat-ish row of
@@ -38,7 +38,7 @@ each line).
      consume measurable CPU when alone on-screen. This is the
      locked-in "no TimelineView while idle" decision (plan line 351).
 
-## StatusPill (`Sources/SeshatAppKit/Components/StatusPill.swift`)
+## StatusPill (`Sources/PersonalScribeAppKit/Components/StatusPill.swift`)
 - **Preview name:** `"StatusPill — variants"`
 - Verify:
   1. Ready pill shows a green dot (`#30D158` dark / `#28A745` light)
@@ -47,7 +47,7 @@ each line).
   3. Neutral pill shows a champagne dot.
   4. Background is `elevatedSurface`; subtle champagne-tinted border.
 
-## TagChip (`Sources/SeshatAppKit/Components/TagChip.swift`)
+## TagChip (`Sources/PersonalScribeAppKit/Components/TagChip.swift`)
 - **Preview name:** `"TagChip — variants"`
 - Verify:
   1. Neutral chips render with `elevatedSurface` background, primary
@@ -55,7 +55,7 @@ each line).
   2. Accent chip ("idea") has a champagne-tinted background and
      champagne text — it reads as "selected".
 
-## ActionButton (`Sources/SeshatAppKit/Components/ActionButton.swift`)
+## ActionButton (`Sources/PersonalScribeAppKit/Components/ActionButton.swift`)
 - **Preview name:** `"ActionButton — variants"`
 - Verify:
   1. Primary button has a champagne fill and near-black text — strong
@@ -65,7 +65,7 @@ each line).
   3. Disabled button is 45% opacity and does not respond to hover or
      click.
 
-## Asset catalog (`Sources/SeshatAppKit/Resources/Assets.xcassets/`)
+## Asset catalog (`Sources/PersonalScribeAppKit/Resources/Assets.xcassets/`)
 - Open the asset catalog in Xcode.
 - `StatusBarIcon` imageset has Render-As set to **Template Image**.
   macOS auto-tints it based on menu-bar dark/light mode.

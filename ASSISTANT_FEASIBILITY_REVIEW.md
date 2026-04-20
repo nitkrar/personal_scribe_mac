@@ -1,4 +1,4 @@
-# Seshat Pillar 3 (Assistant) — Feasibility Review
+# Ninimma Pillar 3 (Assistant) — Feasibility Review
 
 **Reviewer perspective:** ML engineer specializing in on-device inference and local LLM deployment  
 **Date:** 2026-04-15  
@@ -401,7 +401,7 @@ The proposal's claim of "4GB minimum, 8GB recommended" should be revised to "8GB
 
 ## Summary
 
-The Seshat proposal is ambitious and well-structured for Pillars 1 and 2. Pillar 3 (Assistant) is where it overreaches. The combination of "everything local" + "small model" + "consumer hardware" imposes hard constraints that the proposal does not acknowledge.
+The Ninimma proposal is ambitious and well-structured for Pillars 1 and 2. Pillar 3 (Assistant) is where it overreaches. The combination of "everything local" + "small model" + "consumer hardware" imposes hard constraints that the proposal does not acknowledge.
 
 The most critical oversight is not mentioning Apple's Foundation Models framework, which launched in 2025 and is exactly what this project needs: a free, on-device, ~3B parameter model with native Swift APIs, tool calling, guided generation, and Neural Engine optimization. Using this framework eliminates the model distribution problem, reduces memory pressure, and provides a better-quality model than what you could ship via llama.cpp.
 
