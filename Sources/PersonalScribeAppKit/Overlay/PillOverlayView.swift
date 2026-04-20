@@ -44,11 +44,28 @@ public struct PillOverlayView: View {
 
     static let cornerRadius: CGFloat = 14
 
-    // Scheme-invariant pill foreground tokens.
-    // The pill surface is always dark navy — these must always be light.
-    private let fg   = PersonalScribeTheme.Pill.Dark.waveform   // #D4D0C8 champagne
-    private let fgDim = PersonalScribeTheme.Pill.Dark.cancel     // #99999E secondary
-    private let fgStop = PersonalScribeTheme.Pill.Dark.stop      // #F75138 stop red
+    // Pill foreground tokens — selected based on the resolved panel
+    // appearance (which follows the user's Dark / Light / System
+    // preference in Settings). colorScheme reflects the NSPanel
+    // appearance set by PillOverlayPresenter.applyResolvedAppearance().
+    //
+    // Dark panel  → Pill.Dark.*  (champagne on navy)
+    // Light panel → Pill.Light.* (dark ink on pale cream)
+    private var fg: Color {
+        colorScheme == .dark
+            ? PersonalScribeTheme.Pill.Dark.waveform
+            : PersonalScribeTheme.Pill.Light.waveform
+    }
+    private var fgDim: Color {
+        colorScheme == .dark
+            ? PersonalScribeTheme.Pill.Dark.cancel
+            : PersonalScribeTheme.Pill.Light.cancel
+    }
+    private var fgStop: Color {
+        colorScheme == .dark
+            ? PersonalScribeTheme.Pill.Dark.stop
+            : PersonalScribeTheme.Pill.Light.stop
+    }
 
     public init(model: PillOverlayViewModel) {
         self._model = ObservedObject(wrappedValue: model)
