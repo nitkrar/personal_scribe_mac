@@ -24,5 +24,3 @@ public enum PasteMode: String, CaseIterable, Codable, Sendable, Equatable {
         Self.preference(defaults: defaults).persist(self)
     }
 }
-
-public typealias SeshatPasteMode = PasteMode
