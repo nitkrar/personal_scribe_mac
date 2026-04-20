@@ -43,10 +43,10 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
             logger: SeshatLogger(category: SeshatLogCategory.session)
         )
 
-        let stream = await coordinator.stateStream()
-        let observedStates = Task { () -> [SessionState] in
+        let firstSessionStream = await coordinator.stateStream()
+        let firstObservedStates = Task { () -> [SessionState] in
             var observed: [SessionState] = []
-            for await state in stream.prefix(7) {
+            for await state in firstSessionStream.prefix(4) {
                 observed.append(state)
             }
             return observed
@@ -56,29 +56,52 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
         try await modelService.setActiveVoiceModel(secondDescriptor.id)
         await coordinator.toggle()
 
-        let firstPrepareCount = await firstTranscriber.prepareCallCount
+        let firstStates = try await withTimeout(.seconds(1)) {
+            await firstObservedStates.value
+        }
+        let firstPrepareCount = try await withTimeout(.seconds(1)) {
+            while await firstTranscriber.prepareCallCount == 0 {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            return await firstTranscriber.prepareCallCount
+        }
         let firstTranscribeCount = await firstTranscriber.transcribeCallCount
         let secondPrepareCountAfterFirstSession = await secondTranscriber.prepareCallCount
         let secondTranscribeCountAfterFirstSession = await secondTranscriber.transcribeCallCount
         let firstResultText = await coordinator.lastResult()?.text
 
+        XCTAssertEqual(firstStates, [.idle, .recording, .transcribing, .idle])
         XCTAssertEqual(firstPrepareCount, 1)
         XCTAssertEqual(firstTranscribeCount, 1)
         XCTAssertEqual(secondPrepareCountAfterFirstSession, 0)
         XCTAssertEqual(secondTranscribeCountAfterFirstSession, 0)
         XCTAssertEqual(firstResultText, "First model.")
 
+        let secondSessionStream = await coordinator.stateStream()
+        let secondObservedStates = Task { () -> [SessionState] in
+            var observed: [SessionState] = []
+            for await state in secondSessionStream.prefix(4) {
+                observed.append(state)
+            }
+            return observed
+        }
+
         await coordinator.toggle()
         await coordinator.toggle()
 
-        let states = try await withTimeout(.seconds(1)) {
-            await observedStates.value
+        let secondStates = try await withTimeout(.seconds(1)) {
+            await secondObservedStates.value
         }
-        let secondPrepareCount = await secondTranscriber.prepareCallCount
+        let secondPrepareCount = try await withTimeout(.seconds(1)) {
+            while await secondTranscriber.prepareCallCount == 0 {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            return await secondTranscriber.prepareCallCount
+        }
         let secondTranscribeCount = await secondTranscriber.transcribeCallCount
         let secondResultText = await coordinator.lastResult()?.text
 
-        XCTAssertEqual(states, [.idle, .recording, .transcribing, .idle, .recording, .transcribing, .idle])
+        XCTAssertEqual(secondStates, [.idle, .recording, .transcribing, .idle])
         XCTAssertEqual(secondPrepareCount, 1)
         XCTAssertEqual(secondTranscribeCount, 1)
         XCTAssertEqual(secondResultText, "Second model.")
