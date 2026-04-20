@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import SeshatAppKit
 import SeshatCore
@@ -5,35 +6,56 @@ import SeshatCore
 @MainActor
 final class OnboardingViewModelTests: XCTestCase {
     func testInitialStateStartsWithAllPermissionsPending() {
-        let viewModel = OnboardingViewModel(permissionProbe: FakePermissionRequester())
+        let viewModel = OnboardingViewModel(permissionService: FakePermissionService())
 
-        XCTAssertEqual(viewModel.microphoneOutcome, .pending)
-        XCTAssertEqual(viewModel.inputMonitoringOutcome, .pending)
-        XCTAssertEqual(viewModel.accessibilityOutcome, .pending)
+        XCTAssertEqual(viewModel.microphoneState, .pending)
+        XCTAssertEqual(viewModel.inputMonitoringState, .pending)
+        XCTAssertEqual(viewModel.accessibilityState, .pending)
         XCTAssertFalse(viewModel.canContinue)
         XCTAssertFalse(viewModel.isOnboardingComplete)
     }
 
     func testRequestMicrophoneAccessMarksMicrophoneGranted() async {
-        let viewModel = OnboardingViewModel(
-            permissionProbe: FakePermissionRequester(microphoneResult: .granted)
+        let permissionService = FakePermissionService()
+        permissionService.statusUpdatesAfterRequest[.microphone] = .granted
+        permissionService.requestOutcomes[.microphone] = RequestOutcome(
+            prompted: true,
+            openedSettings: false,
+            requiresRelaunch: false,
+            finalStatus: .granted
         )
+        let viewModel = OnboardingViewModel(permissionService: permissionService)
 
         await viewModel.requestMicrophoneAccess()
 
-        XCTAssertEqual(viewModel.microphoneOutcome, .granted)
-        XCTAssertEqual(viewModel.inputMonitoringOutcome, .pending)
-        XCTAssertEqual(viewModel.accessibilityOutcome, .pending)
+        XCTAssertEqual(viewModel.microphoneState, .granted)
+        XCTAssertEqual(viewModel.inputMonitoringState, .pending)
+        XCTAssertEqual(viewModel.accessibilityState, .pending)
     }
 
     func testCanContinueRequiresMicrophoneAndInputMonitoringButNotAccessibility() async {
-        let viewModel = OnboardingViewModel(
-            permissionProbe: FakePermissionRequester(
-                microphoneResult: .granted,
-                inputMonitoringResult: .granted,
-                accessibilityResult: .denied
-            )
+        let permissionService = FakePermissionService()
+        permissionService.statusUpdatesAfterRequest[.microphone] = .granted
+        permissionService.statusUpdatesAfterRequest[.inputMonitoring] = .granted
+        permissionService.requestOutcomes[.microphone] = RequestOutcome(
+            prompted: true,
+            openedSettings: false,
+            requiresRelaunch: false,
+            finalStatus: .granted
         )
+        permissionService.requestOutcomes[.inputMonitoring] = RequestOutcome(
+            prompted: true,
+            openedSettings: false,
+            requiresRelaunch: true,
+            finalStatus: .granted
+        )
+        permissionService.requestOutcomes[.accessibility] = RequestOutcome(
+            prompted: true,
+            openedSettings: false,
+            requiresRelaunch: false,
+            finalStatus: .pending
+        )
+        let viewModel = OnboardingViewModel(permissionService: permissionService)
 
         XCTAssertFalse(viewModel.canContinue)
 
@@ -44,22 +66,84 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.canContinue)
 
         await viewModel.requestAccessibilityAccess()
-        XCTAssertEqual(viewModel.accessibilityOutcome, .denied)
+        XCTAssertEqual(viewModel.accessibilityState, .openSettings)
         XCTAssertTrue(viewModel.canContinue)
     }
 
+    func testRequestAccessibilityAccessShowsWarningWhenServiceStillReportsPendingAfterPrompt() async {
+        let permissionService = FakePermissionService(
+            statuses: [
+                .microphone: .granted,
+                .inputMonitoring: .granted,
+                .accessibility: .pending,
+            ]
+        )
+        permissionService.requestOutcomes[.accessibility] = RequestOutcome(
+            prompted: true,
+            openedSettings: false,
+            requiresRelaunch: false,
+            finalStatus: .pending
+        )
+        let viewModel = OnboardingViewModel(permissionService: permissionService)
+
+        XCTAssertFalse(viewModel.showsAccessibilityWarning)
+        XCTAssertTrue(viewModel.canContinue)
+
+        await viewModel.requestAccessibilityAccess()
+
+        XCTAssertEqual(viewModel.accessibilityState, .openSettings)
+        XCTAssertTrue(viewModel.canContinue)
+        XCTAssertTrue(viewModel.showsAccessibilityWarning)
+    }
+
+    func testRequestInputMonitoringAccessShowsOpenSettingsStateWhenServiceStillReportsPendingAfterPrompt() async {
+        let permissionService = FakePermissionService(
+            statuses: [
+                .microphone: .granted,
+                .inputMonitoring: .pending,
+                .accessibility: .pending,
+            ]
+        )
+        permissionService.requestOutcomes[.inputMonitoring] = RequestOutcome(
+            prompted: true,
+            openedSettings: false,
+            requiresRelaunch: true,
+            finalStatus: .pending
+        )
+        let viewModel = OnboardingViewModel(permissionService: permissionService)
+
+        await viewModel.requestInputMonitoringAccess()
+
+        XCTAssertEqual(viewModel.inputMonitoringState, .openSettings)
+        XCTAssertFalse(viewModel.canContinue)
+    }
+
     func testContinueTappedPersistsCompletionWhenMandatoryPermissionsGranted() async {
-        let defaults = isolatedDefaults(for: #function)
-        let viewModel = makeViewModel(
-            defaults: defaults,
-            permissionProbe: FakePermissionRequester(
-                microphoneResult: .granted,
-                inputMonitoringResult: .granted
-            )
+        let permissionService = FakePermissionService()
+        permissionService.statusUpdatesAfterRequest[.microphone] = .granted
+        permissionService.statusUpdatesAfterRequest[.inputMonitoring] = .granted
+        permissionService.requestOutcomes[.microphone] = RequestOutcome(
+            prompted: true,
+            openedSettings: false,
+            requiresRelaunch: false,
+            finalStatus: .granted
+        )
+        permissionService.requestOutcomes[.inputMonitoring] = RequestOutcome(
+            prompted: true,
+            openedSettings: false,
+            requiresRelaunch: true,
+            finalStatus: .granted
+        )
+        var didPersistCompletion = false
+        let viewModel = OnboardingViewModel(
+            permissionService: permissionService,
+            persistCompletion: {
+                didPersistCompletion = true
+            }
         )
 
         viewModel.continueTapped()
-        XCTAssertEqual(SeshatOnboardingCompleted.resolve(from: defaults), .incomplete)
+        XCTAssertFalse(didPersistCompletion)
         XCTAssertFalse(viewModel.isOnboardingComplete)
 
         await viewModel.requestMicrophoneAccess()
@@ -67,85 +151,90 @@ final class OnboardingViewModelTests: XCTestCase {
 
         viewModel.continueTapped()
 
+        XCTAssertTrue(didPersistCompletion)
         XCTAssertTrue(viewModel.isOnboardingComplete)
-        XCTAssertEqual(viewModel.accessibilityOutcome, .skipped)
-        XCTAssertEqual(SeshatOnboardingCompleted.resolve(from: defaults), .completed)
+        XCTAssertEqual(viewModel.accessibilityState, .skipped)
     }
 
     func testSkipSetupTappedPersistsCompletion() {
-        let defaults = isolatedDefaults(for: #function)
-        let viewModel = makeViewModel(defaults: defaults)
+        var didPersistCompletion = false
+        let viewModel = OnboardingViewModel(
+            permissionService: FakePermissionService(),
+            persistCompletion: {
+                didPersistCompletion = true
+            }
+        )
 
         viewModel.skipSetupTapped()
 
         XCTAssertTrue(viewModel.isOnboardingComplete)
-        XCTAssertEqual(SeshatOnboardingCompleted.resolve(from: defaults), .completed)
+        XCTAssertTrue(didPersistCompletion)
     }
 
-    func testSkipAccessibilityMarksWarningStateWithoutBlockingContinue() async {
+    func testSkipAccessibilityMarksWarningStateWithoutBlockingContinue() {
         let viewModel = OnboardingViewModel(
-            permissionProbe: FakePermissionRequester(
-                microphoneResult: .granted,
-                inputMonitoringResult: .granted
+            permissionService: FakePermissionService(
+                statuses: [
+                    .microphone: .granted,
+                    .inputMonitoring: .granted,
+                    .accessibility: .pending,
+                ]
             )
         )
 
-        await viewModel.requestMicrophoneAccess()
-        await viewModel.requestInputMonitoringAccess()
-
         viewModel.skipAccessibilityAccess()
 
-        XCTAssertEqual(viewModel.accessibilityOutcome, .skipped)
+        XCTAssertEqual(viewModel.accessibilityState, .skipped)
         XCTAssertTrue(viewModel.canContinue)
-    }
-
-    private func makeViewModel(
-        defaults: UserDefaults,
-        permissionProbe: any OnboardingPermissionProbing = FakePermissionRequester()
-    ) -> OnboardingViewModel {
-        OnboardingViewModel(
-            permissionProbe: permissionProbe,
-            persistCompletion: {
-                SeshatOnboardingCompleted.completed.persist(to: defaults)
-            }
-        )
-    }
-
-    private func isolatedDefaults(for testName: String) -> UserDefaults {
-        let suiteName = "OnboardingViewModelTests.\(testName)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        addTeardownBlock {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-        return defaults
     }
 }
 
-private actor FakePermissionRequester: OnboardingPermissionProbing {
-    let microphoneResult: OnboardingPermissionOutcome
-    let inputMonitoringResult: OnboardingPermissionOutcome
-    let accessibilityResult: OnboardingPermissionOutcome
+@MainActor
+private final class FakePermissionService: PermissionService {
+    @Published private(set) var statuses: [Permission: PermissionStatus]
+
+    var requestOutcomes: [Permission: RequestOutcome] = [:]
+    var statusUpdatesAfterRequest: [Permission: PermissionStatus] = [:]
+    var nextRefreshStatuses: [Permission: PermissionStatus]
 
     init(
-        microphoneResult: OnboardingPermissionOutcome = .granted,
-        inputMonitoringResult: OnboardingPermissionOutcome = .granted,
-        accessibilityResult: OnboardingPermissionOutcome = .granted
+        statuses: [Permission: PermissionStatus] = [
+            .microphone: .pending,
+            .inputMonitoring: .pending,
+            .accessibility: .pending,
+        ]
     ) {
-        self.microphoneResult = microphoneResult
-        self.inputMonitoringResult = inputMonitoringResult
-        self.accessibilityResult = accessibilityResult
+        self.statuses = statuses
+        self.nextRefreshStatuses = statuses
     }
 
-    func requestMicrophoneAccess() async -> OnboardingPermissionOutcome {
-        microphoneResult
+    func status(for permission: Permission) -> PermissionStatus {
+        statuses[permission] ?? .pending
     }
 
-    func requestInputMonitoringAccess() async -> OnboardingPermissionOutcome {
-        inputMonitoringResult
+    func request(_ permission: Permission) async -> RequestOutcome {
+        if let updatedStatus = statusUpdatesAfterRequest[permission] {
+            statuses[permission] = updatedStatus
+        }
+
+        return requestOutcomes[permission]
+            ?? RequestOutcome(
+                prompted: false,
+                openedSettings: false,
+                requiresRelaunch: false,
+                finalStatus: status(for: permission)
+            )
     }
 
-    func requestAccessibilityAccess() async -> OnboardingPermissionOutcome {
-        accessibilityResult
+    func statusSnapshot() -> [Permission: PermissionStatus] {
+        statuses
+    }
+
+    func refresh() {
+        statuses = nextRefreshStatuses
+    }
+
+    func systemSettingsDeepLink(for permission: Permission) -> URL {
+        URL(string: "https://example.invalid/\(permission.rawValue)")!
     }
 }

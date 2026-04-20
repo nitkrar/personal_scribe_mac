@@ -23,3 +23,4 @@ prompts still require runtime verification.
 
 - [ ] **MV-OB-7** With Microphone and Input Monitoring granted, click `Continue`. Confirm the window closes whether Accessibility is granted, denied, or skipped.
 - [ ] **MV-OB-8** Relaunch from a fresh-defaults state, click `Skip setup`, and confirm the window closes immediately and onboarding does not appear automatically on the next launch.
+- [ ] **MV-OB-9** From any `Open Settings` state, grant the permission in System Settings, return to the app, and confirm the matching row refreshes automatically without relaunching the onboarding window.

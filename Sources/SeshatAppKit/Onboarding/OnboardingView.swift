@@ -55,11 +55,12 @@ struct OnboardingView: View {
     private var checklist: some View {
         VStack(spacing: 8) {
             permissionRow(
+                permission: .microphone,
                 index: 1,
                 title: "Microphone Access",
                 oneLiner: "Capture audio for transcription.",
                 popoverCopy: "\(AppBrand.displayName) only uses the microphone while you are actively recording. Audio never leaves your device — transcription runs locally via Parakeet-TDT.",
-                outcome: viewModel.microphoneOutcome,
+                state: viewModel.microphoneState,
                 isOptional: false,
                 showsConnector: true,
                 isInfoPresented: $isMicrophoneInfoPresented,
@@ -67,16 +68,16 @@ struct OnboardingView: View {
                     Task { @MainActor in
                         await viewModel.requestMicrophoneAccess()
                     }
-                },
-                settingsAnchor: "Privacy_Microphone"
+                }
             )
 
             permissionRow(
+                permission: .inputMonitoring,
                 index: 2,
                 title: "Input Monitoring",
                 oneLiner: "Detect the global double-tap ⌥ hotkey.",
                 popoverCopy: "Input Monitoring lets \(AppBrand.displayName) see option-key taps even when another app is focused. Without it, the hotkey will not work.",
-                outcome: viewModel.inputMonitoringOutcome,
+                state: viewModel.inputMonitoringState,
                 isOptional: false,
                 showsConnector: true,
                 isInfoPresented: $isInputMonitoringInfoPresented,
@@ -84,16 +85,16 @@ struct OnboardingView: View {
                     Task { @MainActor in
                         await viewModel.requestInputMonitoringAccess()
                     }
-                },
-                settingsAnchor: "Privacy_ListenEvent"
+                }
             )
 
             permissionRow(
+                permission: .accessibility,
                 index: 3,
                 title: "Accessibility",
                 oneLiner: "Paste transcripts into the current app.",
                 popoverCopy: "Accessibility lets \(AppBrand.displayName) paste transcripts into the app you were typing in. Without Accessibility, \(AppBrand.displayName) still copies every transcript to your clipboard — you can paste manually with ⌘V.",
-                outcome: viewModel.accessibilityOutcome,
+                state: viewModel.accessibilityState,
                 isOptional: true,
                 showsConnector: false,
                 isInfoPresented: $isAccessibilityInfoPresented,
@@ -104,8 +105,7 @@ struct OnboardingView: View {
                 },
                 skipAction: {
                     viewModel.skipAccessibilityAccess()
-                },
-                settingsAnchor: "Privacy_Accessibility"
+                }
             )
         }
     }
@@ -203,22 +203,22 @@ struct OnboardingView: View {
     }
 
     private func permissionRow(
+        permission: Permission,
         index: Int,
         title: String,
         oneLiner: String,
         popoverCopy: String,
-        outcome: OnboardingPermissionOutcome,
+        state: OnboardingPermissionRowState,
         isOptional: Bool,
         showsConnector: Bool,
         isInfoPresented: Binding<Bool>,
         grantAction: @escaping () -> Void,
-        skipAction: (() -> Void)? = nil,
-        settingsAnchor: String
+        skipAction: (() -> Void)? = nil
     ) -> some View {
         HStack(alignment: .top, spacing: 12) {
             iconColumn(
                 index: index,
-                outcome: outcome,
+                state: state,
                 isOptional: isOptional,
                 showsConnector: showsConnector
             )
@@ -261,11 +261,11 @@ struct OnboardingView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             statusControl(
-                outcome: outcome,
+                permission: permission,
+                state: state,
                 isOptional: isOptional,
                 grantAction: grantAction,
-                skipAction: skipAction,
-                settingsAnchor: settingsAnchor
+                skipAction: skipAction
             )
         }
         .padding(.vertical, 2)
@@ -273,12 +273,12 @@ struct OnboardingView: View {
 
     private func iconColumn(
         index: Int,
-        outcome: OnboardingPermissionOutcome,
+        state: OnboardingPermissionRowState,
         isOptional: Bool,
         showsConnector: Bool
     ) -> some View {
         VStack(spacing: 4) {
-            rowIcon(index: index, outcome: outcome, isOptional: isOptional)
+            rowIcon(index: index, state: state, isOptional: isOptional)
 
             if showsConnector {
                 Rectangle()
@@ -292,14 +292,14 @@ struct OnboardingView: View {
     @ViewBuilder
     private func rowIcon(
         index: Int,
-        outcome: OnboardingPermissionOutcome,
+        state: OnboardingPermissionRowState,
         isOptional: Bool
     ) -> some View {
-        if outcome == .granted {
+        if state == .granted {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(palette.statusReady)
-        } else if isOptional && (outcome == .denied || outcome == .skipped) {
+        } else if isOptional && (state == .openSettings || state == .skipped) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(warningColor)
@@ -317,13 +317,13 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private func statusControl(
-        outcome: OnboardingPermissionOutcome,
+        permission: Permission,
+        state: OnboardingPermissionRowState,
         isOptional: Bool,
         grantAction: @escaping () -> Void,
-        skipAction: (() -> Void)?,
-        settingsAnchor: String
+        skipAction: (() -> Void)?
     ) -> some View {
-        switch outcome {
+        switch state {
         case .pending:
             if isOptional, let skipAction {
                 VStack(alignment: .trailing, spacing: 4) {
@@ -343,9 +343,9 @@ struct OnboardingView: View {
             Text("Granted")
                 .font(SeshatTheme.Typography.body.font.weight(.semibold))
                 .foregroundStyle(palette.statusReady)
-        case .denied:
+        case .openSettings:
             Button("Open Settings") {
-                openPrivacySettings(anchor: settingsAnchor)
+                openPrivacySettings(for: permission)
             }
             .font(SeshatTheme.Typography.body.font.weight(.semibold))
             .foregroundStyle(palette.statusLink)
@@ -385,13 +385,7 @@ struct OnboardingView: View {
         .background(palette.surface)
     }
 
-    private func openPrivacySettings(anchor: String) {
-        guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)"
-        ) else {
-            return
-        }
-
-        openURL(url)
+    private func openPrivacySettings(for permission: Permission) {
+        openURL(viewModel.systemSettingsDeepLink(for: permission))
     }
 }

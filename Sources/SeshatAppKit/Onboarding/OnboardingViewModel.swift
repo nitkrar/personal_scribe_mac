@@ -2,42 +2,44 @@ import Combine
 import Foundation
 import SeshatCore
 
-enum OnboardingPermissionOutcome: Equatable, Sendable {
+enum OnboardingPermissionRowState: Equatable, Sendable {
     case pending
     case granted
-    case denied
+    case openSettings
     case skipped
 }
 
 @MainActor
 final class OnboardingViewModel: ObservableObject {
-    @Published private(set) var microphoneOutcome: OnboardingPermissionOutcome = .pending
-    @Published private(set) var inputMonitoringOutcome: OnboardingPermissionOutcome = .pending
-    @Published private(set) var accessibilityOutcome: OnboardingPermissionOutcome = .pending
+    @Published private(set) var microphoneState: OnboardingPermissionRowState = .pending
+    @Published private(set) var inputMonitoringState: OnboardingPermissionRowState = .pending
+    @Published private(set) var accessibilityState: OnboardingPermissionRowState = .pending
     @Published private(set) var isOnboardingComplete = false
 
     var canContinue: Bool {
-        microphoneOutcome == .granted && inputMonitoringOutcome == .granted
+        permissionStatuses[.microphone] == .granted
+            && permissionStatuses[.inputMonitoring] == .granted
     }
 
     var showsAccessibilityWarning: Bool {
-        accessibilityOutcome == .denied || accessibilityOutcome == .skipped
+        accessibilityState == .openSettings || accessibilityState == .skipped
     }
 
     private let permissionService: any PermissionService
     private let persistCompletion: @MainActor () -> Void
     private var permissionObservation: AnyCancellable?
+    private var permissionStatuses: [Permission: PermissionStatus]
+    private var requestedPermissions: Set<Permission> = []
     private var didSkipAccessibility = false
 
     init(
         permissionService: (any PermissionService)? = nil,
-        permissionProbe: any OnboardingPermissionProbing = PermissionRequester(),
         persistCompletion: @escaping @MainActor () -> Void = {}
     ) {
-        let resolvedPermissionService = permissionService
-            ?? Self.makeCompatibilityPermissionService(permissionProbe: permissionProbe)
+        let resolvedPermissionService = permissionService ?? AppKitPermissionService()
         self.permissionService = resolvedPermissionService
         self.persistCompletion = persistCompletion
+        self.permissionStatuses = resolvedPermissionService.statusSnapshot()
         syncFromService()
         self.permissionObservation = Self.observePermissionChanges(for: resolvedPermissionService) { [weak self] in
             self?.syncFromService()
@@ -58,31 +60,30 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     func requestMicrophoneAccess() async {
-        _ = await permissionService.request(.microphone)
-        syncFromService()
+        await requestAccess(for: .microphone)
     }
 
     func requestInputMonitoringAccess() async {
-        _ = await permissionService.request(.inputMonitoring)
-        syncFromService()
+        await requestAccess(for: .inputMonitoring)
     }
 
     func requestAccessibilityAccess() async {
         didSkipAccessibility = false
-        _ = await permissionService.request(.accessibility)
-        syncFromService()
+        await requestAccess(for: .accessibility)
     }
 
     func skipAccessibilityAccess() {
         didSkipAccessibility = true
-        accessibilityOutcome = .skipped
+        requestedPermissions.remove(.accessibility)
+        updateDisplayStates()
     }
 
     func continueTapped() {
         guard canContinue else { return }
 
-        if accessibilityOutcome == .pending {
-            accessibilityOutcome = .skipped
+        if accessibilityState == .pending {
+            didSkipAccessibility = true
+            updateDisplayStates()
         }
 
         persistCompletion()
@@ -94,75 +95,54 @@ final class OnboardingViewModel: ObservableObject {
         isOnboardingComplete = true
     }
 
-    private func syncFromService() {
-        let statuses = permissionService.statuses
-        microphoneOutcome = (statuses[.microphone] ?? .pending).onboardingOutcome
-        inputMonitoringOutcome = (statuses[.inputMonitoring] ?? .pending).onboardingOutcome
+    func systemSettingsDeepLink(for permission: Permission) -> URL {
+        permissionService.systemSettingsDeepLink(for: permission)
+    }
 
-        let accessibilityStatus = statuses[.accessibility] ?? .pending
-        if accessibilityStatus == .granted {
-            didSkipAccessibility = false
-            accessibilityOutcome = .granted
-        } else if didSkipAccessibility {
-            accessibilityOutcome = .skipped
+    private func requestAccess(for permission: Permission) async {
+        let outcome = await permissionService.request(permission)
+        if outcome.finalStatus == .granted {
+            requestedPermissions.remove(permission)
         } else {
-            accessibilityOutcome = accessibilityStatus.onboardingOutcome
+            requestedPermissions.insert(permission)
         }
+        syncFromService(overrides: [permission: outcome.finalStatus])
     }
 
-    private static func makeCompatibilityPermissionService(
-        permissionProbe: any OnboardingPermissionProbing
-    ) -> PermissionServiceAdapter {
-        @MainActor
-        final class StateBox {
-            var statuses: [Permission: PermissionStatus] = [
-                .microphone: .pending,
-                .inputMonitoring: .pending,
-                .accessibility: .pending,
-            ]
+    private func syncFromService(overrides: [Permission: PermissionStatus] = [:]) {
+        permissionStatuses = permissionService.statusSnapshot()
+        for (permission, status) in overrides {
+            permissionStatuses[permission] = status
+        }
+        for permission in Permission.allCases where permissionStatuses[permission] == .granted {
+            requestedPermissions.remove(permission)
+        }
+        if permissionStatuses[.accessibility] == .granted {
+            didSkipAccessibility = false
+        }
+        updateDisplayStates()
+    }
+
+    private func updateDisplayStates() {
+        microphoneState = rowState(for: .microphone)
+        inputMonitoringState = rowState(for: .inputMonitoring)
+        accessibilityState = rowState(for: .accessibility)
+    }
+
+    private func rowState(for permission: Permission) -> OnboardingPermissionRowState {
+        let status = permissionStatuses[permission] ?? .pending
+
+        if permission == .accessibility, didSkipAccessibility, status != .granted {
+            return .skipped
         }
 
-        let box = StateBox()
-        return PermissionServiceAdapter(
-            initialStatuses: box.statuses,
-            statusReader: { permission in
-                box.statuses[permission] ?? .pending
-            },
-            requester: { permission in
-                let finalStatus: PermissionStatus
-                switch permission {
-                case .microphone:
-                    finalStatus = await permissionProbe.requestMicrophoneAccess().unifiedPermissionStatus
-                case .inputMonitoring:
-                    finalStatus = await permissionProbe.requestInputMonitoringAccess().unifiedPermissionStatus
-                case .accessibility:
-                    finalStatus = await permissionProbe.requestAccessibilityAccess().unifiedPermissionStatus
-                }
-
-                box.statuses[permission] = finalStatus
-                return RequestOutcome(
-                    prompted: true,
-                    openedSettings: false,
-                    requiresRelaunch: permission == .inputMonitoring,
-                    finalStatus: finalStatus
-                )
-            },
-            refresher: {
-                box.statuses
-            }
-        )
-    }
-}
-
-private extension OnboardingPermissionOutcome {
-    var unifiedPermissionStatus: PermissionStatus {
-        switch self {
-        case .pending, .skipped:
-            return .pending
+        switch status {
+        case .pending:
+            return requestedPermissions.contains(permission) ? .openSettings : .pending
         case .granted:
             return .granted
         case .denied:
-            return .denied
+            return .openSettings
         }
     }
 }

@@ -84,10 +84,7 @@ struct SeshatAppMain: App {
         let onboardingControllerHost = OnboardingWindowControllerHost(
             defaults: defaults,
             startupCoordinator: startupCoordinator,
-            permissionService: compatibilityPermissionService,
-            microphoneStateProvider: { .notYetRequested },
-            inputMonitoringProbe: inputMonitoringProbe,
-            isAccessibilityTrusted: isAccessibilityTrusted
+            permissionService: compatibilityPermissionService
         )
         let isOnboardingCompleteProvider: @MainActor () -> Bool = {
             SeshatOnboardingCompleted.resolve(from: defaults).rawValue

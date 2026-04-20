@@ -141,15 +141,4 @@ extension PermissionStatus {
             return .denied
         }
     }
-
-    var onboardingOutcome: OnboardingPermissionOutcome {
-        switch self {
-        case .pending:
-            return .pending
-        case .granted:
-            return .granted
-        case .denied:
-            return .denied
-        }
-    }
 }

@@ -65,9 +65,10 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
 @MainActor
 final class OnboardingWindowControllerHost: ObservableObject {
-    private let defaults: UserDefaults
     private let startupCoordinator: AppStartupCoordinator
-    private let permissionService: PermissionServiceAdapter
+    private let permissionService: any PermissionService
+    private let isOnboardingCompleteProvider: @MainActor () -> Bool
+    private let persistOnboardingCompletion: @MainActor () -> Void
     private let controllerFactory: @MainActor (
         _ viewModel: OnboardingViewModel,
         _ onFinish: @escaping @MainActor () -> Void
@@ -80,10 +81,9 @@ final class OnboardingWindowControllerHost: ObservableObject {
     init(
         defaults: UserDefaults = .standard,
         startupCoordinator: AppStartupCoordinator,
-        permissionService: PermissionServiceAdapter? = nil,
-        microphoneStateProvider: @escaping @MainActor () -> MicrophonePermissionState,
-        inputMonitoringProbe: any PermissionProbing = IOHIDPermissionProbe(),
-        isAccessibilityTrusted: @escaping @MainActor () -> Bool,
+        permissionService: (any PermissionService)? = nil,
+        isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
+        persistOnboardingCompletion: (@MainActor () -> Void)? = nil,
         controllerFactory: @escaping @MainActor (
             _ viewModel: OnboardingViewModel,
             _ onFinish: @escaping @MainActor () -> Void
@@ -91,16 +91,17 @@ final class OnboardingWindowControllerHost: ObservableObject {
             OnboardingWindowController(viewModel: viewModel, onFinish: onFinish)
         }
     ) {
-        self.defaults = defaults
+        let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
         self.startupCoordinator = startupCoordinator
-        self.permissionService = permissionService
-            ?? Self.makeCompatibilityPermissionService(
-                microphoneStateProvider: microphoneStateProvider,
-                inputMonitoringProbe: inputMonitoringProbe,
-                isAccessibilityTrusted: isAccessibilityTrusted
-            )
+        self.permissionService = permissionService ?? AppKitPermissionService()
+        self.isOnboardingCompleteProvider = isOnboardingCompleteProvider ?? {
+            onboardingCompletionPreference.resolve()
+        }
+        self.persistOnboardingCompletion = persistOnboardingCompletion ?? {
+            onboardingCompletionPreference.persist(true)
+        }
         self.controllerFactory = controllerFactory
-        self.hasCompletedFirstRunOnboarding = SeshatOnboardingCompleted.resolve(from: defaults).rawValue
+        self.hasCompletedFirstRunOnboarding = self.isOnboardingCompleteProvider()
     }
 
     var areCriticalPermissionsGranted: Bool {
@@ -151,7 +152,7 @@ final class OnboardingWindowControllerHost: ObservableObject {
 
         guard persistCompletionOnFinish else { return }
 
-        OnboardingState.completed.persist(to: defaults)
+        persistOnboardingCompletion()
         hasCompletedFirstRunOnboarding = true
         startStartupCoordinatorIfNeeded()
     }
@@ -162,33 +163,11 @@ final class OnboardingWindowControllerHost: ObservableObject {
         startupCoordinator.start()
     }
 
-    private static func makeCompatibilityPermissionService(
-        microphoneStateProvider: @escaping @MainActor () -> MicrophonePermissionState,
-        inputMonitoringProbe: any PermissionProbing,
-        isAccessibilityTrusted: @escaping @MainActor () -> Bool
-    ) -> PermissionServiceAdapter {
-        let snapshot: @MainActor () -> [Permission: PermissionStatus] = {
-            [
-                .microphone: microphoneStateProvider().unifiedPermissionStatus,
-                .inputMonitoring: inputMonitoringProbe.checkInputMonitoring().unifiedPermissionStatus,
-                .accessibility: isAccessibilityTrusted() ? .granted : .pending,
-            ]
-        }
-
-        return PermissionServiceAdapter(
-            initialStatuses: snapshot(),
-            statusReader: { permission in
-                snapshot()[permission] ?? .pending
-            },
-            requester: { permission in
-                RequestOutcome(
-                    prompted: false,
-                    openedSettings: false,
-                    requiresRelaunch: permission == .inputMonitoring,
-                    finalStatus: snapshot()[permission] ?? .pending
-                )
-            },
-            refresher: snapshot
+    private static func onboardingCompletionPreference(defaults: UserDefaults) -> Preference<Bool> {
+        Preference(
+            key: "SeshatOnboardingCompleted",
+            default: false,
+            defaults: defaults
         )
     }
 }
