@@ -4,11 +4,12 @@
 
 ## Snapshot drift callout (read before executing)
 
-This plan is synthesized from per-layer inventory drafts at `plans/central/drafts/stage3/` that were produced across a moving-target trunk. Three sources of staleness to address **before execution**:
+This plan is synthesized from per-layer inventory drafts at `plans/central/drafts/stage3/` that were produced across a moving-target trunk. Two sources of staleness remain to address **before execution** (down from three — L5 resolved post-initial-synthesis):
 
 1. **Layer 1 inventory predates the `phase-2 step 1.retry` permission-fix cluster that just landed.** The L1 draft concluded zero approved rows because every plan-listed symbol still had live refs. With the fix landed, several of those `[QUESTION: Stage 2 swap incomplete]` entries likely become APPROVED. Re-inventory L1 before executing any L1 chunk; the 0 approved-rows count in §3 may grow.
-2. **Layer 5 inventory is missing** — the codex agent for L5 was wedged and re-dispatched; at synthesis time the draft had not landed. Once `plans/central/drafts/stage3/layer_5_inventory.md` lands, re-synthesize this doc or append an L5 addendum.
-3. **Layer 7 inventory predates scope-creep commit `a489d55`** (labeled "L5 fix Step 1" but actually deleted ~14 dead methods in `SessionCoordinator.swift`). Several L7 `[QUESTION]` rows may already be gone. Re-inventory L7 before executing any L7 chunk.
+2. **Layer 7 inventory predates scope-creep commit `a489d55`** (labeled "L5 fix Step 1" but actually deleted ~14 dead methods in `SessionCoordinator.swift`). Several L7 `[QUESTION]` rows may already be gone. Re-inventory L7 before executing any L7 chunk.
+
+(Resolved: L5 inventory landed post-synthesis — `plans/central/drafts/stage3/layer_5_inventory.md` at trunk `a651090`. No new approved-now rows from L5; all candidates blocked on `PasteInjector` / `MenuBarSceneModel` Stage 2 swap completion. Rows folded into §3b below.)
 
 **General safeguard**: every approved row carries a reproducible `Grep to prove unreferenced` column. The execution-time grep is authoritative — re-run it immediately before each chunk's commit and halt the chunk if it returns any live hits (see §7).
 
@@ -60,7 +61,16 @@ These rows exist in the per-layer inventories but are blocked by surviving consu
 |-------|------|------|-----------------------------|
 | 1 | multiple | (all L1 rows) | L1 Stage 2 swap incomplete on snapshot — re-inventory after fix cluster lands |
 | 4 | test | `PillOverlayViewModelTests` | `PillOverlayViewModel.apply(sessionState:preparationProgress:)` still called from `PillOverlayView`, presenter tests |
-| 4 | type | `LegacyPasteInjectorOutputService` | Legacy `MenuBarSceneModel(coordinator:permissionRequester:...)` convenience init still used |
+| 4 | type | `LegacyPasteInjectorOutputService` (L4 citation) | Legacy `MenuBarSceneModel(coordinator:permissionRequester:...)` convenience init still used |
+| 5 | type | `PasteInjector` | `ClipboardBatchOutput` still uses `PasteInjector.RestoreScheduler`/`PasteShortcutPoster`/`postPasteShortcut` |
+| 5 | file | `Sources/SeshatAppKit/Paste/PasteInjector.swift` | Owns `PasteInjecting`, `PasteRoutingDecision`, `FrontmostAppProviding`, `WorkspaceFrontmostAppProvider`; `ClipboardBatchOutput` imports helper types |
+| 5 | protocol | `PasteInjecting` | Still referenced by `PasteInjector.swift`, `MenuBarSceneModel.swift`, `SeshatAppMain.swift` |
+| 5 | type | `PasteRoutingDecision` | Still referenced by `PasteInjector.swift`, `MenuBarSceneModel.swift`, `MenuBarSceneModelTests` |
+| 5 | type | `LegacyPasteInjectorOutputService` (L5 citation) | Private shim still instantiated by `MenuBarSceneModel`; keeps legacy result-mapping path alive |
+| 5 | dead-method | `MenuBarSceneModel.autoPasteTranscriptIfNeeded(_:)` | `applySnapshot(_:)` still calls this on idle transitions; `lastAutoPastedTranscript` deduplicates |
+| 5 | seam | `SeshatAppMain` unused `pasteInjector` parameter | Convenience init still accepts the legacy closure seam |
+| 5 | test | `MenuBarSceneModel` idle-transition `pasteInjector` tests | Legacy seam tests still inject `pasteInjector` |
+| 5 | test | `PasteInjectorTests` | Blocked on `PasteInjector.swift` whole-file delete |
 | 6 | file | `AppConfig.modelId` shim | `AppConfigTests` assertion |
 | 6 | file | `FluidAudioTranscriber.activeModelId` shim | `FluidAudioTranscriberCompileTests` |
 | 6 | type | `ModelRegistry` | `BuiltInModelCatalog` still aliases `ModelRegistry.parakeetTDT06Bv2`; AppKit UI/menu swaps not landed |
@@ -74,8 +84,10 @@ These rows exist in the per-layer inventories but are blocked by surviving consu
 
 ### 3c. Questions / drift flags (unchanged from per-layer drafts — surface here for reviewer)
 
-- Per-layer drafts (`plans/central/drafts/stage3/layer_<N>_inventory.md` §Questions) record a further ~15 plan-vs-tree drift items. Key ones:
+- Per-layer drafts (`plans/central/drafts/stage3/layer_<N>_inventory.md` §Questions) record a further ~20 plan-vs-tree drift items. Key ones:
   - L2 plan §173 lists `BaseDirectoryMigrator.managedSubdirectories` as Stage 3 target — already absent from trunk; plan stale.
+  - L5 plan/reviews cite `SilentPaster`, `OutputService.copy`, `CopyOutputService`, `PasteOutput`, `NotificationOutput` as Stage 3 targets — all already absent from trunk (cleanup landed pre-inventory, partly via `1ac9f98`); plan stale.
+  - L5 plan says `SeshatAppMain` still constructs `PasteInjector()` / calls `pasteInjector.paste(text)` — already removed; only an unused `pasteInjector:` parameter + `_ = pasteInjector` remains.
   - L6 plan names `AppComposition.swift` / `FluidAudioInferenceClient.swift` as fixed-default cleanup targets — both already Stage-2-swapped on trunk; plan stale.
   - L9 plan `[QUESTION-BRAND-1]` about optional `BuildInfo` delete — resolved in favor of delete by §3a row.
   - L1/L2 `BaseDirectoryPath` cross-layer ownership split (Config.swift + AppConfig.swift both own it) — Minor from L3 S2 review; not in §3a because fix direction is ambiguous; cross-layer decision needed.
@@ -172,7 +184,7 @@ Reviewers MUST flag any chunk that crosses this line. The PS-prefix type rename 
 - **Number of chunks**: 5; cumulative LoC deleted ~200.
 - **Cross-layer ordering surprises**: none among approved rows. Questions surfaced in §3c for L1/L2 `BaseDirectoryPath` duplicate ownership.
 - **Per-layer Stage 3 plan vs grep discrepancies**: recorded per-layer draft §Questions. Notable: L2 `managedSubdirectories` already gone; L6 `AppComposition.swift` / `FluidAudioInferenceClient.swift` already Stage-2-swapped; L9 `BuildInfo` optional-delete resolved to delete; L4 stale `PillOverlayController` convenience-init text.
-- **Confidence**: **NEEDS REVIEW** until L1/L5/L7 drift is cleared per §Snapshot drift callout.
+- **Confidence**: **NEEDS REVIEW** until L1 + L7 drift is cleared per §Snapshot drift callout (L5 resolved post-synthesis; no new approved-now rows added).
 - **Confirmation**:
   - `No deletions executed — plan only.`
   - `No swift build or swift test invoked during synthesis.`
