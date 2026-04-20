@@ -138,6 +138,8 @@ struct StatusItemMenuModel: Equatable {
         return StatusItemMenuModel(items: items)
     }
 
+    /// Compatibility bridge for callers that still provide the pre-AppStore
+    /// permission enums. Stage 3 can delete this once the legacy seam is gone.
     static func make(
         sessionState: SessionState,
         micPermission: MicrophonePermissionState,

@@ -8,82 +8,94 @@ import SeshatTestSupport
 
 @MainActor
 final class MenuBarSceneModelTests: XCTestCase {
-    func testInitSeedsPermissionStateFromProvider() async throws {
-        let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .denied },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
+    func testInitSeedsSnapshotPermissionsFromService() async throws {
+        let permissionService = FakePermissionService(statuses: [
+            .microphone: .denied,
+            .inputMonitoring: .granted,
+            .accessibility: .granted,
+        ])
+        let model = try makeModel(permissionService: permissionService)
 
-        XCTAssertEqual(model.permissionState, .denied)
+        XCTAssertEqual(model.snapshot.permissions[.microphone], .denied)
     }
 
-    func testRequestingAccessUpdatesPermissionStateToDeniedWhenPromptReturnsFalse() async throws {
+    func testRequestingAccessUpdatesSnapshotPermissionToDeniedWhenPromptReturnsFalse() async throws {
         let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
+        let permissionService = FakePermissionService(statuses: [
+            .microphone: .pending,
+            .inputMonitoring: .granted,
+            .accessibility: .granted,
+        ])
+        permissionService.statusUpdatesAfterRequest[.microphone] = .denied
+        permissionService.requestOutcomes[.microphone] = RequestOutcome(
+            prompted: true,
+            openedSettings: false,
+            requiresRelaunch: false,
+            finalStatus: .denied
+        )
+        let model = try makeModel(
             coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: false),
-            permissionStateProvider: { .notYetRequested },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
+            permissionService: permissionService
         )
 
         await model.handleRecordButtonTap()
+        await waitUntil {
+            model.snapshot.permissions[.microphone] == .denied
+        }
 
-        XCTAssertEqual(model.permissionState, .denied)
-        // Per MenuBarSceneModel:102-108 (2026-04-19): the record path always
+        XCTAssertEqual(model.snapshot.permissions[.microphone], .denied)
+        // The record path always
         // toggles the coordinator after a permission prompt, surfacing
         // failure via SessionCoordinator → .error rather than blocking the tap.
         let sessionState = await coordinator.state()
+        let requestCount = permissionService.callCount(for: .microphone)
         XCTAssertEqual(sessionState, .recording)
+        XCTAssertEqual(requestCount, 1)
     }
 
     func testHandleRecordButtonTapTogglesWhenPermissionAlreadyGranted() async throws {
         let coordinator = try makeCoordinator()
-        let requester = TestPermissionRequester(result: true)
-        let model = MenuBarSceneModel(
+        let permissionService = FakePermissionService()
+        let model = try makeModel(
             coordinator: coordinator,
-            permissionRequester: requester,
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
+            permissionService: permissionService
         )
 
         await model.handleRecordButtonTap()
 
         let sessionState = await coordinator.state()
-        let requestCount = await requester.callCount()
+        let requestCount = permissionService.callCount(for: .microphone)
         XCTAssertEqual(sessionState, .recording)
         XCTAssertEqual(requestCount, 0)
     }
 
     func testHandleRecordButtonTapRequestsAccessThenTogglesWhenPromptSucceeds() async throws {
         let coordinator = try makeCoordinator()
-        let requester = TestPermissionRequester(result: true)
-        let model = MenuBarSceneModel(
+        let permissionService = FakePermissionService(statuses: [
+            .microphone: .pending,
+            .inputMonitoring: .granted,
+            .accessibility: .granted,
+        ])
+        permissionService.statusUpdatesAfterRequest[.microphone] = .granted
+        permissionService.requestOutcomes[.microphone] = RequestOutcome(
+            prompted: true,
+            openedSettings: false,
+            requiresRelaunch: false,
+            finalStatus: .granted
+        )
+        let model = try makeModel(
             coordinator: coordinator,
-            permissionRequester: requester,
-            permissionStateProvider: { .notYetRequested },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
+            permissionService: permissionService
         )
 
         await model.handleRecordButtonTap()
+        await waitUntil {
+            model.snapshot.permissions[.microphone] == .granted
+        }
 
         let sessionState = await coordinator.state()
-        let requestCount = await requester.callCount()
-        XCTAssertEqual(model.permissionState, .granted)
+        let requestCount = permissionService.callCount(for: .microphone)
+        XCTAssertEqual(model.snapshot.permissions[.microphone], .granted)
         XCTAssertEqual(sessionState, .recording)
         XCTAssertEqual(requestCount, 1)
     }
@@ -97,43 +109,30 @@ final class MenuBarSceneModelTests: XCTestCase {
         // state stream (OS mic prompt, coordinator.error etc.), not via
         // silent onboarding-window reroutes.
         let coordinator = try makeCoordinator()
-        let requester = TestPermissionRequester(result: false)
-        var openOnboardingRequestCount = 0
-        let model = MenuBarSceneModel(
+        let permissionService = FakePermissionService(statuses: [
+            .microphone: .denied,
+            .inputMonitoring: .denied,
+            .accessibility: .pending,
+        ])
+        let model = try makeModel(
             coordinator: coordinator,
-            permissionRequester: requester,
-            permissionStateProvider: { .denied },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            areCriticalPermissionsGranted: { false },
-            openOnboardingRequested: {
-                openOnboardingRequestCount += 1
-            },
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
+            permissionService: permissionService
         )
 
         await model.handleRecordButtonTap()
 
         let sessionState = await coordinator.state()
+        let requestCount = permissionService.callCount(for: .microphone)
         XCTAssertEqual(sessionState, .recording,
                        "Coordinator toggle must fire even when permissions are denied")
-        XCTAssertEqual(openOnboardingRequestCount, 0,
-                       "Menu click must NOT route to onboarding anymore")
+        XCTAssertEqual(requestCount, 0,
+                       "Denied microphone state should not regress into a legacy prompt path")
     }
 
     func testSettingsMenuActionRaisesOpenSettingsRequestedSignal() async throws {
         _ = NSApplication.shared
         let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
+        let model = try makeModel(coordinator: coordinator)
         var openSettingsRequestCount = 0
         let controller = StatusItemController(
             sceneModel: model,
@@ -151,15 +150,7 @@ final class MenuBarSceneModelTests: XCTestCase {
     func testHistoryMenuActionRaisesOpenNotesRequestedSignal() async throws {
         _ = NSApplication.shared
         let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
+        let model = try makeModel(coordinator: coordinator)
         var openNotesRequestCount = 0
         let controller = StatusItemController(
             sceneModel: model,
@@ -181,15 +172,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
     func testStartObservingPublishesRecordingAfterCoordinatorToggle() async throws {
         let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
+        let model = try makeModel(coordinator: coordinator)
 
         model.startObserving()
         await coordinator.toggle()
@@ -200,15 +183,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
     func testStartObservingIsIdempotent() async throws {
         let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
+        let model = try makeModel(coordinator: coordinator)
 
         model.startObserving()
         model.startObserving()
@@ -219,17 +194,11 @@ final class MenuBarSceneModelTests: XCTestCase {
     func testDeinitCancelsObservationTask() async throws {
         let coordinator = try makeCoordinator()
         let cancellationExpectation = expectation(description: "Observation task cancelled")
-        var model: MenuBarSceneModel? = MenuBarSceneModel(
+        var model: MenuBarSceneModel? = try makeModel(
             coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
             onObservationCancelled: {
                 cancellationExpectation.fulfill()
-            },
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
+            }
         )
         weak var weakModel = model
 
@@ -242,15 +211,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
     func testIdleTransitionRefreshesLastResultTextFromCoordinator() async throws {
         let coordinator = try makeCoordinator()
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
+        let model = try makeModel(coordinator: coordinator)
 
         model.startObserving()
         await coordinator.toggle()
@@ -265,17 +226,12 @@ final class MenuBarSceneModelTests: XCTestCase {
     func testIdleTransitionAutoPastesCleanedTranscriptExactlyOnce() async throws {
         let coordinator = try makeCoordinator()
         var pastedValues: [String] = []
-        let model = MenuBarSceneModel(
+        let model = try makeModel(
             coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
             pasteInjector: { text in
                 pastedValues.append(text)
                 return .pasteAtCursor
             },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
 
         model.startObserving()
@@ -293,20 +249,15 @@ final class MenuBarSceneModelTests: XCTestCase {
         let coordinator = try makeCoordinator()
         var pastedValues: [String] = []
         var clipboardOnlyNoticeCount = 0
-        let model = MenuBarSceneModel(
+        let model = try makeModel(
             coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
             pasteInjector: { text in
                 pastedValues.append(text)
                 return .clipboardOnly(reason: .frontmostAppIsSeshat)
             },
-            openSettings: {},
             onClipboardOnlyCopy: {
                 clipboardOnlyNoticeCount += 1
             },
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
 
         model.startObserving()
@@ -324,19 +275,14 @@ final class MenuBarSceneModelTests: XCTestCase {
     func testIdleTransitionDoesNotTriggerClipboardOnlyNoticeWhenPasteRouteTargetsCursor() async throws {
         let coordinator = try makeCoordinator()
         var clipboardOnlyNoticeCount = 0
-        let model = MenuBarSceneModel(
+        let model = try makeModel(
             coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
             pasteInjector: { _ in
                 .pasteAtCursor
             },
-            openSettings: {},
             onClipboardOnlyCopy: {
                 clipboardOnlyNoticeCount += 1
             },
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
 
         model.startObserving()
@@ -353,17 +299,12 @@ final class MenuBarSceneModelTests: XCTestCase {
     func testSecondIdleTransitionDoesNotAutoPasteWhenTranscriptIsUnchanged() async throws {
         let coordinator = try makeCoordinator()
         var pastedValues: [String] = []
-        let model = MenuBarSceneModel(
+        let model = try makeModel(
             coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
             pasteInjector: { text in
                 pastedValues.append(text)
                 return .pasteAtCursor
             },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
 
         model.startObserving()
@@ -387,16 +328,11 @@ final class MenuBarSceneModelTests: XCTestCase {
     func testCopyLatestTranscriptWritesCurrentTranscriptToClipboard() async throws {
         let coordinator = try makeCoordinator()
         var copiedText: String?
-        let model = MenuBarSceneModel(
+        let model = try makeModel(
             coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
             clipboardWriter: { text in
                 copiedText = text
             },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
         model.lastResultText = "copied transcript"
 
@@ -408,16 +344,11 @@ final class MenuBarSceneModelTests: XCTestCase {
     func testCopyLatestTranscriptDoesNothingWhenTranscriptIsMissing() async throws {
         let coordinator = try makeCoordinator()
         var copiedValues: [String] = []
-        let model = MenuBarSceneModel(
+        let model = try makeModel(
             coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
             clipboardWriter: { text in
                 copiedValues.append(text)
             },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
 
         model.copyLatestTranscript()
@@ -428,16 +359,17 @@ final class MenuBarSceneModelTests: XCTestCase {
     func testOpenMicrophonePrivacySettingsInvokesInjectedSettingsAction() async throws {
         let coordinator = try makeCoordinator()
         var openSettingsCallCount = 0
-        let model = MenuBarSceneModel(
+        let permissionService = FakePermissionService(statuses: [
+            .microphone: .denied,
+            .inputMonitoring: .granted,
+            .accessibility: .granted,
+        ])
+        let model = try makeModel(
             coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .denied },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
+            permissionService: permissionService,
             openSettings: {
                 openSettingsCallCount += 1
             },
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
 
         model.openMicrophonePrivacySettings()
@@ -452,15 +384,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             transcriber: transcriber,
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
-        let model = MenuBarSceneModel(
-            coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
-            clipboardWriter: { _ in },
-            pasteInjector: { _ in .pasteAtCursor },
-            openSettings: {},
-            logger: SeshatLogger(category: SeshatLogCategory.ui)
-        )
+        let model = try makeModel(coordinator: coordinator)
 
         model.startObserving()
         await Task.yield()
@@ -521,12 +445,11 @@ final class MenuBarSceneModelTests: XCTestCase {
         try await prepareTask.value
     }
 
-    func testCanInstantiateSeshatAppWithCoordinatorAndPermissionRequester() async throws {
+    func testCanInstantiateSeshatAppWithCoordinatorAndPermissionService() async throws {
         let coordinator = try makeCoordinator()
         let app = SeshatApp(
             coordinator: coordinator,
-            permissionRequester: TestPermissionRequester(result: true),
-            permissionStateProvider: { .granted },
+            permissionService: FakePermissionService(),
             clipboardWriter: { _ in },
             openSettings: {}
         )
@@ -556,6 +479,30 @@ final class MenuBarSceneModelTests: XCTestCase {
             text: "Stub transcript.",
             audioDuration: .seconds(1),
             processingDuration: .milliseconds(200)
+        )
+    }
+
+    private func makeModel(
+        coordinator: SessionCoordinator? = nil,
+        permissionService: FakePermissionService = FakePermissionService(),
+        clipboardWriter: @escaping @MainActor (String) -> Void = { _ in },
+        pasteInjector: @escaping @MainActor (String) -> PasteRoutingDecision = { _ in .pasteAtCursor },
+        outputService: (any OutputService)? = nil,
+        openSettings: @escaping @MainActor () -> Void = {},
+        onClipboardOnlyCopy: @escaping @MainActor () -> Void = {},
+        onObservationCancelled: (@Sendable () -> Void)? = nil
+    ) throws -> MenuBarSceneModel {
+        let resolvedCoordinator = try coordinator ?? makeCoordinator()
+        return MenuBarSceneModel(
+            coordinator: resolvedCoordinator,
+            clipboardWriter: clipboardWriter,
+            pasteInjector: pasteInjector,
+            outputService: outputService,
+            openSettings: openSettings,
+            permissionService: permissionService,
+            onClipboardOnlyCopy: onClipboardOnlyCopy,
+            onObservationCancelled: onObservationCancelled,
+            logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
     }
 
@@ -609,27 +556,56 @@ final class MenuBarSceneModelTests: XCTestCase {
     }
 }
 
-private actor TestPermissionRequester: MicrophonePermissionRequesting {
-    let result: Bool
-    private var requestCount = 0
+@MainActor
+private final class FakePermissionService: PermissionService {
+    @Published private(set) var statuses: [Permission: PermissionStatus]
 
-    init(result: Bool) {
-        self.result = result
+    var requestOutcomes: [Permission: RequestOutcome] = [:]
+    var statusUpdatesAfterRequest: [Permission: PermissionStatus] = [:]
+
+    private var requestCounts: [Permission: Int] = [:]
+
+    init(
+        statuses: [Permission: PermissionStatus] = [
+            .microphone: .granted,
+            .inputMonitoring: .granted,
+            .accessibility: .granted,
+        ]
+    ) {
+        self.statuses = statuses
     }
 
-    func requestAccess() async -> Bool {
-        requestCount += 1
-        return result
+    func status(for permission: Permission) -> PermissionStatus {
+        statuses[permission] ?? .pending
     }
 
-    func callCount() -> Int {
-        requestCount
-    }
-}
+    func request(_ permission: Permission) async -> RequestOutcome {
+        requestCounts[permission, default: 0] += 1
+        if let updatedStatus = statusUpdatesAfterRequest[permission] {
+            statuses[permission] = updatedStatus
+        }
 
-private struct GrantedInputMonitoringProbe: PermissionProbing {
-    func checkInputMonitoring() -> InputMonitoringPermissionState {
-        .granted
+        return requestOutcomes[permission]
+            ?? RequestOutcome(
+                prompted: false,
+                openedSettings: false,
+                requiresRelaunch: false,
+                finalStatus: status(for: permission)
+            )
+    }
+
+    func statusSnapshot() -> [Permission: PermissionStatus] {
+        statuses
+    }
+
+    func refresh() {}
+
+    func systemSettingsDeepLink(for permission: Permission) -> URL {
+        URL(string: "https://example.invalid/\(permission.rawValue)")!
+    }
+
+    func callCount(for permission: Permission) -> Int {
+        requestCounts[permission, default: 0]
     }
 }
 

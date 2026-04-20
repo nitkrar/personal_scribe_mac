@@ -52,8 +52,8 @@ final class MenuBarSceneModel: ObservableObject {
     private var lastAutoPastedTranscript: String?
     private(set) var observationTaskCreationCount = 0
 
-    var permissionState: MicrophonePermissionState {
-        (appStore.snapshot.permissions[.microphone] ?? .pending).microphonePermissionState
+    var snapshot: AppStoreSnapshot {
+        appStore.snapshot
     }
 
     init(
@@ -84,33 +84,23 @@ final class MenuBarSceneModel: ObservableObject {
 
     convenience init(
         coordinator: SessionCoordinator,
-        permissionRequester: any MicrophonePermissionRequesting = AppKitMicrophonePermissionRequester(),
-        permissionStateProvider: @escaping @MainActor () -> MicrophonePermissionState = { .notYetRequested },
         clipboardWriter: @escaping @MainActor (String) -> Void,
         pasteInjector: @escaping @MainActor (String) -> PasteRoutingDecision = { _ in .pasteAtCursor },
         outputService: (any OutputService)? = nil,
         openSettings: @escaping @MainActor () -> Void,
         permissionService: (any PermissionService)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
-        areCriticalPermissionsGranted: @escaping @MainActor () -> Bool = { true },
-        openOnboardingRequested: @escaping @MainActor () -> Void = {},
         onClipboardOnlyCopy: @escaping @MainActor () -> Void = {},
         onObservationCancelled: (@Sendable () -> Void)? = nil,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) {
-        _ = areCriticalPermissionsGranted
-        _ = openOnboardingRequested
-        let resolvedPermissionService = permissionService
-            ?? Self.makeCompatibilityPermissionService(
-                permissionRequester: permissionRequester,
-                permissionStateProvider: permissionStateProvider
-            )
-        let compatibilityPermissionService = Self.makeCompatibilityPermissionServiceAdapter(
+        let resolvedPermissionService = permissionService ?? AppComposition.makePermissionService()
+        let appStorePermissionService = Self.makePermissionServiceAdapter(
             wrapping: resolvedPermissionService
         )
         let appStore = AppStore(
             session: coordinator.appStoreSessionProvider(),
-            permissions: compatibilityPermissionService,
+            permissions: appStorePermissionService,
             activeModeSource: AppComposition.activeModeProvider,
             visibilityModeSource: AppKitVisibilityModeProvider()
         )
@@ -121,7 +111,7 @@ final class MenuBarSceneModel: ObservableObject {
             coordinator: coordinator,
             clipboardWriter: clipboardWriter,
             outputService: outputService ?? LegacyPasteInjectorOutputService(pasteInjector: pasteInjector),
-            permissionService: compatibilityPermissionService,
+            permissionService: resolvedPermissionService,
             openURL: openURL ?? { _ in openSettings() },
             onClipboardOnlyCopy: onClipboardOnlyCopy,
             onObservationCancelled: onObservationCancelled,
@@ -224,57 +214,7 @@ final class MenuBarSceneModel: ObservableObject {
         onObservationCancelled?()
     }
 
-    private static func makeCompatibilityPermissionService(
-        permissionRequester: any MicrophonePermissionRequesting,
-        permissionStateProvider: @escaping @MainActor () -> MicrophonePermissionState
-    ) -> PermissionServiceAdapter {
-        @MainActor
-        final class StateBox {
-            var statuses: [Permission: PermissionStatus]
-
-            init(statuses: [Permission: PermissionStatus]) {
-                self.statuses = statuses
-            }
-        }
-
-        let box = StateBox(statuses: [
-            .microphone: permissionStateProvider().unifiedPermissionStatus,
-            .inputMonitoring: .pending,
-            .accessibility: .pending,
-        ])
-
-        return PermissionServiceAdapter(
-            initialStatuses: box.statuses,
-            statusReader: { permission in
-                box.statuses[permission] ?? .pending
-            },
-            requester: { permission in
-                guard permission == .microphone else {
-                    return RequestOutcome(
-                        prompted: false,
-                        openedSettings: false,
-                        requiresRelaunch: false,
-                        finalStatus: box.statuses[permission] ?? .pending
-                    )
-                }
-
-                let granted = await permissionRequester.requestAccess()
-                let finalStatus: PermissionStatus = granted ? .granted : .denied
-                box.statuses[.microphone] = finalStatus
-                return RequestOutcome(
-                    prompted: true,
-                    openedSettings: false,
-                    requiresRelaunch: false,
-                    finalStatus: finalStatus
-                )
-            },
-            refresher: {
-                box.statuses
-            }
-        )
-    }
-
-    private static func makeCompatibilityPermissionServiceAdapter(
+    private static func makePermissionServiceAdapter(
         wrapping permissionService: any PermissionService
     ) -> PermissionServiceAdapter {
         if let permissionService = permissionService as? PermissionServiceAdapter {

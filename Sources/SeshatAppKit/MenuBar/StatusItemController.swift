@@ -19,11 +19,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     convenience init(
         sceneModel: MenuBarSceneModel,
+        defaults: UserDefaults = .standard,
         openHistory: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "History"),
         openSettings: @escaping @MainActor () -> Void = {},
-        isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
-            SeshatOnboardingCompleted.resolve().rawValue
-        },
+        isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
@@ -32,6 +31,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.init(
             sceneModel: sceneModel,
             appStore: sceneModel.appStore,
+            defaults: defaults,
             openHistory: openHistory,
             openSettings: openSettings,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
@@ -45,21 +45,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     init(
         sceneModel: MenuBarSceneModel,
         appStore: AppStore,
+        defaults: UserDefaults = .standard,
         openHistory: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "History"),
         openSettings: @escaping @MainActor () -> Void = {},
-        isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
-            SeshatOnboardingCompleted.resolve().rawValue
-        },
+        isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) {
+        let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
         self.sceneModel = sceneModel
         self.appStore = appStore
         self.openHistory = openHistory
         self.openSettings = openSettings
-        self.isOnboardingCompleteProvider = isOnboardingCompleteProvider
+        self.isOnboardingCompleteProvider = isOnboardingCompleteProvider ?? {
+            onboardingCompletionPreference.resolve()
+        }
         self.openURL = openURL ?? { url in
             switch url {
             case PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .microphone):
@@ -282,5 +284,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
         ) else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    private static func onboardingCompletionPreference(defaults: UserDefaults) -> Preference<Bool> {
+        Preference(
+            key: "SeshatOnboardingCompleted",
+            default: false,
+            defaults: defaults
+        )
     }
 }
