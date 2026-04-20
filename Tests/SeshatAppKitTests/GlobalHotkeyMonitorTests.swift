@@ -1,3 +1,4 @@
+import Combine
 import AppKit
 import XCTest
 import SeshatCore
@@ -284,11 +285,13 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
     // MARK: - Phase 1 Step 1.9 — Input Monitoring permission warning
 
     func testNilMonitorFailureEmitsDeniedWarningThroughLogSink() {
-        let probe = StubProbe(stubbed: .denied)
+        let permissionService = FakePermissionService(
+            statuses: [.inputMonitoring: .denied]
+        )
         let sink = CapturingLogSink()
         let monitor = GlobalHotkeyMonitor(
             onTrigger: {},
-            permissionProbe: probe,
+            permissionService: permissionService,
             logSink: sink.capture
         )
 
@@ -302,11 +305,13 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
     }
 
     func testNilMonitorFailureReportsNotDeterminedWhenTCCUnresolved() {
-        let probe = StubProbe(stubbed: .notDetermined)
+        let permissionService = FakePermissionService(
+            statuses: [.inputMonitoring: .pending]
+        )
         let sink = CapturingLogSink()
         let monitor = GlobalHotkeyMonitor(
             onTrigger: {},
-            permissionProbe: probe,
+            permissionService: permissionService,
             logSink: sink.capture
         )
 
@@ -316,7 +321,7 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
     }
 
     func testFailureMessageMentionsGrantedPathWhenProbeReportsGrantedDespiteNilMonitor() {
-        let message = GlobalHotkeyMonitor.monitorInstallFailureMessage(for: .granted)
+        let message = GlobalHotkeyMonitor.monitorInstallFailureMessage(for: PermissionStatus.granted)
 
         XCTAssertTrue(message.contains("reporting granted"))
     }
@@ -383,9 +388,36 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
     }
 }
 
-private struct StubProbe: PermissionProbing {
-    let stubbed: InputMonitoringPermissionState
-    func checkInputMonitoring() -> InputMonitoringPermissionState { stubbed }
+@MainActor
+private final class FakePermissionService: PermissionService {
+    @Published private(set) var statuses: [Permission: PermissionStatus]
+
+    init(statuses: [Permission: PermissionStatus] = [:]) {
+        self.statuses = statuses
+    }
+
+    func status(for permission: Permission) -> PermissionStatus {
+        statuses[permission] ?? .pending
+    }
+
+    func request(_ permission: Permission) async -> RequestOutcome {
+        RequestOutcome(
+            prompted: false,
+            openedSettings: false,
+            requiresRelaunch: permission == .inputMonitoring,
+            finalStatus: status(for: permission)
+        )
+    }
+
+    func statusSnapshot() -> [Permission: PermissionStatus] {
+        statuses
+    }
+
+    func refresh() {}
+
+    func systemSettingsDeepLink(for permission: Permission) -> URL {
+        URL(string: "https://example.invalid/\(permission.rawValue)")!
+    }
 }
 
 private final class CapturingLogSink: @unchecked Sendable {

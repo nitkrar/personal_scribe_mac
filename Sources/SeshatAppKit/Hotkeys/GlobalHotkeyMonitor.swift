@@ -31,7 +31,7 @@ public final class GlobalHotkeyMonitor {
     private let recordingHotkey: HotkeyPreference
     private let tapWindow: TimeInterval
     private let scheduleDeferredTrigger: DeferredActionScheduler
-    private let permissionService: PermissionServiceAdapter
+    private let permissionService: any PermissionService
     private let logger: SeshatLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
 
@@ -61,8 +61,7 @@ public final class GlobalHotkeyMonitor {
                 workItem.cancel()
             }
         },
-        permissionService: PermissionServiceAdapter? = nil,
-        permissionProbe: any PermissionProbing = IOHIDPermissionProbe(),
+        permissionService: (any PermissionService)? = nil,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui),
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
     ) {
@@ -71,8 +70,7 @@ public final class GlobalHotkeyMonitor {
         self.recordingHotkey = recordingHotkey
         self.tapWindow = tapWindow
         self.scheduleDeferredTrigger = scheduleDeferredTrigger
-        self.permissionService = permissionService
-            ?? Self.makeCompatibilityPermissionService(permissionProbe: permissionProbe)
+        self.permissionService = permissionService ?? AppKitPermissionService()
         self.logger = logger
         self.logSink = logSink
     }
@@ -109,14 +107,12 @@ public final class GlobalHotkeyMonitor {
     /// dogfood users discover the state.
     internal func handleMonitorInstallFailure() {
         let state = permissionService.status(for: .inputMonitoring)
-        let message = Self.monitorInstallFailureMessage(forUnifiedState: state)
+        let message = Self.monitorInstallFailureMessage(for: state)
         logger.error(message)
         logSink?("error", message)
     }
 
-    private static func monitorInstallFailureMessage(
-        forUnifiedState state: PermissionStatus
-    ) -> String {
+    internal static func monitorInstallFailureMessage(for state: PermissionStatus) -> String {
         let suffix = "Visible remediation will land with Phase 2 NSMenu; until then, grant access in "
             + "System Settings -> Privacy & Security -> Input Monitoring and restart."
         switch state {
@@ -129,12 +125,6 @@ public final class GlobalHotkeyMonitor {
             return "Global hotkey monitor failed to register despite Input Monitoring reporting granted "
                 + "— likely a transient AppKit failure. " + suffix
         }
-    }
-
-    internal static func monitorInstallFailureMessage(
-        for state: InputMonitoringPermissionState
-    ) -> String {
-        monitorInstallFailureMessage(forUnifiedState: state.unifiedPermissionStatus)
     }
 
     public func stop() {
@@ -333,33 +323,5 @@ public final class GlobalHotkeyMonitor {
             modifierFlags.remove(.option)
         }
         return modifierFlags
-    }
-
-    private static func makeCompatibilityPermissionService(
-        permissionProbe: any PermissionProbing
-    ) -> PermissionServiceAdapter {
-        let snapshot: @MainActor () -> [Permission: PermissionStatus] = {
-            [
-                .microphone: .granted,
-                .inputMonitoring: permissionProbe.checkInputMonitoring().unifiedPermissionStatus,
-                .accessibility: .granted,
-            ]
-        }
-
-        return PermissionServiceAdapter(
-            initialStatuses: snapshot(),
-            statusReader: { permission in
-                snapshot()[permission] ?? .pending
-            },
-            requester: { permission in
-                RequestOutcome(
-                    prompted: false,
-                    openedSettings: false,
-                    requiresRelaunch: permission == .inputMonitoring,
-                    finalStatus: snapshot()[permission] ?? .pending
-                )
-            },
-            refresher: snapshot
-        )
     }
 }
