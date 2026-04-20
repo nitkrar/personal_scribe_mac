@@ -3,13 +3,6 @@ import FluidAudio
 import os.signpost
 import PersonalScribeCore
 
-protocol ModelDownloading: Sendable {
-    func ensureModelAvailable(
-        at directory: URL,
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws -> URL
-}
-
 public actor FluidAudioTranscriber: Transcribing {
     private let inference: any FluidAudioInferencing
     private let logger: PersonalScribeLogger

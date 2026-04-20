@@ -6,7 +6,6 @@ public enum PersonalScribeError: Error, Sendable, Equatable {
     case resampleFailure
     case modelLoadFailure
     case transcriptionFailure
-    case modelDownloadFailure
     case cancelled
     case invalidState
     case recordingTooShort
@@ -25,8 +24,6 @@ extension PersonalScribeError: LocalizedError {
             "The transcription model could not be loaded."
         case .transcriptionFailure:
             "Transcription failed."
-        case .modelDownloadFailure:
-            "The transcription model download failed."
         case .cancelled:
             "The operation was cancelled."
         case .invalidState:
@@ -48,8 +45,6 @@ extension PersonalScribeError: LocalizedError {
             "The speech model was unavailable or unreadable."
         case .transcriptionFailure:
             "The transcriber could not produce a result."
-        case .modelDownloadFailure:
-            "The required model assets could not be downloaded."
         case .cancelled:
             "The operation was stopped before it finished."
         case .invalidState:
@@ -65,7 +60,7 @@ extension PersonalScribeError: LocalizedError {
             "Allow microphone access in System Settings and try again."
         case .audioEngineFailure, .resampleFailure:
             "Try recording again."
-        case .modelLoadFailure, .modelDownloadFailure:
+        case .modelLoadFailure:
             "Check model availability and try again."
         case .transcriptionFailure:
             "Try transcribing the recording again."

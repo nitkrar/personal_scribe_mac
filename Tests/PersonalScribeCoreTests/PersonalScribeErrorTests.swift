@@ -35,12 +35,6 @@ final class PersonalScribeErrorTests: XCTestCase {
                 "Try transcribing the recording again."
             ),
             (
-                .modelDownloadFailure,
-                "The transcription model download failed.",
-                "The required model assets could not be downloaded.",
-                "Check model availability and try again."
-            ),
-            (
                 .cancelled,
                 "The operation was cancelled.",
                 "The operation was stopped before it finished.",

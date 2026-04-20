@@ -390,7 +390,7 @@ public final class AppStore: ObservableObject {
             return "Microphone permission needed"
         case .audioEngineFailure, .resampleFailure:
             return "Recording failed"
-        case .modelLoadFailure, .modelDownloadFailure:
+        case .modelLoadFailure:
             return "Model unavailable"
         case .cancelled:
             return "Cancelled"
