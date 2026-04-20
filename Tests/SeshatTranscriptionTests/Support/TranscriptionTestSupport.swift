@@ -73,7 +73,7 @@ actor StubModelDownloader: ModelDownloading {
         ensureCallCount += 1
 
         if let recordingSession {
-            let descriptor = ModelRegistry.parakeetTDT06Bv2
+            let descriptor = BuiltInModelCatalog.parakeetTDT06Bv2
             try await recordingSession.record(
                 URLRequest(url: descriptor.resolveURL(for: descriptor.requiredRelativePaths[0]))
             )

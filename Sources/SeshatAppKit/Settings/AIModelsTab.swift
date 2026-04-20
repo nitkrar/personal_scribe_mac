@@ -6,9 +6,9 @@ public struct AIModelsTab: View {
     private let descriptor: ModelDescriptor
 
     public init(
-        descriptor: ModelDescriptor = ModelRegistry.descriptor(
-            for: ModelRegistry.defaultModelId
-        ) ?? ModelRegistry.parakeetTDT06Bv2
+        descriptor: ModelDescriptor = BuiltInModelCatalog.descriptor(
+            for: BuiltInModelCatalog.defaultModelId
+        ) ?? BuiltInModelCatalog.parakeetTDT06Bv2
     ) {
         self.descriptor = descriptor
     }

@@ -39,6 +39,6 @@ public struct ModesTab: View {
     }
 
     private func voiceModelName(for mode: ModeDescriptor) -> String {
-        ModelRegistry.descriptor(for: mode.voiceModelID)?.displayName ?? mode.voiceModelID
+        BuiltInModelCatalog.descriptor(for: mode.voiceModelID)?.displayName ?? mode.voiceModelID
     }
 }

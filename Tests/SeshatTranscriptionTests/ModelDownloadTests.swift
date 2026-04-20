@@ -4,7 +4,7 @@ import SeshatCore
 
 final class ModelDownloadTests: XCTestCase {
     func testDownloaderUsesPinnedRevision() {
-        let descriptor = ModelRegistry.parakeetTDT06Bv2
+        let descriptor = BuiltInModelCatalog.parakeetTDT06Bv2
         let urls = descriptor.requiredRelativePaths.map(descriptor.resolveURL(for:))
 
         XCTAssertFalse(urls.isEmpty)

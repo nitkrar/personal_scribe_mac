@@ -15,38 +15,27 @@ public struct ModelDescriptor: Sendable, Equatable {
     public let approximateSizeBytes: Int64 // for display and disk-space checks
     public let engine: TranscriptionEngine
 
+    public init(
+        id: String,
+        displayName: String,
+        repository: String,
+        revision: String,
+        requiredRelativePaths: [String],
+        approximateSizeBytes: Int64,
+        engine: TranscriptionEngine
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.repository = repository
+        self.revision = revision
+        self.requiredRelativePaths = requiredRelativePaths
+        self.approximateSizeBytes = approximateSizeBytes
+        self.engine = engine
+    }
+
     public func resolveURL(for relativePath: String) -> URL {
         URL(
             string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(relativePath)"
         )!
     }
-}
-
-public enum ModelRegistry {
-    public static let parakeetTDT06Bv2 = ModelDescriptor(
-        id: "parakeet-tdt-0.6b-v2",
-        displayName: "Parakeet TDT 0.6B",
-        repository: "FluidInference/parakeet-tdt-0.6b-v2-coreml",
-        revision: "ee09c569f73759e6d44c9bd16766f477b2b36d39",
-        requiredRelativePaths: [
-            "Preprocessor.mlmodelc/coremldata.bin",
-            "Encoder.mlmodelc/coremldata.bin",
-            "Decoder.mlmodelc/coremldata.bin",
-            "JointDecision.mlmodelc/coremldata.bin",
-            "parakeet_vocab.json",
-        ],
-        approximateSizeBytes: 450_000_000,
-        engine: .parakeetTDT
-    )
-
-    // Reserve slot. Do not populate until user asks.
-    // public static let parakeetTDT110M = ...
-
-    public static let all: [ModelDescriptor] = [parakeetTDT06Bv2]
-
-    public static func descriptor(for id: String) -> ModelDescriptor? {
-        all.first { $0.id == id }
-    }
-
-    public static let defaultModelId: String = parakeetTDT06Bv2.id
 }

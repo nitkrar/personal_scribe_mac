@@ -8,7 +8,7 @@ final class AppConfigTests: XCTestCase {
     func testConstantsAndOverrideNamesMatchCurrentContract() {
         XCTAssertEqual(AppConfig.sampleRate, 16_000)
         XCTAssertEqual(AppConfig.channelCount, 1)
-        XCTAssertEqual(AppConfig.modelId, ModelRegistry.defaultModelId)
+        XCTAssertEqual(AppConfig.modelId, BuiltInModelCatalog.defaultModelId)
         XCTAssertEqual(AppConfig.baseDirectoryUserDefaultsKey, "BaseDirectoryPath")
         XCTAssertEqual(AppConfig.baseDirectoryEnvironmentVariableName, "SESHAT_BASE_DIR")
     }

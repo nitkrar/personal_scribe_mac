@@ -18,7 +18,7 @@ final class FluidAudioTranscriberCompileTests: XCTestCase {
 
         let activeModelId = await transcriber.activeModelId
 
-        XCTAssertEqual(activeModelId, ModelRegistry.defaultModelId)
+        XCTAssertEqual(activeModelId, BuiltInModelCatalog.defaultModelId)
     }
 
     func testInternalInitializerAcceptsCustomDescriptor() async {

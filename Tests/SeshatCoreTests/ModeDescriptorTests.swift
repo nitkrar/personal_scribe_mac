@@ -5,7 +5,7 @@ final class ModeDescriptorTests: XCTestCase {
     func testDefaultRegistryContainsDictation() {
         XCTAssertEqual(ModeRegistry.all, [ModeRegistry.dictation])
         XCTAssertEqual(ModeRegistry.dictation.name, "Dictation")
-        XCTAssertEqual(ModeRegistry.dictation.voiceModelID, ModelRegistry.defaultModelId)
+        XCTAssertEqual(ModeRegistry.dictation.voiceModelID, BuiltInModelCatalog.defaultModelId)
     }
 
     func testLookupByIDReturnsRegisteredDescriptor() {

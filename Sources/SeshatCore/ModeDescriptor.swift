@@ -26,7 +26,7 @@ public enum ModeRegistry {
     public static let dictation = ModeDescriptor(
         id: "dictation",
         name: "Dictation",
-        voiceModelID: ModelRegistry.defaultModelId
+        voiceModelID: BuiltInModelCatalog.defaultModelId
     )
 
     public static let all: [ModeDescriptor] = [dictation]

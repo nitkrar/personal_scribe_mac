@@ -24,7 +24,7 @@ final class FluidAudioTranscriberAlreadyDownloadedTests: XCTestCase {
         let modelRoot = testRoot
             .appendingPathComponent("Seshat", isDirectory: true)
             .appendingPathComponent("models", isDirectory: true)
-            .appendingPathComponent(ModelRegistry.parakeetTDT06Bv2.id, isDirectory: true)
+            .appendingPathComponent(BuiltInModelCatalog.parakeetTDT06Bv2.id, isDirectory: true)
 
         try TestModelArtifacts.writeValid(to: modelRoot)
     }

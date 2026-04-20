@@ -16,7 +16,19 @@ public enum BuiltInModelCatalog {
         "parakeet_vocab.json",
     ]
 
-    public static let parakeetTDT06Bv2 = ModelRegistry.parakeetTDT06Bv2
+    public static let parakeetTDT06Bv2 = ModelDescriptor(
+        id: "parakeet-tdt-0.6b-v2",
+        displayName: "Parakeet TDT 0.6B",
+        repository: "FluidInference/parakeet-tdt-0.6b-v2-coreml",
+        revision: "ee09c569f73759e6d44c9bd16766f477b2b36d39",
+        requiredRelativePaths: splitFrontendRequiredPaths,
+        approximateSizeBytes: 450_000_000,
+        engine: .parakeetTDT
+    )
+
+    /// The catalog's default model id — used by legacy code paths that still read a
+    /// fixed-default string rather than consulting `defaultActiveDescriptor`.
+    public static let defaultModelId: String = parakeetTDT06Bv2.id
 
     public static let parakeetTDTCTC110M = ModelDescriptor(
         id: "parakeet-tdt-ctc-110m",

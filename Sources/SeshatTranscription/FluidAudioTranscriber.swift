@@ -21,7 +21,7 @@ public actor FluidAudioTranscriber: Transcribing {
     private var prepareTask: Task<Void, Error>?
 
     public init(
-        descriptor: ModelDescriptor = ModelRegistry.parakeetTDT06Bv2,
+        descriptor: ModelDescriptor = BuiltInModelCatalog.parakeetTDT06Bv2,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.transcription)
     ) {
         self.downloader = PrivateModelDownloader(
@@ -40,7 +40,7 @@ public actor FluidAudioTranscriber: Transcribing {
         inference: any FluidAudioInferencing,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.transcription),
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil,
-        descriptor: ModelDescriptor = ModelRegistry.parakeetTDT06Bv2
+        descriptor: ModelDescriptor = BuiltInModelCatalog.parakeetTDT06Bv2
     ) {
         self.downloader = downloader
         self.inference = inference
