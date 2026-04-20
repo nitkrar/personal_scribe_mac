@@ -135,10 +135,17 @@ struct PersonalScribeAppMain: App {
         let showUnifiedWindow: @MainActor () -> Void = {
             unifiedWindowControllerHost.showWindow(nil)
         }
+        let pasteLastTranscriptAction = PasteLastTranscriptAction(
+            transcriptReader: unifiedTranscriptReader,
+            outputService: resolvedOutputService
+        )
         let statusItemControllerHost = StatusItemControllerHost(
             sceneModel: sceneModel,
             appStore: appStore,
             openHome: showUnifiedWindow,
+            openPasteLastTranscript: {
+                Task { await pasteLastTranscriptAction.perform() }
+            },
             isOnboardingCompleteProvider: isOnboardingCompleteProvider
         )
         _sceneModel = StateObject(wrappedValue: sceneModel)
