@@ -1,4 +1,5 @@
 import Foundation
+import FluidAudio
 import XCTest
 import PersonalScribeCore
 @testable import PersonalScribeTranscription
@@ -99,10 +100,12 @@ actor StubInferenceClient: FluidAudioInferencing {
     private(set) var lastReceivedSampleCount = 0
     private(set) var lastFirstSample: Float?
     private(set) var lastLastSample: Float?
+    private(set) var progressHandlerCallCount = 0
 
     private let loadError: Error?
     private let transcribeError: Error?
     private let result: FluidAudioInferenceResult
+    private let scriptedLoadProgress: [DownloadUtils.DownloadProgress]
 
     init(
         loadError: Error? = nil,
@@ -110,20 +113,30 @@ actor StubInferenceClient: FluidAudioInferencing {
         result: FluidAudioInferenceResult = .init(
             text: "",
             processingDuration: .zero
-        )
+        ),
+        scriptedLoadProgress: [DownloadUtils.DownloadProgress] = []
     ) {
         self.loadError = loadError
         self.transcribeError = transcribeError
         self.result = result
+        self.scriptedLoadProgress = scriptedLoadProgress
     }
 
     func loadModel(
         from directory: URL,
-        runtimeVariant: FluidAudioRuntimeVariant
+        runtimeVariant: FluidAudioRuntimeVariant,
+        progressHandler: DownloadUtils.ProgressHandler?
     ) async throws {
         _ = directory
         loadCallCount += 1
         loadedRuntimeVariants.append(runtimeVariant)
+
+        if let progressHandler {
+            for snapshot in scriptedLoadProgress {
+                progressHandler(snapshot)
+                progressHandlerCallCount += 1
+            }
+        }
 
         if let loadError {
             throw loadError

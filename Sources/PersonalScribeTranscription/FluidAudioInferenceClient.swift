@@ -5,9 +5,19 @@ import PersonalScribeCore
 protocol FluidAudioInferencing: Sendable {
     func loadModel(
         from directory: URL,
-        runtimeVariant: FluidAudioRuntimeVariant
+        runtimeVariant: FluidAudioRuntimeVariant,
+        progressHandler: DownloadUtils.ProgressHandler?
     ) async throws
     func transcribe(samples: [Float]) async throws -> FluidAudioInferenceResult
+}
+
+extension FluidAudioInferencing {
+    func loadModel(
+        from directory: URL,
+        runtimeVariant: FluidAudioRuntimeVariant
+    ) async throws {
+        try await loadModel(from: directory, runtimeVariant: runtimeVariant, progressHandler: nil)
+    }
 }
 
 struct FluidAudioInferenceResult: Sendable, Equatable {
@@ -27,11 +37,13 @@ internal actor PrivateFluidAudioInferenceClient: FluidAudioInferencing {
 
     func loadModel(
         from directory: URL,
-        runtimeVariant: FluidAudioRuntimeVariant
+        runtimeVariant: FluidAudioRuntimeVariant,
+        progressHandler: DownloadUtils.ProgressHandler?
     ) async throws {
         let models = try await AsrModels.load(
             from: directory,
-            version: runtimeVariant.asrModelVersion
+            version: runtimeVariant.asrModelVersion,
+            progressHandler: progressHandler
         )
         try await resolvedManager().loadModels(models)
     }

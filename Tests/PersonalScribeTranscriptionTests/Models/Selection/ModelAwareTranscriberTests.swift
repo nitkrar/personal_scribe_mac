@@ -1,4 +1,5 @@
 import Foundation
+import FluidAudio
 import XCTest
 @testable import PersonalScribeCore
 @testable import PersonalScribeTranscription
@@ -261,8 +262,10 @@ private actor StubModelAwareInferenceClient: ModelAwareFluidAudioInferencing {
 
     func loadModel(
         from directory: URL,
-        runtimeVariant: FluidAudioRuntimeVariant
+        runtimeVariant: FluidAudioRuntimeVariant,
+        progressHandler: DownloadUtils.ProgressHandler?
     ) async throws {
+        _ = progressHandler
         loadCallCountStorage += 1
         loadedVariantsStorage.append(runtimeVariant)
         loadedDirectoriesStorage.append(directory)

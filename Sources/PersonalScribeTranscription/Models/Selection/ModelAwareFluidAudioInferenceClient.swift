@@ -5,10 +5,20 @@ import PersonalScribeCore
 protocol ModelAwareFluidAudioInferencing: Sendable {
     func loadModel(
         from directory: URL,
-        runtimeVariant: FluidAudioRuntimeVariant
+        runtimeVariant: FluidAudioRuntimeVariant,
+        progressHandler: DownloadUtils.ProgressHandler?
     ) async throws
 
     func transcribe(samples: [Float]) async throws -> FluidAudioInferenceResult
+}
+
+extension ModelAwareFluidAudioInferencing {
+    func loadModel(
+        from directory: URL,
+        runtimeVariant: FluidAudioRuntimeVariant
+    ) async throws {
+        try await loadModel(from: directory, runtimeVariant: runtimeVariant, progressHandler: nil)
+    }
 }
 
 internal actor PrivateModelAwareFluidAudioInferenceClient: ModelAwareFluidAudioInferencing {
@@ -23,11 +33,13 @@ internal actor PrivateModelAwareFluidAudioInferenceClient: ModelAwareFluidAudioI
 
     func loadModel(
         from directory: URL,
-        runtimeVariant: FluidAudioRuntimeVariant
+        runtimeVariant: FluidAudioRuntimeVariant,
+        progressHandler: DownloadUtils.ProgressHandler?
     ) async throws {
         let models = try await AsrModels.load(
             from: directory,
-            version: runtimeVariant.asrModelVersion
+            version: runtimeVariant.asrModelVersion,
+            progressHandler: progressHandler
         )
         try await resolvedManager().loadModels(models)
     }
