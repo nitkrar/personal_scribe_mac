@@ -24,7 +24,10 @@ public actor FluidAudioTranscriber: Transcribing {
         descriptor: ModelDescriptor = ModelRegistry.parakeetTDT06Bv2,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.transcription)
     ) {
-        self.downloader = PrivateModelDownloader(descriptor: descriptor)
+        self.downloader = PrivateModelDownloader(
+            descriptor: descriptor,
+            storageLocator: AppConfig.liveStorageLocator()
+        )
         self.inference = PrivateFluidAudioInferenceClient()
         self.logger = logger
         self.logSink = nil

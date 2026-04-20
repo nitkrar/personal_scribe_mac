@@ -38,7 +38,7 @@ public actor SQLiteTranscriptStore {
         try self.init(storageLocator: storageLocator, ringCapacity: ringCapacity)
     }
 
-    init(
+    public init(
         storageLocator: any StorageLocator,
         ringCapacity: Int = 500,
         atomicFileWriter: any AtomicFileWriter = FileManagerAtomicFileWriter()

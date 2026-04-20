@@ -35,7 +35,7 @@ public actor TranscriptStoreJSONL {
         try self.init(storageLocator: storageLocator, ringCapacity: ringCapacity)
     }
 
-    init(storageLocator: any StorageLocator, ringCapacity: Int = 500) throws {
+    public init(storageLocator: any StorageLocator, ringCapacity: Int = 500) throws {
         let normalizedCapacity = max(0, ringCapacity)
         let fileManager = FileManager.default
         let logger = SeshatLogger(category: SeshatLogCategory.app)

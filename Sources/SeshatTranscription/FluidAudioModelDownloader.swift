@@ -3,11 +3,16 @@ import SeshatCore
 
 internal struct PrivateModelDownloader: ModelDownloading {
     private let descriptor: ModelDescriptor
+    private let storageLocator: DownloaderModelStorageLocator
     private let session: URLSession = .shared
     private let clock = ContinuousClock()
 
-    init(descriptor: ModelDescriptor) {
+    init(
+        descriptor: ModelDescriptor,
+        storageLocator: any StorageLocator
+    ) {
         self.descriptor = descriptor
+        self.storageLocator = DownloaderModelStorageLocator(storageLocator: storageLocator)
     }
 
     func ensureModelAvailable(
@@ -15,16 +20,14 @@ internal struct PrivateModelDownloader: ModelDownloading {
         progress: @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws -> URL {
         let fileManager = FileManager.default
-        let storageLocator = DownloaderModelStorageLocator(modelDirectory: directory)
         let modelsDirectory = storageLocator.url(for: .models)
-        let modelDirectory = modelsDirectory
-            .appendingPathComponent(descriptor.id, isDirectory: true)
-            .standardizedFileURL
+        let modelDirectory = directory
         let stagingDirectory = FluidAudioTranscriber.stagingDirectory(
             base: modelsDirectory,
             descriptor: descriptor
         )
 
+        try fileManager.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
         try? fileManager.removeItem(at: stagingDirectory)
         try fileManager.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
 
@@ -101,35 +104,21 @@ internal struct PrivateModelDownloader: ModelDownloading {
 }
 
 private struct DownloaderModelStorageLocator: StorageLocator {
-    let baseDirectory: URL
-    private let modelsDirectory: URL
+    private let wrappedStorageLocator: any StorageLocator
 
-    init(modelDirectory: URL) {
-        let modelsDirectory = modelDirectory.deletingLastPathComponent().standardizedFileURL
-        self.modelsDirectory = modelsDirectory
-        self.baseDirectory = modelsDirectory.deletingLastPathComponent().standardizedFileURL
+    init(storageLocator: any StorageLocator) {
+        self.wrappedStorageLocator = storageLocator
+    }
+
+    var baseDirectory: URL {
+        wrappedStorageLocator.baseDirectory
     }
 
     func url(for directory: ManagedDirectory) -> URL {
-        switch directory {
-        case .models:
-            modelsDirectory
-        default:
-            baseDirectory
-                .appendingPathComponent(directory.pathComponent, isDirectory: true)
-                .standardizedFileURL
-        }
+        wrappedStorageLocator.url(for: directory)
     }
 
     func ensureDirectoriesExist() throws {
-        let fileManager = FileManager.default
-        try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
-
-        for directory in ManagedDirectory.allCases {
-            try fileManager.createDirectory(
-                at: url(for: directory),
-                withIntermediateDirectories: true
-            )
-        }
+        try wrappedStorageLocator.ensureDirectoriesExist()
     }
 }

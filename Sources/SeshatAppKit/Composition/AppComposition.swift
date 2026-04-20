@@ -37,8 +37,8 @@ public enum AppComposition {
     private static func makeTranscriptStore() -> SQLiteTranscriptStore? {
         let logger = SeshatLogger(category: SeshatLogCategory.session)
         do {
-            let directory = try SeshatConfig.recordingsDirectory()
-            return try SQLiteTranscriptStore(recordingsDirectory: directory)
+            let storageLocator = AppConfig.liveStorageLocator()
+            return try SQLiteTranscriptStore(storageLocator: storageLocator)
         } catch {
             logger.error("SQLiteTranscriptStore init failed; continuing without persistence", error: error)
             return nil

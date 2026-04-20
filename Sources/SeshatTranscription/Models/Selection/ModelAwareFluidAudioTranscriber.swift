@@ -24,7 +24,10 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
             descriptor: descriptor,
             runtimeVariantResult: Self.resolveRuntimeVariant(for: descriptor),
             storageLocator: storageLocator,
-            downloader: PrivateModelDownloader(descriptor: descriptor),
+            downloader: PrivateModelDownloader(
+                descriptor: descriptor,
+                storageLocator: storageLocator
+            ),
             inference: PrivateModelAwareFluidAudioInferenceClient(),
             logger: logger
         )

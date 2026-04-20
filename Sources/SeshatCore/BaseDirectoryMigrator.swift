@@ -113,8 +113,8 @@ public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable
             }
         }
 
-        AppConfig.setBaseDirectoryOverride(destinationBase, defaults: defaults)
         try destinationStorageLocator.ensureDirectoriesExist()
+        AppConfig.setBaseDirectoryOverride(destinationBase, defaults: defaults)
         return .migrated(
             movedSubdirs: presentSubdirectories.map(\.pathComponent),
             totalBytes: totalBytes

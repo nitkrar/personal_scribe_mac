@@ -196,8 +196,8 @@ extension SeshatAppMain {
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) -> any TranscriptReading {
         do {
-            let recordingsDirectory = try SeshatConfig.recordingsDirectory()
-            let store = try SQLiteTranscriptStore(recordingsDirectory: recordingsDirectory)
+            let storageLocator = AppConfig.liveStorageLocator()
+            let store = try SQLiteTranscriptStore(storageLocator: storageLocator)
             return SQLiteTranscriptReader(store: store)
         } catch {
             logger.error("NotesWindow transcript reader init failed; falling back to empty history", error: error)
