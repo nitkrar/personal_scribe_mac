@@ -50,9 +50,79 @@ struct OverlayPanelInteractionState: Equatable {
     }
 }
 
+@MainActor
 final class DraggablePanel: NSPanel {
+    private let defaults: UserDefaults
+    private let notificationCenter: NotificationCenter
+    private var defaultsDidChangeObserver: NSObjectProtocol?
+
     override var canBecomeKey: Bool {
         true
+    }
+
+    override init(
+        contentRect: NSRect,
+        styleMask style: NSWindow.StyleMask,
+        backing backingStoreType: NSWindow.BackingStoreType,
+        defer flag: Bool
+    ) {
+        defaults = .standard
+        notificationCenter = .default
+        super.init(
+            contentRect: contentRect,
+            styleMask: style,
+            backing: backingStoreType,
+            defer: flag
+        )
+        configurePillAppearanceObservation()
+    }
+
+    init(
+        contentRect: NSRect,
+        styleMask style: NSWindow.StyleMask,
+        backing backingStoreType: NSWindow.BackingStoreType,
+        defer flag: Bool,
+        defaults: UserDefaults = .standard,
+        notificationCenter: NotificationCenter = .default
+    ) {
+        self.defaults = defaults
+        self.notificationCenter = notificationCenter
+        super.init(
+            contentRect: contentRect,
+            styleMask: style,
+            backing: backingStoreType,
+            defer: flag
+        )
+        configurePillAppearanceObservation()
+    }
+
+    required init?(coder: NSCoder) {
+        defaults = .standard
+        notificationCenter = .default
+        super.init(coder: coder)
+        configurePillAppearanceObservation()
+    }
+
+    deinit {
+        if let defaultsDidChangeObserver {
+            notificationCenter.removeObserver(defaultsDidChangeObserver)
+        }
+    }
+
+    private func configurePillAppearanceObservation() {
+        applyResolvedAppearance()
+        defaultsDidChangeObserver = notificationCenter.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: defaults,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyResolvedAppearance()
+        }
+    }
+
+    private func applyResolvedAppearance() {
+        let systemIsDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        appearance = PillAppearance.resolve(from: defaults).nsAppearance(systemIsDark: systemIsDark)
     }
 }
 
@@ -126,6 +196,12 @@ protocol PillOverlayPanelBuilding {
 }
 
 struct AppKitPillOverlayPanelBuilder: PillOverlayPanelBuilding {
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
     @MainActor
     func makePanel(
         model: PillOverlayViewModel,
@@ -138,7 +214,8 @@ struct AppKitPillOverlayPanelBuilder: PillOverlayPanelBuilding {
             contentRect: NSRect(origin: .zero, size: panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
-            defer: false
+            defer: false,
+            defaults: defaults
         )
 
         panel.level = .floating
