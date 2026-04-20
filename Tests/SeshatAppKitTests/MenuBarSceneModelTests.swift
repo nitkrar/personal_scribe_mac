@@ -223,15 +223,12 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(model.lastResultText, "Stub transcript.")
     }
 
-    func testIdleTransitionAutoPastesCleanedTranscriptExactlyOnce() async throws {
+    func testIdleTransitionAutoDeliversTranscriptExactlyOnce() async throws {
         let coordinator = try makeCoordinator()
-        var pastedValues: [String] = []
+        let outputService = RecordingOutputService()
         let model = try makeModel(
             coordinator: coordinator,
-            pasteInjector: { text in
-                pastedValues.append(text)
-                return .pasteAtCursor
-            },
+            outputService: outputService
         )
 
         model.startObserving()
@@ -240,21 +237,22 @@ final class MenuBarSceneModelTests: XCTestCase {
         await coordinator.toggle()
         await waitForState(.idle, on: model)
         await waitForTranscriptText("Stub transcript.", on: model)
-        await Task.yield()
+        await waitUntil {
+            outputService.deliveredTexts == ["Stub transcript."]
+        }
 
-        XCTAssertEqual(pastedValues, ["Stub transcript."])
+        XCTAssertEqual(outputService.deliveredTexts, ["Stub transcript."])
     }
 
-    func testIdleTransitionTriggersClipboardOnlyNoticeWhenPasteRouteSkipsPaste() async throws {
+    func testIdleTransitionTriggersClipboardOnlyNoticeWhenOutputTargetsSelfFrontmost() async throws {
         let coordinator = try makeCoordinator()
-        var pastedValues: [String] = []
         var clipboardOnlyNoticeCount = 0
+        let outputService = RecordingOutputService(
+            result: .delivered(target: .selfFrontmost, delivery: .clipboardOnly)
+        )
         let model = try makeModel(
             coordinator: coordinator,
-            pasteInjector: { text in
-                pastedValues.append(text)
-                return .clipboardOnly(reason: .frontmostAppIsSeshat)
-            },
+            outputService: outputService,
             onClipboardOnlyCopy: {
                 clipboardOnlyNoticeCount += 1
             },
@@ -266,20 +264,23 @@ final class MenuBarSceneModelTests: XCTestCase {
         await coordinator.toggle()
         await waitForState(.idle, on: model)
         await waitForTranscriptText("Stub transcript.", on: model)
-        await Task.yield()
+        await waitUntil {
+            outputService.deliveredTexts == ["Stub transcript."]
+        }
 
-        XCTAssertEqual(pastedValues, ["Stub transcript."])
+        XCTAssertEqual(outputService.deliveredTexts, ["Stub transcript."])
         XCTAssertEqual(clipboardOnlyNoticeCount, 1)
     }
 
-    func testIdleTransitionDoesNotTriggerClipboardOnlyNoticeWhenPasteRouteTargetsCursor() async throws {
+    func testIdleTransitionDoesNotTriggerClipboardOnlyNoticeWhenOutputTargetsFrontmostApp() async throws {
         let coordinator = try makeCoordinator()
         var clipboardOnlyNoticeCount = 0
+        let outputService = RecordingOutputService(
+            result: .delivered(target: .frontmostApp, delivery: .paste)
+        )
         let model = try makeModel(
             coordinator: coordinator,
-            pasteInjector: { _ in
-                .pasteAtCursor
-            },
+            outputService: outputService,
             onClipboardOnlyCopy: {
                 clipboardOnlyNoticeCount += 1
             },
@@ -291,20 +292,19 @@ final class MenuBarSceneModelTests: XCTestCase {
         await coordinator.toggle()
         await waitForState(.idle, on: model)
         await waitForTranscriptText("Stub transcript.", on: model)
-        await Task.yield()
+        await waitUntil {
+            outputService.deliveredTexts == ["Stub transcript."]
+        }
 
         XCTAssertEqual(clipboardOnlyNoticeCount, 0)
     }
 
-    func testSecondIdleTransitionDoesNotAutoPasteWhenTranscriptIsUnchanged() async throws {
+    func testSecondIdleTransitionDoesNotReDeliverWhenTranscriptIsUnchanged() async throws {
         let coordinator = try makeCoordinator()
-        var pastedValues: [String] = []
+        let outputService = RecordingOutputService()
         let model = try makeModel(
             coordinator: coordinator,
-            pasteInjector: { text in
-                pastedValues.append(text)
-                return .pasteAtCursor
-            },
+            outputService: outputService
         )
 
         model.startObserving()
@@ -313,7 +313,9 @@ final class MenuBarSceneModelTests: XCTestCase {
         await coordinator.toggle()
         await waitForState(.idle, on: model)
         await waitForTranscriptText("Stub transcript.", on: model)
-        await Task.yield()
+        await waitUntil {
+            outputService.deliveredTexts == ["Stub transcript."]
+        }
 
         await coordinator.toggle()
         await waitForState(.recording, on: model)
@@ -322,7 +324,7 @@ final class MenuBarSceneModelTests: XCTestCase {
         await waitForTranscriptText("Stub transcript.", on: model)
         await Task.yield()
 
-        XCTAssertEqual(pastedValues, ["Stub transcript."])
+        XCTAssertEqual(outputService.deliveredTexts, ["Stub transcript."])
     }
 
     func testCopyLatestTranscriptWritesCurrentTranscriptToClipboard() async throws {
@@ -486,8 +488,7 @@ final class MenuBarSceneModelTests: XCTestCase {
         coordinator: SessionCoordinator? = nil,
         permissionService: FakePermissionService = FakePermissionService(),
         clipboardWriter: @escaping @MainActor (String) -> Void = { _ in },
-        pasteInjector: @escaping @MainActor (String) -> PasteRoutingDecision = { _ in .pasteAtCursor },
-        outputService: (any OutputService)? = nil,
+        outputService: any OutputService = RecordingOutputService(),
         openSettings: @escaping @MainActor () -> Void = {},
         onClipboardOnlyCopy: @escaping @MainActor () -> Void = {},
         onObservationCancelled: (@Sendable () -> Void)? = nil
@@ -496,7 +497,6 @@ final class MenuBarSceneModelTests: XCTestCase {
         return MenuBarSceneModel(
             coordinator: resolvedCoordinator,
             clipboardWriter: clipboardWriter,
-            pasteInjector: pasteInjector,
             outputService: outputService,
             openSettings: openSettings,
             permissionService: permissionService,

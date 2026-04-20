@@ -7,12 +7,18 @@ typealias PasteboardStringWriter = @MainActor (NSPasteboard, String) -> Bool
 
 @MainActor
 public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
+    typealias RestoreScheduler = @MainActor (
+        _ delay: TimeInterval,
+        _ action: @escaping @MainActor () -> Void
+    ) -> Void
+    typealias PasteShortcutPoster = @MainActor (_ logger: SeshatLogger) -> Bool
+
     private let logger: SeshatLogger
     private let pasteboard: NSPasteboard
     private let defaults: UserDefaults
     private let frontmostAppProvider: any FrontmostAppProviding
     private let selfBundleIdentifier: String
-    private let scheduleRestore: PasteInjector.RestoreScheduler
+    private let scheduleRestore: RestoreScheduler
     private let isAccessibilityTrusted: @MainActor () -> Bool
     private let requestAccessibilityPrompt: @MainActor () -> Void
     private let pasteShortcutPoster: @MainActor () -> Bool
@@ -28,7 +34,7 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         defaults: UserDefaults = .standard,
         frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
         selfBundleIdentifier: String = AppBrand.bundleIdentifier,
-        scheduleRestore: @escaping PasteInjector.RestoreScheduler = { delay, action in
+        scheduleRestore: @escaping RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 Task { @MainActor in
                     action()
@@ -40,7 +46,7 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
             let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
         },
-        pasteShortcutPoster: @escaping PasteInjector.PasteShortcutPoster = PasteInjector.postPasteShortcut,
+        pasteShortcutPoster: @escaping PasteShortcutPoster = ClipboardBatchOutput.postPasteShortcut,
         writeString: @escaping PasteboardStringWriter = { pasteboard, text in
             pasteboard.setString(text, forType: .string)
         }
@@ -132,5 +138,26 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         if !items.isEmpty {
             pasteboard.writeObjects(items)
         }
+    }
+
+    private static func postPasteShortcut(logger: SeshatLogger) -> Bool {
+        guard let source = CGEventSource(stateID: .combinedSessionState) else {
+            logger.info("ClipboardBatchOutput: failed to create CGEventSource; leaving transcript on clipboard as fallback")
+            return false
+        }
+
+        let vKey: CGKeyCode = 9
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false) else {
+            logger.info("ClipboardBatchOutput: failed to create CGEvent; leaving transcript on clipboard as fallback")
+            return false
+        }
+
+        logger.info("ClipboardBatchOutput: posting synthetic Cmd+V to the frontmost app")
+        down.flags = .maskCommand
+        up.flags = .maskCommand
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+        return true
     }
 }

@@ -4,36 +4,6 @@ import SeshatCore
 import SeshatSession
 
 @MainActor
-/// Compatibility-only adapter for the legacy `PasteInjecting` seam.
-///
-/// Do not use this in paths that make user-visible decisions from `OutputResult`:
-/// `PasteInjector.paste(_:)` can report `.pasteAtCursor` even when delivery
-/// fell back to leaving the transcript on the clipboard after AX or synthetic
-/// paste failures. Stage 3 should delete this shim with the legacy seam.
-private final class LegacyPasteInjectorOutputService: OutputService, @unchecked Sendable {
-    private let pasteInjector: @MainActor (String) -> PasteRoutingDecision
-
-    init(pasteInjector: @escaping @MainActor (String) -> PasteRoutingDecision) {
-        self.pasteInjector = pasteInjector
-    }
-
-    func deliverBatch(text: String) async -> OutputResult {
-        guard !text.isEmpty else {
-            return .ignoredEmptyInput
-        }
-
-        switch pasteInjector(text) {
-        case .pasteAtCursor:
-            return .delivered(target: .frontmostApp, delivery: .paste)
-        case .clipboardOnly(reason: .clipboardOnlyMode):
-            return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
-        case .clipboardOnly(reason: .frontmostAppIsSeshat):
-            return .delivered(target: .selfFrontmost, delivery: .clipboardOnly)
-        }
-    }
-}
-
-@MainActor
 final class MenuBarSceneModel: ObservableObject {
     @Published var state: SessionState = .idle
     @Published var lastResultText: String? = nil
@@ -85,7 +55,6 @@ final class MenuBarSceneModel: ObservableObject {
     convenience init(
         coordinator: SessionCoordinator,
         clipboardWriter: @escaping @MainActor (String) -> Void,
-        pasteInjector: @escaping @MainActor (String) -> PasteRoutingDecision = { _ in .pasteAtCursor },
         outputService: (any OutputService)? = nil,
         openSettings: @escaping @MainActor () -> Void,
         permissionService: (any PermissionService)? = nil,
@@ -110,7 +79,7 @@ final class MenuBarSceneModel: ObservableObject {
             appStore: appStore,
             coordinator: coordinator,
             clipboardWriter: clipboardWriter,
-            outputService: outputService ?? LegacyPasteInjectorOutputService(pasteInjector: pasteInjector),
+            outputService: outputService ?? ClipboardBatchOutput(),
             permissionService: resolvedPermissionService,
             openURL: openURL ?? { _ in openSettings() },
             onClipboardOnlyCopy: onClipboardOnlyCopy,
