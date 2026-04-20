@@ -13,7 +13,8 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.make(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted
+            inputMonitoringPermission: .granted,
+            activeModeName: ModeRegistry.dictation.name
         )
 
         XCTAssertEqual(model.items.count, 6)
@@ -46,6 +47,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
+            activeModeName: ModeRegistry.dictation.name,
             isOnboardingComplete: false
         )
 
@@ -68,7 +70,8 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.make(
             sessionState: .recording,
             micPermission: .granted,
-            inputMonitoringPermission: .granted
+            inputMonitoringPermission: .granted,
+            activeModeName: ModeRegistry.dictation.name
         )
         assertAction(model.items[1], id: .startStopRecording, title: "Stop Recording   ⌥⌥")
     }
@@ -77,7 +80,8 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.make(
             sessionState: .transcribing,
             micPermission: .granted,
-            inputMonitoringPermission: .granted
+            inputMonitoringPermission: .granted,
+            activeModeName: ModeRegistry.dictation.name
         )
         guard case let .action(item) = model.items[1] else {
             return XCTFail("Expected action at index 1")
@@ -91,7 +95,8 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.make(
             sessionState: .error(.modelLoadFailure),
             micPermission: .granted,
-            inputMonitoringPermission: .granted
+            inputMonitoringPermission: .granted,
+            activeModeName: ModeRegistry.dictation.name
         )
         assertAction(model.items[1], id: .startStopRecording, title: "Start Recording   ⌥⌥")
     }
@@ -161,7 +166,8 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.make(
             sessionState: .idle,
             micPermission: .notYetRequested,
-            inputMonitoringPermission: .notDetermined
+            inputMonitoringPermission: .notDetermined,
+            activeModeName: ModeRegistry.dictation.name
         )
         // First item is the mode header, not a warning.
         if case .action(let first) = model.items[0] {
@@ -190,7 +196,8 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.make(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted
+            inputMonitoringPermission: .granted,
+            activeModeName: ModeRegistry.dictation.name
         )
         guard case let .action(quit) = model.items.last else {
             return XCTFail("Expected last item to be Quit action")
@@ -208,7 +215,8 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.make(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted
+            inputMonitoringPermission: .granted,
+            activeModeName: ModeRegistry.dictation.name
         )
         guard case let .action(record) = model.items[1] else {
             return XCTFail("Expected record action at index 1")

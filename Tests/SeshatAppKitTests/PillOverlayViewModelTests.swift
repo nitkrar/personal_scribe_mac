@@ -184,10 +184,10 @@ final class PillOverlayViewModelTests: XCTestCase {
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
         XCTAssertEqual(viewModel.visibility, .done)
 
-        // With idle already set, a subsequent apply with download
-        // progress should hide the pill under hidden mode.
+        // The AppStore now derives visibility centrally, and hidden mode
+        // still surfaces active download progress even when the session is idle.
         viewModel.apply(sessionState: .idle, preparationProgress: progress)
-        XCTAssertEqual(viewModel.visibility, .hidden)
+        XCTAssertEqual(viewModel.visibility, .downloading(fractionCompleted: 0.5))
     }
 
     func testAutoShowModeHidesPillWhenIdleAndNoPreparation() {
@@ -219,9 +219,17 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .idle)
 
         viewModel.setVisibilityMode(.hidden)
+        XCTAssertEqual(viewModel.visibilityMode, .hidden)
+        XCTAssertEqual(viewModel.visibility, .idle)
+
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
         XCTAssertEqual(viewModel.visibility, .hidden)
 
         viewModel.setVisibilityMode(.alwaysOn)
+        XCTAssertEqual(viewModel.visibilityMode, .alwaysOn)
+        XCTAssertEqual(viewModel.visibility, .hidden)
+
+        viewModel.apply(sessionState: .idle, preparationProgress: nil)
         XCTAssertEqual(viewModel.visibility, .idle)
     }
 
