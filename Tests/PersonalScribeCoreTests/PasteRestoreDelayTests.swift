@@ -2,7 +2,7 @@ import XCTest
 @testable import PersonalScribeCore
 
 final class PasteRestoreDelayTests: XCTestCase {
-    private let suiteName = "SeshatTestsPasteRestoreDelay"
+    private let suiteName = "PersonalScribeTestsPasteRestoreDelay"
 
     private func isolatedDefaults() -> UserDefaults {
         let defaults = UserDefaults(suiteName: suiteName)!

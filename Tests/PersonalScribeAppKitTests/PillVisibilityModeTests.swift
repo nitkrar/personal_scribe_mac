@@ -10,7 +10,7 @@ import PersonalScribeCore
 /// default `"auto-show"` on first launch. This file tests the raw-value
 /// mapping, resolver behaviour, and default.
 final class PillVisibilityModeTests: XCTestCase {
-    private let suiteName = "SeshatTestsPillVisibilityMode"
+    private let suiteName = "PersonalScribeTestsPillVisibilityMode"
 
     private func isolatedDefaults() -> UserDefaults {
         let defaults = UserDefaults(suiteName: suiteName)!

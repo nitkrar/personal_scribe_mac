@@ -164,7 +164,7 @@ final class TranscriptStoreTests: XCTestCase {
         defer {
             AppConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
             AppConfig.testingBaseDirectoryOverride = nil
-            unsetenv("SESHAT_BASE_DIR")
+            unsetenv("PERSONAL_SCRIBE_BASE_DIR")
             Self.configLock.unlock()
         }
 

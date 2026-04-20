@@ -9,7 +9,7 @@ final class AppConfigTests: XCTestCase {
         XCTAssertEqual(AppConfig.sampleRate, 16_000)
         XCTAssertEqual(AppConfig.channelCount, 1)
         XCTAssertEqual(AppConfig.baseDirectoryUserDefaultsKey, "BaseDirectoryPath")
-        XCTAssertEqual(AppConfig.baseDirectoryEnvironmentVariableName, "SESHAT_BASE_DIR")
+        XCTAssertEqual(AppConfig.baseDirectoryEnvironmentVariableName, "PERSONAL_SCRIBE_BASE_DIR")
     }
 
     func testSetBaseDirectoryOverrideWritesAndClearsDefaultsKey() {

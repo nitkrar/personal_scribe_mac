@@ -2,7 +2,7 @@ import XCTest
 @testable import PersonalScribeCore
 
 final class PasteModeTests: XCTestCase {
-    private let suiteName = "SeshatTestsPasteMode"
+    private let suiteName = "PersonalScribeTestsPasteMode"
 
     private func isolatedDefaults() -> UserDefaults {
         let defaults = UserDefaults(suiteName: suiteName)!

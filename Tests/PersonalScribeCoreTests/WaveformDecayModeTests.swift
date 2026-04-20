@@ -11,7 +11,7 @@ import XCTest
 ///   then snap. `.immediate` = snap to 0 on stream termination (current
 ///   Sprint 1 behaviour).
 final class WaveformDecayModeTests: XCTestCase {
-    private let suiteName = "SeshatTestsWaveformDecayMode"
+    private let suiteName = "PersonalScribeTestsWaveformDecayMode"
 
     private func isolatedDefaults() -> UserDefaults {
         let defaults = UserDefaults(suiteName: suiteName)!

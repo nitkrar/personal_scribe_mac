@@ -4,7 +4,7 @@ import XCTest
 
 final class ActiveModelDescriptorTests: XCTestCase {
     private func isolatedDefaults() -> UserDefaults {
-        let suiteName = "SeshatTests.ActiveModelDescriptor.\(UUID().uuidString)"
+        let suiteName = "PersonalScribeTests.ActiveModelDescriptor.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         addTeardownBlock {

@@ -85,5 +85,5 @@ public struct MetricsSnapshot: Sendable, Equatable {
 }
 
 public enum MetricsNotification {
-    public static let transcriptCommit = Notification.Name("Seshat.metrics.transcriptCommit")
+    public static let transcriptCommit = Notification.Name("PersonalScribe.metrics.transcriptCommit")
 }

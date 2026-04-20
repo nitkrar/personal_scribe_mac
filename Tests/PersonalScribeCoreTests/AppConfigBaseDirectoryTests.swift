@@ -15,7 +15,7 @@ final class AppConfigBaseDirectoryTests: XCTestCase {
         defer {
             AppConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
             AppConfig.testingBaseDirectoryOverride = nil
-            unsetenv("SESHAT_BASE_DIR")
+            unsetenv("PERSONAL_SCRIBE_BASE_DIR")
         }
 
         let appSupport = try AppConfig.baseDirectory()
@@ -43,11 +43,11 @@ final class AppConfigBaseDirectoryTests: XCTestCase {
 
         let override = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        setenv("SESHAT_BASE_DIR", override.path, 1)
+        setenv("PERSONAL_SCRIBE_BASE_DIR", override.path, 1)
         defer {
             AppConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
             AppConfig.testingBaseDirectoryOverride = nil
-            unsetenv("SESHAT_BASE_DIR")
+            unsetenv("PERSONAL_SCRIBE_BASE_DIR")
         }
 
         let baseDirectory = try AppConfig.baseDirectory()
@@ -65,7 +65,7 @@ final class AppConfigBaseDirectoryTests: XCTestCase {
         defer {
             AppConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
             AppConfig.testingBaseDirectoryOverride = nil
-            unsetenv("SESHAT_BASE_DIR")
+            unsetenv("PERSONAL_SCRIBE_BASE_DIR")
         }
 
         let baseDirectory = try AppConfig.baseDirectory()

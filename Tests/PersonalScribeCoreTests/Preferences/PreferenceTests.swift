@@ -15,7 +15,7 @@ private struct TestPreferenceStruct: Codable, Sendable, Equatable {
 
 final class PreferenceTests: XCTestCase {
     private func isolatedDefaults() -> UserDefaults {
-        let suiteName = "SeshatTestsPreference.\(UUID().uuidString)"
+        let suiteName = "PersonalScribeTestsPreference.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         addTeardownBlock {

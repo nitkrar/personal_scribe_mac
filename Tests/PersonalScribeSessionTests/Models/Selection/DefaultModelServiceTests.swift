@@ -7,7 +7,7 @@ import XCTest
 @MainActor
 final class DefaultModelServiceTests: XCTestCase {
     private func isolatedDefaults() -> UserDefaults {
-        let suiteName = "SeshatTests.DefaultModelService.\(UUID().uuidString)"
+        let suiteName = "PersonalScribeTests.DefaultModelService.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         addTeardownBlock {

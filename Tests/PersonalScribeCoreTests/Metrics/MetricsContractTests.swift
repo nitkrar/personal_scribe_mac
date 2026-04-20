@@ -49,7 +49,7 @@ final class MetricsContractTests: XCTestCase {
         XCTAssertEqual(serviceRecentResult, [entry])
         XCTAssertEqual(
             MetricsNotification.transcriptCommit,
-            Notification.Name("Seshat.metrics.transcriptCommit")
+            Notification.Name("PersonalScribe.metrics.transcriptCommit")
         )
     }
 

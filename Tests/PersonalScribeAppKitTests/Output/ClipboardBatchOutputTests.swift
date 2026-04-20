@@ -8,7 +8,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
     private let suiteName = "SeshatTestsClipboardBatchOutput"
 
     private func makePasteboard() -> NSPasteboard {
-        NSPasteboard(name: NSPasteboard.Name(rawValue: "seshat.output.test.\(UUID().uuidString)"))
+        NSPasteboard(name: NSPasteboard.Name(rawValue: "personal_scribe.test.\(UUID().uuidString)"))
     }
 
     private func isolatedDefaults() -> UserDefaults {

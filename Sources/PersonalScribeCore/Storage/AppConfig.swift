@@ -7,7 +7,7 @@ public enum AppConfig {
     public nonisolated(unsafe) static var testingBaseDirectoryOverride: URL?
 
     static let baseDirectoryUserDefaultsKey = "BaseDirectoryPath"
-    static let baseDirectoryEnvironmentVariableName = "SESHAT_BASE_DIR"
+    static let baseDirectoryEnvironmentVariableName = "PERSONAL_SCRIBE_BASE_DIR"
 
     private static let overrideLock = NSLock()
     private static let directoryLock = NSLock()

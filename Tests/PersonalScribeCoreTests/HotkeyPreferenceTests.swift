@@ -3,7 +3,7 @@ import XCTest
 @testable import PersonalScribeCore
 
 final class HotkeyPreferenceTests: XCTestCase {
-    private let suiteName = "SeshatTestsHotkeyPreference"
+    private let suiteName = "PersonalScribeTestsHotkeyPreference"
 
     private func isolatedDefaults() -> UserDefaults {
         let defaults = UserDefaults(suiteName: suiteName)!
