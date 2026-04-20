@@ -241,6 +241,8 @@ final class StatusItemControllerHost: ObservableObject {
         sceneModel: MenuBarSceneModel,
         appStore: AppStore,
         openHome: @escaping @MainActor () -> Void = {},
+        openPasteLastTranscript: @escaping @MainActor () -> Void = {},
+        openCheckForUpdates: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
         }
@@ -249,6 +251,8 @@ final class StatusItemControllerHost: ObservableObject {
             sceneModel: sceneModel,
             appStore: appStore,
             openHome: openHome,
+            openPasteLastTranscript: openPasteLastTranscript,
+            openCheckForUpdates: openCheckForUpdates,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider
         )
     }
