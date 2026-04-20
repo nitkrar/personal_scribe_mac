@@ -19,11 +19,10 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
         let outputService = RecordingOutputService()
         let model = MenuBarSceneModel(
             coordinator: coordinator,
-            permissionRequester: IntegrationPermissionRequester(),
-            permissionStateProvider: { .granted },
             clipboardWriter: { _ in },
             outputService: outputService,
             openSettings: {},
+            permissionService: FakePermissionService(),
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
 
@@ -121,7 +120,7 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
 
         _ = SeshatAppMain(
             coordinator: sessionCoordinator,
-            permissionRequester: IntegrationPermissionRequester(),
+            permissionService: FakePermissionService(),
             clipboardWriter: { _ in },
             outputService: outputService,
             openSettings: {},
@@ -150,7 +149,11 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
         let suiteName = "MenuBarFlowIntegrationTests.\(#function)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        OnboardingState.completed.persist(to: defaults)
+        Preference(
+            key: "SeshatOnboardingCompleted",
+            default: false,
+            defaults: defaults
+        ).persist(true)
         return defaults
     }
 
@@ -170,9 +173,35 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
     }
 }
 
-private struct IntegrationPermissionRequester: MicrophonePermissionRequesting {
-    func requestAccess() async -> Bool {
-        true
+@MainActor
+private final class FakePermissionService: PermissionService {
+    @Published private(set) var statuses: [Permission: PermissionStatus] = [
+        .microphone: .granted,
+        .inputMonitoring: .granted,
+        .accessibility: .granted,
+    ]
+
+    func status(for permission: Permission) -> PermissionStatus {
+        statuses[permission] ?? .pending
+    }
+
+    func request(_ permission: Permission) async -> RequestOutcome {
+        RequestOutcome(
+            prompted: false,
+            openedSettings: false,
+            requiresRelaunch: false,
+            finalStatus: status(for: permission)
+        )
+    }
+
+    func statusSnapshot() -> [Permission: PermissionStatus] {
+        statuses
+    }
+
+    func refresh() {}
+
+    func systemSettingsDeepLink(for permission: Permission) -> URL {
+        URL(string: "https://example.invalid/\(permission.rawValue)")!
     }
 }
 

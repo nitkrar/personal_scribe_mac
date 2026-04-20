@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import XCTest
 import SeshatCore
 import SeshatSession
@@ -17,7 +18,7 @@ final class AppEntryPointTests: XCTestCase {
         let outputService = RecordingOutputService()
         let entry = SeshatAppMain(
             coordinator: coordinator,
-            permissionRequester: EntryPointPermissionRequester(),
+            permissionService: FakePermissionService(),
             clipboardWriter: { _ in },
             outputService: outputService,
             openSettings: {},
@@ -56,13 +57,45 @@ final class AppEntryPointTests: XCTestCase {
         let suiteName = "AppEntryPointTests.\(#function)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        OnboardingState.completed.persist(to: defaults)
+        Preference(
+            key: "SeshatOnboardingCompleted",
+            default: false,
+            defaults: defaults
+        ).persist(true)
         return defaults
     }
 }
 
-private struct EntryPointPermissionRequester: MicrophonePermissionRequesting {
-    func requestAccess() async -> Bool { true }
+@MainActor
+private final class FakePermissionService: PermissionService {
+    @Published private(set) var statuses: [Permission: PermissionStatus] = [
+        .microphone: .granted,
+        .inputMonitoring: .granted,
+        .accessibility: .granted,
+    ]
+
+    func status(for permission: Permission) -> PermissionStatus {
+        statuses[permission] ?? .pending
+    }
+
+    func request(_ permission: Permission) async -> RequestOutcome {
+        RequestOutcome(
+            prompted: false,
+            openedSettings: false,
+            requiresRelaunch: false,
+            finalStatus: status(for: permission)
+        )
+    }
+
+    func statusSnapshot() -> [Permission: PermissionStatus] {
+        statuses
+    }
+
+    func refresh() {}
+
+    func systemSettingsDeepLink(for permission: Permission) -> URL {
+        URL(string: "https://example.invalid/\(permission.rawValue)")!
+    }
 }
 
 @MainActor

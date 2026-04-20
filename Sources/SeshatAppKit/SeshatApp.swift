@@ -14,30 +14,16 @@ struct SeshatApp {
 
     init(
         coordinator: SessionCoordinator,
-        permissionRequester: any MicrophonePermissionRequesting,
         permissionService: (any PermissionService)? = nil,
-        permissionStateProvider: (@MainActor () -> MicrophonePermissionState)? = nil,
         clipboardWriter: @escaping @MainActor (String) -> Void = SeshatApp.defaultClipboardWriter,
         openSettings: @escaping @MainActor () -> Void = SeshatApp.defaultOpenSettings,
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) {
-        let resolvedPermissionService = permissionService
-            ?? SeshatAppMain.makeCompatibilityPermissionService(
-                permissionRequester: permissionRequester,
-                inputMonitoringProbe: IOHIDPermissionProbe(),
-                isAccessibilityTrusted: { false }
-            )
+        let resolvedPermissionService = permissionService ?? AppComposition.makePermissionService()
 
         _model = StateObject(
             wrappedValue: MenuBarSceneModel(
                 coordinator: coordinator,
-                permissionRequester: permissionRequester,
-                permissionStateProvider: permissionStateProvider ?? {
-                    if let permissionRequester = permissionRequester as? AppKitMicrophonePermissionRequester {
-                        return permissionRequester.currentState()
-                    }
-                    return .notYetRequested
-                },
                 clipboardWriter: clipboardWriter,
                 openSettings: openSettings,
                 permissionService: resolvedPermissionService,

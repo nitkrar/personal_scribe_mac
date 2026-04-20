@@ -70,11 +70,18 @@ public enum AppComposition {
         )
     }
 
+    public static func makeGlobalHotkeyMonitor() -> GlobalHotkeyMonitor {
+        makeGlobalHotkeyMonitor(
+            permissionService: makePermissionService(),
+            coordinator: AppComposition.sessionCoordinator
+        )
+    }
+
     public static func makeGlobalHotkeyMonitor(
-        permissionService: PermissionServiceAdapter? = nil,
-        coordinator: SessionCoordinator = AppComposition.sessionCoordinator
+        permissionService: any PermissionService,
+        coordinator: SessionCoordinator
     ) -> GlobalHotkeyMonitor {
-        GlobalHotkeyMonitor(
+        return GlobalHotkeyMonitor(
             onTrigger: {
                 Task {
                     await coordinator.toggle()
@@ -83,7 +90,7 @@ public enum AppComposition {
             emergencyQuitRequested: {
                 NSApplication.shared.terminate(nil)
             },
-            permissionService: permissionService
+            permissionService: makePermissionServiceAdapter(wrapping: permissionService)
         )
     }
 
@@ -114,11 +121,23 @@ public enum AppComposition {
         )
     }
 
-    public static func makeMicrophonePermissionRequester() -> any MicrophonePermissionRequesting {
-        AppKitMicrophonePermissionRequester()
-    }
-
     static func makePermissionService() -> AppKitPermissionService {
         AppKitPermissionService()
+    }
+
+    private static func makePermissionServiceAdapter(
+        wrapping permissionService: any PermissionService
+    ) -> PermissionServiceAdapter {
+        if let permissionService = permissionService as? PermissionServiceAdapter {
+            return permissionService
+        }
+
+        return wrapPermissionService(permissionService)
+    }
+
+    private static func wrapPermissionService<Service: PermissionService>(
+        _ permissionService: Service
+    ) -> PermissionServiceAdapter {
+        PermissionServiceAdapter(wrapping: permissionService)
     }
 }

@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 import SeshatCore
 import SeshatSession
@@ -20,8 +21,7 @@ final class SeshatAppKitShellCompileTests: XCTestCase {
         )
         let app = SeshatApp(
             coordinator: coordinator,
-            permissionRequester: TestShellPermissionRequester(),
-            permissionStateProvider: { .granted },
+            permissionService: FakePermissionService(),
             clipboardWriter: { _ in },
             openSettings: {}
         )
@@ -31,8 +31,34 @@ final class SeshatAppKitShellCompileTests: XCTestCase {
     }
 }
 
-private struct TestShellPermissionRequester: MicrophonePermissionRequesting {
-    func requestAccess() async -> Bool {
-        true
+@MainActor
+private final class FakePermissionService: PermissionService {
+    @Published private(set) var statuses: [Permission: PermissionStatus] = [
+        .microphone: .granted,
+        .inputMonitoring: .granted,
+        .accessibility: .granted,
+    ]
+
+    func status(for permission: Permission) -> PermissionStatus {
+        statuses[permission] ?? .pending
+    }
+
+    func request(_ permission: Permission) async -> RequestOutcome {
+        RequestOutcome(
+            prompted: false,
+            openedSettings: false,
+            requiresRelaunch: false,
+            finalStatus: status(for: permission)
+        )
+    }
+
+    func statusSnapshot() -> [Permission: PermissionStatus] {
+        statuses
+    }
+
+    func refresh() {}
+
+    func systemSettingsDeepLink(for permission: Permission) -> URL {
+        URL(string: "https://example.invalid/\(permission.rawValue)")!
     }
 }

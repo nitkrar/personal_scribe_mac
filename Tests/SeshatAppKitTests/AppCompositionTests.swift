@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 import SeshatCore
 import SeshatSession
@@ -5,17 +6,53 @@ import SeshatSession
 
 @MainActor
 final class AppCompositionTests: XCTestCase {
-    func testMakeSessionCoordinatorReturnsSharedIdleActor() async {
-        let first = AppComposition.makeSessionCoordinator()
-        let second = AppComposition.makeSessionCoordinator()
+    func testMakePermissionServiceReturnsProductionType() {
+        let service = AppComposition.makePermissionService()
 
-        XCTAssertTrue(first === second)
-        let state = await first.state()
-        XCTAssertEqual(state, .idle)
+        XCTAssertEqual(
+            String(reflecting: type(of: service)),
+            String(reflecting: AppKitPermissionService.self)
+        )
     }
 
-    func testMakeMicrophonePermissionRequesterReturnsProductionType() async {
-        let requester = AppComposition.makeMicrophonePermissionRequester()
-        XCTAssertTrue(requester is AppKitMicrophonePermissionRequester)
+    func testMakeGlobalHotkeyMonitorAcceptsUnifiedPermissionService() {
+        let monitor = AppComposition.makeGlobalHotkeyMonitor(
+            permissionService: FakePermissionService(),
+            coordinator: DevelopmentComposition.makeTestingSessionCoordinator()
+        )
+
+        XCTAssertFalse(monitor.isActive)
+    }
+}
+
+@MainActor
+private final class FakePermissionService: PermissionService {
+    @Published private(set) var statuses: [Permission: PermissionStatus] = [
+        .microphone: .granted,
+        .inputMonitoring: .granted,
+        .accessibility: .granted,
+    ]
+
+    func status(for permission: Permission) -> PermissionStatus {
+        statuses[permission] ?? .pending
+    }
+
+    func request(_ permission: Permission) async -> RequestOutcome {
+        RequestOutcome(
+            prompted: false,
+            openedSettings: false,
+            requiresRelaunch: false,
+            finalStatus: status(for: permission)
+        )
+    }
+
+    func statusSnapshot() -> [Permission: PermissionStatus] {
+        statuses
+    }
+
+    func refresh() {}
+
+    func systemSettingsDeepLink(for permission: Permission) -> URL {
+        URL(string: "https://example.invalid/\(permission.rawValue)")!
     }
 }

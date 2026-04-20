@@ -18,23 +18,19 @@ struct SeshatAppMain: App {
     @StateObject private var settingsWindowController: SettingsWindowControllerHost
 
     init() {
-        let permissionService: any PermissionService = AppComposition.makePermissionService()
         self.init(
             coordinator: AppComposition.sessionCoordinator,
-            permissionRequester: AppComposition.makeMicrophonePermissionRequester(),
-            permissionService: permissionService,
+            permissionService: AppComposition.makePermissionService(),
             clipboardWriter: SeshatAppMain.defaultClipboardWriter,
             openSettings: SeshatAppMain.defaultOpenSettings,
             overlayPanelBuilder: AppKitPillOverlayPanelBuilder(),
             defaults: .standard,
-            inputMonitoringProbe: IOHIDPermissionProbe(),
             startupCoordinator: nil
         )
     }
 
     init(
         coordinator: SessionCoordinator,
-        permissionRequester: any MicrophonePermissionRequesting,
         permissionService: (any PermissionService)? = nil,
         clipboardWriter: @escaping @MainActor (String) -> Void = SeshatAppMain.defaultClipboardWriter,
         pasteInjector: (any PasteInjecting)? = nil,
@@ -42,26 +38,17 @@ struct SeshatAppMain: App {
         openSettings: @escaping @MainActor () -> Void = SeshatAppMain.defaultOpenSettings,
         overlayPanelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
         defaults: UserDefaults = .standard,
-        inputMonitoringProbe: any PermissionProbing = IOHIDPermissionProbe(),
         isAccessibilityTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
         notesWindowControllerFactory: @escaping @MainActor () -> NotesWindowController = {
             NotesWindowController(transcriptReader: SeshatAppMain.defaultTranscriptReader())
         },
         startupCoordinator: AppStartupCoordinator? = nil
     ) {
-        let compatibilityPermissionService: PermissionServiceAdapter =
-            if let permissionService {
-                Self.makeCompatibilityPermissionServiceAdapter(wrapping: permissionService)
-            } else {
-                Self.makeCompatibilityPermissionService(
-                    permissionRequester: permissionRequester,
-                    inputMonitoringProbe: inputMonitoringProbe,
-                    isAccessibilityTrusted: isAccessibilityTrusted
-                )
-            }
+        let resolvedPermissionService = permissionService ?? AppComposition.makePermissionService()
+        let appPermissionService = Self.makePermissionServiceAdapter(wrapping: resolvedPermissionService)
         let appStore = AppStore(
             session: coordinator.appStoreSessionProvider(),
-            permissions: compatibilityPermissionService,
+            permissions: appPermissionService,
             activeModeSource: AppComposition.activeModeProvider,
             visibilityModeSource: AppKitVisibilityModeProvider(defaults: defaults)
         )
@@ -76,7 +63,7 @@ struct SeshatAppMain: App {
             ?? AppComposition.makeStartupCoordinator(
                 coordinator: coordinator,
                 hotkeyMonitor: AppComposition.makeGlobalHotkeyMonitor(
-                    permissionService: compatibilityPermissionService,
+                    permissionService: appPermissionService,
                     coordinator: coordinator
                 )
             )
@@ -84,10 +71,11 @@ struct SeshatAppMain: App {
         let onboardingControllerHost = OnboardingWindowControllerHost(
             defaults: defaults,
             startupCoordinator: startupCoordinator,
-            permissionService: compatibilityPermissionService
+            permissionService: appPermissionService
         )
+        let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
         let isOnboardingCompleteProvider: @MainActor () -> Bool = {
-            SeshatOnboardingCompleted.resolve(from: defaults).rawValue
+            onboardingCompletionPreference.resolve()
         }
 
         self.coordinator = coordinator
@@ -97,7 +85,7 @@ struct SeshatAppMain: App {
             coordinator: coordinator,
             clipboardWriter: clipboardWriter,
             outputService: resolvedOutputService,
-            permissionService: compatibilityPermissionService,
+            permissionService: appPermissionService,
             openURL: { url in
                 _ = NSWorkspace.shared.open(url)
             },
@@ -195,6 +183,14 @@ struct SeshatAppMain: App {
 }
 
 extension SeshatAppMain {
+    fileprivate static func onboardingCompletionPreference(defaults: UserDefaults) -> Preference<Bool> {
+        Preference(
+            key: "SeshatOnboardingCompleted",
+            default: false,
+            defaults: defaults
+        )
+    }
+
     static func defaultTranscriptReader(
         logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
     ) -> any TranscriptReading {
@@ -220,90 +216,7 @@ extension SeshatAppMain {
         )
     }
 
-    static func makeCompatibilityPermissionService(
-        permissionRequester: any MicrophonePermissionRequesting,
-        inputMonitoringProbe: any PermissionProbing,
-        isAccessibilityTrusted: @escaping @MainActor () -> Bool
-    ) -> PermissionServiceAdapter {
-        @MainActor
-        final class StateBox {
-            var statuses: [Permission: PermissionStatus]
-
-            init(statuses: [Permission: PermissionStatus]) {
-                self.statuses = statuses
-            }
-        }
-
-        let initialMicrophoneStatus: PermissionStatus
-        if let permissionRequester = permissionRequester as? AppKitMicrophonePermissionRequester {
-            initialMicrophoneStatus = permissionRequester.currentState().unifiedPermissionStatus
-        } else {
-            initialMicrophoneStatus = .pending
-        }
-
-        let box = StateBox(statuses: [
-            .microphone: initialMicrophoneStatus,
-            .inputMonitoring: inputMonitoringProbe.checkInputMonitoring().unifiedPermissionStatus,
-            .accessibility: isAccessibilityTrusted() ? .granted : .pending,
-        ])
-
-        return PermissionServiceAdapter(
-            initialStatuses: box.statuses,
-            statusReader: { permission in
-                switch permission {
-                case .inputMonitoring:
-                    let status = inputMonitoringProbe.checkInputMonitoring().unifiedPermissionStatus
-                    box.statuses[.inputMonitoring] = status
-                    return status
-                case .accessibility:
-                    let status: PermissionStatus = isAccessibilityTrusted() ? .granted : .pending
-                    box.statuses[.accessibility] = status
-                    return status
-                case .microphone:
-                    return box.statuses[.microphone] ?? .pending
-                }
-            },
-            requester: { permission in
-                switch permission {
-                case .microphone:
-                    let granted = await permissionRequester.requestAccess()
-                    let finalStatus: PermissionStatus = granted ? .granted : .denied
-                    box.statuses[.microphone] = finalStatus
-                    return RequestOutcome(
-                        prompted: true,
-                        openedSettings: false,
-                        requiresRelaunch: false,
-                        finalStatus: finalStatus
-                    )
-                case .inputMonitoring:
-                    let finalStatus = inputMonitoringProbe.checkInputMonitoring().unifiedPermissionStatus
-                    box.statuses[.inputMonitoring] = finalStatus
-                    return RequestOutcome(
-                        prompted: false,
-                        openedSettings: false,
-                        requiresRelaunch: true,
-                        finalStatus: finalStatus
-                    )
-                case .accessibility:
-                    let finalStatus: PermissionStatus = isAccessibilityTrusted() ? .granted : .pending
-                    box.statuses[.accessibility] = finalStatus
-                    return RequestOutcome(
-                        prompted: false,
-                        openedSettings: false,
-                        requiresRelaunch: false,
-                        finalStatus: finalStatus
-                    )
-                }
-            },
-            refresher: {
-                box.statuses[.inputMonitoring] = inputMonitoringProbe.checkInputMonitoring().unifiedPermissionStatus
-                box.statuses[.accessibility] = isAccessibilityTrusted() ? .granted : .pending
-                return box.statuses
-            }
-        )
-    }
-
-    private static func makeCompatibilityPermissionServiceAdapter(
+    private static func makePermissionServiceAdapter(
         wrapping permissionService: any PermissionService
     ) -> PermissionServiceAdapter {
         if let permissionService = permissionService as? PermissionServiceAdapter {
@@ -334,7 +247,7 @@ final class StatusItemControllerHost: ObservableObject {
         openHistory: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
-            SeshatOnboardingCompleted.resolve().rawValue
+            SeshatAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
         }
     ) {
         self.controller = StatusItemController(
