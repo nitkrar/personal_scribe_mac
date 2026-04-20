@@ -11,6 +11,15 @@
 #   -i, --install                  Replace /Applications/Ninimma.app after build
 #   -d, --dmg                      Also emit Ninimma-<ver>.dmg at repo root
 #   -r, --run                      Launch after install (implies --install)
+#       --reset                    Simulate fresh install: quit running app,
+#                                   delete /Applications/Ninimma.app, wipe
+#                                   ~/Library/Application Support/personal_scribe/
+#                                   (models + recordings + transcripts),
+#                                   delete UserDefaults domain, reset TCC
+#                                   grants (mic/input-monitoring/accessibility),
+#                                   clear .build/. Runs BEFORE the build step.
+#                                   DESTRUCTIVE — prompts unless -y is passed.
+#   -y, --yes                      Skip --reset confirmation prompt
 #   -h, --help                     Show this help
 #
 # Examples:
@@ -18,6 +27,8 @@
 #   scripts/package.sh -ir                  # build + install + launch (common dev loop)
 #   scripts/package.sh -c release -ir       # release build + install + launch
 #   scripts/package.sh -d                   # build + DMG (for GitHub Release upload)
+#   scripts/package.sh --reset -ir          # full fresh-install dry run (wipes user data)
+#   scripts/package.sh --reset -y           # wipe without prompt, no build after
 #
 # Notes:
 #   * Always rebuilds the .app fresh — no way to skip. Avoids running
@@ -34,6 +45,8 @@ CONFIG="debug"
 DO_INSTALL=0
 DO_DMG=0
 DO_RUN=0
+DO_RESET=0
+ASSUME_YES=0
 
 print_usage() {
     sed -n '2,/^set -euo/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'
@@ -61,6 +74,14 @@ while [[ $# -gt 0 ]]; do
         -r|--run)
             DO_RUN=1
             DO_INSTALL=1
+            shift
+            ;;
+        --reset)
+            DO_RESET=1
+            shift
+            ;;
+        -y|--yes)
+            ASSUME_YES=1
             shift
             ;;
         -h|--help)
@@ -110,6 +131,45 @@ DMG_NAME="$APP_NAME-$VERSION"
 DMG_PATH="$REPO_ROOT/$DMG_NAME.dmg"
 ICNS_SOURCE="$REPO_ROOT/Sources/PersonalScribeAppKit/Resources/AppIcon.icns"
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo 'unknown')"
+
+# --- [0] Optional reset ---
+#
+# Simulates a fresh install by wiping every piece of state the app owns on
+# this machine. Used to mimic "first-launch on a new laptop" without actually
+# moving to one. DESTRUCTIVE: removes models (which then re-download on first
+# run), recordings, transcripts, and TCC grants (which then re-prompt).
+if [[ "$DO_RESET" -eq 1 ]]; then
+    SUPPORT_DIR="$HOME/Library/Application Support/personal_scribe"
+    echo "==> --reset: fresh-install simulation"
+    echo "    Will remove:"
+    echo "      • installed app:    $INSTALL_PATH"
+    echo "      • user data:        $SUPPORT_DIR"
+    echo "      • UserDefaults:     $BUNDLE_ID"
+    echo "      • TCC grants:       Microphone, ListenEvent, Accessibility ($BUNDLE_ID)"
+    echo "      • build artifacts:  $REPO_ROOT/.build"
+    echo "      • local .app:       $APP_PATH"
+    if [[ "$ASSUME_YES" -ne 1 ]]; then
+        read -r -p "    Proceed? [y/N] " CONFIRM
+        if [[ "${CONFIRM,,}" != "y" && "${CONFIRM,,}" != "yes" ]]; then
+            echo "    aborted"
+            exit 1
+        fi
+    fi
+
+    # Quit running instance so we can safely remove/rewrite state
+    osascript -e "tell application \"$APP_NAME\" to quit" >/dev/null 2>&1 || true
+    pkill -f "$BINARY_NAME" 2>/dev/null || true
+
+    rm -rf "$INSTALL_PATH"
+    rm -rf "$APP_PATH"
+    rm -rf "$SUPPORT_DIR"
+    rm -rf "$REPO_ROOT/.build"
+    defaults delete "$BUNDLE_ID" 2>/dev/null || true
+    for service in Microphone ListenEvent Accessibility; do
+        tccutil reset "$service" "$BUNDLE_ID" >/dev/null 2>&1 || true
+    done
+    echo "    reset complete"
+fi
 
 # --- [1] Build ---
 echo "==> Building $BINARY_NAME ($CONFIG)..."
