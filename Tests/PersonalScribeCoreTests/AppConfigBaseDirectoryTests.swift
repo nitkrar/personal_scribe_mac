@@ -24,7 +24,7 @@ final class AppConfigBaseDirectoryTests: XCTestCase {
         XCTAssertEqual(
             appSupport,
             baseDirectory
-                .appendingPathComponent("Seshat", isDirectory: true)
+                .appendingPathComponent("personal_scribe", isDirectory: true)
                 .standardizedFileURL
         )
         XCTAssertEqual(

@@ -37,7 +37,7 @@ final class StorageLocatorTests: XCTestCase {
         XCTAssertEqual(
             locator.baseDirectory,
             testingOverride
-                .appendingPathComponent("Seshat", isDirectory: true)
+                .appendingPathComponent("personal_scribe", isDirectory: true)
                 .standardizedFileURL
         )
     }
@@ -97,7 +97,7 @@ final class StorageLocatorTests: XCTestCase {
         )
 
         let expected = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Seshat", isDirectory: true)
+            .appendingPathComponent("personal_scribe", isDirectory: true)
             .standardizedFileURL
 
         XCTAssertEqual(locator.baseDirectory, expected)

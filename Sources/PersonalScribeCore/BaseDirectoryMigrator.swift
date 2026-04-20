@@ -59,15 +59,46 @@ public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable
     private let fileManager: FileManager
     private let defaults: UserDefaults
     private let environment: [String: String]
+    private let logger: PersonalScribeLogger
 
     public init(
         fileManager: FileManager = .default,
         defaults: UserDefaults = .standard,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.app)
     ) {
         self.fileManager = fileManager
         self.defaults = defaults
         self.environment = environment
+        self.logger = logger
+    }
+
+    /// One-shot first-launch migration from the legacy brand directory
+    /// (`~/Library/Application Support/Seshat/`) to the new brand directory
+    /// (`~/Library/Application Support/personal_scribe/`).
+    ///
+    /// Idempotent + safe:
+    ///   - No-op if the legacy directory does not exist (fresh install).
+    ///   - No-op if the destination already exists (migration already ran,
+    ///     or a concurrent fresh directory got created first).
+    ///   - Throws on actual filesystem errors from `FileManager.moveItem`.
+    ///
+    /// On same-volume moves this is an atomic inode relink; cross-volume
+    /// moves degrade to copy-then-delete under the hood.
+    public func migrateFromLegacyBrandDirectoryIfNeeded(
+        fileManager: FileManager = .default,
+        appSupportProvider: () -> URL = { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0] }
+    ) throws {
+        let appSupport = appSupportProvider()
+        let legacy = appSupport.appendingPathComponent("Seshat", isDirectory: true)
+        let current = appSupport.appendingPathComponent("personal_scribe", isDirectory: true)
+
+        // No-op if legacy doesn't exist, or if current already exists.
+        guard fileManager.fileExists(atPath: legacy.path) else { return }
+        guard !fileManager.fileExists(atPath: current.path) else { return }
+
+        try fileManager.moveItem(at: legacy, to: current)
+        logger.info("BaseDirectoryMigrator: moved \(legacy.path) → \(current.path)")
     }
 
     public func migrate(to newBase: URL) async throws -> MigrationReport {
@@ -123,7 +154,7 @@ public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable
 
     private func validateWritableDestination(_ destinationBase: URL) throws {
         let probeURL = destinationBase.appendingPathComponent(
-            ".seshat-migration-probe-\(UUID().uuidString)",
+            ".personal_scribe-migration-probe-\(UUID().uuidString)",
             isDirectory: false
         )
         let created = fileManager.createFile(atPath: probeURL.path, contents: Data(), attributes: nil)

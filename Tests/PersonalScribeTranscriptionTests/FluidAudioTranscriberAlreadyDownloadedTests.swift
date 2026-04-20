@@ -22,7 +22,7 @@ final class FluidAudioTranscriberAlreadyDownloadedTests: XCTestCase {
         AppConfig.testingBaseDirectoryOverride = testRoot
 
         let modelRoot = testRoot
-            .appendingPathComponent("Seshat", isDirectory: true)
+            .appendingPathComponent("personal_scribe", isDirectory: true)
             .appendingPathComponent("models", isDirectory: true)
             .appendingPathComponent(BuiltInModelCatalog.parakeetTDT06Bv2.id, isDirectory: true)
 

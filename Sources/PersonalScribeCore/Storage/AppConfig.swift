@@ -46,7 +46,7 @@ public enum AppConfig {
     /// Resolution order (first match wins):
     ///   1. `SESHAT_BASE_DIR` environment variable (dev/test convenience)
     ///   2. `BaseDirectoryPath` UserDefaults key (user-facing override)
-    ///   3. `~/Library/Application Support/Seshat/` (default)
+    ///   3. `~/Library/Application Support/personal_scribe/` (default)
     ///
     /// `testingBaseDirectoryOverride` takes precedence over all three for XCTest.
     public static func baseDirectory(
@@ -94,7 +94,7 @@ public enum AppConfig {
     ) -> URL {
         if let testingBaseDirectoryOverride {
             return testingBaseDirectoryOverride
-                .appendingPathComponent("Seshat", isDirectory: true)
+                .appendingPathComponent("personal_scribe", isDirectory: true)
                 .standardizedFileURL
         }
 
@@ -107,7 +107,7 @@ public enum AppConfig {
         }
 
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return appSupport.appendingPathComponent("Seshat", isDirectory: true).standardizedFileURL
+        return appSupport.appendingPathComponent("personal_scribe", isDirectory: true).standardizedFileURL
     }
 
     private static func subdirectory(for managedDirectory: ManagedDirectory) throws -> URL {
