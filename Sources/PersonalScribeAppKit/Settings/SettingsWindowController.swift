@@ -4,11 +4,15 @@ import SwiftUI
 
 @MainActor
 final class SettingsWindowController: NSWindowController {
+    private let defaults: UserDefaults
+    private var windowTintObserver: NSObjectProtocol?
+
     init(
         defaults: UserDefaults = .standard,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
+        self.defaults = defaults
         let rootView = SettingsView(
             defaults: defaults,
             menuBarVisibilityProvider: menuBarVisibilityProvider,
@@ -25,13 +29,31 @@ final class SettingsWindowController: NSWindowController {
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.isReleasedWhenClosed = false
         window.title = "\(AppBrand.displayName) Settings"
+        let tint = WindowTint.resolve(from: defaults)
+        window.appearance = tint.forcesDarkMode ? NSAppearance(named: .darkAqua) : nil
 
         super.init(window: window)
+
+        windowTintObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: defaults,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.applyWindowTint()
+            }
+        }
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        if let windowTintObserver {
+            NotificationCenter.default.removeObserver(windowTintObserver)
+        }
     }
 
     override func showWindow(_ sender: Any?) {
@@ -44,6 +66,12 @@ final class SettingsWindowController: NSWindowController {
         super.showWindow(sender)
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private func applyWindowTint() {
+        guard let window else { return }
+        let tint = WindowTint.resolve(from: defaults)
+        window.appearance = tint.forcesDarkMode ? NSAppearance(named: .darkAqua) : nil
     }
 }
 
