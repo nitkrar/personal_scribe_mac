@@ -232,25 +232,54 @@ public struct PillOverlayView: View {
     }
 }
 
-/// Shared rounded-rectangle chrome for every pill variant. Dark navy
-/// fill, soft shadow, no border — per Claude's minimalist spec.
+/// Shared rounded-rectangle chrome for every pill variant.
+///
+/// ## 3D depth treatment (2026-04-20)
+/// A vertical gradient fill (top face slightly lighter than the base
+/// colour) combined with a hairline specular rim and two layered
+/// shadows gives the pill a floating, physical quality on dark
+/// desktops without any blur or NSVisualEffectView overhead.
 ///
 /// ## Fuzzy-edge fix (2026-04-18)
-/// The system `NSPanel.hasShadow = true` drew a fringe outside the
-/// rounded corners. Fix: NSPanel shadow disabled at the panel layer;
-/// the chrome here applies a hard `.clipShape` BEFORE `.shadow(...)`
-/// so the shadow is composited on a clean pixel boundary.
+/// NSPanel shadow disabled at the panel layer; `.clipShape` applied
+/// BEFORE `.shadow` so the shadow composites on a clean pixel boundary.
 private struct PillChrome: ViewModifier {
     let palette: PersonalScribeTheme.Palette
 
     func body(content: Content) -> some View {
+        let base = palette.pillBackground
         content
             .background {
                 RoundedRectangle(
                     cornerRadius: PillOverlayView.cornerRadius,
                     style: .continuous
                 )
-                .fill(palette.pillBackground.opacity(0.94))
+                // Vertical gradient: top face ~7% brighter than base.
+                // Achieved by layering a white-to-clear gradient over
+                // the solid base fill — no Color.blended() needed.
+                .fill(base.opacity(0.94))
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: PillOverlayView.cornerRadius,
+                        style: .continuous
+                    )
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.07), Color.clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                }
+                // Specular rim — 1px white stroke at low opacity
+                // creates a visible top edge on dark backgrounds.
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: PillOverlayView.cornerRadius,
+                        style: .continuous
+                    )
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                }
             }
             .clipShape(
                 RoundedRectangle(
@@ -258,7 +287,9 @@ private struct PillChrome: ViewModifier {
                     style: .continuous
                 )
             )
-            .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
+            // Dual shadow: large ambient + tight key light.
+            .shadow(color: .black.opacity(0.18), radius: 24, y: 8)  // ambient
+            .shadow(color: .black.opacity(0.45), radius: 8,  y: 4)  // key
     }
 }
 
