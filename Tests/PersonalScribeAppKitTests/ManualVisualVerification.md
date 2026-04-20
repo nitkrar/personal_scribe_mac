@@ -183,6 +183,34 @@ in M3.2–M3.5; this milestone proves the shell + routing + menu-bar entry
 13. Settings NSWindow still opens via menu bar → "Settings".
 14. Onboarding flow still triggers for a fresh install.
 
+## M4.1 voice-modulated pill waveform
+
+The pill's recording-state `SineWaveView` now tracks live mic level
+via `PillOverlayViewModel.audioLevel`, with a 500 ms linear-interp
+smoothing (`WaveformDecayMode.animated`) that matches the shape
+`WaveformView` uses. Source: `Sources/PersonalScribeAppKit/Components/SineWaveView.swift`.
+Unit tests cover the amplitude + smoothing math
+(`Tests/PersonalScribeAppKitTests/Components/SineWaveViewTests.swift`)
+but the UX of "speaking grows the wave, stopping decays it smoothly"
+is SwiftUI-Canvas + wall-clock, so it needs a dogfood pass. Reviewer
+runs this checklist in a dogfood build:
+
+1. Start recording with the mic muted (or hold the mic away). The pill's
+   wave renders as a thin champagne horizontal line — no oscillation,
+   no amplitude.
+2. Speak at normal volume. The wave visibly oscillates; amplitude is
+   clearly greater than silence.
+3. Vary volume: louder speech produces taller peaks, quieter speech
+   produces shorter peaks. The response tracks mic level continuously,
+   not in discrete steps.
+4. Stop speaking mid-recording. The wave decays smoothly back to the
+   flat horizontal line over ~500 ms — it does NOT snap abruptly.
+5. The phase of the wave continues scrolling left-to-right regardless
+   of volume. When the wave is flat (silence), phase motion is
+   invisible but resumes visibly as soon as you speak again — the
+   `TimelineView(.animation)` driver never pauses while the recording
+   pill is on-screen.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift

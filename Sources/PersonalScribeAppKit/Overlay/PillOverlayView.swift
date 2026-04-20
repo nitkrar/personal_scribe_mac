@@ -101,9 +101,13 @@ public struct PillOverlayView: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(palette.brandChampagne.opacity(0.7))
 
-            // Animated waveform
+            // Voice-modulated waveform. Amplitude tracks `model.audioLevel`
+            // with a 500 ms linear-interp smoothing (matches WaveformView's
+            // `.animated` decay shape) so mic-RMS jitter never makes the wave
+            // jump between frames.
             SineWaveView(
-                isAnimating: true,
+                audioLevel: model.audioLevel,
+                decayMode: .animated,
                 tint: palette.brandChampagne
             )
             .frame(width: 120, height: 28)
