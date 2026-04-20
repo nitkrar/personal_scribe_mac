@@ -162,6 +162,7 @@ struct PersonalScribeAppMain: App {
         )
 
         sceneModel.startObserving()
+        startupCoordinator.start()
 
         // First-launch onboarding routing: if permissions haven't been
         // granted yet, auto-open the unified window to the Settings tab
