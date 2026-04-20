@@ -25,6 +25,9 @@ final class DiskSpaceSnapshotTests: XCTestCase {
         )
 
         let capturedAt = Date(timeIntervalSince1970: 1_713_484_800)
+        let expectedVolumeAvailableBytes = try baseDirectory.resourceValues(
+            forKeys: [.volumeAvailableCapacityForImportantUsageKey]
+        ).volumeAvailableCapacityForImportantUsage
         let snapshot = try DiskSpaceSnapshot.capture(
             from: FixedStorageLocator(baseDirectory: baseDirectory),
             fileManager: fileManager,
@@ -41,9 +44,7 @@ final class DiskSpaceSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.usedBytesByDirectory[.cache], Int64(0))
         XCTAssertEqual(snapshot.totalUsedBytes, snapshot.usedBytesByDirectory.values.reduce(0, +))
 
-        if let volumeAvailableBytes = snapshot.volumeAvailableBytes {
-            XCTAssertGreaterThan(volumeAvailableBytes, 0)
-        }
+        XCTAssertEqual(snapshot.volumeAvailableBytes, expectedVolumeAvailableBytes)
     }
 
     func testCaptureTreatsMissingBaseDirectoryAsEmptySnapshotWithoutCreatingDirectories() throws {
