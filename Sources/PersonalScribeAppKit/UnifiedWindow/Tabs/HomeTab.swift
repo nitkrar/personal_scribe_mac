@@ -1,0 +1,212 @@
+import PersonalScribeCore
+import SwiftUI
+
+/// Home tab for the unified NavigationSplitView window (M3.5).
+///
+/// Layout: header "Home" + a 4-cell stat card grid (Words this week,
+/// Recordings, Minutes saved, WPM avg) + a "Recent" section showing the
+/// 3 most-recent transcripts via the shared `TranscriptRow` composite.
+///
+/// Data source: `HomeTabViewModel`, which consumes the existing L8
+/// `MetricsReading.loadSnapshot(window:, recentLimit:)`. Reactive
+/// refresh is driven by `MetricsNotification.transcriptCommit`.
+///
+/// Reference: `plans/App UI design/Claude_Final_Bundle_Prompt.md` §3A.
+@MainActor
+struct HomeTab: View {
+    @ObservedObject private var viewModel: HomeTabViewModel
+
+    init(viewModel: HomeTabViewModel) {
+        self.viewModel = viewModel
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.xl) {
+            Text("Home")
+                .font(PersonalScribeTheme.Typography.largeTitle.font)
+
+            statCardGrid
+
+            VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
+                Text("Recent")
+                    .font(PersonalScribeTheme.Typography.sectionLabel.font)
+                    .textCase(.uppercase)
+
+                ForEach(viewModel.recent.prefix(HomeTabViewModel.recentLimit), id: \.id) { entry in
+                    TranscriptRow(
+                        title: Self.title(for: entry),
+                        timestamp: entry.timestamp,
+                        preview: entry.text
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task {
+            await viewModel.load()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: MetricsNotification.transcriptCommit
+            )
+        ) { _ in
+            Task { @MainActor in
+                await viewModel.refresh()
+            }
+        }
+    }
+
+    // MARK: - Stat cards
+
+    private var statCardGrid: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 150), spacing: PersonalScribeTheme.Spacing.md)],
+            alignment: .leading,
+            spacing: PersonalScribeTheme.Spacing.md
+        ) {
+            StatCard(
+                label: "Words this week",
+                value: Self.integerFormatter.string(
+                    from: NSNumber(value: viewModel.rollups.wordsThisWeek)
+                ) ?? "\(viewModel.rollups.wordsThisWeek)"
+            )
+            StatCard(
+                label: "Recordings",
+                value: Self.integerFormatter.string(
+                    from: NSNumber(value: viewModel.rollups.recordingsThisWeek)
+                ) ?? "\(viewModel.rollups.recordingsThisWeek)"
+            )
+            StatCard(
+                label: "Minutes saved",
+                value: Self.minutesFormatter.string(
+                    from: NSNumber(value: viewModel.rollups.minutesSavedThisWeek.rounded())
+                ) ?? "\(Int(viewModel.rollups.minutesSavedThisWeek.rounded()))"
+            )
+            StatCard(
+                label: "WPM avg",
+                value: Self.wpmFormatter.string(
+                    from: NSNumber(value: viewModel.rollups.averageWPMThisWeek)
+                ) ?? String(format: "%.1f", viewModel.rollups.averageWPMThisWeek)
+            )
+        }
+    }
+
+    // MARK: - Derivation
+
+    /// Title for a transcript row. Matches the legacy History/Notes
+    /// convention: first non-empty whitespace-trimmed line, truncated
+    /// by `TranscriptRow` itself. Falls back to a short date stamp
+    /// when the text is empty.
+    static func title(for entry: TranscriptEntry) -> String {
+        let firstLine = entry.text
+            .split(whereSeparator: \.isNewline)
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespaces)
+            ?? ""
+        if !firstLine.isEmpty {
+            return firstLine
+        }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: entry.timestamp)
+    }
+
+    // MARK: - Formatters
+
+    private static let integerFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        formatter.usesGroupingSeparator = true
+        return formatter
+    }()
+
+    private static let minutesFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        formatter.usesGroupingSeparator = true
+        return formatter
+    }()
+
+    private static let wpmFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        return formatter
+    }()
+}
+
+// MARK: - StatCard
+
+/// Compact stat card: caption label stacked above a large value.
+/// Card surface uses the environment `WindowTint` when provided,
+/// otherwise falls back to the theme elevated-surface colour.
+@MainActor
+private struct StatCard: View {
+    let label: String
+    let value: String
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.windowTint) private var windowTint
+
+    var body: some View {
+        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+        let background = windowTint?.cardBackground ?? palette.elevatedSurface
+
+        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.xs) {
+            Text(label)
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(palette.secondaryText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Text(value)
+                .font(PersonalScribeTheme.Typography.largeTitle.font)
+                .foregroundStyle(palette.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .padding(PersonalScribeTheme.Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.md, style: .continuous)
+                .fill(background)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.md, style: .continuous)
+                .strokeBorder(
+                    palette.brandChampagne.opacity(0.12),
+                    lineWidth: 0.5
+                )
+        )
+    }
+}
+
+// MARK: - WindowTint environment bridge
+//
+// The tint is passed to the stub/detail area via the M3.1 view; stat
+// cards read it optionally so they render sensibly inside previews or
+// unit tests that don't install a tint.
+
+private struct WindowTintEnvironmentKey: EnvironmentKey {
+    static let defaultValue: WindowTint? = nil
+}
+
+extension EnvironmentValues {
+    var windowTint: WindowTint? {
+        get { self[WindowTintEnvironmentKey.self] }
+        set { self[WindowTintEnvironmentKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Install a `WindowTint` in the environment so descendant surfaces
+    /// (stat cards, etc.) pick up matching card / hover backgrounds.
+    func windowTint(_ tint: WindowTint) -> some View {
+        environment(\.windowTint, tint)
+    }
+}
