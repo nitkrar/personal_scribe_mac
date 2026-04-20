@@ -34,8 +34,20 @@ final class FluidAudioTranscriberTests: PersonalScribeTranscriptionFilesystemTes
             XCTFail("Unexpected error: \(error)")
         }
 
-        let records = await recorder.records
-        XCTAssertTrue(records.contains { $0.level == "error" && $0.message.contains("Compile failed") })
+        // logSink fires a detached Task to record — poll until the record
+        // lands (or bail after ~500 yields) instead of reading once.
+        var finalRecords: [(level: String, message: String)] = []
+        for _ in 0..<500 {
+            finalRecords = await recorder.records
+            if finalRecords.contains(where: { $0.level == "error" && $0.message.contains("Compile failed") }) {
+                break
+            }
+            await Task.yield()
+        }
+        XCTAssertTrue(
+            finalRecords.contains { $0.level == "error" && $0.message.contains("Compile failed") },
+            "Expected error log containing 'Compile failed'; got: \(finalRecords)"
+        )
     }
 }
 
