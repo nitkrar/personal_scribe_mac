@@ -115,9 +115,25 @@ struct PersonalScribeAppMain: App {
         let notesWindowControllerHost = NotesWindowControllerHost(
             controllerFactory: notesWindowControllerFactory
         )
+        let metricsReader: any MetricsReading = {
+            do {
+                return try AppComposition.makeMetricsReader()
+            } catch {
+                return EmptyMetricsReader()
+            }
+        }()
+        let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader()
+        let appKitActiveModeProvider = AppComposition.activeModeProvider
         let unifiedWindowControllerHost = UnifiedWindowControllerHost(
             controllerFactory: {
-                UnifiedWindowController(defaults: defaults)
+                UnifiedWindowController(
+                    defaults: defaults,
+                    transcriptReader: unifiedTranscriptReader,
+                    metricsReader: metricsReader,
+                    permissionService: appPermissionService,
+                    modes: ModeRegistry.all,
+                    activeModeProvider: { appKitActiveModeProvider.currentActiveMode() }
+                )
             }
         )
         var showNotesWindow: @MainActor () -> Void = {}
@@ -295,6 +311,25 @@ private struct EmptyTranscriptReader: TranscriptReading {
     }
 
     func all() async -> [TranscriptEntry] {
+        []
+    }
+}
+
+/// Fallback MetricsReading used when the SQLite metrics store can't be
+/// constructed (e.g. fresh install with no recordings directory yet).
+/// Returns zero-rollups + empty recents so the Home tab renders blank
+/// instead of crashing.
+private struct EmptyMetricsReader: MetricsReading {
+    func loadSnapshot(window: MetricsWindow, recentLimit: Int) async throws -> MetricsSnapshot {
+        MetricsSnapshot(
+            rollups: MetricsRollups.empty(window: window),
+            recentTranscriptions: [],
+            lastUpdatedAt: Date(),
+            lastRefreshReason: .initialLoad
+        )
+    }
+
+    func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry] {
         []
     }
 }

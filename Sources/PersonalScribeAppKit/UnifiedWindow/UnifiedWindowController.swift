@@ -17,17 +17,41 @@ final class UnifiedWindowController: NSWindowController {
     private let defaults: UserDefaults
     private let model: UnifiedWindowModel
     private let hostingController: NSHostingController<UnifiedWindowView>
+    private let homeViewModel: HomeTabViewModel
+    private let transcriptionsViewModel: TranscriptionsTabViewModel
+    private let modesViewModel: ModesTabViewModel
+    private let permissionService: any PermissionService
     private var windowTintObserver: NSObjectProtocol?
 
     init(
         defaults: UserDefaults = .standard,
-        model: UnifiedWindowModel = UnifiedWindowModel()
+        model: UnifiedWindowModel = UnifiedWindowModel(),
+        transcriptReader: any TranscriptReading,
+        metricsReader: any MetricsReading,
+        permissionService: any PermissionService,
+        modes: [ModeDescriptor] = ModeRegistry.all,
+        activeModeProvider: @escaping @MainActor () -> ModeDescriptor? = { nil }
     ) {
         self.defaults = defaults
         self.model = model
+        self.permissionService = permissionService
+        self.homeViewModel = HomeTabViewModel(reader: metricsReader)
+        self.transcriptionsViewModel = TranscriptionsTabViewModel(reader: transcriptReader)
+        self.modesViewModel = ModesTabViewModel(
+            modes: modes,
+            activeModeProvider: activeModeProvider
+        )
 
         let initialTint = WindowTint.resolve(from: defaults)
-        let rootView = UnifiedWindowView(model: model, windowTint: initialTint)
+        let rootView = UnifiedWindowView(
+            model: model,
+            windowTint: initialTint,
+            homeViewModel: homeViewModel,
+            transcriptionsViewModel: transcriptionsViewModel,
+            modesViewModel: modesViewModel,
+            permissionService: permissionService,
+            defaults: defaults
+        )
         let hostingController = NSHostingController(rootView: rootView)
         self.hostingController = hostingController
 
@@ -93,7 +117,15 @@ final class UnifiedWindowController: NSWindowController {
     private func applyWindowTint() {
         let tint = WindowTint.resolve(from: defaults)
         window?.appearance = tint.forcesDarkMode ? NSAppearance(named: .darkAqua) : nil
-        hostingController.rootView = UnifiedWindowView(model: model, windowTint: tint)
+        hostingController.rootView = UnifiedWindowView(
+            model: model,
+            windowTint: tint,
+            homeViewModel: homeViewModel,
+            transcriptionsViewModel: transcriptionsViewModel,
+            modesViewModel: modesViewModel,
+            permissionService: permissionService,
+            defaults: defaults
+        )
     }
 }
 
@@ -105,9 +137,7 @@ final class UnifiedWindowControllerHost: ObservableObject {
     private var controller: UnifiedWindowController?
 
     init(
-        controllerFactory: @escaping @MainActor () -> UnifiedWindowController = {
-            UnifiedWindowController()
-        }
+        controllerFactory: @escaping @MainActor () -> UnifiedWindowController
     ) {
         self.controllerFactory = controllerFactory
     }

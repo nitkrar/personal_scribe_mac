@@ -142,7 +142,7 @@ final class HomeTabViewModelTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private static let referenceDate = Date(timeIntervalSince1970: 1_700_000_000)
+    nonisolated private static let referenceDate = Date(timeIntervalSince1970: 1_700_000_000)
 
     private static func rollups(
         recordings: Int = 0,

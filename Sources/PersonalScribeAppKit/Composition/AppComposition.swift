@@ -62,10 +62,24 @@ public enum AppComposition {
             .appendingPathComponent(transcriptDatabaseFileName, isDirectory: false)
             .standardizedFileURL
 
-        // TODO: consumer wiring in PersonalScribeAppMain deferred until Phase 2 Home tab lands
         return try SQLiteMetricsService(
             databaseURL: databaseURL,
             calendar: .current,
+            referenceDateProvider: Date.init
+        )
+    }
+
+    /// Read-only snapshot accessor used by the unified window's Home tab.
+    /// Returns a `MetricsReading` backed by the same SQLite database as
+    /// `makeMetricsService()`, so rollups + recents stay consistent.
+    public static func makeMetricsReader() throws -> any MetricsReading {
+        let databaseURL = AppConfig.liveStorageLocator()
+            .url(for: .recordings)
+            .appendingPathComponent(transcriptDatabaseFileName, isDirectory: false)
+            .standardizedFileURL
+
+        return try SQLiteMetricsReader(
+            databaseURL: databaseURL,
             referenceDateProvider: Date.init
         )
     }

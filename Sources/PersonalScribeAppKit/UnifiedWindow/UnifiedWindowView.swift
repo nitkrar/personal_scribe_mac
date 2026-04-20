@@ -15,12 +15,32 @@ struct UnifiedWindowView: View {
     @ObservedObject var model: UnifiedWindowModel
     let windowTint: WindowTint
 
+    // Tab-content dependencies. ViewModels are constructed once per
+    // window lifetime by UnifiedWindowController and passed through;
+    // recreating this view for WindowTint changes leaves @Published
+    // subscriptions intact.
+    @ObservedObject var homeViewModel: HomeTabViewModel
+    @ObservedObject var transcriptionsViewModel: TranscriptionsTabViewModel
+    @ObservedObject var modesViewModel: ModesTabViewModel
+    let permissionService: any PermissionService
+    let defaults: UserDefaults
+
     init(
         model: UnifiedWindowModel,
-        windowTint: WindowTint = .warm
+        windowTint: WindowTint = .warm,
+        homeViewModel: HomeTabViewModel,
+        transcriptionsViewModel: TranscriptionsTabViewModel,
+        modesViewModel: ModesTabViewModel,
+        permissionService: any PermissionService,
+        defaults: UserDefaults = .standard
     ) {
         self.model = model
         self.windowTint = windowTint
+        self.homeViewModel = homeViewModel
+        self.transcriptionsViewModel = transcriptionsViewModel
+        self.modesViewModel = modesViewModel
+        self.permissionService = permissionService
+        self.defaults = defaults
     }
 
     var body: some View {
@@ -90,7 +110,7 @@ struct UnifiedWindowView: View {
 
     @ViewBuilder
     private var detail: some View {
-        tabStubView(for: model.activeTab)
+        tabView(for: model.activeTab)
             .frame(
                 maxWidth: .infinity,
                 maxHeight: .infinity,
@@ -98,27 +118,20 @@ struct UnifiedWindowView: View {
             )
             .padding(PersonalScribeTheme.Spacing.xl)
             .background(windowTint.primaryBackground)
+            .windowTint(windowTint)
     }
 
     @ViewBuilder
-    private func tabStubView(for tab: AppTab) -> some View {
-        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
-            Text(tab.rawValue)
-                .font(PersonalScribeTheme.Typography.largeTitle.font)
-                .foregroundStyle(windowTint.primaryText)
-
-            Text(stubBody(for: tab))
-                .font(PersonalScribeTheme.Typography.body.font)
-                .foregroundStyle(windowTint.primaryText.opacity(0.6))
-        }
-    }
-
-    private func stubBody(for tab: AppTab) -> String {
+    private func tabView(for tab: AppTab) -> some View {
         switch tab {
-        case .home:           return "Stats and recent transcriptions land in M3.5."
-        case .transcriptions: return "Search + grouped transcript list migrate from NotesView in M3.2."
-        case .modes:          return "Mode cards (Dictation, Command, Notes) land in M3.4."
-        case .settings:       return "General / Permissions / About sub-tabs land in M3.3."
+        case .home:
+            HomeTab(viewModel: homeViewModel)
+        case .transcriptions:
+            TranscriptionsTab(viewModel: transcriptionsViewModel)
+        case .modes:
+            ModesTab(viewModel: modesViewModel)
+        case .settings:
+            SettingsTab(defaults: defaults, permissionService: permissionService)
         }
     }
 

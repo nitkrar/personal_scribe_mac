@@ -1,3 +1,4 @@
+import PersonalScribeCore
 import SwiftUI
 
 @MainActor
@@ -5,9 +6,14 @@ public struct SettingsTab: View {
     @State private var selectedSubTab: SettingsSubTab = .general
 
     private let defaults: UserDefaults
+    private let permissionService: any PermissionService
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(
+        defaults: UserDefaults = .standard,
+        permissionService: any PermissionService
+    ) {
         self.defaults = defaults
+        self.permissionService = permissionService
     }
 
     public var body: some View {
@@ -28,23 +34,15 @@ public struct SettingsTab: View {
                 case .general:
                     GeneralTab(defaults: defaults)
                 case .permissions:
-                    PermissionsSubTab()
+                    PermissionsSubTab(
+                        viewModel: PermissionsSubTabViewModel(
+                            permissionService: permissionService
+                        )
+                    )
                 case .about:
                     AboutSubTab()
                 }
             }
         }
-    }
-}
-
-private struct PermissionsSubTab: View {
-    var body: some View {
-        Text("Permissions sub-tab lands in M3.3b")
-    }
-}
-
-private struct AboutSubTab: View {
-    var body: some View {
-        Text("About sub-tab lands in M3.3c")
     }
 }
