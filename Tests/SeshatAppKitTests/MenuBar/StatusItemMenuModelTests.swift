@@ -17,7 +17,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         )
 
         XCTAssertEqual(model.items.count, 6)
-        assertHeader(model.items[0], "Quick Memo")
+        assertHeader(model.items[0], ModeRegistry.dictation.name)
         assertAction(model.items[1], id: .startStopRecording, title: "Start Recording   ⌥⌥")
         assertAction(model.items[2], id: .openHistory, title: "History")
         assertAction(model.items[3], id: .openSettings, title: "Settings")

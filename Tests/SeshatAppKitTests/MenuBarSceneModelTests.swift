@@ -137,7 +137,6 @@ final class MenuBarSceneModelTests: XCTestCase {
         var openSettingsRequestCount = 0
         let controller = StatusItemController(
             sceneModel: model,
-            imPermissionProbe: GrantedInputMonitoringProbe(),
             openHistory: {},
             openSettings: {
                 openSettingsRequestCount += 1
@@ -164,7 +163,6 @@ final class MenuBarSceneModelTests: XCTestCase {
         var openNotesRequestCount = 0
         let controller = StatusItemController(
             sceneModel: model,
-            imPermissionProbe: GrantedInputMonitoringProbe(),
             openHistory: {
                 openNotesRequestCount += 1
             },

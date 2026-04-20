@@ -48,15 +48,23 @@ struct SeshatAppMain: App {
         },
         startupCoordinator: AppStartupCoordinator? = nil
     ) {
-        let permissionService = permissionService
-            ?? Self.makeCompatibilityPermissionService(
-                permissionRequester: permissionRequester,
-                inputMonitoringProbe: inputMonitoringProbe,
-                isAccessibilityTrusted: isAccessibilityTrusted
-            )
-        let compatibilityPermissionService = Self.makeCompatibilityPermissionServiceAdapter(
-            wrapping: permissionService
+        let compatibilityPermissionService: PermissionServiceAdapter =
+            if let permissionService {
+                Self.makeCompatibilityPermissionServiceAdapter(wrapping: permissionService)
+            } else {
+                Self.makeCompatibilityPermissionService(
+                    permissionRequester: permissionRequester,
+                    inputMonitoringProbe: inputMonitoringProbe,
+                    isAccessibilityTrusted: isAccessibilityTrusted
+                )
+            }
+        let appStore = AppStore(
+            session: coordinator.appStoreSessionProvider(),
+            permissions: compatibilityPermissionService,
+            activeModeSource: AppKitActiveModeProvider(),
+            visibilityModeSource: AppKitVisibilityModeProvider(defaults: defaults)
         )
+        appStore.start()
         let resolvedOutputService: any OutputService = ClipboardBatchOutput()
         let startupCoordinator = startupCoordinator
             ?? AppComposition.makeStartupCoordinator(
@@ -82,11 +90,11 @@ struct SeshatAppMain: App {
         self.coordinator = coordinator
         self.startupCoordinator = startupCoordinator
         let sceneModel = MenuBarSceneModel(
+            appStore: appStore,
             coordinator: coordinator,
             clipboardWriter: clipboardWriter,
             outputService: resolvedOutputService,
-            openSettings: openSettings,
-            permissionService: permissionService,
+            permissionService: compatibilityPermissionService,
             openURL: { url in
                 _ = NSWorkspace.shared.open(url)
             },
@@ -95,10 +103,9 @@ struct SeshatAppMain: App {
             }
         )
         let pillController = PillOverlayController(
-            statePublisher: sceneModel.$state.eraseToAnyPublisher(),
-            preparationProgressPublisher: sceneModel.$preparationProgress.eraseToAnyPublisher(),
+            appStore: appStore,
             audioLevelPublisher: nil,
-            visibilityMode: PillVisibilityMode.resolve(),
+            defaults: defaults,
             onTap: {
                 guard onboardingControllerHost.requestInteractionAccess() else {
                     return
@@ -118,7 +125,7 @@ struct SeshatAppMain: App {
         var showSettingsWindow: @MainActor () -> Void = {}
         let statusItemControllerHost = StatusItemControllerHost(
             sceneModel: sceneModel,
-            permissionService: permissionService,
+            appStore: appStore,
             openHistory: {
                 showNotesWindow()
             },
@@ -320,7 +327,7 @@ final class StatusItemControllerHost: ObservableObject {
 
     init(
         sceneModel: MenuBarSceneModel,
-        permissionService: (any PermissionService)? = nil,
+        appStore: AppStore,
         openHistory: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
@@ -329,7 +336,7 @@ final class StatusItemControllerHost: ObservableObject {
     ) {
         self.controller = StatusItemController(
             sceneModel: sceneModel,
-            permissionService: permissionService,
+            appStore: appStore,
             openHistory: openHistory,
             openSettings: openSettings,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider

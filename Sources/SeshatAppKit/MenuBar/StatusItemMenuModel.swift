@@ -55,7 +55,7 @@ struct StatusItemMenuModel: Equatable {
     /// [warning: microphone access required] (prepended when mic is not granted)
     /// [warning: input monitoring required]  (prepended when IM is not granted)
     /// [separator]                            (present when any warning shows)
-    /// Quick Memo                             (header, non-interactive)
+    /// Dictation                              (header, non-interactive)
     /// Start Recording ⌥⌘                     (or "Stop Recording")
     /// History
     /// Settings
@@ -66,7 +66,7 @@ struct StatusItemMenuModel: Equatable {
         sessionState: SessionState,
         micPermission: PermissionStatus,
         inputMonitoringPermission: PermissionStatus,
-        activeModeName: String = "Quick Memo",
+        activeModeName: String? = nil,
         isOnboardingComplete: Bool = true
     ) -> StatusItemMenuModel {
         _ = isOnboardingComplete
@@ -101,7 +101,9 @@ struct StatusItemMenuModel: Equatable {
             items.append(.separator)
         }
 
-        items.append(.header(title: activeModeName))
+        if let activeModeName {
+            items.append(.header(title: activeModeName))
+        }
 
         items.append(.action(ActionItem(
             id: .startStopRecording,
@@ -140,7 +142,7 @@ struct StatusItemMenuModel: Equatable {
         sessionState: SessionState,
         micPermission: MicrophonePermissionState,
         inputMonitoringPermission: InputMonitoringPermissionState,
-        activeModeName: String = "Quick Memo",
+        activeModeName: String? = nil,
         isOnboardingComplete: Bool = true
     ) -> StatusItemMenuModel {
         makeUnified(

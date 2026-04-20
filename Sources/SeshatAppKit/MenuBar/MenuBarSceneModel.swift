@@ -33,6 +33,7 @@ final class MenuBarSceneModel: ObservableObject {
     @Published var lastResultText: String? = nil
     @Published var preparationProgress: ModelDownloadProgress?
 
+    let appStore: AppStore
     private let coordinator: SessionCoordinator
     private let permissionService: any PermissionService
     private let clipboardWriter: @MainActor (String) -> Void
@@ -41,17 +42,41 @@ final class MenuBarSceneModel: ObservableObject {
     private let onClipboardOnlyCopy: @MainActor () -> Void
     private let logger: SeshatLogger
     private let onObservationCancelled: (@Sendable () -> Void)?
-    private var observationTask: Task<Void, Never>?
-    private var preparationObservationTask: Task<Void, Never>?
-    private var permissionObservation: AnyCancellable?
+    private var snapshotObservation: AnyCancellable?
     private var lastAutoPastedTranscript: String?
     private(set) var observationTaskCreationCount = 0
 
     var permissionState: MicrophonePermissionState {
-        (permissionService.statuses[.microphone] ?? .pending).microphonePermissionState
+        (appStore.snapshot.permissions[.microphone] ?? .pending).microphonePermissionState
     }
 
     init(
+        appStore: AppStore,
+        coordinator: SessionCoordinator,
+        clipboardWriter: @escaping @MainActor (String) -> Void,
+        outputService: any OutputService,
+        permissionService: any PermissionService,
+        openURL: @escaping @MainActor (URL) -> Void,
+        onClipboardOnlyCopy: @escaping @MainActor () -> Void = {},
+        onObservationCancelled: (@Sendable () -> Void)? = nil,
+        logger: SeshatLogger = SeshatLogger(category: SeshatLogCategory.ui)
+    ) {
+        let snapshot = appStore.snapshot
+        _state = Published(initialValue: snapshot.sessionState)
+        _lastResultText = Published(initialValue: snapshot.lastTranscriptionResult?.text)
+        _preparationProgress = Published(initialValue: snapshot.modelDownloadProgress)
+        self.appStore = appStore
+        self.coordinator = coordinator
+        self.permissionService = permissionService
+        self.clipboardWriter = clipboardWriter
+        self.outputService = outputService
+        self.openURL = openURL
+        self.onClipboardOnlyCopy = onClipboardOnlyCopy
+        self.onObservationCancelled = onObservationCancelled
+        self.logger = logger
+    }
+
+    convenience init(
         coordinator: SessionCoordinator,
         permissionRequester: any MicrophonePermissionRequesting = AppKitMicrophonePermissionRequester(),
         permissionStateProvider: @escaping @MainActor () -> MicrophonePermissionState = { .notYetRequested },
@@ -74,70 +99,41 @@ final class MenuBarSceneModel: ObservableObject {
                 permissionRequester: permissionRequester,
                 permissionStateProvider: permissionStateProvider
             )
-        self.coordinator = coordinator
-        self.permissionService = resolvedPermissionService
-        self.clipboardWriter = clipboardWriter
-        self.outputService = outputService ?? LegacyPasteInjectorOutputService(pasteInjector: pasteInjector)
-        self.openURL = openURL ?? { _ in openSettings() }
-        self.onClipboardOnlyCopy = onClipboardOnlyCopy
-        self.onObservationCancelled = onObservationCancelled
-        self.logger = logger
-        self.permissionObservation = Self.observePermissionChanges(for: resolvedPermissionService) { [weak self] in
-            self?.objectWillChange.send()
-        }
-    }
+        let compatibilityPermissionService = Self.makeCompatibilityPermissionServiceAdapter(
+            wrapping: resolvedPermissionService
+        )
+        let appStore = AppStore(
+            session: coordinator.appStoreSessionProvider(),
+            permissions: compatibilityPermissionService,
+            activeModeSource: AppKitActiveModeProvider(),
+            visibilityModeSource: AppKitVisibilityModeProvider()
+        )
+        appStore.start()
 
-    private static func observePermissionChanges<Service: PermissionService>(
-        for service: Service,
-        onChange: @escaping @MainActor () -> Void
-    ) -> AnyCancellable {
-        service.objectWillChange.sink { _ in
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    onChange()
-                }
-            }
-        }
+        self.init(
+            appStore: appStore,
+            coordinator: coordinator,
+            clipboardWriter: clipboardWriter,
+            outputService: outputService ?? LegacyPasteInjectorOutputService(pasteInjector: pasteInjector),
+            permissionService: compatibilityPermissionService,
+            openURL: openURL ?? { _ in openSettings() },
+            onClipboardOnlyCopy: onClipboardOnlyCopy,
+            onObservationCancelled: onObservationCancelled,
+            logger: logger
+        )
     }
 
     func startObserving() {
-        guard observationTask == nil else { return }
+        guard snapshotObservation == nil else { return }
 
-        logger.info("Starting coordinator observation")
+        logger.info("Starting AppStore observation")
         observationTaskCreationCount += 1
-        let coordinator = coordinator
-        observationTask = Task { [weak self, coordinator] in
-            guard let self else { return }
-            let stream = await coordinator.stateStream()
-            for await newState in stream {
-                let lastResultText: String?
-                if case .idle = newState {
-                    lastResultText = await coordinator.lastResult()?.text
-                } else {
-                    lastResultText = nil
-                }
-
-                await MainActor.run {
-                    self.state = newState
-                    if case .idle = newState {
-                        self.lastResultText = lastResultText
-                        self.autoPasteTranscriptIfNeeded(lastResultText)
-                    }
-                }
-            }
-        }
-
-        preparationObservationTask = Task { [weak self, coordinator] in
-            guard let self else { return }
-            let stream = await coordinator.modelDownloadProgress()
-            for await progress in stream {
-                await MainActor.run {
-                    switch progress.phase {
-                    case .idle, .finished:
-                        self.preparationProgress = nil
-                    case .downloading, .loading:
-                        self.preparationProgress = progress
-                    }
+        applySnapshot(appStore.snapshot)
+        snapshotObservation = appStore.objectWillChange.sink { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                MainActor.assumeIsolated {
+                    self.applySnapshot(self.appStore.snapshot)
                 }
             }
         }
@@ -201,9 +197,24 @@ final class MenuBarSceneModel: ObservableObject {
         }
     }
 
-    deinit {
-        observationTask?.cancel()
-        preparationObservationTask?.cancel()
+    private func applySnapshot(_ snapshot: AppStoreSnapshot) {
+        let previousState = state
+        state = snapshot.sessionState
+        preparationProgress = snapshot.modelDownloadProgress
+
+        if snapshot.sessionState.isIdle {
+            let transcriptText = snapshot.lastTranscriptionResult?.text
+            lastResultText = transcriptText
+
+            if !previousState.isIdle {
+                autoPasteTranscriptIfNeeded(transcriptText)
+            }
+        } else {
+            lastResultText = nil
+        }
+    }
+
+    isolated deinit {
         onObservationCancelled?()
     }
 
@@ -255,5 +266,31 @@ final class MenuBarSceneModel: ObservableObject {
                 box.statuses
             }
         )
+    }
+
+    private static func makeCompatibilityPermissionServiceAdapter(
+        wrapping permissionService: any PermissionService
+    ) -> PermissionServiceAdapter {
+        if let permissionService = permissionService as? PermissionServiceAdapter {
+            return permissionService
+        }
+
+        return wrapPermissionService(permissionService)
+    }
+
+    private static func wrapPermissionService<Service: PermissionService>(
+        _ permissionService: Service
+    ) -> PermissionServiceAdapter {
+        PermissionServiceAdapter(wrapping: permissionService)
+    }
+}
+
+private extension SessionState {
+    var isIdle: Bool {
+        if case .idle = self {
+            return true
+        }
+
+        return false
     }
 }
