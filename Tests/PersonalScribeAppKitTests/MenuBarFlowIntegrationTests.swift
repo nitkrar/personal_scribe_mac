@@ -135,10 +135,12 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
                 + "AppStartupCoordinator should schedule the work and return."
         )
 
-        for _ in 0..<500 {
-            if flag.hasFired { break }
-            await Task.yield()
-        }
+        // Wall-clock wait (project memory: `condition-based-waiting`).
+        // Previously this was a 500-iteration `Task.yield()` loop, which flaked
+        // because `startupCoordinator.start()` fans work out onto a detached
+        // Task and cooperative yielding alone doesn't guarantee that task
+        // makes forward progress under CI load.
+        await waitUntil { flag.hasFired }
         XCTAssertTrue(
             flag.hasFired,
             "startupCoordinator.start() was never invoked after PersonalScribeAppMain.init()."
@@ -157,19 +159,25 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
         return defaults
     }
 
+    /// Wall-clock polling loop (project memory: `condition-based-waiting`).
+    /// Replaces the previous `Task.yield()`-only loop which flaked because
+    /// detached Tasks scheduled by the production code don't get guaranteed
+    /// forward progress from cooperative yields alone. Real-time deadline
+    /// keeps the test fast in the common case but robust under CI load.
     private func waitUntil(
-        maxIterations: Int = 500,
+        timeout: Duration = .seconds(5),
+        pollInterval: Duration = .milliseconds(5),
         condition: @escaping @MainActor () -> Bool
     ) async {
-        for _ in 0..<maxIterations {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
             if condition() {
                 return
             }
-
-            await Task.yield()
+            try? await Task.sleep(for: pollInterval, tolerance: pollInterval)
         }
-
-        XCTFail("Timed out waiting for condition")
+        XCTFail("Timed out waiting for condition after \(timeout)")
     }
 }
 

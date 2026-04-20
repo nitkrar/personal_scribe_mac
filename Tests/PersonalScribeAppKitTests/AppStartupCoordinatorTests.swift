@@ -52,19 +52,25 @@ final class AppStartupCoordinatorTests: XCTestCase {
         XCTAssertEqual(counts.prepareCount, 1)
     }
 
+    /// Wall-clock polling loop (project memory: `condition-based-waiting`).
+    /// Replaces the previous `Task.yield()`-only loop which flaked because
+    /// `coordinator.start()` schedules a detached Task whose forward progress
+    /// isn't guaranteed by cooperative yielding alone. Real-time deadline
+    /// keeps the test fast in the common case but robust under CI load.
     private func waitUntil(
-        maxIterations: Int = 500,
+        timeout: Duration = .seconds(5),
+        pollInterval: Duration = .milliseconds(5),
         condition: @escaping @Sendable () -> Bool
     ) async {
-        for _ in 0..<maxIterations {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
             if condition() {
                 return
             }
-
-            await Task.yield()
+            try? await Task.sleep(for: pollInterval, tolerance: pollInterval)
         }
-
-        XCTFail("Timed out waiting for condition")
+        XCTFail("Timed out waiting for condition after \(timeout)")
     }
 }
 

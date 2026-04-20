@@ -44,7 +44,10 @@ final class DiskSpaceSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.usedBytesByDirectory[.cache], Int64(0))
         XCTAssertEqual(snapshot.totalUsedBytes, snapshot.usedBytesByDirectory.values.reduce(0, +))
 
-        XCTAssertEqual(snapshot.volumeAvailableBytes, expectedVolumeAvailableBytes)
+        assertVolumeAvailableBytes(
+            snapshot.volumeAvailableBytes,
+            closeTo: expectedVolumeAvailableBytes
+        )
     }
 
     func testCaptureTreatsMissingBaseDirectoryAsEmptySnapshotWithoutCreatingDirectories() throws {
@@ -71,7 +74,10 @@ final class DiskSpaceSnapshotTests: XCTestCase {
         XCTAssertEqual(Set(snapshot.usedBytesByDirectory.keys), Set(ManagedDirectory.allCases))
         XCTAssertTrue(snapshot.usedBytesByDirectory.values.allSatisfy { $0 == 0 })
         XCTAssertEqual(snapshot.totalUsedBytes, 0)
-        XCTAssertEqual(snapshot.volumeAvailableBytes, expectedVolumeAvailableBytes)
+        assertVolumeAvailableBytes(
+            snapshot.volumeAvailableBytes,
+            closeTo: expectedVolumeAvailableBytes
+        )
     }
 
     private func makeTemporaryDirectory() throws -> URL {
@@ -82,5 +88,42 @@ final class DiskSpaceSnapshotTests: XCTestCase {
 
     private func cleanup(_ url: URL) {
         try? fileManager.removeItem(at: url)
+    }
+
+    /// Asserts that two system-wide volume-available-byte counts are within a
+    /// tolerance of each other. The test takes two independent readings of
+    /// `.volumeAvailableCapacityForImportantUsage` (one via `resourceValues`,
+    /// one via `DiskSpaceSnapshot.capture`) and the OS is free to write
+    /// between them, so exact equality is a race. Tolerance = 50 MiB, which
+    /// is generous enough to absorb concurrent logging / indexing traffic
+    /// while still catching order-of-magnitude regressions.
+    private func assertVolumeAvailableBytes(
+        _ actual: Int64?,
+        closeTo expected: Int64?,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let tolerance: Int64 = 50 * 1024 * 1024
+        switch (actual, expected) {
+        case let (lhs?, rhs?):
+            let delta = abs(lhs - rhs)
+            XCTAssertLessThanOrEqual(
+                delta,
+                tolerance,
+                "volumeAvailableBytes drifted by \(delta) bytes between the "
+                    + "pre-capture reading (\(rhs)) and the snapshot reading "
+                    + "(\(lhs)); tolerance is \(tolerance) bytes.",
+                file: file,
+                line: line
+            )
+        case (nil, nil):
+            break
+        case (nil, _?), (_?, nil):
+            XCTFail(
+                "volumeAvailableBytes nil-ness mismatch: expected \(String(describing: expected)), got \(String(describing: actual))",
+                file: file,
+                line: line
+            )
+        }
     }
 }

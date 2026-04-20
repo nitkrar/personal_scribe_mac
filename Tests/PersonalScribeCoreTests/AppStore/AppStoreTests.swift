@@ -374,19 +374,25 @@ final class AppStoreTests: XCTestCase {
         )
     }
 
+    /// Wall-clock polling loop (project memory: `condition-based-waiting`).
+    /// Replaces the previous `Task.yield()`-only loop which flaked whenever
+    /// the AppStore's AsyncStream consumer Task didn't get immediate
+    /// forward progress on a yield. Real-time deadline keeps the test fast
+    /// in the common case but robust under CI load.
     private func waitUntil(
-        maxIterations: Int = 500,
+        timeout: Duration = .seconds(5),
+        pollInterval: Duration = .milliseconds(5),
         condition: @escaping @MainActor () -> Bool
     ) async {
-        for _ in 0..<maxIterations {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
             if condition() {
                 return
             }
-
-            await Task.yield()
+            try? await Task.sleep(for: pollInterval, tolerance: pollInterval)
         }
-
-        XCTFail("Timed out waiting for condition")
+        XCTFail("Timed out waiting for condition after \(timeout)")
     }
 }
 
