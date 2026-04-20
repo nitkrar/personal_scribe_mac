@@ -13,7 +13,7 @@ public enum AppBrand {
 
     /// Short origin story for the About card — scribe/goddess role only.
     /// Full mythology: https://mythlok.com/ninimma/
-    public static let originStory = "Ninimma was the divine scribe of the Sumerian gods \u2014 keeper of the clay tablet, guardian of celestial decrees. Her name means Lady of the Clay Tablet."
+    public static let originStory = "Ninimma was the divine scribe of the Sumerian gods — keeper of the clay tablet, guardian of celestial decrees. Her name means Lady of the Clay Tablet."
     public static let version = resolvedVersion(in: Bundle.main.infoDictionary ?? [:])
     public static let buildNumber = resolvedBuildNumber(in: Bundle.main.infoDictionary ?? [:])
 
