@@ -97,6 +97,7 @@ public actor SessionCoordinator {
     }
 
     public func toggle() async {
+        await startAudioLevelRelayIfNeeded()
         await pipeline.toggleCapture()
         let snapshot = await pipeline.snapshot()
         applyPipelineSnapshot(snapshot)
@@ -122,10 +123,8 @@ public actor SessionCoordinator {
 
     /// Multiplexed audio-level stream (phase-2 step 2.10). Yields the latest
     /// cached level on subscription and every subsequent level republished
-    /// from the capture service while recording is live. Values are
-    /// normalized `[0, 1]`. Stream stays open across start/stop cycles —
-    /// the coordinator resubscribes to the capture's level stream on every
-    /// new recording.
+    /// from the pipeline while recording is live. Values are normalized
+    /// `[0, 1]`. Stream stays open across start/stop cycles.
     public func audioLevelStream() -> AsyncStream<Float> {
         let id = UUID()
 
@@ -169,6 +168,38 @@ public actor SessionCoordinator {
 
     private func removeAudioLevelContinuation(id: UUID) {
         audioLevelContinuations[id] = nil
+    }
+
+    private func startAudioLevelRelayIfNeeded() async {
+        guard audioLevelTask == nil else {
+            return
+        }
+
+        // Subscribe before the first recording toggle so the pipeline's cached
+        // value and earliest live samples cannot outrun the coordinator relay.
+        let stream = await pipeline.audioLevelStream()
+        audioLevelTask = Task { [weak self] in
+            var didInspectInitialSample = false
+
+            for await level in stream {
+                guard let self else {
+                    return
+                }
+
+                if !didInspectInitialSample {
+                    didInspectInitialSample = true
+                    if await self.shouldSuppressInitialRelayedAudioLevel(level) {
+                        continue
+                    }
+                }
+
+                await self.publishAudioLevel(level)
+            }
+        }
+    }
+
+    private func shouldSuppressInitialRelayedAudioLevel(_ level: Float) -> Bool {
+        level == currentAudioLevel
     }
 
     private static func makePipeline(
@@ -227,16 +258,6 @@ public actor SessionCoordinator {
             }
         }
 
-        Task { [weak owner, pipeline] in
-            let stream = await pipeline.audioLevelStream()
-            for await level in stream {
-                guard let owner else {
-                    return
-                }
-                await owner.publishAudioLevel(level)
-            }
-        }
-
         Task {
             let stream = await pipelineTranscriber.modelDownloadProgress()
             for await progress in stream {
@@ -267,241 +288,10 @@ public actor SessionCoordinator {
         }
     }
 
-    private func startRecording() async {
-        bufferedAudio.removeAll(keepingCapacity: true)
-
-        do {
-            let stream = try await capture.start()
-            let transcriber = await resolveRecordingSessionTranscriber()
-            // Step 2.10: subscribe to capture's level stream before flipping
-            // to .recording so any early emissions reach UI consumers.
-            let levelStream = await capture.audioLevelStream()
-            audioLevelTask?.cancel()
-            audioLevelTask = Task { [weak self] in
-                for await level in levelStream {
-                    await self?.publishAudioLevel(level)
-                }
-                // When the capture's level stream ends, fall back to silence
-                // so a subsequent recording starts from 0 rather than the
-                // last loud sample.
-                await self?.publishAudioLevel(0.0)
-            }
-
-            publish(.recording)
-            prepareTranscriberInBackground(using: transcriber)
-            captureTask = Task {
-                await self.consumeCaptureStream(stream)
-            }
-        } catch {
-            publish(.error(map(error, default: .audioEngineFailure)))
-        }
-    }
-
-    private func stopRecordingAndTranscribe() async {
-        await capture.stop()
-        await captureTask?.value
-        captureTask = nil
-
-        // Step 2.10: drain the level-forwarding task so the coordinator's
-        // cached level settles to 0 before the UI observes .transcribing.
-        await audioLevelTask?.value
-        audioLevelTask = nil
-        defer {
-            recordingSessionTranscriber = nil
-        }
-
-        if case .error = currentState {
-            logger.info("Capture stream failed while stop was in flight; preserving error state")
-            bufferedAudio.removeAll(keepingCapacity: true)
-            return
-        }
-
-        let replayBuffers = bufferedAudio
-        bufferedAudio.removeAll(keepingCapacity: true)
-        let transcriber = await transcriberForStopPath()
-
-        // FluidAudio requires at least 1 second of 16 kHz audio; feeding
-        // shorter buffers surfaces as "Invalid audio data" mid-transcribe
-        // which then routes to `.error` → pill vanishes silently. Guard
-        // at the coordinator layer so the user sees a "too short" signal
-        // instead of a disappearing pill.
-        let bufferedDuration = replayBuffers.reduce(Duration.zero) { $0 + $1.duration }
-        if bufferedDuration < .milliseconds(1_000) {
-            logger.info("Recording too short (\(bufferedDuration)); skipping transcription")
-            publish(.error(.recordingTooShort))
-            return
-        }
-
-        publish(.transcribing)
-
-        do {
-            let raw = try await transcriber.transcribe(stream: makeReplayStream(from: replayBuffers))
-            let cleanedText = postProcessor.clean(raw.text)
-            mostRecentResult = TranscriptionResult(
-                text: cleanedText,
-                segments: raw.segments,
-                audioDuration: raw.audioDuration,
-                processingDuration: raw.processingDuration
-            )
-            await persistTranscript(
-                text: cleanedText,
-                audioDuration: raw.audioDuration,
-                processingDuration: raw.processingDuration
-            )
-            publish(.idle)
-        } catch {
-            publish(.error(map(error, default: .transcriptionFailure)))
-        }
-    }
-
-    private func persistTranscript(
-        text: String,
-        audioDuration: Duration,
-        processingDuration: Duration
-    ) async {
-        guard let transcriptStore else {
-            return
-        }
-
-        let entry = TranscriptEntry(
-            id: UUID(),
-            timestamp: Date(),
-            text: text,
-            audioDuration: Self.seconds(from: audioDuration),
-            processingDuration: Self.seconds(from: processingDuration)
-        )
-
-        do {
-            try await transcriptStore.append(entry)
-        } catch {
-            logger.error("Failed to persist transcript to SQLiteTranscriptStore", error: error)
-        }
-    }
-
     private static func seconds(from duration: Duration) -> TimeInterval {
         let components = duration.components
         return TimeInterval(components.seconds)
             + TimeInterval(components.attoseconds) / 1_000_000_000_000_000_000
-    }
-
-    private func consumeCaptureStream(_ stream: AsyncThrowingStream<PCMBuffer, Error>) async {
-        do {
-            for try await buffer in stream {
-                bufferedAudio.append(buffer)
-            }
-        } catch {
-            publish(.error(map(error, default: .audioEngineFailure)))
-        }
-    }
-
-    private func makeReplayStream(from buffers: [PCMBuffer]) -> AsyncThrowingStream<PCMBuffer, Error> {
-        AsyncThrowingStream { continuation in
-            for buffer in buffers {
-                continuation.yield(buffer)
-            }
-            continuation.finish()
-        }
-    }
-
-    private func map(_ error: any Error, default fallback: SeshatError) -> SeshatError {
-        if let seshatError = error as? SeshatError {
-            return seshatError
-        }
-
-        logger.error("Mapped underlying error to shared contract", error: error)
-        return fallback
-    }
-
-    private func prepareTranscriberInBackground(using transcriber: any Transcribing) {
-        let logger = logger
-
-        Task.detached(priority: .background) {
-            do {
-                try await transcriber.prepare()
-            } catch is CancellationError {
-                return
-            } catch {
-                logger.error("Background transcriber preparation failed", error: error)
-            }
-        }
-    }
-
-    private func resolvedTranscriberForPreparation() async -> any Transcribing {
-        if let recordingSessionTranscriber {
-            observeDownloadProgress(for: recordingSessionTranscriber)
-            return recordingSessionTranscriber
-        }
-
-        return await resolvedActiveTranscriber()
-    }
-
-    private func resolveRecordingSessionTranscriber() async -> any Transcribing {
-        if let fixedTranscriber {
-            recordingSessionTranscriber = fixedTranscriber
-            observeDownloadProgress(for: fixedTranscriber)
-            return fixedTranscriber
-        }
-
-        let descriptor = await activeVoiceModel()
-        let transcriber = resolvedModelBoundTranscriber(for: descriptor)
-        recordingSessionTranscriber = transcriber
-        observeDownloadProgress(for: transcriber)
-        return transcriber
-    }
-
-    private func transcriberForStopPath() async -> any Transcribing {
-        if let recordingSessionTranscriber {
-            return recordingSessionTranscriber
-        }
-
-        return await resolvedActiveTranscriber()
-    }
-
-    private func resolvedActiveTranscriber() async -> any Transcribing {
-        if let fixedTranscriber {
-            observeDownloadProgress(for: fixedTranscriber)
-            return fixedTranscriber
-        }
-
-        let descriptor = await activeVoiceModel()
-        let transcriber = resolvedModelBoundTranscriber(for: descriptor)
-        observeDownloadProgress(for: transcriber)
-        return transcriber
-    }
-
-    private func activeVoiceModel() async -> ModelDescriptor {
-        guard let modelService else {
-            preconditionFailure("SessionCoordinator model-service path requires a ModelService")
-        }
-
-        return await MainActor.run {
-            modelService.activeDescriptor.voiceModel
-        }
-    }
-
-    private func resolvedModelBoundTranscriber(
-        for descriptor: ModelDescriptor
-    ) -> any Transcribing {
-        guard let transcriberProvider else {
-            preconditionFailure("SessionCoordinator model-service path requires a transcriber provider")
-        }
-
-        return transcriberProvider.transcriber(for: descriptor)
-    }
-
-    private func observeDownloadProgress(for transcriber: any Transcribing) {
-        downloadProgressObservationTask?.cancel()
-        let broadcaster = downloadProgressBroadcaster
-
-        downloadProgressObservationTask = Task {
-            for await progress in transcriber.modelDownloadProgress() {
-                if Task.isCancelled {
-                    return
-                }
-
-                broadcaster.update(progress)
-            }
-        }
     }
 }
 
