@@ -38,6 +38,7 @@ struct SeshatAppMain: App {
         permissionService: (any PermissionService)? = nil,
         clipboardWriter: @escaping @MainActor (String) -> Void = SeshatAppMain.defaultClipboardWriter,
         pasteInjector: (any PasteInjecting)? = nil,
+        outputService: (any OutputService)? = nil,
         openSettings: @escaping @MainActor () -> Void = SeshatAppMain.defaultOpenSettings,
         overlayPanelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
         defaults: UserDefaults = .standard,
@@ -65,7 +66,12 @@ struct SeshatAppMain: App {
             visibilityModeSource: AppKitVisibilityModeProvider(defaults: defaults)
         )
         appStore.start()
-        let resolvedOutputService: any OutputService = ClipboardBatchOutput()
+        _ = pasteInjector // Stage 3 deletes the legacy seam; Layer 5 composes through OutputService.
+        let resolvedOutputService = outputService
+            ?? ClipboardBatchOutput(
+                defaults: defaults,
+                isAccessibilityTrusted: isAccessibilityTrusted
+            )
         let startupCoordinator = startupCoordinator
             ?? AppComposition.makeStartupCoordinator(
                 coordinator: coordinator,

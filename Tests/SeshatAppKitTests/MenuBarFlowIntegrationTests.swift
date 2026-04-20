@@ -16,11 +16,13 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
 
     func testRecordStopTranscribeIdleFlowPublishesLatestResult() async {
         let coordinator = DevelopmentComposition.makeTestingSessionCoordinator()
+        let outputService = RecordingOutputService()
         let model = MenuBarSceneModel(
             coordinator: coordinator,
             permissionRequester: IntegrationPermissionRequester(),
             permissionStateProvider: { .granted },
             clipboardWriter: { _ in },
+            outputService: outputService,
             openSettings: {},
             logger: SeshatLogger(category: SeshatLogCategory.ui)
         )
@@ -46,6 +48,9 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
         await fulfillment(of: [transitionExpectation], timeout: 1.0)
         stateCancellable.cancel()
         await waitForTranscriptText("Development transcript.", on: model)
+        await waitUntil {
+            outputService.deliveredTexts == ["Development transcript."]
+        }
 
         XCTAssertEqual(model.lastResultText, "Development transcript.")
     }
@@ -112,12 +117,13 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
             sleep: { _ in }
         )
         let defaults = makeCompletedOnboardingDefaults()
+        let outputService = RecordingOutputService()
 
         _ = SeshatAppMain(
             coordinator: sessionCoordinator,
             permissionRequester: IntegrationPermissionRequester(),
             clipboardWriter: { _ in },
-            pasteInjector: SilentPaster(),
+            outputService: outputService,
             openSettings: {},
             overlayPanelBuilder: NoOpPanelBuilder(),
             defaults: defaults,
@@ -147,6 +153,21 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
         OnboardingState.completed.persist(to: defaults)
         return defaults
     }
+
+    private func waitUntil(
+        maxIterations: Int = 500,
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        for _ in 0..<maxIterations {
+            if condition() {
+                return
+            }
+
+            await Task.yield()
+        }
+
+        XCTFail("Timed out waiting for condition")
+    }
 }
 
 private struct IntegrationPermissionRequester: MicrophonePermissionRequesting {
@@ -165,13 +186,6 @@ private final class HotkeyFireFlag: @unchecked Sendable {
 
     var hasFired: Bool {
         lock.withLock { fired }
-    }
-}
-
-@MainActor
-private struct SilentPaster: PasteInjecting {
-    func paste(_ text: String) -> PasteRoutingDecision {
-        .pasteAtCursor
     }
 }
 

@@ -14,20 +14,42 @@ final class AppEntryPointTests: XCTestCase {
             sleep: { _ in }
         )
         let defaults = makeCompletedOnboardingDefaults()
+        let outputService = RecordingOutputService()
         let entry = SeshatAppMain(
             coordinator: coordinator,
             permissionRequester: EntryPointPermissionRequester(),
             clipboardWriter: { _ in },
-            pasteInjector: SilentPaster(),
+            outputService: outputService,
             openSettings: {},
             overlayPanelBuilder: NoOpPanelBuilder(),
             defaults: defaults,
             startupCoordinator: startupCoordinator
         )
 
+        await coordinator.toggle()
+        await coordinator.toggle()
+        await waitUntil {
+            outputService.deliveredTexts == ["Development transcript."]
+        }
+
         XCTAssertTrue(entry.coordinator === coordinator)
         let state = await entry.coordinator.state()
         XCTAssertEqual(state, .idle)
+    }
+
+    private func waitUntil(
+        maxIterations: Int = 500,
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        for _ in 0..<maxIterations {
+            if condition() {
+                return
+            }
+
+            await Task.yield()
+        }
+
+        XCTFail("Timed out waiting for condition")
     }
 
     private func makeCompletedOnboardingDefaults() -> UserDefaults {
@@ -41,13 +63,6 @@ final class AppEntryPointTests: XCTestCase {
 
 private struct EntryPointPermissionRequester: MicrophonePermissionRequesting {
     func requestAccess() async -> Bool { true }
-}
-
-@MainActor
-private struct SilentPaster: PasteInjecting {
-    func paste(_ text: String) -> PasteRoutingDecision {
-        .pasteAtCursor
-    }
 }
 
 @MainActor
