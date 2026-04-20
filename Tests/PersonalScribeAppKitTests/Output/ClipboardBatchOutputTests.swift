@@ -5,7 +5,7 @@ import PersonalScribeCore
 
 @MainActor
 final class ClipboardBatchOutputTests: XCTestCase {
-    private let suiteName = "SeshatTestsClipboardBatchOutput"
+    private let suiteName = "PersonalScribeTestsClipboardBatchOutput"
 
     private func makePasteboard() -> NSPasteboard {
         NSPasteboard(name: NSPasteboard.Name(rawValue: "personal_scribe.test.\(UUID().uuidString)"))

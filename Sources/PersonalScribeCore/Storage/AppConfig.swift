@@ -44,7 +44,7 @@ public enum AppConfig {
     // MARK: - Directory accessors
 
     /// Resolution order (first match wins):
-    ///   1. `SESHAT_BASE_DIR` environment variable (dev/test convenience)
+    ///   1. `PERSONAL_SCRIBE_BASE_DIR` environment variable (dev/test convenience)
     ///   2. `BaseDirectoryPath` UserDefaults key (user-facing override)
     ///   3. `~/Library/Application Support/personal_scribe/` (default)
     ///
