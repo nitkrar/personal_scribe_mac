@@ -4,9 +4,6 @@ public enum AppConfig {
     public static let sampleRate: Double = 16_000
     public static let channelCount: Int = 1
 
-    // DEPRECATED shim — kept until Layer 6 consumers stop reading the fixed-default model id.
-    public static let modelId: String = BuiltInModelCatalog.defaultModelId
-
     public nonisolated(unsafe) static var testingBaseDirectoryOverride: URL?
 
     static let baseDirectoryUserDefaultsKey = "BaseDirectoryPath"
