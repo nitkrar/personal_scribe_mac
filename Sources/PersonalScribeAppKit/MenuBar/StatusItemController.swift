@@ -13,6 +13,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let openCheckForUpdates: @MainActor () -> Void
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
     private let openURL: @MainActor (URL) -> Void
+    private let inputDeviceProvider: any AudioInputDeviceProviding
     private let logger: PersonalScribeLogger
 
     private var snapshotCancellable: AnyCancellable?
@@ -28,6 +29,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
+        inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
     ) {
         self.init(
@@ -41,6 +43,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             openURL: openURL,
             openMicrophoneSystemSettings: openMicrophoneSystemSettings,
             openInputMonitoringSystemSettings: openInputMonitoringSystemSettings,
+            inputDeviceProvider: inputDeviceProvider,
             logger: logger
         )
     }
@@ -56,6 +59,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
+        inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
     ) {
         let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
@@ -77,6 +81,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 _ = NSWorkspace.shared.open(url)
             }
         }
+        self.inputDeviceProvider = inputDeviceProvider ?? EmptyAudioInputDeviceProvider()
         self.logger = logger
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
@@ -136,6 +141,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             openURL(PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .inputMonitoring))
         case .quit:
             NSApplication.shared.terminate(nil)
+        case .selectAudioInputDevice:
+            // Device rows route through `handleDeviceSelection(_:)`
+            // directly — the deviceID payload is on the NSMenuItem,
+            // not on the ActionID enum, so this switch case is
+            // unreachable in normal use. Logging it instead of
+            // silently ignoring catches future refactors that
+            // mistakenly route here.
+            logger.error("performMenuAction called for .selectAudioInputDevice; expected direct handleDeviceSelection path")
         }
     }
 
@@ -213,12 +226,19 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         let snapshot = appStore.snapshot
         let permissions = snapshot.permissions
+        // Re-query the provider on every rebuild so the submenu
+        // reflects hotplug changes (USB mic plugged / unplugged)
+        // without any observer plumbing.
+        let inputDevices = inputDeviceProvider.availableDevices()
+        let currentInputDeviceID = inputDeviceProvider.selectedDeviceID
         let model = StatusItemMenuModel.makeUnified(
             sessionState: snapshot.sessionState,
             micPermission: permissions[.microphone] ?? .pending,
             inputMonitoringPermission: permissions[.inputMonitoring] ?? .pending,
             activeModeName: snapshot.activeMode?.name,
-            isOnboardingComplete: isOnboardingCompleteProvider()
+            isOnboardingComplete: isOnboardingCompleteProvider(),
+            inputDevices: inputDevices,
+            currentInputDeviceID: currentInputDeviceID
         )
 
         menu.removeAllItems()
@@ -256,6 +276,29 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                     )
                 }
                 menu.addItem(menuItem)
+            case .submenu(let title, let iconName, let children):
+                let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                parent.isEnabled = true
+                if let iconName {
+                    parent.image = NSImage(
+                        systemSymbolName: iconName,
+                        accessibilityDescription: nil
+                    )
+                }
+                let submenu = NSMenu(title: title)
+                submenu.autoenablesItems = false
+                for child in children {
+                    let childItem = NSMenuItem()
+                    childItem.title = child.title
+                    childItem.state = child.isActive ? .on : .off
+                    childItem.isEnabled = true
+                    childItem.target = self
+                    childItem.action = #selector(handleDeviceSelection(_:))
+                    childItem.representedObject = child.deviceID
+                    submenu.addItem(childItem)
+                }
+                parent.submenu = submenu
+                menu.addItem(parent)
             }
         }
     }
@@ -268,6 +311,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         performMenuAction(id)
+    }
+
+    /// Microphone-submenu device row handler. `representedObject`
+    /// carries the `AudioInputDevice.id` string that we persist via
+    /// `inputDeviceProvider.selectDevice(id:)`. We then rebuild the
+    /// menu so the checkmark + parent title reflect the new selection
+    /// on the next open (AppKit closes the menu after a click anyway,
+    /// but rebuilding keeps the programmatic state in sync for
+    /// whatever opens the menu next).
+    @objc private func handleDeviceSelection(_ sender: NSMenuItem) {
+        guard let deviceID = sender.representedObject as? String else {
+            logger.error("Device selection fired with unknown representedObject")
+            return
+        }
+        inputDeviceProvider.selectDevice(id: deviceID)
+        rebuildMenu()
     }
 
     private func statusItemLabel(for sessionState: SessionState) -> String {
@@ -312,4 +371,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             defaults: defaults
         )
     }
+}
+
+/// Default `AudioInputDeviceProviding` used when the controller is
+/// constructed without an explicit provider — returns no devices so
+/// the Microphone submenu is omitted entirely, matching the M5.2
+/// layout. Production wiring in `PersonalScribeAppMain` injects the
+/// live `AVFoundationInputDeviceProvider` from `PersonalScribeAudio`
+/// instead. Tests that don't care about the submenu can rely on this
+/// fallback without pulling AVFoundation into the test harness.
+final class EmptyAudioInputDeviceProvider: AudioInputDeviceProviding, @unchecked Sendable {
+    func availableDevices() -> [AudioInputDevice] { [] }
+    var selectedDeviceID: String? { nil }
+    func selectDevice(id: String?) {}
 }

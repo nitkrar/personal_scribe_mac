@@ -14,12 +14,34 @@ struct StatusItemMenuModel: Equatable {
     /// One rendered row. `.header` is a non-interactive grey title row
     /// (e.g. the brand name or the current mode name); `.action` is a
     /// clickable item wired to an action identifier; `.separator`
-    /// renders a divider. Headers may carry an optional SF Symbol
-    /// icon; actions may likewise carry an optional icon.
+    /// renders a divider; `.submenu` is a parent row with nested
+    /// children (e.g. the Microphone input-device picker added in
+    /// M5.3). Headers may carry an optional SF Symbol icon; actions
+    /// and submenu parents may likewise carry an optional icon.
     enum Item: Equatable {
         case header(title: String, iconName: String? = nil)
         case action(ActionItem)
         case separator
+        case submenu(title: String, iconName: String?, children: [SubmenuChild])
+    }
+
+    /// One row inside a `.submenu(...)`. Currently used only for the
+    /// Microphone input-device picker; `deviceID` is the opaque
+    /// `AudioInputDevice.id` payload that the consumer dispatches on
+    /// when the user selects a row. `isActive == true` renders a
+    /// checkmark (`NSMenuItem.state == .on`).
+    struct SubmenuChild: Equatable {
+        /// Opaque payload forwarded to
+        /// `AudioInputDeviceProviding.selectDevice(id:)`.
+        let deviceID: String
+        let title: String
+        let isActive: Bool
+
+        init(deviceID: String, title: String, isActive: Bool) {
+            self.deviceID = deviceID
+            self.title = title
+            self.isActive = isActive
+        }
     }
 
     struct ActionItem: Equatable {
@@ -65,6 +87,11 @@ struct StatusItemMenuModel: Equatable {
         case openMicrophoneSystemSettings
         case openInputMonitoringSystemSettings
         case quit
+        /// Dispatch id for Microphone-submenu device rows. The payload
+        /// (`AudioInputDevice.id`) travels on the `SubmenuChild`, not
+        /// through this enum — the controller hands the id straight
+        /// to `AudioInputDeviceProviding.selectDevice(id:)`.
+        case selectAudioInputDevice
     }
 
     let items: [Item]
@@ -88,14 +115,21 @@ struct StatusItemMenuModel: Equatable {
     /// Quit <AppBrand.displayName>
     /// ```
     ///
-    /// The mic-device submenu called for by Manus §2 lands in M5.3 and
-    /// is intentionally not emitted here yet.
+    /// When `inputDevices` is non-empty (M5.3), a Microphone submenu is
+    /// inserted between `Paste Last Transcript` and the separator
+    /// before `Check for Updates…`, with the submenu's parent title
+    /// showing the currently-selected device name (or "Microphone" if
+    /// no user selection exists yet) and a checkmark on the child row
+    /// whose id equals `currentInputDeviceID`. When `inputDevices` is
+    /// empty the submenu is omitted entirely — no stub row.
     static func makeUnified(
         sessionState: SessionState,
         micPermission: PermissionStatus,
         inputMonitoringPermission: PermissionStatus,
         activeModeName: String? = nil,
-        isOnboardingComplete: Bool = true
+        isOnboardingComplete: Bool = true,
+        inputDevices: [AudioInputDevice] = [],
+        currentInputDeviceID: String? = nil
     ) -> StatusItemMenuModel {
         _ = isOnboardingComplete
         var items: [Item] = []
@@ -167,6 +201,27 @@ struct StatusItemMenuModel: Equatable {
             iconName: "doc.on.clipboard"
         )))
 
+        // Microphone submenu (M5.3) — omitted entirely when no
+        // devices are discoverable, so the rest of the menu shape
+        // stays identical to M5.2 for unit-test stability.
+        if !inputDevices.isEmpty {
+            items.append(.separator)
+            items.append(.submenu(
+                title: currentInputDeviceName(
+                    in: inputDevices,
+                    selectedID: currentInputDeviceID
+                ) ?? "Microphone",
+                iconName: "mic",
+                children: inputDevices.map { device in
+                    SubmenuChild(
+                        deviceID: device.id,
+                        title: device.name,
+                        isActive: device.id == currentInputDeviceID
+                    )
+                }
+            ))
+        }
+
         items.append(.separator)
 
         items.append(.action(ActionItem(
@@ -223,5 +278,20 @@ struct StatusItemMenuModel: Equatable {
         case .idle, .recording, .error:
             return true
         }
+    }
+
+    // MARK: - Microphone submenu helpers (M5.3)
+
+    /// Returns the display name of the currently-selected input device
+    /// if it is still present in `devices`; returns `nil` if there is
+    /// no selection or the previously-selected device has disappeared
+    /// (e.g. USB mic unplugged). Callers fall back to a generic
+    /// "Microphone" title in that case.
+    static func currentInputDeviceName(
+        in devices: [AudioInputDevice],
+        selectedID: String?
+    ) -> String? {
+        guard let selectedID else { return nil }
+        return devices.first(where: { $0.id == selectedID })?.name
     }
 }

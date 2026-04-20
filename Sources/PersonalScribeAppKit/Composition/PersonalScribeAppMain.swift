@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import Combine
 import SwiftUI
+import PersonalScribeAudio
 import PersonalScribeCore
 import PersonalScribeSession
 
@@ -146,7 +147,8 @@ struct PersonalScribeAppMain: App {
             openPasteLastTranscript: {
                 Task { await pasteLastTranscriptAction.perform() }
             },
-            isOnboardingCompleteProvider: isOnboardingCompleteProvider
+            isOnboardingCompleteProvider: isOnboardingCompleteProvider,
+            inputDeviceProvider: AVFoundationInputDeviceProvider(defaults: defaults)
         )
         _sceneModel = StateObject(wrappedValue: sceneModel)
         _pillController = StateObject(
@@ -252,7 +254,8 @@ final class StatusItemControllerHost: ObservableObject {
         openCheckForUpdates: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
-        }
+        },
+        inputDeviceProvider: (any AudioInputDeviceProviding)? = nil
     ) {
         self.controller = StatusItemController(
             sceneModel: sceneModel,
@@ -260,7 +263,8 @@ final class StatusItemControllerHost: ObservableObject {
             openHome: openHome,
             openPasteLastTranscript: openPasteLastTranscript,
             openCheckForUpdates: openCheckForUpdates,
-            isOnboardingCompleteProvider: isOnboardingCompleteProvider
+            isOnboardingCompleteProvider: isOnboardingCompleteProvider,
+            inputDeviceProvider: inputDeviceProvider
         )
     }
 
