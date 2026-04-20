@@ -52,15 +52,13 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 ### Implementations
 - `ClipboardBatchOutput`
   Writes the pasteboard, posts synthetic `Cmd+V`, restores after the configured delay, and returns an `OutputResult` that distinguishes pasted vs clipboard-only delivery.
-- `StreamedTypingOutput`
-  Deferred. Not shipped in Stage 1.
 
 ### Deferred streaming note
-- Streaming API intentionally deferred — see `plans/backlog/pipeline-streaming-defer.md`. Layer 5 does not expose `beginStream()` or `OutputStreamHandle` in Stage 1.
+- Streaming API intentionally deferred — see `plans/backlog/pipeline-streaming-defer.md`. Layer 5 does not expose a public streaming surface in Stage 1.
 - Any dormant partial-delivery surface remains outside Layer 5 until the stream-build slice resolves ownership and transport.
 
 ## Proposed live implementation
-`ClipboardBatchOutput` is the only live `OutputService` conformer in Stage 1. It absorbs the old `PasteOutputService` plus `CopyOutputService` split, keeps the current clipboard save or restore behavior, keeps `PasteMode` plus `PasteRestoreDelay` reads inside the batch path, and restores the prior clipboard contents if a clipboard-only write fails.
+`ClipboardBatchOutput` is the only live `OutputService` conformer in Stage 1. It absorbs the old paste-routing and clipboard-write split, keeps the current clipboard save or restore behavior, keeps `PasteMode` plus `PasteRestoreDelay` reads inside the batch path, and restores the prior clipboard contents if a clipboard-only write fails.
 
 `SessionCoordinator` becomes the owner of batch post-transcript output in Stage 2. The coordinator already owns "transcription succeeded, `mostRecentResult` is ready, persistence is done" at `Sources/SeshatSession/SessionCoordinator.swift:200-214`; Layer 5 should move the primary output hook there so output does not depend on `MenuBarSceneModel` observation timing. Output delivery remains best-effort: successful transcription must still publish `.idle` and keep `mostRecentResult` even if output falls back to clipboard or returns `.failed(.clipboardWriteFailed)`.
 
@@ -115,7 +113,7 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 #### Validation checklist (implementer ticks box-by-box)
 - [ ] `Sources/SeshatCore/Output/OutputMode.swift` declares exactly `batch` and `streaming`, matching `Proposed API / contracts > Types`.
 - [ ] `Sources/SeshatCore/Output/OutputService.swift` exposes only `deliverBatch(text:) async -> OutputResult`, matching `Proposed API / contracts > Protocols`.
-- [ ] No `Sources/SeshatCore/Output/OutputStreamHandle.swift` file exists in Stage 1, matching `Deferred streaming note`.
+- [ ] No Layer 5 public streaming-handle file exists in Stage 1, matching `Deferred streaming note`.
 - [ ] `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` pins the contract without importing AppKit behavior, matching `Test strategy` unit-test bullet 1.
 
 ### Step 1.2 — Add `ClipboardBatchOutput` in new `SeshatAppKit/Output` files
@@ -148,13 +146,13 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 #### Validation checklist (implementer ticks box-by-box)
 - [ ] `Sources/SeshatAppKit/Output/ClipboardBatchOutput.swift` preserves the existing batch routing semantics without modifying `Sources/SeshatAppKit/Paste/PasteInjector.swift`, matching `Proposed live implementation`.
 - [ ] `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift` covers the behaviors currently pinned by `Tests/SeshatAppKitTests/PasteInjectorTests.swift`, matching `Test strategy` regression-guard bullets.
-- [ ] No `Sources/SeshatAppKit/Output/CopyOutputService.swift`, `Sources/SeshatAppKit/Output/AppKitOutputService.swift`, or `Sources/SeshatAppKit/Output/StreamingOutputHandle.swift` file exists in Stage 1, matching `Deferred streaming note`.
+- [ ] `ClipboardBatchOutput` remains the only concrete Layer 5 implementation in Stage 1, matching `Deferred streaming note`.
 
 ### Step 1.3 — Update the plan and defer note
 | Change | Before | After |
 |---|---|---|
 | Layer 5 API section | The plan diverges from the locked master prompt. | The plan records the `deliverBatch(text:) async -> OutputResult` contract and the `ClipboardBatchOutput` implementation. |
-| Streaming note | Layer 5 still claims a public `beginStream()` surface. | The plan explicitly records that streaming is deferred and not exposed by Layer 5 in Stage 1. |
+| Streaming note | Layer 5 still claims a public streaming surface. | The plan explicitly records that streaming is deferred and not exposed by Layer 5 in Stage 1. |
 
 #### Files touched (exhaustive) — path:line-range — what changes
 - `plans/central/LAYER_5_output.md` — replace the divergent API description with the locked batch-only Stage 1 contract.
@@ -169,15 +167,12 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 
 #### Validation checklist (implementer ticks box-by-box)
 - [ ] The API section matches `plans/CENTRAL_LAYERS_PROMPT.md:268-276` for `OutputMode`, `OutputTarget`, `OutputDelivery`, `OutputService.deliverBatch(text:)`, and `ClipboardBatchOutput`.
-- [ ] The plan states that Layer 5 does not expose `beginStream()` or `OutputStreamHandle` in Stage 1, matching `plans/backlog/pipeline-streaming-defer.md`.
-
-> Note: the Stage 2 / Stage 3 migration tables below predate this Stage 1 contract correction. Until those sections are rewritten, interpret `OutputService` as the batch-only `deliverBatch(text:)` surface, `ClipboardBatchOutput` as the sole Stage 1 live implementation, and any references to `copy(text:)`, `beginStream()`, `OutputStreamHandle`, `PasteOutputService`, `CopyOutputService`, or `AppKitOutputService` as stale.
+- [ ] The plan states that Layer 5 does not expose a public streaming API in Stage 1, matching `plans/backlog/pipeline-streaming-defer.md`.
 
 ### Stage 2 — Swap
 | Stage step | Depends on | Summary |
 |---|---|---|
 | `2.1` | `1.3`, layer `1` Stage 2, layer `3` Stage 2 | Move the main post-transcript output hook into `SessionCoordinator` and remove menu-bar observation-driven auto-paste. |
-| `2.2` | `2.1`, layer `3` Stage 2 | Replace the menu-bar copy or paste-last helper and app-entry clipboard seams with `OutputService.copy(text:)`. |
 | `2.3` | `2.1` | Audit command-mode stubs; swap to `OutputService` only if a real trunk call site exists when execution begins. |
 
 ### Step 2.1 — Move the main post-transcript output hook into `SessionCoordinator`
@@ -203,7 +198,7 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 - Preserve the clipboard-only notice path without making `MenuBarSceneModel` responsible for deciding when output happens.
 
 #### Scope — OUT
-- No direct clipboard-write swap yet. That is Step 2.2.
+- No manual `copyLatestTranscript()` migration; that stays deferred to `Open design questions`.
 - No command-mode adoption yet. That is Step 2.3.
 - No streaming consumer adoption.
 
@@ -221,42 +216,7 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 - [ ] `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:264-384` no longer treats idle-state observation as the source of truth for output delivery, matching `Why this layer exists` paragraph 1.
 - [ ] The touched surface is limited to `Sources/SeshatSession/SessionCoordinator.swift:5-38,200-216`, `Sources/SeshatAppKit/Composition/AppComposition.swift:9-25,44-46`, `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:24-27,64-79,135-144`, `Tests/SeshatSessionTests/SessionCoordinatorOutputTests.swift:1-200`, `Tests/SeshatSessionTests/SessionCoordinatorHappyPathTests.swift:7-45`, `Tests/SeshatSessionTests/SessionCoordinatorErrorTests.swift:7-182`, `Tests/SeshatAppKitTests/DevelopmentComposition.swift:8-25`, and `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:264-384`, matching `Stage 2 — Swap`.
 
-### Step 2.2 — Replace the menu-bar copy or paste-last helper and app-entry clipboard seams with `OutputService.copy(text:)`
-| Change | Before | After |
-|---|---|---|
-| Manual copy helper | `MenuBarSceneModel.copyLatestTranscript()` calls `clipboardWriter(lastResultText)`. | `MenuBarSceneModel.copyLatestTranscript()` uses `try await outputService.copy(text:)`. |
-| App entry seam | `SeshatAppMain` and `SeshatApp` pass raw `clipboardWriter` closures. | Both shells inject the shared Layer 5 service instead of ad-hoc pasteboard writers. |
-| Test seam | Entry-point and menu-bar tests build `SilentPaster` or raw clipboard closures. | Tests use `RecordingOutputService` and `ThrowingOutputService` fakes. |
-
-#### Files touched (exhaustive) — path:line-range — what changes
-- `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:16-18,29-54,120-128` — replace the stored clipboard writer with `OutputService`.
-- `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:25-26,39-40,75-82,197-200` — stop constructing raw clipboard writers and inject the shared output service instead.
-- `Sources/SeshatAppKit/SeshatApp.swift:19-20,37-38,56-60` — stop constructing the alternate raw clipboard writer and inject the shared output service instead.
-- `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:386-424` — rewrite the copy helper tests against `OutputService.copy(text:)`.
-- `Tests/SeshatAppKitTests/AppEntryPointTests.swift:9-31,46-50` — replace `SilentPaster` with an output-service fake.
-- `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift:17-25,116-125,171-175` — replace old output fakes with the Layer 5 fake surface.
-
-#### Scope — IN
-- Swap every current menu-bar and app-entry clipboard seam to `OutputService.copy(text:)`.
-- Preserve `copyLatestTranscript()` behavior even though trunk currently has no status-menu dispatch to it.
-- Keep this step limited to the current helper and entry shells unless main-session explicitly resolves the missing dispatch as part of the same execution.
-
-#### Scope — OUT
-- Do not invent a new status-item action if the dispatch still does not exist on trunk.
-- Do not change command-mode stubs here.
-- Do not re-open the output service contract.
-
-#### Acceptance tests — Tests/... — test name + what it asserts + clause it ties to
-- `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift` — `testCopyLatestTranscriptWritesCurrentTranscriptToOutputService`; ties to `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:120-128`.
-- `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift` — `testCopyLatestTranscriptDoesNothingWhenTranscriptIsMissing`; ties to the current no-op behavior at `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:121-124`.
-- `Tests/SeshatAppKitTests/AppEntryPointTests.swift` — `testSeshatAppMainBuildsSceneModelFromComposition`; ties to `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:75-93`.
-
-#### Validation checklist (implementer ticks box-by-box)
-- [ ] `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:120-128` uses `OutputService.copy(text:)` instead of a raw pasteboard closure, matching `Stage 2` step `2.2`.
-- [ ] `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:25-26,39-40,75-82,197-200` and `Sources/SeshatAppKit/SeshatApp.swift:19-20,37-38,56-60` no longer contain raw `NSPasteboard.general` writes, matching `Proposed live implementation` paragraph 3.
-- [ ] `Tests/SeshatAppKitTests/AppEntryPointTests.swift:9-31,46-50` and `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift:116-125,171-175` use Layer 5 output fakes rather than `PasteInjecting`, matching `Stage 3 delete inventory`.
-- [ ] `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:386-424` still proves missing-transcript no-op behavior, matching `Observed current spread` row for `MenuBarSceneModel`.
-- [ ] The touched surface is limited to `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:16-18,29-54,120-128`, `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:25-26,39-40,75-82,197-200`, `Sources/SeshatAppKit/SeshatApp.swift:19-20,37-38,56-60`, `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:386-424`, `Tests/SeshatAppKitTests/AppEntryPointTests.swift:9-31,46-50`, and `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift:17-25,116-125,171-175`, matching `Stage 2` step `2.2`.
+> Backlog pointer: `copyLatestTranscript()` and the raw app-entry clipboard-writer seam stay deferred until the `[QUESTION]` in `Open design questions` resolves whether Layer 5 should grow an approved caller-specified clipboard-only API.
 
 ### Step 2.3 — Audit command-mode stub wiring and swap only if a real output call site exists
 | Change | Before | After |
@@ -291,7 +251,7 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 ### Stage 3 — Delete
 | Stage step | Depends on | Summary |
 |---|---|---|
-| `3.1` | `2.1`, `2.2`, `2.3` | Delete legacy `PasteInjector` call sites, ad-hoc clipboard-writer seams, and the old test surface. |
+| `3.1` | `2.1`, `2.3` | Delete legacy `PasteInjector` call sites, observation-driven post-transcript seams, and the old test surface; leave manual copy-helper cleanup deferred. |
 
 ### Stage 3 delete inventory
 | Legacy surface | Current file:line | Delete in Stage 3 because |
@@ -300,8 +260,6 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 | Direct `pasteInjector.paste(text)` closure bridge | `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:80-82` | The coordinator and menu-bar model should no longer know about `PasteInjecting`. |
 | Legacy paste closure storage and use | `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:17`, `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:34`, `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:46`, `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:140-143` | Replaced by Layer 5 output ownership in Stage 2.1. |
 | Observation-driven auto-paste state | `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:26`, `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:77`, `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:135-144` | Output should no longer depend on menu-bar observation timing. |
-| Raw clipboard writer injection and implementation | `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:25`, `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:39`, `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:79`, `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:197-200` | `CopyOutputService` is the only clipboard writer after Stage 2.2. |
-| Alternate shell raw clipboard writer | `Sources/SeshatAppKit/SeshatApp.swift:19`, `Sources/SeshatAppKit/SeshatApp.swift:37`, `Sources/SeshatAppKit/SeshatApp.swift:56-60` | Same reason as `SeshatAppMain`; delete the duplicate seam. |
 | Legacy protocol and type surface | `Sources/SeshatAppKit/Paste/PasteInjector.swift:7-52` | `PasteRoutingDecision` and `PasteInjecting` should not survive after Layer 5 owns output. |
 | Legacy test seam `SilentPaster` | `Tests/SeshatAppKitTests/AppEntryPointTests.swift:47-50`, `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift:172-175` | Tests should use Layer 5 fakes instead of the deleted protocol. |
 | Legacy `PasteInjectorTests` file | `Tests/SeshatAppKitTests/PasteInjectorTests.swift:1-209` | Coverage has moved to `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift`. |
@@ -309,43 +267,43 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 ### Step 3.1 — Delete legacy output surfaces after every consumer has swapped
 | Change | Before | After |
 |---|---|---|
-| Output protocol surface | `PasteInjecting`, `PasteRoutingDecision`, and direct paste closures remain reachable. | Only Layer 5 types remain reachable from production and tests. |
-| Clipboard seams | `SeshatAppMain` and `SeshatApp` still carry raw pasteboard helpers. | Only `CopyOutputService` writes to the clipboard from app code. |
+| Output protocol surface | `PasteInjecting`, `PasteRoutingDecision`, and direct paste closures remain reachable. | Only Layer 5 batch-output types remain reachable on the migrated post-transcript path. |
+| Post-transcript delivery seam | The main post-transcript path still exposes `PasteInjecting` and direct paste closures. | The main post-transcript path goes through `OutputService.deliverBatch(text:)` with `ClipboardBatchOutput`; manual copy-helper seams stay deferred to `Open design questions`. |
 | Test surface | Tests still reference the pre-Layer-5 output seam. | Tests use only Layer 5 output fakes and output-specific test files. |
 
 #### Files touched (exhaustive) — path:line-range — what changes
 - `Sources/SeshatAppKit/Paste/PasteInjector.swift:1-227` — delete the file once `ClipboardBatchOutput` fully owns the behavior.
-- `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:16-18,24-27,120-144` — remove any leftover old output state or helper code.
-- `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:25-26,39-40,75-82,197-200` — remove the old output seam from composition.
-- `Sources/SeshatAppKit/SeshatApp.swift:19-20,37-38,56-60` — remove the alternate-shell clipboard seam.
+- `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:16-18,24-27,135-144` — remove any leftover old post-transcript output state.
+- `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:26,40,75-82` — remove the old post-transcript `PasteInjecting` seam from composition.
 - `Tests/SeshatAppKitTests/PasteInjectorTests.swift:1-209` — delete once the new output tests are authoritative.
 - `Tests/SeshatAppKitTests/AppEntryPointTests.swift:17-26,46-50` — remove `PasteInjecting`-based fakes.
 - `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift:116-125,171-175` — remove `PasteInjecting`-based fakes.
-- `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:264-424` — remove any remaining references to the deleted seam.
+- `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:264-384` — remove any remaining references to the deleted post-transcript seam.
 
 #### Scope — IN
 - Remove every legacy direct `PasteInjector` call site listed in `Stage 3 delete inventory`.
-- Remove every ad-hoc clipboard writer seam listed in `Stage 3 delete inventory`.
+- Remove every legacy direct paste-closure and `PasteInjecting` seam listed in `Stage 3 delete inventory`.
 - Delete legacy test-only protocol fakes once the new Layer 5 tests are live.
 
 #### Scope — OUT
 - No new behavior.
 - No silent "keep the old helper around just in case" exception.
 - No additional consumer changes beyond the explicit delete inventory.
+- No manual `copyLatestTranscript()` cleanup or raw clipboard-writer deletion; that stays deferred to `Open design questions`.
 
 #### Acceptance tests — Tests/... — test name + what it asserts + clause it ties to
 - `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift` — ported batch output coverage remains green after the old file disappears.
-- `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift` — copy helper tests remain green without raw clipboard closures.
+- `Tests/SeshatAppKitTests/AppEntryPointTests.swift` — entry-point composition remains green after deleting `PasteInjecting`-based fakes.
 - `Tests/SeshatSessionTests/SessionCoordinatorOutputTests.swift` — post-transcript output remains green after the legacy seam deletion.
 - `Tests/SeshatAppKitTests/ManualPillOverlayVerification.md` — keep `MV-B1-7` and `MV-B1-8` passing after the delete step.
 - `Tests/SeshatAppKitTests/ManualSettingsVerification.md` — keep the clipboard restore delay checks passing after the delete step.
 
 #### Validation checklist (implementer ticks box-by-box)
-- [ ] The delete sweep removed the production legacy surfaces in `Sources/SeshatAppKit/Paste/PasteInjector.swift:1-227`, `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:16-18,24-27,120-144`, `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:25-26,39-40,75-82,197-200`, and `Sources/SeshatAppKit/SeshatApp.swift:19-20,37-38,56-60`, matching `Stage 3 delete inventory`.
+- [ ] The delete sweep removed the production legacy surfaces in `Sources/SeshatAppKit/Paste/PasteInjector.swift:1-227`, `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:16-18,24-27,135-144`, and `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:26,40,75-82`, matching `Stage 3 delete inventory`.
 - [ ] `Sources/SeshatAppKit/Paste/PasteInjector.swift:1-227` is deleted, and no public `PasteInjecting` or `PasteRoutingDecision` surface remains, matching `Proposed live implementation` paragraph 2.
-- [ ] `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:25-26,39-40,75-82,197-200` and `Sources/SeshatAppKit/SeshatApp.swift:19-20,37-38,56-60` contain no raw `NSPasteboard.general` writes, matching `Stage 3 delete inventory`.
+- [ ] `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:26,40,75-82` and the corresponding app-entry tests contain no `PasteInjecting` dependency on the post-transcript path, matching `Stage 3 delete inventory`.
 - [ ] `Tests/SeshatAppKitTests/PasteInjectorTests.swift:1-209` is deleted, and the replacement coverage lives under `Tests/SeshatAppKitTests/Output/*`, matching `Test strategy`.
-- [ ] After deleting `Sources/SeshatAppKit/Paste/PasteInjector.swift:1-227`, `Tests/SeshatAppKitTests/PasteInjectorTests.swift:1-209`, `Tests/SeshatAppKitTests/AppEntryPointTests.swift:17-26,46-50`, and `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift:116-125,171-175`, `rg -n '\\bPasteInjector\\b|\\bPasteInjecting\\b|\\bPasteRoutingDecision\\b|clipboardWriter' Sources Tests` returns zero hits outside historical plan docs, matching `Stage 3 delete inventory`.
+- [ ] After deleting `Sources/SeshatAppKit/Paste/PasteInjector.swift:1-227`, `Tests/SeshatAppKitTests/PasteInjectorTests.swift:1-209`, `Tests/SeshatAppKitTests/AppEntryPointTests.swift:17-26,46-50`, and `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift:116-125,171-175`, `rg -n '\\bPasteInjector\\b|\\bPasteInjecting\\b|\\bPasteRoutingDecision\\b' Sources Tests` returns zero hits outside historical plan docs, matching `Stage 3 delete inventory`.
 
 ## Test strategy
 - Unit tests: add `Tests/SeshatCoreTests/Output/OutputContractsTests.swift` to pin the Layer 5 contract; add `Tests/SeshatAppKitTests/Output/ClipboardBatchOutputTests.swift` to pin batch behavior and the clipboard-preservation failure case; add `Tests/SeshatSessionTests/SessionCoordinatorOutputTests.swift` to pin the new post-transcript hook.
@@ -383,9 +341,8 @@ The refactor needs one `@MainActor` output layer that preserves the current batc
 
 Recommended mapping for this layer:
 - `1.1` -> `trunk: layer 5.1: define output service contracts`
-- `1.2` -> `trunk: layer 5.2: add batch paste and copy output services`
-- `1.3` -> `trunk: layer 5.3: add live output facade and streaming seam`
+- `1.2` -> `trunk: layer 5.2: add clipboard batch output and tests`
+- `1.3` -> `trunk: layer 5.3: align layer 5 plan with batch-only contract`
 - `2.1` -> `trunk: layer 5.4: move post-transcript output into session coordinator`
-- `2.2` -> `trunk: layer 5.5: swap menu bar copy path to output service`
-- `2.3` -> `trunk: layer 5.6: adopt output service in command-mode call site` if non-no-op
-- `3.1` -> `trunk: layer 5.7: delete legacy paste and clipboard seams`
+- `2.3` -> `trunk: layer 5.5: adopt output service in command-mode call site` if non-no-op
+- `3.1` -> `trunk: layer 5.6: delete legacy paste output seams`
