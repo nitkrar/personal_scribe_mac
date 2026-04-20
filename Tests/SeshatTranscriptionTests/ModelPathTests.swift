@@ -18,6 +18,6 @@ final class ModelPathTests: SeshatTranscriptionFilesystemTestCase {
 
         try FileManager.default.createDirectory(at: modelRoot, withIntermediateDirectories: true)
 
-        XCTAssertFalse(FluidAudioTranscriber.modelsExist(in: modelRoot, descriptor: descriptor))
+        XCTAssertFalse(ModelArtifactStaging.modelsExist(in: modelRoot, descriptor: descriptor))
     }
 }

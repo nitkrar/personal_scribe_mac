@@ -262,7 +262,7 @@ private extension ModelAwareFluidAudioTranscriber {
         externalProgress: (@Sendable (ModelDownloadProgress) -> Void)?
     ) async throws {
         let fileManager = FileManager.default
-        let stagingDirectory = FluidAudioTranscriber.stagingDirectory(
+        let stagingDirectory = ModelArtifactStaging.stagingDirectory(
             base: modelDirectory.deletingLastPathComponent(),
             descriptor: descriptor
         )
@@ -326,13 +326,13 @@ private extension ModelAwareFluidAudioTranscriber {
     }
 
     static func modelArtifactsAreValid(in directory: URL, descriptor: ModelDescriptor) -> Bool {
-        guard FluidAudioTranscriber.modelsExist(in: directory, descriptor: descriptor) else {
+        guard ModelArtifactStaging.modelsExist(in: directory, descriptor: descriptor) else {
             return false
         }
 
         let fileManager = FileManager.default
 
-        for path in FluidAudioTranscriber.requiredModelPaths(in: directory, descriptor: descriptor)
+        for path in ModelArtifactStaging.requiredModelPaths(in: directory, descriptor: descriptor)
         where path.lastPathComponent == "coremldata.bin" {
             guard
                 let attributes = try? fileManager.attributesOfItem(atPath: path.path),

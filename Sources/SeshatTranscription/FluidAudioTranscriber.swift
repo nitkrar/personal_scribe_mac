@@ -54,22 +54,6 @@ public actor FluidAudioTranscriber: Transcribing {
         descriptor.id
     }
 
-    static func stagingDirectory(base: URL, descriptor: ModelDescriptor) -> URL {
-        base.appendingPathComponent("\(descriptor.id)-staging", isDirectory: true)
-    }
-
-    static func requiredModelPaths(in directory: URL, descriptor: ModelDescriptor) -> [URL] {
-        descriptor.requiredRelativePaths.map {
-            directory.appendingPathComponent($0, isDirectory: false)
-        }
-    }
-
-    static func modelsExist(in directory: URL, descriptor: ModelDescriptor) -> Bool {
-        let fileManager = FileManager.default
-        return requiredModelPaths(in: directory, descriptor: descriptor)
-            .allSatisfy { fileManager.fileExists(atPath: $0.path) }
-    }
-
     public func prepare() async throws {
         if hasPreparedModel {
             return
@@ -104,7 +88,7 @@ public actor FluidAudioTranscriber: Transcribing {
 
         let modelDirectory = try modelDirectory()
 
-        if !Self.modelArtifactsAreValid(in: modelDirectory, descriptor: descriptor) {
+        if !ModelArtifactStaging.modelArtifactsAreValid(in: modelDirectory, descriptor: descriptor) {
             try await ensureValidDownloadedModel(at: modelDirectory)
         }
 
@@ -250,7 +234,7 @@ private extension FluidAudioTranscriber {
     func ensureValidDownloadedModel(at modelDirectory: URL) async throws {
         let fileManager = FileManager.default
         let progressBroadcaster = self.progressBroadcaster
-        let stagingDirectory = Self.stagingDirectory(
+        let stagingDirectory = ModelArtifactStaging.stagingDirectory(
             base: modelDirectory.deletingLastPathComponent(),
             descriptor: descriptor
         )
@@ -261,12 +245,18 @@ private extension FluidAudioTranscriber {
                     at: modelDirectory,
                     progress: { snapshot in
                         let current = progressBroadcaster.currentSnapshot
-                        let normalized = Self.normalizedProgress(snapshot, current: current)
+                        let normalized = ModelArtifactStaging.normalizedProgress(
+                            snapshot,
+                            current: current
+                        )
                         progressBroadcaster.update(normalized)
                     }
                 )
 
-                guard Self.modelArtifactsAreValid(in: modelDirectory, descriptor: descriptor) else {
+                guard ModelArtifactStaging.modelArtifactsAreValid(
+                    in: modelDirectory,
+                    descriptor: descriptor
+                ) else {
                     throw ModelArtifactValidationError.invalidArtifacts
                 }
 
@@ -285,57 +275,6 @@ private extension FluidAudioTranscriber {
     func logError(_ message: String, error: Error) {
         logger.error("\(message): \(error.localizedDescription)", error: error)
         logSink?("error", "\(message): \(error.localizedDescription)")
-    }
-
-    static func normalizedProgress(
-        _ snapshot: ModelDownloadProgress,
-        current: ModelDownloadProgress
-    ) -> ModelDownloadProgress {
-        guard snapshot.phase == .downloading, current.phase == .downloading else {
-            return snapshot
-        }
-
-        return .init(
-            phase: .downloading,
-            fractionCompleted: max(snapshot.fractionCompleted, current.fractionCompleted),
-            receivedBytes: max(snapshot.receivedBytes, current.receivedBytes),
-            expectedBytes: snapshot.expectedBytes ?? current.expectedBytes
-        )
-    }
-}
-
-private extension FluidAudioTranscriber {
-    static func modelArtifactsAreValid(in directory: URL, descriptor: ModelDescriptor) -> Bool {
-        guard modelsExist(in: directory, descriptor: descriptor) else {
-            return false
-        }
-
-        let fileManager = FileManager.default
-
-        for path in requiredModelPaths(in: directory, descriptor: descriptor)
-        where path.lastPathComponent == "coremldata.bin" {
-            guard
-                let attributes = try? fileManager.attributesOfItem(atPath: path.path),
-                let size = attributes[.size] as? NSNumber,
-                size.intValue > 0
-            else {
-                return false
-            }
-        }
-
-        let vocabURL = directory.appendingPathComponent("parakeet_vocab.json", isDirectory: false)
-        guard
-            let data = try? Data(contentsOf: vocabURL),
-            !data.isEmpty,
-            let contents = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .first,
-            contents == "{" || contents == "["
-        else {
-            return false
-        }
-
-        return true
     }
 }
 

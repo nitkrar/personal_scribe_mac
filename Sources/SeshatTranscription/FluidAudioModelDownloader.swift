@@ -22,7 +22,7 @@ internal struct PrivateModelDownloader: ModelDownloading {
         let fileManager = FileManager.default
         let modelsDirectory = storageLocator.url(for: .models)
         let modelDirectory = directory
-        let stagingDirectory = FluidAudioTranscriber.stagingDirectory(
+        let stagingDirectory = ModelArtifactStaging.stagingDirectory(
             base: modelsDirectory,
             descriptor: descriptor
         )
