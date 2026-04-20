@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# package.sh — build Seshat.app; optionally install to /Applications,
+# package.sh — build Ninimma.app; optionally install to /Applications,
 # produce a DMG, and launch.
 #
 # Usage:
@@ -8,13 +8,13 @@
 #
 # Options:
 #   -c, --config <debug|release>   Build config (default: debug)
-#   -i, --install                  Replace /Applications/Seshat.app after build
-#   -d, --dmg                      Also emit Seshat-<ver>.dmg at repo root
+#   -i, --install                  Replace /Applications/Ninimma.app after build
+#   -d, --dmg                      Also emit Ninimma-<ver>.dmg at repo root
 #   -r, --run                      Launch after install (implies --install)
 #   -h, --help                     Show this help
 #
 # Examples:
-#   scripts/package.sh                      # build ./Seshat.app only
+#   scripts/package.sh                      # build ./Ninimma.app only
 #   scripts/package.sh -ir                  # build + install + launch (common dev loop)
 #   scripts/package.sh -c release -ir       # release build + install + launch
 #   scripts/package.sh -d                   # build + DMG (for GitHub Release upload)
@@ -23,10 +23,10 @@
 #   * Always rebuilds the .app fresh — no way to skip. Avoids running
 #     a stale binary after a code change.
 #   * Ad-hoc signed with hardened runtime + audio-input entitlement.
-#   * Install replaces /Applications/Seshat.app at a stable path — per-path
+#   * Install replaces /Applications/Ninimma.app at a stable path — per-path
 #     TCC grants (Mic, Input Monitoring, Accessibility) persist across rebuilds.
-#   * First-run Gatekeeper: right-click Seshat.app → Open, OR
-#       xattr -dr com.apple.quarantine /Applications/Seshat.app
+#   * First-run Gatekeeper: right-click Ninimma.app → Open, OR
+#       xattr -dr com.apple.quarantine /Applications/Ninimma.app
 
 set -euo pipefail
 
@@ -98,9 +98,9 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-APP_NAME="Seshat"
-BINARY_NAME="SeshatAppKit"
-BUNDLE_ID="com.nitkrar.seshat"
+APP_NAME="Ninimma"
+BINARY_NAME="PersonalScribeAppKit"
+BUNDLE_ID="com.nitkrar.personal_scribe"
 VERSION="0.1.0"
 MIN_MACOS="14.0"
 BUILD_DIR=".build/$CONFIG"
@@ -108,7 +108,7 @@ APP_PATH="$REPO_ROOT/$APP_NAME.app"
 INSTALL_PATH="/Applications/$APP_NAME.app"
 DMG_NAME="$APP_NAME-$VERSION"
 DMG_PATH="$REPO_ROOT/$DMG_NAME.dmg"
-ICNS_SOURCE="$REPO_ROOT/Sources/SeshatAppKit/Resources/AppIcon.icns"
+ICNS_SOURCE="$REPO_ROOT/Sources/PersonalScribeAppKit/Resources/AppIcon.icns"
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo 'unknown')"
 
 # --- [1] Build ---
@@ -154,7 +154,7 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
     <string>????</string>
     <key>CFBundleVersion</key>
     <string>${VERSION}</string>
-    <key>SeshatGitSHA</key>
+    <key>PersonalScribeGitSHA</key>
     <string>${GIT_SHA}</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
@@ -171,7 +171,7 @@ cat > "$APP_PATH/Contents/Info.plist" <<PLIST
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Nitkrar. MIT License.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Seshat transcribes your speech into text locally on your Mac. Audio never leaves your device.</string>
+    <string>Ninimma transcribes your speech into text locally on your Mac. Audio never leaves your device.</string>
     <key>NSSupportsAutomaticTermination</key>
     <true/>
     <key>NSSupportsSuddenTermination</key>
@@ -184,7 +184,7 @@ printf 'APPL????' > "$APP_PATH/Contents/PkgInfo"
 
 # --- [3] Embed app icon ---
 # The canonical `.icns` is a checked-in artifact at
-# `Sources/SeshatAppKit/Resources/AppIcon.icns` (has proper RGBA
+# `Sources/PersonalScribeAppKit/Resources/AppIcon.icns` (has proper RGBA
 # transparency around the rounded rect). Earlier revisions auto-
 # generated from `logo_dark.png` via sips+iconutil, but that source
 # is an RGB-only logo with no alpha — the resulting icon rendered as
@@ -223,7 +223,7 @@ if ! security find-identity -p codesigning 2>/dev/null | grep -q "\"$SIGN_IDENTI
     SIGN_IDENTITY="-"
 fi
 echo "==> Signing with identity: $SIGN_IDENTITY (hardened runtime + mic entitlement)..."
-ENTITLEMENTS_PLIST="$(mktemp -t seshat-entitlements.XXXXXX).plist"
+ENTITLEMENTS_PLIST="$(mktemp -t personal_scribe-entitlements.XXXXXX).plist"
 cleanup() {
     rm -f "$ENTITLEMENTS_PLIST"
     [[ -n "${STAGING_DIR:-}" ]] && rm -rf "$STAGING_DIR"
@@ -258,7 +258,7 @@ echo "✓ Built $APP_PATH ($APP_SIZE)"
 if [[ "$DO_DMG" == "1" ]]; then
     echo ""
     echo "==> Packaging DMG..."
-    STAGING_DIR="$(mktemp -d -t seshat-dmg-staging)"
+    STAGING_DIR="$(mktemp -d -t personal_scribe-dmg-staging)"
     cp -R "$APP_PATH" "$STAGING_DIR/$APP_NAME.app"
     ln -s /Applications "$STAGING_DIR/Applications"
     rm -f "$DMG_PATH"
@@ -278,7 +278,7 @@ fi
 if [[ "$DO_INSTALL" == "1" ]]; then
     echo ""
     echo "==> Installing to $INSTALL_PATH..."
-    osascript -e 'tell application "Seshat" to quit' >/dev/null 2>&1 || true
+    osascript -e 'tell application "Ninimma" to quit' >/dev/null 2>&1 || true
     sleep 1
     rm -rf "$INSTALL_PATH"
     ditto "$APP_PATH" "$INSTALL_PATH"

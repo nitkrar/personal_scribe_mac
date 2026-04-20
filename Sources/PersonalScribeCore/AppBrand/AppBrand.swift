@@ -1,8 +1,8 @@
 import Foundation
 
 public enum AppBrand {
-    public static let displayName = "Seshat"
-    public static let bundleIdentifier = "com.nitkrar.seshat"
+    public static let displayName = "Ninimma"
+    public static let bundleIdentifier = "com.nitkrar.personal_scribe"
     public static let logSubsystem = bundleIdentifier
     public static let websiteURL: URL? = nil
     public static let privacyURL: URL? = nil

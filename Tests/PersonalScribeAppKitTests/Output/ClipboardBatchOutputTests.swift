@@ -112,7 +112,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
-                frontmostApplicationBundleIdentifier: "com.nitkrar.seshat"
+                frontmostApplicationBundleIdentifier: "com.nitkrar.personal_scribe"
             ),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },

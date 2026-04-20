@@ -3,9 +3,9 @@ import XCTest
 
 final class AppBrandTests: XCTestCase {
     func testStaticIdentityMatchesLayer9Contract() {
-        XCTAssertEqual(AppBrand.displayName, "Seshat")
-        XCTAssertEqual(AppBrand.bundleIdentifier, "com.nitkrar.seshat")
-        XCTAssertEqual(AppBrand.logSubsystem, "com.nitkrar.seshat")
+        XCTAssertEqual(AppBrand.displayName, "Ninimma")
+        XCTAssertEqual(AppBrand.bundleIdentifier, "com.nitkrar.personal_scribe")
+        XCTAssertEqual(AppBrand.logSubsystem, "com.nitkrar.personal_scribe")
     }
 
     func testMarketingLinksDefaultToNil() {

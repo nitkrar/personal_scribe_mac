@@ -39,7 +39,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     func testSettingsAndHistoryAlwaysEnabledRegardlessOfOnboardingState() {
         // Regression guard: previously Settings + History were gated on
         // isOnboardingComplete, which grey-ed them out after a
-        // `defaults delete com.nitkrar.seshat` reset (user stuck with
+        // `defaults delete com.nitkrar.personal_scribe` reset (user stuck with
         // no way to reopen onboarding). Menu items should always be
         // enabled; routing into the Settings window handles the
         // permissions-needed UX instead.
