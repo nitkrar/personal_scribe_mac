@@ -22,7 +22,8 @@ public enum AppComposition {
     public static let sessionCoordinator: SessionCoordinator = {
         let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
         let capture = AVAudioCaptureService(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.audio)
+            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.audio),
+            inputDeviceProvider: AVFoundationInputDeviceProvider(defaults: .standard)
         )
         let transcriberProvider = ModelBoundTranscriberProvider()
 

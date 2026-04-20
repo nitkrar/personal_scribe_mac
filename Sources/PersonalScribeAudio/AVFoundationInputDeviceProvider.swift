@@ -67,3 +67,17 @@ public final class AVFoundationInputDeviceProvider: AudioInputDeviceProviding, @
         .external,
     ]
 }
+
+/// Default `AudioInputDeviceProviding` used when `AVAudioCaptureService` is
+/// constructed without an explicit provider — always reports no selection so
+/// the capture engine falls through to the macOS system default input.
+///
+/// Useful for tests and for the zero-argument convenience initializer that
+/// predates M5.3. Production wiring in `AppComposition` passes a real
+/// `AVFoundationInputDeviceProvider(defaults: .standard)` instead.
+public final class NoOpAudioInputDeviceProvider: AudioInputDeviceProviding, @unchecked Sendable {
+    public init() {}
+    public func availableDevices() -> [AudioInputDevice] { [] }
+    public var selectedDeviceID: String? { nil }
+    public func selectDevice(id: String?) {}
+}

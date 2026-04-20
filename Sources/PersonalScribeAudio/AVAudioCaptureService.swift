@@ -7,7 +7,8 @@ import PersonalScribeCore
 /// values until `stop()` (or a runtime error) terminates the stream exactly once.
 public actor AVAudioCaptureService: AudioCapturing {
     public init(
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.audio)
+        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.audio),
+        inputDeviceProvider: any AudioInputDeviceProviding = NoOpAudioInputDeviceProvider()
     ) {
         self.init(
             logger: logger,
@@ -20,7 +21,8 @@ public actor AVAudioCaptureService: AudioCapturing {
                     inputSampleRate: sampleRate,
                     logger: logger
                 )
-            }
+            },
+            inputDeviceProvider: inputDeviceProvider
         )
     }
 
@@ -28,12 +30,14 @@ public actor AVAudioCaptureService: AudioCapturing {
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.audio),
         authorizationStatusProvider: @escaping @Sendable () -> AVAuthorizationStatus,
         engineDriver: AudioEngineDriver,
-        resamplerFactory: @escaping @Sendable (Double, PersonalScribeLogger) throws -> AudioResampler
+        resamplerFactory: @escaping @Sendable (Double, PersonalScribeLogger) throws -> AudioResampler,
+        inputDeviceProvider: any AudioInputDeviceProviding = NoOpAudioInputDeviceProvider()
     ) {
         self.logger = logger
         self.authorizationStatusProvider = authorizationStatusProvider
         self.engineDriver = engineDriver
         self.resamplerFactory = resamplerFactory
+        self.inputDeviceProvider = inputDeviceProvider
     }
 
     public func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
@@ -48,6 +52,22 @@ public actor AVAudioCaptureService: AudioCapturing {
         guard !isCapturing || isTerminated else {
             logger.error("start() called while capture already live; rejecting second start")
             throw PersonalScribeError.audioEngineFailure
+        }
+
+        // 2a. Apply the persisted input-device selection before reading the
+        // input format so the resampler is sized for the selected device's
+        // sample rate (e.g. 48 kHz USB mic vs. 44.1 kHz built-in). A failure
+        // here is intentionally logged and swallowed — the engine will still
+        // start on the macOS system default. This matches the brief's "log
+        // + proceed" contract: a disconnected-device selection must never
+        // block the user from recording.
+        do {
+            try engineDriver.applyInputDevice(uid: inputDeviceProvider.selectedDeviceID)
+        } catch {
+            logger.error(
+                "Failed to apply selected audio input device; proceeding with system default",
+                error: error
+            )
         }
 
         // 3. Read input format and create resampler
@@ -286,6 +306,7 @@ public actor AVAudioCaptureService: AudioCapturing {
     private let authorizationStatusProvider: @Sendable () -> AVAuthorizationStatus
     private let engineDriver: AudioEngineDriver
     private let resamplerFactory: @Sendable (Double, PersonalScribeLogger) throws -> AudioResampler
+    private let inputDeviceProvider: any AudioInputDeviceProviding
     private var continuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?
     private var resampler: AudioResampler?
     private var isCapturing = false

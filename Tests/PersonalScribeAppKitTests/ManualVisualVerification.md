@@ -211,6 +211,43 @@ runs this checklist in a dogfood build:
    `TimelineView(.animation)` driver never pauses while the recording
    pill is on-screen.
 
+## M5.3 followup — microphone selection takes effect
+
+The M5.3 commit (`158c00d`) shipped the menu-bar Microphone submenu and
+persisted the user's choice under `UserDefaults["SelectedAudioInputDeviceID"]`,
+but the capture pipeline still started on the macOS system default input.
+The M5.3 followup wires the persisted UID through
+`AudioEngineDriver.applyInputDevice(uid:)` into
+`AudioUnitSetProperty(kAudioOutputUnitProperty_CurrentDevice)` on
+`engine.inputNode.audioUnit` before every recording starts. This is a
+runtime-UX change and must be dogfooded on hardware — unit tests cover
+forwarding and ordering, not CoreAudio device routing.
+
+Reviewer runs this checklist with at least two input devices attached
+(e.g. built-in mic + USB/AirPods):
+
+1. Menu bar icon → **Microphone** submenu → pick a non-default device
+   (e.g. USB mic or AirPods). The submenu's checkmark moves to the new
+   selection.
+2. Menu bar icon → **Start Recording** (or press the global hotkey).
+3. Speak into the just-selected device at normal volume. The recording
+   pill's voice-modulated wave (the M4.1 waveform) tracks the selected
+   device's levels, not the macOS system default input. If you pick
+   AirPods and speak into the MacBook's built-in mic, the wave stays
+   flat.
+4. Stop recording. Open the unified window → Transcriptions, verify
+   the transcript has the expected content (confirms the selected
+   device's audio reached the recognizer, not just the waveform UI).
+5. Regression: change selection in the Microphone submenu to a
+   different device, start a new recording, and speak into the new
+   selection. The wave tracks the new device; the previous selection's
+   audio no longer drives the wave.
+6. Edge: unplug the currently-selected USB device while the app is
+   running, then Start Recording. The engine must fall back to the
+   macOS system default (recording still starts, wave still responds
+   to the built-in mic) — `AudioEngineDriver.applyInputDevice` logs a
+   warning and proceeds rather than blocking.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift
