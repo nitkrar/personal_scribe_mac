@@ -9,13 +9,20 @@ import SeshatTranscription
 public enum AppComposition {
     private static let transcriptDatabaseFileName = "transcripts.sqlite"
 
+    public static let modelService: DefaultModelService = {
+        DefaultModelService(
+            logger: SeshatLogger(category: SeshatLogCategory.session)
+        )
+    }()
+
+    public static let activeModeProvider: AppKitActiveModeProvider = {
+        AppKitActiveModeProvider(modelService: modelService)
+    }()
+
     public static let sessionCoordinator: SessionCoordinator = {
         let logger = SeshatLogger(category: SeshatLogCategory.session)
         let capture = AVAudioCaptureService(
             logger: SeshatLogger(category: SeshatLogCategory.audio)
-        )
-        let modelService = DefaultModelService(
-            logger: SeshatLogger(category: SeshatLogCategory.session)
         )
         let transcriberProvider = ModelBoundTranscriberProvider()
 

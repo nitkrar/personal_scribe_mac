@@ -62,7 +62,7 @@ struct SeshatAppMain: App {
         let appStore = AppStore(
             session: coordinator.appStoreSessionProvider(),
             permissions: compatibilityPermissionService,
-            activeModeSource: AppKitActiveModeProvider(),
+            activeModeSource: AppComposition.activeModeProvider,
             visibilityModeSource: AppKitVisibilityModeProvider(defaults: defaults)
         )
         appStore.start()
