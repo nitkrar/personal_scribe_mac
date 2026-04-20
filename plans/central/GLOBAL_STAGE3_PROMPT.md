@@ -40,63 +40,44 @@ Out of scope for Stage 3 (do not touch): `plans/seshat manus resources/`, `plans
 5. **One commit per chunk.** Subject format: `trunk: stage 3 — <layer-or-cross-layer-scope> delete <one-line summary>`. No squash.
 6. **Never skip hooks.** `git commit --no-verify` is forbidden.
 
-## Building the deletion inventory — code-first vs plan-first
+## Building the deletion inventory — code-first
 
-This is the central methodological choice for this plan. Pick one before you start and record the choice in the plan file.
+**Use this methodology. Do not deviate.** Today's refactor run showed repeated drift between layer plans and landed code (stale symbol names in plan text, fix-forward renames the plans missed, Stage 2 scope expansions the plans didn't capture, plan-doc references to types that were deleted a week ago). The tree is authoritative; the plans are commentary.
 
-### Approach A — Plan-first (read 9 layer plans, aggregate their delete lists)
+### Procedure
 
-**How**: Read every `plans/central/LAYER_<N>_*.md`, extract the Stage 3 section's delete list, merge into one table. Spot-check source via `rg` to confirm each symbol still exists.
-
-**Pros**:
-- Captures *intent* — why a symbol is slated for deletion, which Stage 2 swap freed it, what special handling (e.g., renamed-for-collision alias files).
-- Every deletion is traceable back to a locked contract the user signed off on.
-
-**Cons**:
-- Plans may have drifted from landed reality. Stage 1 code reviews surfaced deviations that were fix-forwarded in commits (e.g., Layer 1's `PermissionStatus.swift` rename to `InputMonitoringPermissionProbe.swift`) — some of those deviations may or may not be reflected in the plan text.
-- Deletions that plans forgot won't surface; deletions the plan lists that already happened will look like pending work.
-
-### Approach B — Code-first (enumerate code, let plans provide context)
-
-**How**:
-1. List the **new central-layer directories** (the ones Stage 1 created):
+1. **Inventory new central-layer directories** (Stage 1 creations — confirm exact paths via `ls Sources/*/` and `ls Sources/*/*/`, don't trust this list blindly):
    - `Sources/SeshatCore/Permissions/` (Layer 1)
    - `Sources/SeshatCore/Storage/` + `Sources/SeshatAppKit/Storage/` (Layer 2)
    - `Sources/SeshatCore/Preferences/` (Layer 3)
-   - `Sources/SeshatAppKit/AppStore/` (Layer 4)
+   - `Sources/SeshatCore/AppStore/` + `Sources/SeshatAppKit/AppStore/` (Layer 4)
    - `Sources/SeshatCore/Output/` + `Sources/SeshatAppKit/Output/` (Layer 5)
-   - `Sources/SeshatCore/ModelSelection/` (Layer 6)
+   - `Sources/SeshatCore/ModelSelection/` or `Sources/SeshatCore/Models/Selection/` (Layer 6)
    - `Sources/SeshatSession/Pipeline/` (Layer 7)
    - `Sources/SeshatCore/Metrics/` + `Sources/SeshatAppKit/Metrics/` (Layer 8)
    - `Sources/SeshatCore/AppBrand/` (Layer 9)
-   - Confirm exact paths via `ls Sources/*/` — don't trust this list blindly.
-2. For each **legacy sibling** (types/files that live *outside* the new dirs and deal with the same concern), check for still-existing references:
+
+2. **Enumerate legacy siblings** — types/files outside the new dirs that deal with the same concern. For each, run:
    - `rg -l '<SymbolName>' Sources/ Tests/`
-   - Zero production-code hits + zero test hits → safe to delete.
-   - Still-referenced → either Stage 2 swap is incomplete, or this is an actively-used cross-layer primitive (not a Stage 3 candidate).
-3. For each **renamed-for-collision file** (Stage 1 deviations documented in commits): those appear in the tree but have no meaningful consumers; grep confirms, plan confirms intent. Delete.
-4. For each **legacy test file** that exercised the old API: if the types it imports are all slated for deletion, the test goes too.
-5. Consult plans only when the grep result is ambiguous or when you need the *why*.
+   - Zero production + zero test hits → **APPROVED for delete**.
+   - Still-referenced → Stage 2 swap incomplete OR actively-used cross-layer primitive. **NOT a Stage 3 candidate**; flag as `[QUESTION]`.
 
-**Pros**:
-- Source of truth is the source code. Divergences-from-plan surface automatically because they're in the tree.
-- Less text to read — 9 plan files are verbose.
-- Matches how we debug: read the code first, docs when stuck.
+3. **Enumerate dead methods inside surviving files**. Some files aren't being deleted entirely but have dead private methods from Stage 2 delegation (e.g., L7 S2 Step 1 left ~14 private methods in `SessionCoordinator.swift` unreferenced). Use `rg 'func <methodName>' Sources/` — methods declared but not called from anywhere under `Sources/` or `Tests/` are dead. Hand-off report lists them per-file for chunked deletion.
 
-**Cons**:
-- Doesn't explain *why* a file is alive. Some files are deliberately preserved (renamed-for-collision, defense-in-depth) and that context lives in plans/commits, not code.
-- Risk of proposing deletions for types that are still needed for reasons not obvious from `rg` alone (e.g., cross-module test helpers, future-parked features).
+4. **Renamed-for-collision files** (Stage 1 deviations documented in commits) — e.g., `InputMonitoringPermissionProbe.swift` was renamed from `PermissionStatus.swift` to resolve a Stage 1 basename collision. Grep confirms they have no active consumers. Delete.
 
-### Approach C — Recommended: hybrid (code-first with plan as context)
+5. **Legacy test files** — if every type a test imports is slated for deletion, the test itself goes too.
 
-1. **Inventory**: code-first. Enumerate new dirs → find legacy siblings → grep for references.
-2. **Classification**: for each candidate deletion, consult the corresponding layer plan's Stage 3 section.
-   - Plan confirms → mark APPROVED.
-   - Plan silent but grep is unambiguous (zero refs, no intent hint needed) → mark APPROVED with note "not in layer plan Stage 3 list; code-first justification".
-   - Plan lists deletion but grep finds references → Stage 2 incomplete OR cross-layer user; mark `[QUESTION]`, surface to user.
-   - Plan lists deletion and grep confirms gone-from-trunk already → mark OBSOLETE (nothing to delete here; flag plan text as stale).
-3. **Stage 1 code reviews**: `rg -l 'delete|remove' plans/central/reviews/LAYER_*_stage1_code_review.md` — scan for reviewer-flagged deletions that didn't make it into the layer plans' Stage 3 sections.
-4. **Source of truth wins**: if the plan and the code disagree, the code is authoritative. Update the plan's Stage 3 section in a separate commit only after this global plan lands.
+6. **Consult plans only when grep is ambiguous** or when you need the *why*. Plans = commentary, not source of truth. If the plan and the code disagree, **the code wins**. Optionally flag plan staleness as a separate `[QUESTION]` for post-Stage-3 plan cleanup.
+
+7. **Stage 1 & Stage 2 code reviews** — `rg -l 'delete|remove' plans/central/reviews/` — scan for reviewer-flagged deletions that didn't make it into layer plans' Stage 3 sections. These are high-confidence candidates with an explicit reviewer trace.
+
+### Why code-first (not plan-first, not hybrid)
+
+- Inventory is reproducible: run `rg` with the same patterns, get the same answer.
+- Surfaces drift automatically: anything in the tree that shouldn't be there is findable.
+- Avoids the plan-writing session inheriting any earlier plan's bias or omissions.
+- Plans can be updated post-facto to match what actually landed.
 
 ## Your task
 
@@ -112,7 +93,7 @@ If splitting is cleaner, produce `plans/central/INDEX.md` (overview) AND `plans/
 
 ### 1. Methodology declaration
 
-State up front which approach (A / B / hybrid C) this plan uses. If hybrid, name which step checked which source.
+State up front: "This plan uses the code-first methodology per `plans/central/GLOBAL_STAGE3_PROMPT.md`. Inventory from `rg`/`ls`; plans consulted only for disambiguation of *why*; when plan and tree disagree, tree wins." Record every `rg` pattern used to build the inventory so the result is reproducible.
 
 ### 2. Preconditions gate (must-be-true before execution)
 
