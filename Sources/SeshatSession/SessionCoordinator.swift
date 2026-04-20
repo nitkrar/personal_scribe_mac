@@ -287,12 +287,6 @@ public actor SessionCoordinator {
             publish(snapshot.sessionState)
         }
     }
-
-    private static func seconds(from duration: Duration) -> TimeInterval {
-        let components = duration.components
-        return TimeInterval(components.seconds)
-            + TimeInterval(components.attoseconds) / 1_000_000_000_000_000_000
-    }
 }
 
 private struct CoordinatorPipelineCapture: AudioCapturing {
