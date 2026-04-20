@@ -33,6 +33,12 @@ public struct SettingsTab: View {
                 switch selectedSubTab {
                 case .general:
                     GeneralTab(defaults: defaults)
+                case .aiModels:
+                    AIModelsTab()
+                case .shortcuts:
+                    ShortcutsTab(defaults: defaults)
+                case .advanced:
+                    AdvancedTab()
                 case .permissions:
                     PermissionsSubTab(
                         viewModel: PermissionsSubTabViewModel(
