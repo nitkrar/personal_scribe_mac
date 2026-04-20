@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Combine
 import SwiftUI
 import PersonalScribeCore
 import PersonalScribeSession
@@ -85,9 +86,22 @@ struct PersonalScribeAppMain: App {
                 clipboardOnlyNotice?()
             }
         )
+        // Bridge SessionCoordinator's `AsyncStream<Float>` audio-level
+        // source to the Combine `AnyPublisher<Double, Never>` the pill
+        // overlay controller expects. Values are already normalized
+        // [0, 1] by the capture pipeline and widen to Double without
+        // loss. The forwarding Task lives for the process's lifetime —
+        // the coordinator's stream stays open across start/stop cycles.
+        let audioLevelSubject = PassthroughSubject<Double, Never>()
+        Task { @MainActor [coordinator] in
+            let stream = await coordinator.audioLevelStream()
+            for await level in stream {
+                audioLevelSubject.send(Double(level))
+            }
+        }
         let pillController = PillOverlayController(
             appStore: appStore,
-            audioLevelPublisher: nil,
+            audioLevelPublisher: audioLevelSubject.eraseToAnyPublisher(),
             defaults: defaults,
             onTap: {
                 Task { await coordinator.toggle() }
