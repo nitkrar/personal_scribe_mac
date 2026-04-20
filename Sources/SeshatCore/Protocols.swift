@@ -35,10 +35,6 @@ public protocol Transcribing: Sendable {
     func transcribe(stream: AsyncThrowingStream<PCMBuffer, Error>) async throws -> TranscriptionResult
 }
 
-public protocol MicrophonePermissionRequesting: Sendable {
-    func requestAccess() async -> Bool
-}
-
 public struct ModelDownloadProgress: Sendable, Equatable {
     public enum Phase: Sendable, Equatable {
         case idle

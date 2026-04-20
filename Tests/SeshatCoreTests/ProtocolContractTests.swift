@@ -1,10 +1,6 @@
 import XCTest
 @testable import SeshatCore
 
-private struct StubPermissionRequester: MicrophonePermissionRequesting {
-    func requestAccess() async -> Bool { true }
-}
-
 private actor StubAudioCapturing: AudioCapturing {
     func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
         AsyncThrowingStream { continuation in
@@ -36,12 +32,9 @@ private actor StubTranscribing: Transcribing {
 
 final class ProtocolContractTests: XCTestCase {
     func testSharedProtocolsAcceptTrivialConformers() async throws {
-        let permission = StubPermissionRequester()
         let capture = StubAudioCapturing()
         let transcriber = StubTranscribing()
 
-        let accessGranted = await permission.requestAccess()
-        XCTAssertTrue(accessGranted)
         _ = try await capture.start()
         try await transcriber.prepare()
         _ = transcriber.modelDownloadProgress()
