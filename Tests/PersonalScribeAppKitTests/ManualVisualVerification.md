@@ -72,6 +72,63 @@ each line).
 - Verify placeholder 18×18pt @2x images are there. Replace with the
   final monochrome quill export once the design is frozen.
 
+## Brand milestone (M2) — runtime verification for WindowTint + PillAppearance
+
+These two user-selectable axes have view-model + round-trip unit-tests
+(`WindowTintTests`, `PillAppearanceTests`, `GeneralTabViewModelThemeTests`,
+`SettingsWindowControllerWindowTintTests`, `PillOverlayPillAppearanceTests`)
+but the runtime "does the window actually go dark, does the pill actually
+switch palettes" loop is SwiftUI/AppKit and cannot be runtime-verified
+by XCTest. Reviewer performs this checklist in a dogfood build:
+
+### Settings → General tab pickers
+
+1. Launch a fresh DMG (ensure `~/Library/Application Support/personal_scribe/`
+   exists per Phase 4 migration).
+2. Open Settings from the menu bar → General.
+3. **Appearance** card shows two segmented pickers: "Window tint"
+   (Warm / Neutral / Dark) and "Pill theme" (Dark / Light / System).
+4. Default state: Window tint = Warm, Pill theme = Dark.
+
+### WindowTint runtime behaviour
+
+5. With Settings window open, flip Window tint → **Dark**. Settings
+   window immediately adopts the dark-aqua NSAppearance (controls,
+   title bar, and background all flip). Reference:
+   `plans/App UI design/Claude_Final_Bundle_Prompt.md` §1.
+6. Flip Window tint → **Warm**. Settings window reverts to the system
+   theme (follows macOS light/dark preference).
+7. Flip Window tint → **Neutral**. Same as Warm — tint does not force
+   an override. (Until M3 lands the unified window shell, the
+   secondary/primary background hex difference between Warm and
+   Neutral is not yet visibly applied anywhere.)
+8. Quit and relaunch — last-selected tint persists via UserDefaults
+   key `"WindowTint"`.
+
+### PillAppearance runtime behaviour
+
+9. With the floating pill visible (Always-on mode recommended for
+   this check), flip Pill theme → **Light**. The pill's NSPanel
+   switches to the light NSAppearance; the champagne waveform
+   darkens to `#333338` and background becomes pale cream
+   (`#F0EDE8`). The effect is visible as soon as the picker changes.
+10. Flip Pill theme → **System**. Pill inherits from macOS theme —
+    with macOS dark mode on, pill is dark; toggle macOS to light,
+    pill goes light.
+11. Flip Pill theme → **Dark**. Pill forces dark-navy regardless of
+    macOS theme.
+12. Quit and relaunch — last-selected pill appearance persists via
+    UserDefaults key `"PillAppearance"`.
+
+### Regression checks
+
+13. Changing Window tint does NOT flip Pill theme, and vice versa —
+    the two axes are independent.
+14. The existing Settings controls (Visibility, Behavior cards —
+    menu-bar toggle, pill visibility, waveform decay, paste mode,
+    paste-restore slider) still work after the Appearance card is
+    added.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift
