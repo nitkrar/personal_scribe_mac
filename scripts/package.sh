@@ -127,6 +127,16 @@ mkdir -p "$APP_PATH/Contents/MacOS"
 mkdir -p "$APP_PATH/Contents/Resources"
 cp "$BUILD_DIR/$BINARY_NAME" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
 
+# Strip symbol tables on release builds. Statically linked FluidAudio +
+# GRDB drop ~187k symbols + a 4.4MB string table into LC_SYMTAB that
+# the linker doesn't remove; unstripped release binaries are ~14MB,
+# stripped they drop to ~8MB. Debug builds keep symbols for crash
+# symbolication.
+if [[ "$CONFIG" == "release" ]]; then
+    echo "==> Stripping release binary symbols..."
+    strip -x "$APP_PATH/Contents/MacOS/$BINARY_NAME"
+fi
+
 cat > "$APP_PATH/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
