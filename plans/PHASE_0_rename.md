@@ -3,6 +3,23 @@
 ## Critical discipline
 > Do NOT diverge from this plan or the Manus mockups. Silent divergence is the cardinal sin. To deviate, surface the proposed divergence in a comment in the commit message AND in the hand-off report; wait for main-session confirmation. Paraphrasing the contract is divergence. Renaming variables the plan specifies is divergence. Choosing a different animation curve than the mockup implies is divergence.
 
+## 2026-04-20 update — PS prefix adopted for type renames
+
+Previous revisions of this plan renamed `Seshat*` types to prefix-less names (`SeshatConfig` → `Config`, `SeshatTheme` → `Theme`, `SeshatError` → `AppError`, `SeshatLogger` → `AppLogger`, etc.). That decision has been overridden:
+
+- **Types now adopt a `PS` prefix** (`SeshatConfig` → `PSConfig`, `SeshatTheme` → `PSTheme`, `SeshatError` → `PSError`, `SeshatLogger` → `PSLogger`, etc.). Rationale: preserves grep-uniqueness, avoids future cross-module collisions with generic names like `Config`/`Theme`/`Logger`, aligns with the locked product-code decision in memory `project_ninimma_rename.md`.
+- **UserDefaults keys stay unprefixed** (Step 0.1 unchanged). Per-bundle-ID storage makes a prefix redundant; no `PS` prefix on keys.
+- **SPM target names stay `SeshatCore`/`SeshatAppKit`/etc.** The target rename + bundle-ID + folder + display-name flip are now bundled into a deferred Stage B atomic rebrand. Rationale: avoids TCC permission reset and UserDefaults suite reset mid-refactor.
+- Locked decision `#7` is updated accordingly: replace `Seshat` prefix on types/prefixed filenames with `PS`; keys drop `Seshat` prefix (stay unprefixed); SPM target names unchanged.
+
+### Resolved (2026-04-20)
+- `Sources/SeshatAppKit/SeshatApp.swift` → **`Sources/SeshatAppKit/PSApp.swift`** with type `SeshatApp` → `PSApp`. The old `App`-collision rationale dissolves under `PS` prefix. App-shell consistency: `PSApp` joins `PSAppMain`/`PSAppBrand`/`PSAppTheme`.
+- `Sources/SeshatCore/Config.swift` → **`Sources/SeshatCore/PSConfig.swift`** (holds `PSConfig`).
+- `Sources/SeshatCore/Errors.swift` → **`Sources/SeshatCore/PSError.swift`** (holds `PSError`).
+- `Sources/SeshatCore/Logger.swift` → **`Sources/SeshatCore/PSLogger.swift`** (holds `PSLogger` + `PSLogCategory`).
+
+  Rationale: filename/type-name alignment is more valuable than preserving the `Errors.swift`/`Logger.swift` namespace-style idiom — consistent with every other `Seshat*`-prefixed file rename in this phase.
+
 ## Prerequisites
 - Execute Phase 0 before any Phase 1 or Phase 2 work. Later plans assume the post-rename symbols and post-rename UserDefaults keys already exist.
 - Confirm the current key inventory before editing. On trunk, the only persisted `Seshat*` keys in `Sources/` are:
@@ -14,25 +31,25 @@
   - `Sources/SeshatCore/WaveformDecayMode.swift:35` — `SeshatWaveformDecayMode`
   - `Sources/SeshatAppKit/Overlay/PillVisibilityMode.swift:36` — `SeshatPillVisibilityMode`
 - Confirm the rename-now production symbol inventory before editing:
-  - `Sources/SeshatCore/Config.swift:3-107` — `SeshatConfig` -> `Config`
-  - `Sources/SeshatCore/Errors.swift:3-80` — `SeshatError` -> `AppError`
-  - `Sources/SeshatCore/Logger.swift:4-52` — `SeshatLogger` -> `AppLogger`; `SeshatLogCategory` -> `AppLogCategory`
-  - `Sources/SeshatCore/SeshatPasteMode.swift:8-28` — `SeshatPasteMode` -> `PasteMode`
-  - `Sources/SeshatAppKit/Theme/SeshatTheme.swift:12-259` — `SeshatTheme` -> `Theme`
-  - `Sources/SeshatAppKit/Components/SeshatLogoView.swift:16-37` — `SeshatLogoView` -> `LogoView`
-  - `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:7-259` — `SeshatAppMain` -> `AppMain`
+  - `Sources/SeshatCore/Config.swift:3-107` — `SeshatConfig` -> `PSConfig`
+  - `Sources/SeshatCore/Errors.swift:3-80` — `SeshatError` -> `PSError`
+  - `Sources/SeshatCore/Logger.swift:4-52` — `SeshatLogger` -> `PSLogger`; `SeshatLogCategory` -> `PSLogCategory`
+  - `Sources/SeshatCore/SeshatPasteMode.swift:8-28` — `SeshatPasteMode` -> `PSPasteMode`
+  - `Sources/SeshatAppKit/Theme/SeshatTheme.swift:12-259` — `SeshatTheme` -> `PSTheme`
+  - `Sources/SeshatAppKit/Components/SeshatLogoView.swift:16-37` — `SeshatLogoView` -> `PSLogoView`
+  - `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:7-259` — `SeshatAppMain` -> `PSAppMain`
+  - `Sources/SeshatAppKit/SeshatApp.swift:6-42` — `SeshatApp` -> `PSApp` (file moves to `Sources/SeshatAppKit/PSApp.swift` via `git mv`; the old file comment about `SwiftUI.App` collision is obsolete under `PS` prefix and must be updated or removed).
   - `Sources/SeshatCore/OnboardingState.swift:34` — delete the `SeshatOnboardingCompleted` alias instead of inventing a second alias.
 - Confirm the explicit keeps before editing:
-  - Keep `Sources/SeshatAppKit/SeshatApp.swift:6-42` unchanged in Phase 0. The file comment documents why `App` is a bad post-rename spelling here: the shell deliberately does not conform to `SwiftUI.App`, and the bare name `App` collides with that protocol boundary.
   - Keep the module-marker enums and their compile tests unchanged because target-name renaming is deferred: `Package.swift:11-34,47-97`, `Sources/SeshatCore/SeshatCoreModule.swift:1`, `Sources/SeshatSession/SeshatSessionModule.swift:1`, `Sources/SeshatTranscription/SeshatTranscriptionModule.swift:1`, `Sources/SeshatTestSupport/SeshatTestSupportModule.swift:1`, `Sources/SeshatAppKit/Permissions/SeshatAppKitPermissionsModule.swift:1`.
 - Freeze the repo-wide Phase 0.3 call-site inventory before the first call-site commit. The exhaustive surface is the output of:
 
 ```text
-rg -l '\bSeshatConfig\b|\bSeshatPasteMode\b|\bSeshatOnboardingCompleted\b|\bSeshatTheme\b|\bSeshatLogoView\b|\bSeshatAppMain\b|\bSeshatError\b|\bSeshatLogger\b|\bSeshatLogCategory\b' Sources Tests | sort
+rg -l '\bSeshatConfig\b|\bSeshatPasteMode\b|\bSeshatOnboardingCompleted\b|\bSeshatTheme\b|\bSeshatLogoView\b|\bSeshatAppMain\b|\bSeshatApp\b|\bSeshatError\b|\bSeshatLogger\b|\bSeshatLogCategory\b' Sources Tests | sort
 ```
 
 ## Locked design decisions applicable to this phase
-- Locked decision `#7`: drop the `Seshat` prefix from UserDefaults keys and from type/file names where removing the prefix does not create a collision. `SeshatError` becomes `AppError`; `SeshatLogger` becomes `AppLogger`. Keep SPM target names unchanged.
+- Locked decision `#7` (updated 2026-04-20): drop the `Seshat` prefix from UserDefaults keys (keys stay unprefixed). Replace the `Seshat` prefix on types and `Seshat*`-prefixed filenames with `PS` (e.g., `SeshatError` becomes `PSError`; `SeshatLogger` becomes `PSLogger`; `SeshatTheme.swift` moves to `PSTheme.swift`). Keep SPM target names unchanged (deferred to Stage B atomic rebrand alongside bundle-ID flip).
 - Locked decision `#10`: no UserDefaults migration is required. The old prefixed keys must stop being read immediately.
 - Locked decision `#3`: Phase 2 will replace the theme in a single big-bang commit. Phase 0 only renames the theme file/type; it does not change theme content.
 
@@ -105,22 +122,23 @@ Phase 0.1 hand-off
 > Do NOT diverge from this plan or the Manus mockups. Silent divergence is the cardinal sin. To deviate, surface the proposed divergence in a comment in the commit message AND in the hand-off report; wait for main-session confirmation. Paraphrasing the contract is divergence. Renaming variables the plan specifies is divergence. Choosing a different animation curve than the mockup implies is divergence.
 
 ### Files touched (exhaustive) — path:line-range — what changes
-- `Sources/SeshatCore/Config.swift:1-107` — rename the top-level type from `SeshatConfig` to `Config`; the file name already matches the post-rename spelling and must not move.
-- `Sources/SeshatCore/Errors.swift:1-80` — rename `SeshatError` to `AppError`.
-- `Sources/SeshatCore/Logger.swift:1-52` — rename `SeshatLogger` to `AppLogger` and `SeshatLogCategory` to `AppLogCategory`.
-- `Sources/SeshatCore/SeshatPasteMode.swift:1-28 -> Sources/SeshatCore/PasteMode.swift` — use `git mv`, then rename the enum from `SeshatPasteMode` to `PasteMode`.
-- `Sources/SeshatAppKit/Theme/SeshatTheme.swift:1-277 -> Sources/SeshatAppKit/Theme/Theme.swift` — use `git mv`, then rename `SeshatTheme` to `Theme` only; do not change theme content in this step.
-- `Sources/SeshatAppKit/Components/SeshatLogoView.swift:1-135 -> Sources/SeshatAppKit/Components/LogoView.swift` — use `git mv`, then rename `SeshatLogoView` to `LogoView`.
-- `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:1-259 -> Sources/SeshatAppKit/Composition/AppMain.swift` — use `git mv`, then rename `SeshatAppMain` to `AppMain`.
+- `Sources/SeshatCore/Config.swift:1-107 -> Sources/SeshatCore/PSConfig.swift` — use `git mv`, then rename the top-level type from `SeshatConfig` to `PSConfig`.
+- `Sources/SeshatCore/Errors.swift:1-80 -> Sources/SeshatCore/PSError.swift` — use `git mv`, then rename `SeshatError` to `PSError`.
+- `Sources/SeshatCore/Logger.swift:1-52 -> Sources/SeshatCore/PSLogger.swift` — use `git mv`, then rename `SeshatLogger` to `PSLogger` and `SeshatLogCategory` to `PSLogCategory`.
+- `Sources/SeshatCore/SeshatPasteMode.swift:1-28 -> Sources/SeshatCore/PSPasteMode.swift` — use `git mv`, then rename the enum from `SeshatPasteMode` to `PSPasteMode`.
+- `Sources/SeshatAppKit/Theme/SeshatTheme.swift:1-277 -> Sources/SeshatAppKit/Theme/PSTheme.swift` — use `git mv`, then rename `SeshatTheme` to `PSTheme` only; do not change theme content in this step.
+- `Sources/SeshatAppKit/Components/SeshatLogoView.swift:1-135 -> Sources/SeshatAppKit/Components/PSLogoView.swift` — use `git mv`, then rename `SeshatLogoView` to `PSLogoView`.
+- `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:1-259 -> Sources/SeshatAppKit/Composition/PSAppMain.swift` — use `git mv`, then rename `SeshatAppMain` to `PSAppMain`.
+- `Sources/SeshatAppKit/SeshatApp.swift:1-42 -> Sources/SeshatAppKit/PSApp.swift` — use `git mv`, then rename `SeshatApp` to `PSApp`. Update or remove the pre-rename file comment about the `SwiftUI.App` collision (it no longer applies under `PS` prefix).
 - `Sources/SeshatCore/OnboardingState.swift:34` — delete the `SeshatOnboardingCompleted` alias.
-- `Tests/SeshatCoreTests/SeshatConfigTests.swift:1-75 -> Tests/SeshatCoreTests/ConfigTests.swift` — use `git mv`, rename the XCTestCase type to `ConfigTests`.
-- `Tests/SeshatCoreTests/SeshatConfigScaffoldingTests.swift:1-9 -> Tests/SeshatCoreTests/ConfigScaffoldingTests.swift` — use `git mv`, rename the XCTestCase type to `ConfigScaffoldingTests`.
-- `Tests/SeshatCoreTests/SeshatErrorTests.swift:1-63 -> Tests/SeshatCoreTests/AppErrorTests.swift` — use `git mv`, rename the XCTestCase type to `AppErrorTests`.
-- `Tests/SeshatCoreTests/SeshatErrorScaffoldingTests.swift:1-9 -> Tests/SeshatCoreTests/AppErrorScaffoldingTests.swift` — use `git mv`, rename the XCTestCase type to `AppErrorScaffoldingTests`.
-- `Tests/SeshatCoreTests/SeshatLoggerTests.swift:1-16 -> Tests/SeshatCoreTests/AppLoggerTests.swift` — use `git mv`, rename the XCTestCase type to `AppLoggerTests`.
-- `Tests/SeshatCoreTests/SeshatLoggerScaffoldingTests.swift:1-9 -> Tests/SeshatCoreTests/AppLoggerScaffoldingTests.swift` — use `git mv`, rename the XCTestCase type to `AppLoggerScaffoldingTests`.
-- `Tests/SeshatAppKitTests/Theme/SeshatThemeTests.swift:1-244 -> Tests/SeshatAppKitTests/Theme/ThemeTests.swift` — use `git mv`, rename the XCTestCase type to `ThemeTests`.
-- `Tests/SeshatAppKitTests/Components/SeshatLogoViewTests.swift:1-48 -> Tests/SeshatAppKitTests/Components/LogoViewTests.swift` — use `git mv`, rename the XCTestCase type to `LogoViewTests`.
+- `Tests/SeshatCoreTests/SeshatConfigTests.swift:1-75 -> Tests/SeshatCoreTests/PSConfigTests.swift` — use `git mv`, rename the XCTestCase type to `PSConfigTests`.
+- `Tests/SeshatCoreTests/SeshatConfigScaffoldingTests.swift:1-9 -> Tests/SeshatCoreTests/PSConfigScaffoldingTests.swift` — use `git mv`, rename the XCTestCase type to `PSConfigScaffoldingTests`.
+- `Tests/SeshatCoreTests/SeshatErrorTests.swift:1-63 -> Tests/SeshatCoreTests/PSErrorTests.swift` — use `git mv`, rename the XCTestCase type to `PSErrorTests`.
+- `Tests/SeshatCoreTests/SeshatErrorScaffoldingTests.swift:1-9 -> Tests/SeshatCoreTests/PSErrorScaffoldingTests.swift` — use `git mv`, rename the XCTestCase type to `PSErrorScaffoldingTests`.
+- `Tests/SeshatCoreTests/SeshatLoggerTests.swift:1-16 -> Tests/SeshatCoreTests/PSLoggerTests.swift` — use `git mv`, rename the XCTestCase type to `PSLoggerTests`.
+- `Tests/SeshatCoreTests/SeshatLoggerScaffoldingTests.swift:1-9 -> Tests/SeshatCoreTests/PSLoggerScaffoldingTests.swift` — use `git mv`, rename the XCTestCase type to `PSLoggerScaffoldingTests`.
+- `Tests/SeshatAppKitTests/Theme/SeshatThemeTests.swift:1-244 -> Tests/SeshatAppKitTests/Theme/PSThemeTests.swift` — use `git mv`, rename the XCTestCase type to `PSThemeTests`.
+- `Tests/SeshatAppKitTests/Components/SeshatLogoViewTests.swift:1-48 -> Tests/SeshatAppKitTests/Components/PSLogoViewTests.swift` — use `git mv`, rename the XCTestCase type to `PSLogoViewTests`.
 
 ### Scope — IN
 - Use `git mv` for every file-path rename in this step; do not “rename” by deleting and recreating files.
@@ -129,20 +147,19 @@ Phase 0.1 hand-off
 - Keep all implementation bodies behavior-identical. This step is spelling-only except for the alias deletion.
 
 ### Scope — OUT (with backlog ticket paths where applicable)
-- Do not rename `Sources/SeshatAppKit/SeshatApp.swift:6-42`; bare `App` is the documented collision.
 - Do not rename any SPM target name or any target-marker enum/compile test: `Package.swift:11-34,47-97`, `Sources/SeshatCore/SeshatCoreModule.swift:1`, `Sources/SeshatSession/SeshatSessionModule.swift:1`, `Sources/SeshatTranscription/SeshatTranscriptionModule.swift:1`, `Sources/SeshatTestSupport/SeshatTestSupportModule.swift:1`, `Sources/SeshatAppKit/Permissions/SeshatAppKitPermissionsModule.swift:1`.
 - Do not update repo-wide call sites here except what the renamed files themselves require to keep their own declarations compiling. The wide sweep is Step 0.3.
 
 ### Acceptance tests — Tests/... — test name + what it asserts + mockup/doc clause it ties to
-- `Tests/SeshatCoreTests/ConfigScaffoldingTests.swift` — `testTypeExists`; asserts the post-rename `Config` surface still resolves at compile time; ties to `Sources/SeshatCore/Config.swift:3-107`.
-- `Tests/SeshatCoreTests/AppErrorScaffoldingTests.swift` — `testTypeExists`; asserts the post-rename `AppError` surface still resolves; ties to `Sources/SeshatCore/Errors.swift:3-80`.
-- `Tests/SeshatCoreTests/AppLoggerScaffoldingTests.swift` — `testTypeExists`; asserts the post-rename `AppLogger` surface still resolves; ties to `Sources/SeshatCore/Logger.swift:4-52`.
-- `Tests/SeshatAppKitTests/Theme/ThemeTests.swift` — `testColorHexInitializerRoundTrip`; asserts the theme type rename did not change behavior; ties to `Sources/SeshatAppKit/Theme/SeshatTheme.swift:24-25`.
-- `Tests/SeshatAppKitTests/Components/LogoViewTests.swift` — existing logo-view geometry tests under the new type/file names; ties to `Sources/SeshatAppKit/Components/SeshatLogoView.swift:16-37`.
+- `Tests/SeshatCoreTests/PSConfigScaffoldingTests.swift` — `testTypeExists`; asserts the post-rename `PSConfig` surface still resolves at compile time; ties to `Sources/SeshatCore/Config.swift:3-107`.
+- `Tests/SeshatCoreTests/PSErrorScaffoldingTests.swift` — `testTypeExists`; asserts the post-rename `PSError` surface still resolves; ties to `Sources/SeshatCore/Errors.swift:3-80`.
+- `Tests/SeshatCoreTests/PSLoggerScaffoldingTests.swift` — `testTypeExists`; asserts the post-rename `PSLogger` surface still resolves; ties to `Sources/SeshatCore/Logger.swift:4-52`.
+- `Tests/SeshatAppKitTests/Theme/PSThemeTests.swift` — `testColorHexInitializerRoundTrip`; asserts the theme type rename did not change behavior; ties to `Sources/SeshatAppKit/Theme/SeshatTheme.swift:24-25`.
+- `Tests/SeshatAppKitTests/Components/PSLogoViewTests.swift` — existing logo-view geometry tests under the new type/file names; ties to `Sources/SeshatAppKit/Components/SeshatLogoView.swift:16-37`.
 
 ### Validation checklist (implementer ticks box-by-box in hand-off)
-- [ ] The rename-now set is exact: `SeshatConfig -> Config`, `SeshatError -> AppError`, `SeshatLogger -> AppLogger`, `SeshatLogCategory -> AppLogCategory`, `SeshatPasteMode -> PasteMode`, `SeshatTheme -> Theme`, `SeshatLogoView -> LogoView`, `SeshatAppMain -> AppMain`, and the `SeshatOnboardingCompleted` alias is gone.
-- [ ] The explicit keep set is exact: `SeshatApp`, the five module-marker enums, and the target-name compile tests remain prefixed.
+- [ ] The rename-now set is exact: `SeshatConfig -> PSConfig`, `SeshatError -> PSError`, `SeshatLogger -> PSLogger`, `SeshatLogCategory -> PSLogCategory`, `SeshatPasteMode -> PSPasteMode`, `SeshatTheme -> PSTheme`, `SeshatLogoView -> PSLogoView`, `SeshatAppMain -> PSAppMain`, `SeshatApp -> PSApp`, and the `SeshatOnboardingCompleted` alias is gone.
+- [ ] The explicit keep set is exact: the five module-marker enums and the target-name compile tests remain `Seshat`-prefixed.
 - [ ] Every path rename in this step used `git mv`; there are no delete-and-recreate artifacts in `git diff --summary`.
 - [ ] Locked decision `#3` is honored: the theme rename is spelling-only here; no theme-token changes piggybacked into this step.
 - [ ] Diff against this step shows no silent divergence; every modified file is listed above, and any proposed deviation is recorded in the commit message comment and hand-off report.
@@ -172,7 +189,7 @@ Phase 0.2 hand-off
 
 ### Files touched (exhaustive) — path:line-range — what changes
 - Whole-file mechanical updates in every file returned by the frozen inventory below. This is the exhaustive Step 0.3 surface; do not touch files outside this list.
-- The inventory is intentionally frozen on trunk before Step 0.2 path renames. When executing Step 0.3 after Step 0.2, substitute the post-rename paths `Sources/SeshatCore/PasteMode.swift`, `Sources/SeshatAppKit/Theme/Theme.swift`, `Sources/SeshatAppKit/Components/LogoView.swift`, `Sources/SeshatAppKit/Composition/AppMain.swift`, `Tests/SeshatCoreTests/ConfigTests.swift`, `Tests/SeshatCoreTests/ConfigScaffoldingTests.swift`, `Tests/SeshatCoreTests/AppErrorTests.swift`, `Tests/SeshatCoreTests/AppErrorScaffoldingTests.swift`, `Tests/SeshatCoreTests/AppLoggerTests.swift`, `Tests/SeshatCoreTests/AppLoggerScaffoldingTests.swift`, `Tests/SeshatAppKitTests/Theme/ThemeTests.swift`, and `Tests/SeshatAppKitTests/Components/LogoViewTests.swift` for their pre-Step-0.2 counterparts without widening the surface.
+- The inventory is intentionally frozen on trunk before Step 0.2 path renames. When executing Step 0.3 after Step 0.2, substitute the post-rename paths `Sources/SeshatCore/PSConfig.swift`, `Sources/SeshatCore/PSError.swift`, `Sources/SeshatCore/PSLogger.swift`, `Sources/SeshatCore/PSPasteMode.swift`, `Sources/SeshatAppKit/Theme/PSTheme.swift`, `Sources/SeshatAppKit/Components/PSLogoView.swift`, `Sources/SeshatAppKit/Composition/PSAppMain.swift`, `Sources/SeshatAppKit/PSApp.swift`, `Tests/SeshatCoreTests/PSConfigTests.swift`, `Tests/SeshatCoreTests/PSConfigScaffoldingTests.swift`, `Tests/SeshatCoreTests/PSErrorTests.swift`, `Tests/SeshatCoreTests/PSErrorScaffoldingTests.swift`, `Tests/SeshatCoreTests/PSLoggerTests.swift`, `Tests/SeshatCoreTests/PSLoggerScaffoldingTests.swift`, `Tests/SeshatAppKitTests/Theme/PSThemeTests.swift`, and `Tests/SeshatAppKitTests/Components/PSLogoViewTests.swift` for their pre-Step-0.2 counterparts without widening the surface.
 
 ```text
 Sources/SeshatAppKit/Components/ActionButton.swift
@@ -276,14 +293,13 @@ Tests/SeshatTranscriptionTests/ModelPathTests.swift
 Tests/SeshatTranscriptionTests/Support/SeshatTranscriptionFilesystemTestCase.swift
 ```
 
-- `Sources/SeshatAppKit/SeshatApp.swift:15-42` — keep the shell named `SeshatApp`, but update its collaborator spellings to `AppLogger`, `Config`, `PasteMode`, `Theme`, `LogoView`, and `AppMain`.
+- `Sources/SeshatAppKit/PSApp.swift:15-42` (post-Step-0.2 path; pre-Step-0.2 path is `Sources/SeshatAppKit/SeshatApp.swift`) — the file was renamed and the type is now `PSApp`; update its collaborator spellings to `PSLogger`, `PSConfig`, `PSPasteMode`, `PSTheme`, `PSLogoView`, and `PSAppMain`.
 - `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:95-146` — replace the deleted `SeshatOnboardingCompleted` alias with `OnboardingState`.
 - `Tests/SeshatAppKitTests/SeshatAppKitShellCompileTests.swift:8-31` — keep the file name because it is a target compile test, but update all collaborator spellings inside it.
 
 ### Scope — IN
-- Replace every repo-wide reference to the renamed symbols from Step 0.2.
+- Replace every repo-wide reference to the renamed symbols from Step 0.2 (including `SeshatApp` → `PSApp`).
 - Update comments, manual runbooks, preview labels, and test names that still mention the old prefixed symbols.
-- Keep `SeshatApp` unchanged while updating its internals to the renamed collaborators.
 - Keep the target-marker enum references unchanged.
 
 ### Scope — OUT (with backlog ticket paths where applicable)
@@ -292,16 +308,16 @@ Tests/SeshatTranscriptionTests/Support/SeshatTranscriptionFilesystemTestCase.swi
 - Do not piggyback Phase 1 permission-service work or Phase 2 UI work into this step.
 
 ### Acceptance tests — Tests/... — test name + what it asserts + mockup/doc clause it ties to
-- `Tests/SeshatAppKitTests/AppEntryPointTests.swift` — `testCanInstantiateAppMainAfterRename`; asserts the app entry point still compiles and wires correctly under `AppMain`, `AppLogger`, and `Config`.
+- `Tests/SeshatAppKitTests/AppEntryPointTests.swift` — `testCanInstantiatePSAppMainAfterRename`; asserts the app entry point still compiles and wires correctly under `PSAppMain`, `PSLogger`, and `PSConfig`.
 - `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift` — `testStartupCoordinatorDoesNotBlockInitOnHotkeyInstall`; asserts the renamed entry-point surface still preserves startup ordering.
-- `Tests/SeshatAudioTests/AVAudioCaptureServiceTests.swift` — existing microphone-error mapping tests remain green under `AppError`/`AppLogger`; ties to `Sources/SeshatAudio/AVAudioCaptureService.swift:39-45`.
-- `Tests/SeshatSessionTests/SessionCoordinatorPreparationTests.swift` — existing preparation tests remain green under `AppLogger`/`AppError`; ties to `Sources/SeshatSession/SessionCoordinator.swift`.
-- `Tests/SeshatTranscriptionTests/FluidAudioTranscriberTests.swift` — existing model-path/download tests remain green under `Config`; ties to `Sources/SeshatCore/Config.swift:43-63`.
+- `Tests/SeshatAudioTests/AVAudioCaptureServiceTests.swift` — existing microphone-error mapping tests remain green under `PSError`/`PSLogger`; ties to `Sources/SeshatAudio/AVAudioCaptureService.swift:39-45`.
+- `Tests/SeshatSessionTests/SessionCoordinatorPreparationTests.swift` — existing preparation tests remain green under `PSLogger`/`PSError`; ties to `Sources/SeshatSession/SessionCoordinator.swift`.
+- `Tests/SeshatTranscriptionTests/FluidAudioTranscriberTests.swift` — existing model-path/download tests remain green under `PSConfig`; ties to `Sources/SeshatCore/Config.swift:43-63`.
 
 ### Validation checklist (implementer ticks box-by-box in hand-off)
 - [ ] The frozen Step 0.3 inventory above is exactly the touched surface; no extra files were edited.
-- [ ] `rg -n '\bSeshat(Config|Error|Logger|LogCategory|PasteMode|Theme|LogoView|AppMain|OnboardingCompleted)\b' Sources Tests` returns zero hits after the step.
-- [ ] `rg -n '\bSeshat(App|CoreModule|SessionModule|TranscriptionModule|TestSupportModule|AppKitPermissionsModule)\b' Sources Tests` returns only the explicit keep set.
+- [ ] `rg -n '\bSeshat(Config|Error|Logger|LogCategory|PasteMode|Theme|LogoView|AppMain|App|OnboardingCompleted)\b' Sources Tests` returns zero hits after the step.
+- [ ] `rg -n '\bSeshat(CoreModule|SessionModule|TranscriptionModule|TestSupportModule|AppKitPermissionsModule)\b' Sources Tests` returns only the explicit keep set.
 - [ ] Comments and manual runbooks were updated alongside code so no stale rename vocabulary remains in shipped docs.
 - [ ] Diff against this step shows no silent divergence; every modified file is listed above, and any proposed deviation is recorded in the commit message comment and hand-off report.
 - [ ] No `Color(hex:` outside `Theme/*` (hard rule — long-standing).
@@ -342,7 +358,7 @@ Phase 0.3 hand-off
 - Do not rename any additional symbols “while you’re here.”
 
 ### Acceptance tests — Tests/... — test name + what it asserts + mockup/doc clause it ties to
-- `Tests/SeshatCoreTests/ConfigTests.swift` — renamed config tests still pass, proving the base-directory override path survived the sweep.
+- `Tests/SeshatCoreTests/PSConfigTests.swift` — renamed config tests still pass, proving the base-directory override path survived the sweep.
 - `Tests/SeshatAppKitTests/AppEntryPointTests.swift` — app entry point still compiles after the full rename surface.
 - `Tests/SeshatAudioTests/AVAudioCaptureServiceTests.swift` — audio permission/error plumbing still compiles under the new names.
 - `Tests/SeshatSessionTests/SessionCoordinatorHappyPathTests.swift` — session happy path still compiles under the new names.
@@ -350,8 +366,8 @@ Phase 0.3 hand-off
 
 ### Validation checklist (implementer ticks box-by-box in hand-off)
 - [ ] `swift build --build-tests` succeeds from `/Users/nitinkum/Projects/nitkrar/seshat`.
-- [ ] `swift test --filter ConfigTests`, `swift test --filter AppEntryPointTests`, `swift test --filter AVAudioCaptureServiceTests`, `swift test --filter SessionCoordinatorHappyPathTests`, and `swift test --filter FluidAudioTranscriberTests` all pass from the main-repo path.
-- [ ] `rg -n '\bSeshat(Config|Error|Logger|LogCategory|PasteMode|Theme|LogoView|AppMain|OnboardingCompleted)\b' Sources Tests` returns zero hits.
+- [ ] `swift test --filter PSConfigTests`, `swift test --filter AppEntryPointTests`, `swift test --filter AVAudioCaptureServiceTests`, `swift test --filter SessionCoordinatorHappyPathTests`, and `swift test --filter FluidAudioTranscriberTests` all pass from the main-repo path.
+- [ ] `rg -n '\bSeshat(Config|Error|Logger|LogCategory|PasteMode|Theme|LogoView|AppMain|App|OnboardingCompleted)\b' Sources Tests` returns zero hits.
 - [ ] `git diff --name-only --diff-filter=ACMR HEAD` shows only the Phase 0 file surface.
 - [ ] Diff against this step shows no silent divergence; every modified file is accounted for and any proposed deviation is recorded in the commit message comment and hand-off report.
 - [ ] No `Color(hex:` outside `Theme/*` (hard rule — long-standing).
