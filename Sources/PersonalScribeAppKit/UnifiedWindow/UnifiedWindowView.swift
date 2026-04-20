@@ -14,6 +14,7 @@ import PersonalScribeCore
 struct UnifiedWindowView: View {
     @ObservedObject var model: UnifiedWindowModel
     let windowTint: WindowTint
+    @Environment(\.colorScheme) private var colorScheme
 
     // Tab-content dependencies. ViewModels are constructed once per
     // window lifetime by UnifiedWindowController and passed through;
@@ -70,7 +71,7 @@ struct UnifiedWindowView: View {
                 .padding(.vertical, PersonalScribeTheme.Spacing.lg)
 
             List(AppTab.allCases, selection: tabBinding) { tab in
-                Label(tab.rawValue, systemImage: tab.systemImageName)
+                sidebarRow(for: tab)
                     .tag(tab)
             }
             .listStyle(.sidebar)
@@ -82,6 +83,29 @@ struct UnifiedWindowView: View {
                 .padding(.vertical, PersonalScribeTheme.Spacing.md)
         }
         .background(windowTint.secondaryBackground)
+        // Thin 1px separator between sidebar and detail pane.
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(windowTint.primaryText.opacity(0.08))
+                .frame(width: 1)
+        }
+    }
+
+    /// Sidebar row with a champagne left-accent bar on the active tab.
+    @ViewBuilder
+    private func sidebarRow(for tab: AppTab) -> some View {
+        let isActive = model.activeTab == tab
+        let accentColor = PersonalScribeTheme.Palette.for(scheme: colorScheme).brandChampagne
+        HStack(spacing: 0) {
+            // Champagne accent bar — 3pt wide, full row height.
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(isActive ? accentColor : Color.clear)
+                .frame(width: 3)
+                .padding(.vertical, 4)
+
+            Label(tab.rawValue, systemImage: tab.systemImageName)
+                .padding(.leading, PersonalScribeTheme.Spacing.xs)
+        }
     }
 
     private var brandHeader: some View {
