@@ -1,5 +1,6 @@
 import SwiftUI
 import PersonalScribeCore
+import ServiceManagement
 
 @MainActor
 public struct GeneralTab: View {
@@ -26,11 +27,27 @@ public struct GeneralTab: View {
                 description: "Core defaults for the pill overlay, menu bar surface, and transcript delivery."
             ) {
                 VStack(alignment: .leading, spacing: SettingsLayout.itemSpacing) {
+                    launchCard
                     visibilityCard
                     appearanceCard
                     behaviorCard
                 }
             }
+        }
+    }
+
+    private var launchCard: some View {
+        SettingsCard {
+            Text("Startup")
+                .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+
+            Toggle(
+                "Launch at login",
+                isOn: Binding(
+                    get: { viewModel.launchAtLogin },
+                    set: { viewModel.setLaunchAtLogin($0) }
+                )
+            )
         }
     }
 
@@ -191,6 +208,7 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var pillAppearance: PillAppearance
     @Published private(set) var pasteRestoreDelay: PasteRestoreDelay
     @Published private(set) var visibilityError: VisibilityConfigError?
+    @Published private(set) var launchAtLogin: Bool
 
     private let defaults: UserDefaults
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
@@ -215,6 +233,9 @@ final class GeneralTabViewModel: ObservableObject {
         self.windowTint = WindowTint.resolve(from: defaults)
         self.pillAppearance = PillAppearance.resolve(from: defaults)
         self.pasteRestoreDelay = PasteRestoreDelay.resolve(from: defaults)
+        // SMAppService.mainApp.status reflects the current registration
+        // state. .enabled means the app is registered to launch at login.
+        self.launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
     var visibilityErrorMessage: String? {
@@ -255,6 +276,22 @@ final class GeneralTabViewModel: ObservableObject {
     func setPillAppearance(_ appearance: PillAppearance) {
         pillAppearance = appearance
         appearance.persist(to: defaults)
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+            launchAtLogin = SMAppService.mainApp.status == .enabled
+        } catch {
+            // Registration can fail if the user denies the system prompt
+            // or if the bundle is not signed. Silently refresh the toggle
+            // to reflect the actual state rather than the requested state.
+            launchAtLogin = SMAppService.mainApp.status == .enabled
+        }
     }
 
     func setPasteRestoreDelaySeconds(_ seconds: TimeInterval) {
