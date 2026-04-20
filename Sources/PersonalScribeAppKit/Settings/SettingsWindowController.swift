@@ -50,7 +50,7 @@ final class SettingsWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    deinit {
+    isolated deinit {
         if let windowTintObserver {
             NotificationCenter.default.removeObserver(windowTintObserver)
         }

@@ -96,14 +96,12 @@ final class DraggablePanel: NSPanel {
         configurePillAppearanceObservation()
     }
 
+    @available(*, unavailable)
     required init?(coder: NSCoder) {
-        defaults = .standard
-        notificationCenter = .default
-        super.init(coder: coder)
-        configurePillAppearanceObservation()
+        fatalError("init(coder:) has not been implemented")
     }
 
-    deinit {
+    isolated deinit {
         if let defaultsDidChangeObserver {
             notificationCenter.removeObserver(defaultsDidChangeObserver)
         }
