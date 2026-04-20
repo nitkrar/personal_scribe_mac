@@ -12,6 +12,8 @@ public actor SessionCoordinator {
     private let postProcessor = PostProcessor()
     private let signposter = OSSignposter(subsystem: SeshatLogger.subsystem, category: "prepare")
     private let downloadProgressBroadcaster = SessionDownloadProgressBroadcaster()
+    private let pipeline: SessionPipelineOrchestrator
+    private let pipelineTranscriber: CoordinatorPipelineTranscriber
 
     private var currentState: SessionState = .idle
     private var mostRecentResult: TranscriptionResult?
@@ -36,12 +38,29 @@ public actor SessionCoordinator {
         logger: SeshatLogger,
         transcriptStore: SQLiteTranscriptStore? = nil
     ) {
+        let pipelineTranscriber = CoordinatorPipelineTranscriber(
+            fixedTranscriber: transcriber,
+            logger: logger
+        )
         self.capture = capture
         self.fixedTranscriber = transcriber
         self.modelService = nil
         self.transcriberProvider = nil
         self.transcriptStore = transcriptStore
         self.logger = logger
+        self.pipelineTranscriber = pipelineTranscriber
+        self.pipeline = Self.makePipeline(
+            capture: capture,
+            pipelineTranscriber: pipelineTranscriber,
+            transcriptStore: transcriptStore,
+            logger: logger
+        )
+        Self.startPipelineObservers(
+            owner: self,
+            pipeline: self.pipeline,
+            pipelineTranscriber: self.pipelineTranscriber,
+            broadcaster: self.downloadProgressBroadcaster
+        )
     }
 
     public init(
@@ -51,26 +70,36 @@ public actor SessionCoordinator {
         logger: SeshatLogger,
         transcriptStore: SQLiteTranscriptStore? = nil
     ) {
+        let pipelineTranscriber = CoordinatorPipelineTranscriber(
+            modelService: modelService,
+            transcriberProvider: transcriberProvider,
+            logger: logger
+        )
         self.capture = capture
         self.fixedTranscriber = nil
         self.modelService = modelService
         self.transcriberProvider = transcriberProvider
         self.transcriptStore = transcriptStore
         self.logger = logger
+        self.pipelineTranscriber = pipelineTranscriber
+        self.pipeline = Self.makePipeline(
+            capture: capture,
+            pipelineTranscriber: pipelineTranscriber,
+            transcriptStore: transcriptStore,
+            logger: logger
+        )
+        Self.startPipelineObservers(
+            owner: self,
+            pipeline: self.pipeline,
+            pipelineTranscriber: self.pipelineTranscriber,
+            broadcaster: self.downloadProgressBroadcaster
+        )
     }
 
     public func toggle() async {
-        switch currentState {
-        case .idle:
-            await startRecording()
-        case .recording:
-            await stopRecordingAndTranscribe()
-        case .transcribing:
-            logger.info("Ignored toggle while transcribing")
-        case .error:
-            publish(.idle)
-            await startRecording()
-        }
+        await pipeline.toggleCapture()
+        let snapshot = await pipeline.snapshot()
+        applyPipelineSnapshot(snapshot)
     }
 
     public func state() -> SessionState {
@@ -127,8 +156,7 @@ public actor SessionCoordinator {
         let intervalName: StaticString = "SessionCoordinator.prepareTranscriber"
         let state = signposter.beginInterval(intervalName)
         defer { signposter.endInterval(intervalName, state) }
-        let transcriber = await resolvedTranscriberForPreparation()
-        try await transcriber.prepare()
+        try await pipeline.prepareTranscriber()
     }
 
     public func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
@@ -143,6 +171,80 @@ public actor SessionCoordinator {
         audioLevelContinuations[id] = nil
     }
 
+    private static func makePipeline(
+        capture: any AudioCapturing,
+        pipelineTranscriber: CoordinatorPipelineTranscriber,
+        transcriptStore: SQLiteTranscriptStore?,
+        logger: SeshatLogger
+    ) -> SessionPipelineOrchestrator {
+        SessionPipelineOrchestrator(
+            capture: CoordinatorPipelineCapture(
+                base: capture,
+                pipelineTranscriber: pipelineTranscriber
+            ),
+            transcriber: pipelineTranscriber,
+            logger: logger,
+            postProcessingPipeline: CoordinatorPostProcessingPipeline(),
+            outputSink: CoordinatorPipelineOutputSink(),
+            contextProvider: CoordinatorPipelineContextProvider(),
+            persistenceHandler: makePersistenceHandler(
+                transcriptStore: transcriptStore,
+                logger: logger
+            )
+        )
+    }
+
+    private static func makePersistenceHandler(
+        transcriptStore: SQLiteTranscriptStore?,
+        logger: SeshatLogger
+    ) -> (@Sendable (TranscriptEntry) async throws -> Void)? {
+        guard let transcriptStore else {
+            return nil
+        }
+
+        return { entry in
+            do {
+                try await transcriptStore.append(entry)
+            } catch {
+                logger.error("Failed to persist transcript to SQLiteTranscriptStore", error: error)
+            }
+        }
+    }
+
+    private static func startPipelineObservers(
+        owner: SessionCoordinator,
+        pipeline: SessionPipelineOrchestrator,
+        pipelineTranscriber: CoordinatorPipelineTranscriber,
+        broadcaster: SessionDownloadProgressBroadcaster
+    ) {
+        Task { [weak owner, pipeline] in
+            let stream = await pipeline.snapshotStream()
+            for await snapshot in stream {
+                guard let owner else {
+                    return
+                }
+                await owner.applyPipelineSnapshot(snapshot)
+            }
+        }
+
+        Task { [weak owner, pipeline] in
+            let stream = await pipeline.audioLevelStream()
+            for await level in stream {
+                guard let owner else {
+                    return
+                }
+                await owner.publishAudioLevel(level)
+            }
+        }
+
+        Task {
+            let stream = await pipelineTranscriber.modelDownloadProgress()
+            for await progress in stream {
+                broadcaster.update(progress)
+            }
+        }
+    }
+
     private func publish(_ state: SessionState) {
         currentState = state
         for continuation in stateContinuations.values {
@@ -155,6 +257,13 @@ public actor SessionCoordinator {
         currentAudioLevel = level
         for continuation in audioLevelContinuations.values {
             continuation.yield(level)
+        }
+    }
+
+    private func applyPipelineSnapshot(_ snapshot: PipelineSnapshot) {
+        mostRecentResult = snapshot.lastCompletedResult
+        if currentState != snapshot.sessionState {
+            publish(snapshot.sessionState)
         }
     }
 
@@ -393,6 +502,195 @@ public actor SessionCoordinator {
                 broadcaster.update(progress)
             }
         }
+    }
+}
+
+private struct CoordinatorPipelineCapture: AudioCapturing {
+    private let base: any AudioCapturing
+    private let pipelineTranscriber: CoordinatorPipelineTranscriber
+
+    init(
+        base: any AudioCapturing,
+        pipelineTranscriber: CoordinatorPipelineTranscriber
+    ) {
+        self.base = base
+        self.pipelineTranscriber = pipelineTranscriber
+    }
+
+    func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
+        let stream = try await base.start()
+        await pipelineTranscriber.beginRecordingSession()
+        return stream
+    }
+
+    func stop() async {
+        await base.stop()
+    }
+
+    func audioLevelStream() async -> AsyncStream<Float> {
+        await base.audioLevelStream()
+    }
+}
+
+private actor CoordinatorPipelineTranscriber: Transcribing {
+    private let fixedTranscriber: (any Transcribing)?
+    private let modelService: (any ModelService)?
+    private let transcriberProvider: (any ModelBoundTranscriberProviding)?
+    private let logger: SeshatLogger
+    private let progressBroadcaster = SessionDownloadProgressBroadcaster()
+
+    private var recordingSessionTranscriber: (any Transcribing)?
+    private var progressObservationTask: Task<Void, Never>?
+
+    init(
+        fixedTranscriber: any Transcribing,
+        logger: SeshatLogger
+    ) {
+        self.fixedTranscriber = fixedTranscriber
+        self.modelService = nil
+        self.transcriberProvider = nil
+        self.logger = logger
+    }
+
+    init(
+        modelService: any ModelService,
+        transcriberProvider: any ModelBoundTranscriberProviding,
+        logger: SeshatLogger
+    ) {
+        self.fixedTranscriber = nil
+        self.modelService = modelService
+        self.transcriberProvider = transcriberProvider
+        self.logger = logger
+    }
+
+    func beginRecordingSession() async {
+        let transcriber = await resolveRecordingSessionTranscriber()
+        observeDownloadProgress(for: transcriber)
+    }
+
+    func prepare() async throws {
+        let transcriber = await resolvedTranscriberForPreparation()
+        try await transcriber.prepare()
+    }
+
+    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        progressBroadcaster.stream()
+    }
+
+    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+        let transcriber = await transcriberForStopPath()
+        defer {
+            recordingSessionTranscriber = nil
+        }
+        return try await transcriber.transcribe(audio)
+    }
+
+    func transcribe(stream: AsyncThrowingStream<PCMBuffer, Error>) async throws -> TranscriptionResult {
+        let transcriber = await transcriberForStopPath()
+        defer {
+            recordingSessionTranscriber = nil
+        }
+        return try await transcriber.transcribe(stream: stream)
+    }
+
+    private func resolvedTranscriberForPreparation() async -> any Transcribing {
+        if let recordingSessionTranscriber {
+            observeDownloadProgress(for: recordingSessionTranscriber)
+            return recordingSessionTranscriber
+        }
+
+        return await resolvedActiveTranscriber()
+    }
+
+    private func resolveRecordingSessionTranscriber() async -> any Transcribing {
+        if let fixedTranscriber {
+            recordingSessionTranscriber = fixedTranscriber
+            observeDownloadProgress(for: fixedTranscriber)
+            return fixedTranscriber
+        }
+
+        let descriptor = await activeVoiceModel()
+        let transcriber = resolvedModelBoundTranscriber(for: descriptor)
+        recordingSessionTranscriber = transcriber
+        observeDownloadProgress(for: transcriber)
+        return transcriber
+    }
+
+    private func transcriberForStopPath() async -> any Transcribing {
+        if let recordingSessionTranscriber {
+            return recordingSessionTranscriber
+        }
+
+        return await resolvedActiveTranscriber()
+    }
+
+    private func resolvedActiveTranscriber() async -> any Transcribing {
+        if let fixedTranscriber {
+            observeDownloadProgress(for: fixedTranscriber)
+            return fixedTranscriber
+        }
+
+        let descriptor = await activeVoiceModel()
+        let transcriber = resolvedModelBoundTranscriber(for: descriptor)
+        observeDownloadProgress(for: transcriber)
+        return transcriber
+    }
+
+    private func activeVoiceModel() async -> ModelDescriptor {
+        guard let modelService else {
+            preconditionFailure("SessionCoordinator model-service path requires a ModelService")
+        }
+
+        return await MainActor.run {
+            modelService.activeDescriptor.voiceModel
+        }
+    }
+
+    private func resolvedModelBoundTranscriber(
+        for descriptor: ModelDescriptor
+    ) -> any Transcribing {
+        guard let transcriberProvider else {
+            preconditionFailure("SessionCoordinator model-service path requires a transcriber provider")
+        }
+
+        return transcriberProvider.transcriber(for: descriptor)
+    }
+
+    private func observeDownloadProgress(for transcriber: any Transcribing) {
+        progressObservationTask?.cancel()
+        let broadcaster = progressBroadcaster
+
+        progressObservationTask = Task {
+            for await progress in transcriber.modelDownloadProgress() {
+                if Task.isCancelled {
+                    return
+                }
+
+                broadcaster.update(progress)
+            }
+        }
+    }
+}
+
+private struct CoordinatorPostProcessingPipeline: PostProcessingPipeline {
+    private let postProcessor = PostProcessor()
+
+    func run(_ text: String, context: PostProcessingContext) async throws -> String {
+        postProcessor.clean(text)
+    }
+}
+
+private struct CoordinatorPipelineOutputSink: PipelineOutputSink {
+    func deliverPartial(_ revision: TranscriptProgress) async throws {}
+
+    func deliverFinal(_ result: TranscriptionResult) async throws {}
+
+    func resetForNewSession() async {}
+}
+
+private struct CoordinatorPipelineContextProvider: PipelineContextProviding {
+    func currentContext() -> PipelineContextSnapshot {
+        PipelineContextSnapshot(streamingOutputEnabled: false)
     }
 }
 
