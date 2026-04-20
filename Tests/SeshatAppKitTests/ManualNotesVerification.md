@@ -1,11 +1,11 @@
 # Manual Notes Verification
 
-- Open the status-item `History` row after onboarding is completed and confirm a single `Seshat History` window opens in front of the app.
+- Open the status-item `History` row after onboarding is completed and confirm a single `<AppBrand.displayName> History` window opens in front of the app.
 - Close the window, open `History` again, and confirm the same window instance is reused rather than spawning duplicates.
 
 ## Empty state
 
-- Point Seshat at a clean base directory with no persisted transcripts, open `History`, and confirm the sidebar shows `No transcripts yet`.
+- Point `<AppBrand.displayName>` at a clean base directory with no persisted transcripts, open `History`, and confirm the sidebar shows `No transcripts yet`.
 - In the same empty-state run, confirm the center editor shows `Select a transcript to view its text.` and the right-side panel shows `Select a transcript to inspect its metadata.`
 
 ## Sidebar shows recent entries

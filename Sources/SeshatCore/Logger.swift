@@ -2,7 +2,7 @@ import Foundation
 import os
 
 public struct SeshatLogger: Sendable {
-    public static let subsystem = "com.nitkrar.seshat"
+    public static let subsystem = AppBrand.logSubsystem
 
     private let logger: Logger
 

@@ -27,7 +27,7 @@ extension BaseDirectoryMigrationError: LocalizedError {
     public var failureReason: String? {
         switch self {
         case .destinationNotWritable:
-            "Seshat could not create and remove a write probe in the selected directory."
+            "\(AppBrand.displayName) could not create and remove a write probe in the selected directory."
         case .partialFailure:
             "Any subdirectories moved before the failure were rolled back when possible."
         }

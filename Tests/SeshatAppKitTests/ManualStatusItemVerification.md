@@ -24,3 +24,13 @@ or `StatusItemIconLoader`.
 - [ ] **MV-SI-4** Stop recording; while transcribing the icon tints orange.
 - [ ] **MV-SI-5** When idle again, the icon returns to the default
   monochrome template tint.
+
+## Brand copy and accessibility
+
+- [ ] **MV-SI-6** Open the status-item menu and confirm the quit row reads
+  `Quit <AppBrand.displayName>`.
+- [ ] **MV-SI-7** Hover the status item and inspect it with Accessibility
+  Inspector or VoiceOver. Confirm the tooltip/accessibility label uses the
+  current app name in all three states: `<AppBrand.displayName>` at idle,
+  `<AppBrand.displayName> — recording` while recording, and
+  `<AppBrand.displayName> — transcribing` while transcribing.

@@ -106,6 +106,14 @@ below tells you to change it.
   `SineWaveView`'s `TimelineView(.animation)` driver has regressed.
   Stop recording and confirm the wave snaps to its static rest pose.
 
+- [ ] **MV-B1-10 (brand-backed accessibility labels)** Use Accessibility
+  Inspector or VoiceOver on the pill in idle, recording, and transcribing
+  states, and on any surfaced error card. Confirm the labels read
+  `<AppBrand.displayName> idle — double-tap right Option to record`,
+  `<AppBrand.displayName> recording — tap to stop`,
+  `<AppBrand.displayName> transcribing`, and
+  `<AppBrand.displayName> error: …`.
+
 ---
 
 ## Notes
