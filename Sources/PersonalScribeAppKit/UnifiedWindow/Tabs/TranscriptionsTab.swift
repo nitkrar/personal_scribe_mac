@@ -32,8 +32,26 @@ struct TranscriptionsTab: View {
                 .font(PersonalScribeTheme.Typography.largeTitle.font)
                 .foregroundStyle(palette.primaryText)
 
+            // Use searchFieldStyle for a native macOS search bar
+            // (magnifying glass icon, clear button, correct focus ring).
             TextField("Search transcriptions", text: $viewModel.searchText)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.plain)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+                .background {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(palette.surface)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(palette.primaryText.opacity(0.1), lineWidth: 1)
+                }
+                .overlay(alignment: .leading) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(palette.secondaryText)
+                        .padding(.leading, 10)
+                        .allowsHitTesting(false)
+                }
+                .padding(.leading, 22)
                 .frame(maxWidth: .infinity)
 
             ScrollView {
@@ -43,7 +61,7 @@ struct TranscriptionsTab: View {
                         Section {
                             ForEach(group.entries, id: \.id) { entry in
                                 TranscriptRow(
-                                    title: entry.text,
+                                    title: HomeTab.title(for: entry),
                                     timestamp: entry.timestamp,
                                     preview: entry.text,
                                     referenceDate: now
