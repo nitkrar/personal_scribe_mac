@@ -23,7 +23,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         assertAction(model.items[2], id: .openHistory, title: "History")
         assertAction(model.items[3], id: .openSettings, title: "Settings")
         XCTAssertEqual(model.items[4], .separator)
-        assertAction(model.items[5], id: .quit, title: "Quit Seshat")
+        assertAction(model.items[5], id: .quit, title: "Quit \(AppBrand.displayName)")
     }
 
     func testActiveModeNameIsReflectedInHeader() {

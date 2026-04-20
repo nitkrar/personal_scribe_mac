@@ -102,7 +102,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "clipboard only")
     }
 
-    func testDeliverBatchReturnsClipboardOnlyWhenFrontmostAppIsSeshat() async {
+    func testDeliverBatchReturnsClipboardOnlyWhenFrontmostAppIsPersonalScribe() async {
         let defaults = isolatedDefaults()
         PasteMode.preference(defaults: defaults).persist(.pasteAtCursor)
         let pasteboard = makePasteboard()

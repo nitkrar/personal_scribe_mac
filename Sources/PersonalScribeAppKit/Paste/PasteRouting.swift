@@ -4,7 +4,7 @@ import AppKit
 enum PasteRoutingDecision: Equatable, Sendable {
     enum ClipboardOnlyReason: Equatable, Sendable {
         case clipboardOnlyMode
-        case frontmostAppIsSeshat
+        case frontmostAppIsPersonalScribe
     }
 
     case pasteAtCursor

@@ -1,5 +1,5 @@
 // PersonalScribeLogoView.swift
-// Vector-accurate quill logo for Seshat — derived from the master logo SVG trace.
+// Vector-accurate quill logo for PersonalScribe — derived from the master logo SVG trace.
 // Replaces the hand-coded Path approximation in the existing PersonalScribeLogoView.
 //
 // Usage:

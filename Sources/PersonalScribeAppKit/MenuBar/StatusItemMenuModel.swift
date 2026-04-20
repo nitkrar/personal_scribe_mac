@@ -60,7 +60,7 @@ struct StatusItemMenuModel: Equatable {
     /// History
     /// Settings
     /// ---
-    /// Quit Seshat
+    /// Quit <AppBrand.displayName>
     /// ```
     static func makeUnified(
         sessionState: SessionState,

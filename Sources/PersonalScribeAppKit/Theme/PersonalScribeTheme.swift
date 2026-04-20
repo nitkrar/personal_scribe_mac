@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Seshat design-system tokens (palette, typography, spacing, radii).
+/// PersonalScribe design-system tokens (palette, typography, spacing, radii).
 ///
 /// This is the **single source of truth** for every colour, font, and
 /// spacing value used anywhere in `PersonalScribeAppKit`. Every Phase 2+ view
@@ -194,17 +194,73 @@ public enum PersonalScribeTheme {
             weight: .regular,
             design: .default
         )
+
+        // MARK: v2 additions — unified-window redesign
+        // (App UI design bundle, 2026-04-19). These coexist with the
+        // existing tokens above; consumers pick whichever name reads
+        // best in context.
+
+        /// 26pt bold — hero headers in the unified window.
+        public static let largeTitle = FontToken(
+            pointSize: 26,
+            weight: .bold,
+            design: .default
+        )
+
+        /// 20pt bold — section titles (Home, Transcriptions, Modes, Settings).
+        /// Same point-size as `display`; kept as a distinct token so
+        /// callsites match the Manus reference vocabulary.
+        public static let title = FontToken(
+            pointSize: 20,
+            weight: .bold,
+            design: .default
+        )
+
+        /// 15pt semibold — card titles, emphasised list rows.
+        public static let headline = FontToken(
+            pointSize: 15,
+            weight: .semibold,
+            design: .default
+        )
+
+        /// 11pt semibold — uppercase section labels ("TODAY", "YESTERDAY").
+        public static let sectionLabel = FontToken(
+            pointSize: 11,
+            weight: .semibold,
+            design: .default
+        )
+
+        /// 11pt semibold — bold caption variant for stat-card values.
+        public static let captionBold = FontToken(
+            pointSize: 11,
+            weight: .semibold,
+            design: .default
+        )
     }
 
     // MARK: - Radius & spacing
 
     public enum Radius {
-        /// Pill-overlay capsule radius — 12pt.
+        /// Pill-overlay (pre-capsule) radius — 12pt. Retained for any
+        /// rounded-rect pill variants; the new 180×34 floating pill uses
+        /// `capsule` instead.
         public static let pill: CGFloat = 12
         /// Main window corner radius — 14pt.
         public static let window: CGFloat = 14
         /// List-row / card radius — 8pt.
         public static let row: CGFloat = 8
+
+        // MARK: v2 additions — unified-window redesign
+        /// 6pt — tight chips, badges.
+        public static let sm: CGFloat = 6
+        /// 10pt — medium rounded surfaces.
+        public static let md: CGFloat = 10
+        /// 14pt — large rounded surfaces (alias of `window`).
+        public static let lg: CGFloat = 14
+        /// 100pt — full capsule for the 180×34 floating pill.
+        /// Any value ≥ half the view's height produces a capsule; 100
+        /// is a comfortable margin.
+        public static let capsule: CGFloat = 100
     }
 
     public enum Spacing {
@@ -214,6 +270,107 @@ public enum PersonalScribeTheme {
         public static let rowPadding: CGFloat = 12
         /// Icon padding — 8pt.
         public static let iconPadding: CGFloat = 8
+
+        // MARK: v2 additions — unified-window redesign
+        /// 4pt — very tight gaps (icon-to-label inside a chip).
+        public static let xs: CGFloat = 4
+        /// 8pt — default tight stack spacing.
+        public static let sm: CGFloat = 8
+        /// 12pt — default row spacing.
+        public static let md: CGFloat = 12
+        /// 16pt — section-internal spacing.
+        public static let lg: CGFloat = 16
+        /// 24pt — inter-section spacing.
+        public static let xl: CGFloat = 24
+        /// 32pt — top-level page spacing.
+        public static let xxl: CGFloat = 32
+    }
+
+    // MARK: - Accent (v2 — unified-window redesign)
+
+    /// Champagne-family accent tokens, same in both light and dark mode.
+    /// Reference: `plans/App UI design/SeshatTheme.swift` (adopted verbatim;
+    /// type name adjusted to PersonalScribe naming per project rule).
+    public enum Accent {
+        /// #CCB990 — primary champagne accent.
+        public static let champagne = color(hex: "CCB990")
+        /// #B89961 — deeper gold for hover / active variants.
+        public static let gold = color(hex: "B89961")
+    }
+
+    // MARK: - Status semantic colours (v2)
+
+    public enum Status {
+        /// #32C756 — success / connected / ready.
+        public static let success = color(hex: "32C756")
+        /// #FF9E0A — warning / attention.
+        public static let warning = color(hex: "FF9E0A")
+        /// #FF453A — destructive / stop / error.
+        public static let error = color(hex: "FF453A")
+        /// #007AFF — system blue for actionable links / CTA.
+        public static let link = color(hex: "007AFF")
+    }
+
+    // MARK: - Separator (v2)
+
+    public enum Separator {
+        /// #D1D1D6 — standard row divider.
+        public static let primary = color(hex: "D1D1D6")
+        /// #E5E5EA — subtle background-level divider.
+        public static let subtle = color(hex: "E5E5EA")
+    }
+
+    // MARK: - Pill explicit palette (v2)
+    //
+    // The floating pill uses an EXPLICIT appearance regardless of the
+    // main window's light/dark mode — it must read consistently over
+    // any background. Selection is driven by the `PillAppearance` enum
+    // (lands in a later sub-commit).
+
+    public enum Pill {
+        public enum Dark {
+            /// #1A1B2E — dark-navy pill surface.
+            public static let background = color(hex: "1A1B2E")
+            /// #D4D0C8 — champagne waveform trace on dark pill.
+            public static let waveform = color(hex: "D4D0C8")
+            /// #F75138 — stop-button red on dark pill.
+            public static let stop = color(hex: "F75138")
+            /// #99999E — cancel / secondary glyph on dark pill.
+            public static let cancel = color(hex: "99999E")
+        }
+
+        public enum Light {
+            /// #F0EDE8 — pale-cream pill surface.
+            public static let background = color(hex: "F0EDE8")
+            /// #333338 — dark waveform trace on light pill.
+            public static let waveform = color(hex: "333338")
+            /// #F75138 — same stop-red regardless of pill mode.
+            public static let stop = color(hex: "F75138")
+            /// #808082 — cancel / secondary glyph on light pill.
+            public static let cancel = color(hex: "808082")
+        }
+    }
+
+    // MARK: - Row heights (v2)
+
+    public enum RowHeight {
+        /// 36pt — compact settings toggle row.
+        public static let compact: CGFloat = 36
+        /// 52pt — mode / permission card row.
+        public static let standard: CGFloat = 52
+        /// 56pt — transcript list row (two-line body + timestamp).
+        public static let tall: CGFloat = 56
+    }
+
+    // MARK: - Layout constants (v2)
+
+    public enum Layout {
+        /// 200pt — fixed sidebar width in the unified window.
+        public static let sidebarWidth: CGFloat = 200
+        /// 760pt — minimum window width.
+        public static let windowMinWidth: CGFloat = 760
+        /// 520pt — minimum window height.
+        public static let windowMinHeight: CGFloat = 520
     }
 
     // MARK: - Component metrics

@@ -447,7 +447,7 @@ final class MenuBarSceneModelTests: XCTestCase {
         try await prepareTask.value
     }
 
-    func testCanInstantiateSeshatAppWithCoordinatorAndPermissionService() async throws {
+    func testCanInstantiatePersonalScribeAppWithCoordinatorAndPermissionService() async throws {
         let coordinator = try makeCoordinator()
         let app = PersonalScribeApp(
             coordinator: coordinator,
