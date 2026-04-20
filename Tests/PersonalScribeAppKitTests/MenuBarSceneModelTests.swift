@@ -129,47 +129,6 @@ final class MenuBarSceneModelTests: XCTestCase {
                        "Denied microphone state should not regress into a legacy prompt path")
     }
 
-    func testSettingsMenuActionRaisesOpenSettingsRequestedSignal() async throws {
-        _ = NSApplication.shared
-        let coordinator = try makeCoordinator()
-        let model = try makeModel(coordinator: coordinator)
-        var openSettingsRequestCount = 0
-        let controller = StatusItemController(
-            sceneModel: model,
-            openHistory: {},
-            openSettings: {
-                openSettingsRequestCount += 1
-            }
-        )
-
-        controller.performMenuAction(.openSettings)
-
-        XCTAssertEqual(openSettingsRequestCount, 1)
-    }
-
-    func testHistoryMenuActionRaisesOpenNotesRequestedSignal() async throws {
-        _ = NSApplication.shared
-        let coordinator = try makeCoordinator()
-        let model = try makeModel(coordinator: coordinator)
-        var openNotesRequestCount = 0
-        let controller = StatusItemController(
-            sceneModel: model,
-            openHistory: {
-                openNotesRequestCount += 1
-            },
-            openSettings: {}
-        )
-
-        controller.performMenuAction(.openHistory)
-
-        XCTAssertEqual(openNotesRequestCount, 1)
-    }
-
-    // testHistoryMenuItemIsDisabledWhenOnboardingIsIncomplete was
-    // deleted when the onboarding gate was removed; equivalent
-    // positive-behaviour assertion now lives in
-    // StatusItemMenuModelTests.testSettingsAndHistoryAlwaysEnabledRegardlessOfOnboardingState.
-
     func testStartObservingPublishesRecordingAfterCoordinatorToggle() async throws {
         let coordinator = try makeCoordinator()
         let model = try makeModel(coordinator: coordinator)

@@ -13,9 +13,6 @@ struct PersonalScribeAppMain: App {
     @StateObject private var sceneModel: MenuBarSceneModel
     @StateObject private var pillController: PillOverlayController
     @StateObject private var statusItemController: StatusItemControllerHost
-    @StateObject private var onboardingController: OnboardingWindowControllerHost
-    @StateObject private var notesWindowController: NotesWindowControllerHost
-    @StateObject private var settingsWindowController: SettingsWindowControllerHost
     @StateObject private var unifiedWindowController: UnifiedWindowControllerHost
 
     init() {
@@ -39,9 +36,6 @@ struct PersonalScribeAppMain: App {
         overlayPanelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
         defaults: UserDefaults = .standard,
         isAccessibilityTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
-        notesWindowControllerFactory: @escaping @MainActor () -> NotesWindowController = {
-            NotesWindowController(transcriptReader: PersonalScribeAppMain.defaultTranscriptReader())
-        },
         startupCoordinator: AppStartupCoordinator? = nil
     ) {
         // Run the one-shot UserDefaults rename migration before any preference
@@ -71,11 +65,6 @@ struct PersonalScribeAppMain: App {
                 )
             )
         var clipboardOnlyNotice: (@MainActor () -> Void)?
-        let onboardingControllerHost = OnboardingWindowControllerHost(
-            defaults: defaults,
-            startupCoordinator: startupCoordinator,
-            permissionService: appPermissionService
-        )
         let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
         let isOnboardingCompleteProvider: @MainActor () -> Bool = {
             onboardingCompletionPreference.resolve()
@@ -101,10 +90,6 @@ struct PersonalScribeAppMain: App {
             audioLevelPublisher: nil,
             defaults: defaults,
             onTap: {
-                guard onboardingControllerHost.requestInteractionAccess() else {
-                    return
-                }
-
                 Task { await coordinator.toggle() }
             },
             panelBuilder: overlayPanelBuilder
@@ -112,9 +97,6 @@ struct PersonalScribeAppMain: App {
         clipboardOnlyNotice = {
             pillController.showClipboardOnlyNotice()
         }
-        let notesWindowControllerHost = NotesWindowControllerHost(
-            controllerFactory: notesWindowControllerFactory
-        )
         let metricsReader: any MetricsReading = {
             do {
                 return try AppComposition.makeMetricsReader()
@@ -136,8 +118,6 @@ struct PersonalScribeAppMain: App {
                 )
             }
         )
-        var showNotesWindow: @MainActor () -> Void = {}
-        var showSettingsWindow: @MainActor () -> Void = {}
         let showUnifiedWindow: @MainActor () -> Void = {
             unifiedWindowControllerHost.showWindow(nil)
         }
@@ -145,37 +125,8 @@ struct PersonalScribeAppMain: App {
             sceneModel: sceneModel,
             appStore: appStore,
             openHome: showUnifiedWindow,
-            openHistory: {
-                showNotesWindow()
-            },
-            openSettings: {
-                showSettingsWindow()
-            },
             isOnboardingCompleteProvider: isOnboardingCompleteProvider
         )
-        let settingsWindowControllerHost = SettingsWindowControllerHost(
-            controllerFactory: {
-                SettingsWindowController(
-                    defaults: defaults,
-                    menuBarVisibilityProvider: {
-                        statusItemControllerHost.isMenuBarVisible
-                    },
-                    menuBarVisibilitySetter: { isVisible in
-                        statusItemControllerHost.setMenuBarVisible(isVisible)
-                    }
-                )
-            }
-        )
-        showSettingsWindow = {
-            settingsWindowControllerHost.showWindow(nil as Any?)
-        }
-        showNotesWindow = {
-            guard isOnboardingCompleteProvider() else {
-                return
-            }
-
-            notesWindowControllerHost.showWindow(nil)
-        }
         _sceneModel = StateObject(wrappedValue: sceneModel)
         _pillController = StateObject(
             wrappedValue: pillController
@@ -183,21 +134,21 @@ struct PersonalScribeAppMain: App {
         _statusItemController = StateObject(
             wrappedValue: statusItemControllerHost
         )
-        _onboardingController = StateObject(
-            wrappedValue: onboardingControllerHost
-        )
-        _notesWindowController = StateObject(
-            wrappedValue: notesWindowControllerHost
-        )
-        _settingsWindowController = StateObject(
-            wrappedValue: settingsWindowControllerHost
-        )
         _unifiedWindowController = StateObject(
             wrappedValue: unifiedWindowControllerHost
         )
 
         sceneModel.startObserving()
-        onboardingControllerHost.start()
+
+        // First-launch onboarding routing: if permissions haven't been
+        // granted yet, auto-open the unified window to the Settings tab
+        // so the Permissions sub-tab is one click away. Replaces the
+        // pre-M4 OnboardingWindowController auto-open.
+        if !isOnboardingCompleteProvider() {
+            Task { @MainActor in
+                unifiedWindowControllerHost.showWindow(selecting: .settings)
+            }
+        }
     }
 
     var body: some Scene {
@@ -276,8 +227,6 @@ final class StatusItemControllerHost: ObservableObject {
         sceneModel: MenuBarSceneModel,
         appStore: AppStore,
         openHome: @escaping @MainActor () -> Void = {},
-        openHistory: @escaping @MainActor () -> Void = {},
-        openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
         }
@@ -286,8 +235,6 @@ final class StatusItemControllerHost: ObservableObject {
             sceneModel: sceneModel,
             appStore: appStore,
             openHome: openHome,
-            openHistory: openHistory,
-            openSettings: openSettings,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider
         )
     }

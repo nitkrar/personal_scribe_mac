@@ -39,8 +39,6 @@ struct StatusItemMenuModel: Equatable {
     enum ActionID: String, Equatable {
         case startStopRecording
         case openHome
-        case openHistory
-        case openSettings
         case openMicrophoneSystemSettings
         case openInputMonitoringSystemSettings
         case quit
@@ -59,8 +57,6 @@ struct StatusItemMenuModel: Equatable {
     /// Dictation                              (header, non-interactive)
     /// Start Recording ⌥⌘                     (or "Stop Recording")
     /// Home                                    (opens unified window)
-    /// History                                 (legacy NotesWindow — kept until M4)
-    /// Settings
     /// ---
     /// Quit <AppBrand.displayName>
     /// ```
@@ -117,20 +113,6 @@ struct StatusItemMenuModel: Equatable {
         items.append(.action(ActionItem(
             id: .openHome,
             title: "Home",
-            keyEquivalent: "",
-            isEnabled: true
-        )))
-
-        items.append(.action(ActionItem(
-            id: .openHistory,
-            title: "History",
-            keyEquivalent: "",
-            isEnabled: true
-        )))
-
-        items.append(.action(ActionItem(
-            id: .openSettings,
-            title: "Settings",
             keyEquivalent: "",
             isEnabled: true
         )))

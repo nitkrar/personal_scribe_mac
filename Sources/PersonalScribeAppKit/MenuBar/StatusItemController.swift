@@ -9,8 +9,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let sceneModel: MenuBarSceneModel
     private let appStore: AppStore
     private let openHome: @MainActor () -> Void
-    private let openHistory: @MainActor () -> Void
-    private let openSettings: @MainActor () -> Void
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
     private let openURL: @MainActor (URL) -> Void
     private let logger: PersonalScribeLogger
@@ -22,8 +20,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         sceneModel: MenuBarSceneModel,
         defaults: UserDefaults = .standard,
         openHome: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "Home"),
-        openHistory: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "History"),
-        openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
@@ -35,8 +31,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             appStore: sceneModel.appStore,
             defaults: defaults,
             openHome: openHome,
-            openHistory: openHistory,
-            openSettings: openSettings,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             openURL: openURL,
             openMicrophoneSystemSettings: openMicrophoneSystemSettings,
@@ -50,8 +44,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         appStore: AppStore,
         defaults: UserDefaults = .standard,
         openHome: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "Home"),
-        openHistory: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "History"),
-        openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
@@ -62,8 +54,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.sceneModel = sceneModel
         self.appStore = appStore
         self.openHome = openHome
-        self.openHistory = openHistory
-        self.openSettings = openSettings
         self.isOnboardingCompleteProvider = isOnboardingCompleteProvider ?? {
             onboardingCompletionPreference.resolve()
         }
@@ -126,10 +116,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
         case .openHome:
             openHome()
-        case .openHistory:
-            openHistory()
-        case .openSettings:
-            openSettings()
         case .openMicrophoneSystemSettings:
             openURL(PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .microphone))
         case .openInputMonitoringSystemSettings:

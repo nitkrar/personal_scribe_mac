@@ -17,14 +17,12 @@ final class StatusItemMenuModelTests: XCTestCase {
             activeModeName: ModeRegistry.dictation.name
         )
 
-        XCTAssertEqual(model.items.count, 7)
+        XCTAssertEqual(model.items.count, 5)
         assertHeader(model.items[0], ModeRegistry.dictation.name)
         assertAction(model.items[1], id: .startStopRecording, title: "Start Recording   ⌥⌥")
         assertAction(model.items[2], id: .openHome, title: "Home")
-        assertAction(model.items[3], id: .openHistory, title: "History")
-        assertAction(model.items[4], id: .openSettings, title: "Settings")
-        XCTAssertEqual(model.items[5], .separator)
-        assertAction(model.items[6], id: .quit, title: "Quit \(AppBrand.displayName)")
+        XCTAssertEqual(model.items[3], .separator)
+        assertAction(model.items[4], id: .quit, title: "Quit \(AppBrand.displayName)")
     }
 
     func testActiveModeNameIsReflectedInHeader() {
@@ -35,34 +33,6 @@ final class StatusItemMenuModelTests: XCTestCase {
             activeModeName: "Long-form"
         )
         assertHeader(model.items[0], "Long-form")
-    }
-
-    func testSettingsAndHistoryAlwaysEnabledRegardlessOfOnboardingState() {
-        // Regression guard: previously Settings + History were gated on
-        // isOnboardingComplete, which grey-ed them out after a
-        // `defaults delete com.nitkrar.personal_scribe` reset (user stuck with
-        // no way to reopen onboarding). Menu items should always be
-        // enabled; routing into the Settings window handles the
-        // permissions-needed UX instead.
-        let model = StatusItemMenuModel.makeUnified(
-            sessionState: .idle,
-            micPermission: .granted,
-            inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
-            isOnboardingComplete: false
-        )
-
-        guard case let .action(history) = model.items[3] else {
-            return XCTFail("Expected History action at index 3")
-        }
-        guard case let .action(settings) = model.items[4] else {
-            return XCTFail("Expected Settings action at index 4")
-        }
-
-        XCTAssertEqual(history.id, .openHistory)
-        XCTAssertTrue(history.isEnabled)
-        XCTAssertEqual(settings.id, .openSettings)
-        XCTAssertTrue(settings.isEnabled)
     }
 
     // MARK: - Recording-toggle title switching
@@ -175,7 +145,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             XCTAssertNotEqual(first.id, .openMicrophoneSystemSettings)
             XCTAssertNotEqual(first.id, .openInputMonitoringSystemSettings)
         }
-        XCTAssertEqual(model.items.count, 7, "No warning items expected")
+        XCTAssertEqual(model.items.count, 5, "No warning items expected")
     }
 
     // MARK: - Action identifiers

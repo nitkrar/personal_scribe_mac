@@ -63,7 +63,7 @@ final class PermissionsSubTabViewModel: ObservableObject {
         // `objectWillChange` fires before the service mutates its
         // `@Published` storage, so defer the snapshot read to the next
         // runloop tick to pick up the post-change value. Mirrors the
-        // pattern in `PermissionServiceAdapter` / `OnboardingViewModel`.
+        // pattern in `PermissionServiceAdapter`.
         service.objectWillChange.sink { _ in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
