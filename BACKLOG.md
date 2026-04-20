@@ -2,7 +2,30 @@
 
 ## Status
 
-**Phase 1 gate met.** Record → transcribe → paste → persist loop is shipped and dogfooded. Transcript history lands in `~/Library/Application Support/personal_scribe/recordings/transcripts.jsonl`. Phase 2 = unified architecture + visual identity (see `plans/PLAN_PHASES.md` and `plans/seshat_agent_bundle/`).
+**M1–M5 on trunk (2026-04-20). Ready for dogfood.** Phase 1 (record loop) + Phase 2 (unified architecture + visual identity) + the rename pass (Seshat→PersonalScribe/Ninimma/personal_scribe) all landed. Test suite: **665 tests, 1 skipped, 0 failures, 0 flakes.** Trunk HEAD: `ce02bf1`. Remote: `https://github.com/nitkrar/personal_scribe_mac`.
+
+### M1–M5 closures (post-Phase-1)
+
+| Milestone | Trunk commits | Summary |
+|---|---|---|
+| **Rename pass** | `5ce4984` · `defb8fb`/`896cf13` · `2cc1e7e` · `24a4fdc`/`a9a8f66` · `ab0ad5f` · `11fb91d` · `b4e0795` | `Seshat` → `PersonalScribe` (code) / `Ninimma` (display) / `personal_scribe` (folder + bundle ID suffix). All 8 phases in `plans/rename/PLAN.md` shipped. Repo folder + GitHub repo both renamed. |
+| **M1 — Brand + theme tokens** | `aae802a` | v2 design-system tokens added to `PersonalScribeTheme`: `Accent`, `Status`, `Separator`, `Pill.Dark/Light`, extended `Typography`/`Spacing`/`Radius`, `RowHeight`, `Layout`. Purely additive to v1 `Palette`. |
+| **M2 — WindowTint + PillAppearance** | `980d6ad` · `b2468fe` · `f6b1d0f` · `8120c8f` · `fa17f12` · `c4bf008` | Two user-selectable theme axes (`Warm/Neutral/Dark` × `Dark/Light/System`) + Settings General pickers + Settings NSWindow + pill NSPanel live-respond to `UserDefaults` changes. |
+| **M3 — Unified NavigationSplitView window** | `1ad54f7` · `73f0ffd` · `b54d639` · `7108016` · `afccbec` · `b9d43df` · `a5ccae2` · `1e440db` | Home / Transcriptions / Modes / Settings tabs. Home tab consumes L8 Metrics (rollups + recent). Transcriptions tab replaces NotesView. Settings has General + Permissions + About sub-tabs. |
+| **M4 — Pill voice modulation + legacy cleanup** | `56b15db` · `c92171f` · `b2dc0ba` · `a96089c` · `ecea168` · `04d0616` | `SineWaveView` is audio-level reactive (500ms decay; silence → flat). `AsyncStream<Float>` → `PassthroughSubject<Double>` bridge in `PersonalScribeAppMain`. Deleted `NotesWindowController`, `SettingsWindowController`, `OnboardingWindowController` + tests. Menu simplified. |
+| **M5 — Menu bar polish** | `344cf55` · `fadd6e7` · `158c00d` · `64710eb` | SF Symbol icons per item + brand header (`pencil.and.scribble` + `AppBrand.displayName`) + Paste Last Transcript handler (reads last transcript, routes through `OutputService`) + Microphone submenu (`AVCaptureDevice.DiscoverySession` → persist UID → CoreAudio `kAudioOutputUnitProperty_CurrentDevice` applied pre-recording). |
+| **Tooling** | `ac50bda` · `67a6d95` · `ce02bf1` | `scripts/package.sh --reset` for fresh-install dogfood sim (wipes installed app + `Application Support/personal_scribe/` + UserDefaults domain + TCC grants + `.build/`). Flake sweep: 7 of 8 fixed via `ContinuousClock` + `Task.sleep` polling; 1 quarantined with `XCTSkip` — see `feedback_stateobject_in_tests.md`. |
+
+### Known debts (cosmetic / optional end-of-phase cleanup)
+
+- `ecea168` mis-labeled "M4.4a" but content is actually M4.4b Settings deletions (cross-agent git-hygiene breach during parallel worktree dispatch). Rewordable via `git rebase -i` if desired.
+- `SettingsLayout.windowWidth` / `windowHeight` constants in `Sources/PersonalScribeAppKit/Settings/SettingsLayout.swift` are dead (pre-M4 SettingsWindow consumer deleted).
+- `StatusItemController.defaultPhase3Placeholder` is misnamed now that `openHome` is its only consumer.
+
+### Still open (not in M1–M5 scope)
+
+- **Hotkey bug #22** (row below) — `GlobalHotkeyMonitor` dual-monitor fix. Stop-via-hotkey fails when recording was started via pill/menu. Add `addLocalMonitorForEvents` parallel to existing `addGlobalMonitorForEvents`.
+- **Dogfood rebuild + manual-verification walkthrough.** Runbook entries for M2 / M3.1 / M4.1 / M5.3 live in `Tests/PersonalScribeAppKitTests/ManualVisualVerification.md`. Nothing runtime-verified yet.
 
 ## Completed Explorations
 
