@@ -256,9 +256,9 @@ public struct PillOverlayView: View {
 ///
 /// ## 3D depth treatment (2026-04-20)
 /// A vertical gradient fill (top face slightly lighter than the base
-/// colour) combined with a hairline specular rim and two layered
-/// shadows gives the pill a floating, physical quality on dark
-/// desktops without any blur or NSVisualEffectView overhead.
+/// colour) combined with a hairline specular rim and a single clean
+/// shadow gives the pill a floating quality on dark desktops without
+/// any blur or NSVisualEffectView overhead.
 ///
 /// ## Fuzzy-edge fix (2026-04-18)
 /// NSPanel shadow disabled at the panel layer; `.clipShape` applied
@@ -304,8 +304,6 @@ private struct PillChrome: ViewModifier {
                     style: .continuous
                 )
             )
-            // Dual shadow: large ambient + tight key light.
-            .shadow(color: .black.opacity(0.18), radius: 24, y: 8)  // ambient
-            .shadow(color: .black.opacity(0.45), radius: 8,  y: 4)  // key
+            .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
     }
 }
