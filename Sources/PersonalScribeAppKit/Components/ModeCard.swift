@@ -80,15 +80,30 @@ public struct ModeCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.row, style: .continuous)
-                .fill(palette.surface)
+                // Active card uses elevatedSurface for a subtle lift;
+                // inactive cards stay on the flat surface token.
+                .fill(isActive ? palette.elevatedSurface : palette.surface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.row, style: .continuous)
                 .strokeBorder(
-                    palette.brandChampagne.opacity(Layout.borderOpacity),
+                    // Active card gets a stronger champagne border.
+                    palette.brandChampagne.opacity(
+                        isActive ? Layout.activeBorderOpacity : Layout.borderOpacity
+                    ),
                     lineWidth: Layout.borderWidth
                 )
         )
+        // Champagne left accent bar on the active card.
+        .overlay(alignment: .leading) {
+            if isActive {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(palette.brandChampagne)
+                    .frame(width: 3)
+                    .padding(.vertical, 6)
+                    .padding(.leading, 0)
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(modeName) mode, \(statusPillLabel), \(subtitle)")
     }
@@ -100,6 +115,7 @@ public struct ModeCard: View {
         static let innerSpacing: CGFloat = 4
         static let borderWidth: CGFloat = 0.5
         static let borderOpacity: Double = 0.15
+        static let activeBorderOpacity: Double = 0.40
     }
 
     // MARK: - Pure formatting helpers (tested)
