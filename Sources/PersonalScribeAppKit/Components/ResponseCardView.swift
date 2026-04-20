@@ -30,7 +30,7 @@ struct ResponseCardView: View {
                         .strokeBorder(
                             LinearGradient(
                                 colors: [
-                                    palette.brandChampagne.opacity(0.4),
+                                    PersonalScribeTheme.Pill.Dark.waveform.opacity(0.35),
                                     Color.clear
                                 ],
                                 startPoint: .top,
@@ -44,20 +44,24 @@ struct ResponseCardView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 )
 
-            // Body text — leading-aligned, 13pt, champagne/cream
+            // Body text — leading-aligned, 12pt, scheme-invariant
+            // champagne fg. Hard 2-line limit keeps the card compact;
+            // longer responses are truncated with an ellipsis.
             Text(text)
-                .font(.system(size: 13))
-                .foregroundColor(palette.pillForegroundText)
-                .lineSpacing(4)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .font(.system(size: 12))
+                .foregroundColor(PersonalScribeTheme.Pill.Dark.waveform)
+                .lineSpacing(3)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             // Dismiss button
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(palette.brandChampagne.opacity(0.6))
+                    .foregroundColor(PersonalScribeTheme.Pill.Dark.cancel)
                     .padding(6)
             }
             .buttonStyle(.plain)

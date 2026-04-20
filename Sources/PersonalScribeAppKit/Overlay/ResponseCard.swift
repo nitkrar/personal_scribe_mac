@@ -43,13 +43,16 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
 
     /// Horizontal padding (each side) that the owning SwiftUI view
     /// applies. Used to estimate layout height.
-    private static let horizontalTextPadding: CGFloat = 12
+    private static let horizontalTextPadding: CGFloat = 10
     /// Vertical padding (top + bottom combined) + small buffer so
     /// descenders + bottom shadow don't clip.
-    private static let verticalTextPaddingTotal: CGFloat = 24
-    /// Minimum card width — matches the wispr reference card so it
-    /// doesn't squash when the anchor pill is very narrow.
-    private static let minimumCardWidth: CGFloat = 320
+    private static let verticalTextPaddingTotal: CGFloat = 18
+    /// Minimum card width. Narrower than the old 320pt so short
+    /// responses don't leave a huge empty card.
+    private static let minimumCardWidth: CGFloat = 200
+    /// Maximum card width — caps very long responses to keep the
+    /// card compact and readable.
+    private static let maximumCardWidth: CGFloat = 320
     /// Gap between the top of the pill window and the bottom of the
     /// card.
     private static let gapAbovePill: CGFloat = 8
@@ -97,7 +100,10 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
         dismissTimer?.invalidate()
 
         let pillFrame = pillWindow.frame
-        let cardWidth = max(pillFrame.width, Self.minimumCardWidth)
+        let cardWidth = min(
+            max(pillFrame.width, Self.minimumCardWidth),
+            Self.maximumCardWidth
+        )
         let cardHeight = Self.estimatedHeight(for: text, width: cardWidth)
 
         let x = pillFrame.midX - cardWidth / 2
