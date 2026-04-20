@@ -183,8 +183,8 @@ public actor FluidAudioTranscriber: Transcribing {
         do {
             let aggregate = try PCMBuffer(
                 samples: bufferedSamples,
-                sampleRate: firstBuffer?.sampleRate ?? SeshatConfig.sampleRate,
-                channelCount: firstBuffer?.channelCount ?? SeshatConfig.channelCount,
+                sampleRate: firstBuffer?.sampleRate ?? AppConfig.sampleRate,
+                channelCount: firstBuffer?.channelCount ?? AppConfig.channelCount,
                 timestamp: firstBuffer?.timestamp ?? ContinuousClock().now
             )
 
@@ -244,7 +244,7 @@ private final class DownloadProgressBroadcaster: @unchecked Sendable {
 
 private extension FluidAudioTranscriber {
     func modelDirectory() throws -> URL {
-        try SeshatConfig.directory(for: descriptor)
+        try AppConfig.directory(for: descriptor)
     }
 
     func ensureValidDownloadedModel(at modelDirectory: URL) async throws {

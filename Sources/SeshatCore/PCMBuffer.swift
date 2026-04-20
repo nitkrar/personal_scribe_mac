@@ -8,8 +8,8 @@ public struct PCMBuffer: Sendable, Equatable {
 
     public init(
         samples: [Float],
-        sampleRate: Double = SeshatConfig.sampleRate,
-        channelCount: Int = SeshatConfig.channelCount,
+        sampleRate: Double = AppConfig.sampleRate,
+        channelCount: Int = AppConfig.channelCount,
         timestamp: ContinuousClock.Instant
     ) throws {
         guard sampleRate > 0, channelCount > 0, samples.count.isMultiple(of: channelCount) else {

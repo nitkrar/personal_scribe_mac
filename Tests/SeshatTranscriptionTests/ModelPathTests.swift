@@ -5,8 +5,8 @@ import SeshatCore
 final class ModelPathTests: SeshatTranscriptionFilesystemTestCase {
     func testModelRootLivesUnderTestingOverride() throws {
         let descriptor = ModelRegistry.parakeetTDT06Bv2
-        let modelsDirectory = try SeshatConfig.modelsDirectory()
-        let modelRoot = try SeshatConfig.directory(for: descriptor)
+        let modelsDirectory = try AppConfig.modelsDirectory()
+        let modelRoot = try AppConfig.directory(for: descriptor)
 
         XCTAssertTrue(modelRoot.path.hasPrefix(modelsDirectory.path))
         XCTAssertEqual(modelRoot.lastPathComponent, descriptor.id)
@@ -14,7 +14,7 @@ final class ModelPathTests: SeshatTranscriptionFilesystemTestCase {
 
     func testModelsExistRequiresExactFiveExpectedPaths() throws {
         let descriptor = ModelRegistry.parakeetTDT06Bv2
-        let modelRoot = try SeshatConfig.directory(for: descriptor)
+        let modelRoot = try AppConfig.directory(for: descriptor)
 
         try FileManager.default.createDirectory(at: modelRoot, withIntermediateDirectories: true)
 

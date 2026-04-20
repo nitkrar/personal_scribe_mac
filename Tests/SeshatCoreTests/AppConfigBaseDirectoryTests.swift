@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import SeshatCore
 
-final class SeshatConfigTests: XCTestCase {
+final class AppConfigBaseDirectoryTests: XCTestCase {
     private static let stateLock = NSLock()
 
     func testBaseDirectoryUsesTestingOverrideAndModelsNestUnderIt() throws {
@@ -11,15 +11,15 @@ final class SeshatConfigTests: XCTestCase {
 
         let baseDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        SeshatConfig.testingBaseDirectoryOverride = baseDirectory
+        AppConfig.testingBaseDirectoryOverride = baseDirectory
         defer {
-            SeshatConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
-            SeshatConfig.testingBaseDirectoryOverride = nil
+            AppConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
+            AppConfig.testingBaseDirectoryOverride = nil
             unsetenv("SESHAT_BASE_DIR")
         }
 
-        let appSupport = try SeshatConfig.baseDirectory()
-        let models = try SeshatConfig.modelsDirectory()
+        let appSupport = try AppConfig.baseDirectory()
+        let models = try AppConfig.modelsDirectory()
 
         XCTAssertEqual(
             appSupport,
@@ -45,12 +45,12 @@ final class SeshatConfigTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         setenv("SESHAT_BASE_DIR", override.path, 1)
         defer {
-            SeshatConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
-            SeshatConfig.testingBaseDirectoryOverride = nil
+            AppConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
+            AppConfig.testingBaseDirectoryOverride = nil
             unsetenv("SESHAT_BASE_DIR")
         }
 
-        let baseDirectory = try SeshatConfig.baseDirectory()
+        let baseDirectory = try AppConfig.baseDirectory()
 
         XCTAssertEqual(baseDirectory, override.standardizedFileURL)
     }
@@ -61,21 +61,21 @@ final class SeshatConfigTests: XCTestCase {
 
         let override = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        SeshatConfig.baseDirectoryPathPreference(defaults: .standard).persist(override.path)
+        AppConfig.baseDirectoryPathPreference(defaults: .standard).persist(override.path)
         defer {
-            SeshatConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
-            SeshatConfig.testingBaseDirectoryOverride = nil
+            AppConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
+            AppConfig.testingBaseDirectoryOverride = nil
             unsetenv("SESHAT_BASE_DIR")
         }
 
-        let baseDirectory = try SeshatConfig.baseDirectory()
+        let baseDirectory = try AppConfig.baseDirectory()
 
         XCTAssertEqual(baseDirectory, override.standardizedFileURL)
     }
 
     func testBaseDirectoryPathPreferenceDropsSeshatPrefix() {
         XCTAssertEqual(
-            SeshatConfig.baseDirectoryPathPreference(defaults: .standard).key,
+            AppConfig.baseDirectoryPathPreference(defaults: .standard).key,
             "BaseDirectoryPath"
         )
     }

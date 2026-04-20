@@ -220,7 +220,7 @@ private final class BlockingResampleBox: @unchecked Sendable {
 
         return try PCMBuffer(
             samples: samples,
-            sampleRate: SeshatConfig.sampleRate,
+            sampleRate: AppConfig.sampleRate,
             channelCount: 1,
             timestamp: timestamp
         )

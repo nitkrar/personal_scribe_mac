@@ -20,7 +20,7 @@ internal actor AudioResampler {
     ) {
         self.customResampleImpl = resampleImpl
         self.logger = SeshatLogger(category: SeshatLogCategory.audio)
-        self.inputSampleRate = SeshatConfig.sampleRate
+        self.inputSampleRate = AppConfig.sampleRate
     }
 
     internal func resample(
@@ -38,11 +38,11 @@ internal actor AudioResampler {
         timestamp: ContinuousClock.Instant
     ) throws -> PCMBuffer {
         // Fast path: input already at target rate — no conversion needed.
-        if inputSampleRate == SeshatConfig.sampleRate {
+        if inputSampleRate == AppConfig.sampleRate {
             return try PCMBuffer(
                 samples: monoSamples,
-                sampleRate: SeshatConfig.sampleRate,
-                channelCount: SeshatConfig.channelCount,
+                sampleRate: AppConfig.sampleRate,
+                channelCount: AppConfig.channelCount,
                 timestamp: timestamp
             )
         }
@@ -56,13 +56,13 @@ internal actor AudioResampler {
             ),
             let outputFormat = AVAudioFormat(
                 commonFormat: .pcmFormatFloat32,
-                sampleRate: SeshatConfig.sampleRate,
+                sampleRate: AppConfig.sampleRate,
                 channels: 1,
                 interleaved: false
             ),
             let converter = AVAudioConverter(from: inputFormat, to: outputFormat)
         else {
-            logger.error("Failed to create AVAudioConverter for \(inputSampleRate)Hz -> \(SeshatConfig.sampleRate)Hz")
+            logger.error("Failed to create AVAudioConverter for \(inputSampleRate)Hz -> \(AppConfig.sampleRate)Hz")
             throw SeshatError.resampleFailure
         }
 
@@ -82,7 +82,7 @@ internal actor AudioResampler {
             }
         }
 
-        let ratio = SeshatConfig.sampleRate / inputSampleRate
+        let ratio = AppConfig.sampleRate / inputSampleRate
         let outputCapacity = AVAudioFrameCount(Double(inputCapacity) * ratio + 1)
         guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: outputCapacity) else {
             logger.error("Failed to allocate output AVAudioPCMBuffer")
@@ -119,8 +119,8 @@ internal actor AudioResampler {
 
         return try PCMBuffer(
             samples: outputSamples,
-            sampleRate: SeshatConfig.sampleRate,
-            channelCount: SeshatConfig.channelCount,
+            sampleRate: AppConfig.sampleRate,
+            channelCount: AppConfig.channelCount,
             timestamp: timestamp
         )
     }

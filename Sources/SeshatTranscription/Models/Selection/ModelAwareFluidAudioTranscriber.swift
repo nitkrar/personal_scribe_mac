@@ -174,8 +174,8 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
         do {
             let aggregate = try PCMBuffer(
                 samples: bufferedSamples,
-                sampleRate: firstBuffer?.sampleRate ?? SeshatConfig.sampleRate,
-                channelCount: firstBuffer?.channelCount ?? SeshatConfig.channelCount,
+                sampleRate: firstBuffer?.sampleRate ?? AppConfig.sampleRate,
+                channelCount: firstBuffer?.channelCount ?? AppConfig.channelCount,
                 timestamp: firstBuffer?.timestamp ?? ContinuousClock().now
             )
 

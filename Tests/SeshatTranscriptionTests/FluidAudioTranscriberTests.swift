@@ -5,7 +5,7 @@ import SeshatCore
 
 final class FluidAudioTranscriberTests: SeshatTranscriptionFilesystemTestCase {
     func testPrepareThrowsModelLoadFailureWhenFluidAudioLoadThrows() async throws {
-        let modelRoot = try SeshatConfig.directory(for: ModelRegistry.parakeetTDT06Bv2)
+        let modelRoot = try AppConfig.directory(for: ModelRegistry.parakeetTDT06Bv2)
 
         try TestModelArtifacts.writeValid(to: modelRoot)
 

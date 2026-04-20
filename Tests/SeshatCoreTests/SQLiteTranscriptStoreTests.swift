@@ -203,15 +203,15 @@ final class SQLiteTranscriptStoreTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
 
         Self.configLock.lock()
-        SeshatConfig.testingBaseDirectoryOverride = baseDirectory
+        AppConfig.testingBaseDirectoryOverride = baseDirectory
         defer {
-            SeshatConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
-            SeshatConfig.testingBaseDirectoryOverride = nil
+            AppConfig.baseDirectoryPathPreference(defaults: .standard).persist(nil)
+            AppConfig.testingBaseDirectoryOverride = nil
             unsetenv("SESHAT_BASE_DIR")
             Self.configLock.unlock()
         }
 
-        let recordingsDirectory = try SeshatConfig.recordingsDirectory()
+        let recordingsDirectory = try AppConfig.recordingsDirectory()
         let databaseURL = recordingsDirectory.appendingPathComponent("transcripts.sqlite", isDirectory: false)
         let jsonlURL = recordingsDirectory.appendingPathComponent("transcripts.jsonl", isDirectory: false)
         let temporaryDatabaseURL = databaseURL.appendingPathExtension("tmp")

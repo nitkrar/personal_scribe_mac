@@ -8,7 +8,7 @@ public struct AdvancedTab: View {
     private let openInFinder: @MainActor (URL) -> Void
 
     public init(
-        baseDirectoryResult: Result<URL, Error> = Result { try SeshatConfig.baseDirectory() },
+        baseDirectoryResult: Result<URL, Error> = Result { try AppConfig.baseDirectory() },
         migrator: any BaseDirectoryMigrating = BaseDirectoryMigrator(),
         selectDirectory: @escaping @MainActor (URL?) -> URL? = Self.presentDirectoryPicker,
         openInFinder: @escaping @MainActor (URL) -> Void = {
@@ -135,7 +135,7 @@ final class AdvancedTabViewModel: ObservableObject {
     private let selectDirectory: @MainActor (URL?) -> URL?
 
     init(
-        baseDirectoryResult: Result<URL, Error> = Result { try SeshatConfig.baseDirectory() },
+        baseDirectoryResult: Result<URL, Error> = Result { try AppConfig.baseDirectory() },
         migrator: any BaseDirectoryMigrating = BaseDirectoryMigrator(),
         selectDirectory: @escaping @MainActor (URL?) -> URL?
     ) {

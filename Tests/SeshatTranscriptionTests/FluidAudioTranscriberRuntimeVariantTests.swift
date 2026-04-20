@@ -5,7 +5,7 @@ import SeshatCore
 final class FluidAudioTranscriberRuntimeVariantTests: SeshatTranscriptionFilesystemTestCase {
     func testPrepareLoadsModelsUsingDescriptorRuntimeVariant() async throws {
         let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
-        let modelRoot = try SeshatConfig.directory(for: descriptor)
+        let modelRoot = try AppConfig.directory(for: descriptor)
         let inference = StubInferenceClient()
         let transcriber = FluidAudioTranscriber(
             downloader: StubModelDownloader(),

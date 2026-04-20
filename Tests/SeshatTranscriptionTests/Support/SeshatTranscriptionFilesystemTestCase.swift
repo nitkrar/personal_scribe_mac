@@ -21,11 +21,11 @@ class SeshatTranscriptionFilesystemTestCase: XCTestCase {
             at: testRoot,
             withIntermediateDirectories: true
         )
-        SeshatConfig.testingBaseDirectoryOverride = testRoot
+        AppConfig.testingBaseDirectoryOverride = testRoot
     }
 
     override func tearDown() async throws {
-        SeshatConfig.testingBaseDirectoryOverride = nil
+        AppConfig.testingBaseDirectoryOverride = nil
         try? FileManager.default.removeItem(at: testRoot)
         try await super.tearDown()
     }

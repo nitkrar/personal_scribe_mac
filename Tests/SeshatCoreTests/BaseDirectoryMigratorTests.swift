@@ -10,17 +10,17 @@ final class BaseDirectoryMigratorTests: XCTestCase {
         let sourceBase = try makeTemporaryDirectory()
         let destinationBase = try makeTemporaryDirectory()
         defer {
-            SeshatConfig.setBaseDirectoryOverride(nil, defaults: defaults)
+            AppConfig.setBaseDirectoryOverride(nil, defaults: defaults)
             defaults.removePersistentDomain(forName: suiteName)
             cleanup(sourceBase)
             cleanup(destinationBase)
         }
 
-        let previousTestingOverride = SeshatConfig.testingBaseDirectoryOverride
-        SeshatConfig.testingBaseDirectoryOverride = nil
-        defer { SeshatConfig.testingBaseDirectoryOverride = previousTestingOverride }
+        let previousTestingOverride = AppConfig.testingBaseDirectoryOverride
+        AppConfig.testingBaseDirectoryOverride = nil
+        defer { AppConfig.testingBaseDirectoryOverride = previousTestingOverride }
 
-        SeshatConfig.setBaseDirectoryOverride(sourceBase, defaults: defaults)
+        AppConfig.setBaseDirectoryOverride(sourceBase, defaults: defaults)
         try writeData(count: 17, toManagedSubdirectory: "models", named: "ggml.bin", under: sourceBase)
         try writeData(count: 23, toManagedSubdirectory: "modes", named: "dictation.json", under: sourceBase)
         try writeData(count: 29, toManagedSubdirectory: "recordings", named: "clip.wav", under: sourceBase)
@@ -44,7 +44,7 @@ final class BaseDirectoryMigratorTests: XCTestCase {
         XCTAssertTrue(fileManager.fileExists(atPath: destinationBase.appendingPathComponent("modes").path))
         XCTAssertTrue(fileManager.fileExists(atPath: destinationBase.appendingPathComponent("recordings").path))
         XCTAssertEqual(
-            try SeshatConfig.baseDirectory(defaults: defaults, environment: [:]),
+            try AppConfig.baseDirectory(defaults: defaults, environment: [:]),
             destinationBase.standardizedFileURL
         )
     }
@@ -53,16 +53,16 @@ final class BaseDirectoryMigratorTests: XCTestCase {
         let (suiteName, defaults) = isolatedDefaults()
         let baseDirectory = try makeTemporaryDirectory()
         defer {
-            SeshatConfig.setBaseDirectoryOverride(nil, defaults: defaults)
+            AppConfig.setBaseDirectoryOverride(nil, defaults: defaults)
             defaults.removePersistentDomain(forName: suiteName)
             cleanup(baseDirectory)
         }
 
-        let previousTestingOverride = SeshatConfig.testingBaseDirectoryOverride
-        SeshatConfig.testingBaseDirectoryOverride = nil
-        defer { SeshatConfig.testingBaseDirectoryOverride = previousTestingOverride }
+        let previousTestingOverride = AppConfig.testingBaseDirectoryOverride
+        AppConfig.testingBaseDirectoryOverride = nil
+        defer { AppConfig.testingBaseDirectoryOverride = previousTestingOverride }
 
-        SeshatConfig.setBaseDirectoryOverride(baseDirectory, defaults: defaults)
+        AppConfig.setBaseDirectoryOverride(baseDirectory, defaults: defaults)
         try writeData(count: 11, toManagedSubdirectory: "models", named: "marker.bin", under: baseDirectory)
 
         let migrator = BaseDirectoryMigrator(defaults: defaults, environment: [:])
@@ -72,7 +72,7 @@ final class BaseDirectoryMigratorTests: XCTestCase {
         XCTAssertEqual(report, .noOp)
         XCTAssertTrue(fileManager.fileExists(atPath: baseDirectory.appendingPathComponent("models").path))
         XCTAssertEqual(
-            try SeshatConfig.baseDirectory(defaults: defaults, environment: [:]),
+            try AppConfig.baseDirectory(defaults: defaults, environment: [:]),
             baseDirectory.standardizedFileURL
         )
     }
@@ -82,17 +82,17 @@ final class BaseDirectoryMigratorTests: XCTestCase {
         let sourceBase = try makeTemporaryDirectory()
         let destinationBase = try makeTemporaryDirectory()
         defer {
-            SeshatConfig.setBaseDirectoryOverride(nil, defaults: defaults)
+            AppConfig.setBaseDirectoryOverride(nil, defaults: defaults)
             defaults.removePersistentDomain(forName: suiteName)
             cleanup(sourceBase)
             cleanup(destinationBase)
         }
 
-        let previousTestingOverride = SeshatConfig.testingBaseDirectoryOverride
-        SeshatConfig.testingBaseDirectoryOverride = nil
-        defer { SeshatConfig.testingBaseDirectoryOverride = previousTestingOverride }
+        let previousTestingOverride = AppConfig.testingBaseDirectoryOverride
+        AppConfig.testingBaseDirectoryOverride = nil
+        defer { AppConfig.testingBaseDirectoryOverride = previousTestingOverride }
 
-        SeshatConfig.setBaseDirectoryOverride(sourceBase, defaults: defaults)
+        AppConfig.setBaseDirectoryOverride(sourceBase, defaults: defaults)
         try writeData(count: 17, toManagedSubdirectory: "models", named: "ggml.bin", under: sourceBase)
         try writeData(count: 23, toManagedSubdirectory: "modes", named: "dictation.json", under: sourceBase)
         try writeData(count: 29, toManagedSubdirectory: "recordings", named: "clip.wav", under: sourceBase)
@@ -122,7 +122,7 @@ final class BaseDirectoryMigratorTests: XCTestCase {
         XCTAssertFalse(fileManager.fileExists(atPath: destinationBase.appendingPathComponent("modes").path))
         XCTAssertTrue(fileManager.fileExists(atPath: conflictingRecordingsDirectory.path))
         XCTAssertEqual(
-            try SeshatConfig.baseDirectory(defaults: defaults, environment: [:]),
+            try AppConfig.baseDirectory(defaults: defaults, environment: [:]),
             sourceBase.standardizedFileURL
         )
     }
@@ -133,17 +133,17 @@ final class BaseDirectoryMigratorTests: XCTestCase {
         let parentDirectory = try makeTemporaryDirectory()
         let destinationFile = parentDirectory.appendingPathComponent("not-a-directory", isDirectory: false)
         defer {
-            SeshatConfig.setBaseDirectoryOverride(nil, defaults: defaults)
+            AppConfig.setBaseDirectoryOverride(nil, defaults: defaults)
             defaults.removePersistentDomain(forName: suiteName)
             cleanup(sourceBase)
             cleanup(parentDirectory)
         }
 
-        let previousTestingOverride = SeshatConfig.testingBaseDirectoryOverride
-        SeshatConfig.testingBaseDirectoryOverride = nil
-        defer { SeshatConfig.testingBaseDirectoryOverride = previousTestingOverride }
+        let previousTestingOverride = AppConfig.testingBaseDirectoryOverride
+        AppConfig.testingBaseDirectoryOverride = nil
+        defer { AppConfig.testingBaseDirectoryOverride = previousTestingOverride }
 
-        SeshatConfig.setBaseDirectoryOverride(sourceBase, defaults: defaults)
+        AppConfig.setBaseDirectoryOverride(sourceBase, defaults: defaults)
         try writeData(count: 17, toManagedSubdirectory: "models", named: "ggml.bin", under: sourceBase)
         try Data(repeating: 0x41, count: 3).write(to: destinationFile)
 
@@ -158,7 +158,7 @@ final class BaseDirectoryMigratorTests: XCTestCase {
 
         XCTAssertTrue(fileManager.fileExists(atPath: sourceBase.appendingPathComponent("models").path))
         XCTAssertEqual(
-            try SeshatConfig.baseDirectory(defaults: defaults, environment: [:]),
+            try AppConfig.baseDirectory(defaults: defaults, environment: [:]),
             sourceBase.standardizedFileURL
         )
     }

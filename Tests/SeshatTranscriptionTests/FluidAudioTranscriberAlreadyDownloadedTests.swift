@@ -19,7 +19,7 @@ final class FluidAudioTranscriberAlreadyDownloadedTests: XCTestCase {
         testRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: testRoot, withIntermediateDirectories: true)
-        SeshatConfig.testingBaseDirectoryOverride = testRoot
+        AppConfig.testingBaseDirectoryOverride = testRoot
 
         let modelRoot = testRoot
             .appendingPathComponent("Seshat", isDirectory: true)
@@ -30,7 +30,7 @@ final class FluidAudioTranscriberAlreadyDownloadedTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        SeshatConfig.testingBaseDirectoryOverride = nil
+        AppConfig.testingBaseDirectoryOverride = nil
         try? FileManager.default.removeItem(at: testRoot)
         try await super.tearDown()
     }
