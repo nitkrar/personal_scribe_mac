@@ -4,6 +4,30 @@ import SeshatCore
 import SeshatSession
 
 @MainActor
+private final class LegacyPasteInjectorOutputService: OutputService, @unchecked Sendable {
+    private let pasteInjector: @MainActor (String) -> PasteRoutingDecision
+
+    init(pasteInjector: @escaping @MainActor (String) -> PasteRoutingDecision) {
+        self.pasteInjector = pasteInjector
+    }
+
+    func deliverBatch(text: String) async -> OutputResult {
+        guard !text.isEmpty else {
+            return .ignoredEmptyInput
+        }
+
+        switch pasteInjector(text) {
+        case .pasteAtCursor:
+            return .delivered(target: .frontmostApp, delivery: .paste)
+        case .clipboardOnly(reason: .clipboardOnlyMode):
+            return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
+        case .clipboardOnly(reason: .frontmostAppIsSeshat):
+            return .delivered(target: .selfFrontmost, delivery: .clipboardOnly)
+        }
+    }
+}
+
+@MainActor
 final class MenuBarSceneModel: ObservableObject {
     @Published var state: SessionState = .idle
     @Published var lastResultText: String? = nil
@@ -12,7 +36,7 @@ final class MenuBarSceneModel: ObservableObject {
     private let coordinator: SessionCoordinator
     private let permissionService: any PermissionService
     private let clipboardWriter: @MainActor (String) -> Void
-    private let pasteInjector: @MainActor (String) -> PasteRoutingDecision
+    private let outputService: any OutputService
     private let openURL: @MainActor (URL) -> Void
     private let onClipboardOnlyCopy: @MainActor () -> Void
     private let logger: SeshatLogger
@@ -33,6 +57,7 @@ final class MenuBarSceneModel: ObservableObject {
         permissionStateProvider: @escaping @MainActor () -> MicrophonePermissionState = { .notYetRequested },
         clipboardWriter: @escaping @MainActor (String) -> Void,
         pasteInjector: @escaping @MainActor (String) -> PasteRoutingDecision = { _ in .pasteAtCursor },
+        outputService: (any OutputService)? = nil,
         openSettings: @escaping @MainActor () -> Void,
         permissionService: (any PermissionService)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
@@ -52,7 +77,7 @@ final class MenuBarSceneModel: ObservableObject {
         self.coordinator = coordinator
         self.permissionService = resolvedPermissionService
         self.clipboardWriter = clipboardWriter
-        self.pasteInjector = pasteInjector
+        self.outputService = outputService ?? LegacyPasteInjectorOutputService(pasteInjector: pasteInjector)
         self.openURL = openURL ?? { _ in openSettings() }
         self.onClipboardOnlyCopy = onClipboardOnlyCopy
         self.onObservationCancelled = onObservationCancelled
@@ -158,9 +183,21 @@ final class MenuBarSceneModel: ObservableObject {
         guard transcript != lastAutoPastedTranscript else { return }
 
         lastAutoPastedTranscript = transcript
-        let route = pasteInjector(transcript)
-        if case .clipboardOnly = route {
-            onClipboardOnlyCopy()
+        let outputService = outputService
+        let onClipboardOnlyCopy = onClipboardOnlyCopy
+        let logger = logger
+
+        Task { @MainActor in
+            switch await outputService.deliverBatch(text: transcript) {
+            case .delivered(let target, _):
+                if target == .clipboardOnly || target == .selfFrontmost {
+                    onClipboardOnlyCopy()
+                }
+            case .failed(let error):
+                logger.error("Auto-paste transcript delivery failed", error: error)
+            case .ignoredEmptyInput:
+                break
+            }
         }
     }
 

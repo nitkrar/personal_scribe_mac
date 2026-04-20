@@ -57,8 +57,7 @@ struct SeshatAppMain: App {
         let compatibilityPermissionService = Self.makeCompatibilityPermissionServiceAdapter(
             wrapping: permissionService
         )
-        let resolvedPasteInjector = pasteInjector
-            ?? PasteInjector(permissionService: compatibilityPermissionService)
+        let resolvedOutputService: any OutputService = ClipboardBatchOutput()
         let startupCoordinator = startupCoordinator
             ?? AppComposition.makeStartupCoordinator(
                 coordinator: coordinator,
@@ -85,9 +84,7 @@ struct SeshatAppMain: App {
         let sceneModel = MenuBarSceneModel(
             coordinator: coordinator,
             clipboardWriter: clipboardWriter,
-            pasteInjector: { text in
-                resolvedPasteInjector.paste(text)
-            },
+            outputService: resolvedOutputService,
             openSettings: openSettings,
             permissionService: permissionService,
             openURL: { url in
