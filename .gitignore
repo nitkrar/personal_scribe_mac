@@ -8,9 +8,9 @@ DerivedData/
 .netrc
 
 # Dev-built app bundle (scripts/package.sh output)
-/Seshat.app/
+/Ninimma.app/
 # DMG output of scripts/package.sh -d
-/Seshat-*.dmg
+/Ninimma-*.dmg
 
 # Claude Code agent-tool worktrees (isolation: "worktree")
 .claude/worktrees/
