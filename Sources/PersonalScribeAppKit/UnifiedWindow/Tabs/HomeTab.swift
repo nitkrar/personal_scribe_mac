@@ -186,27 +186,3 @@ private struct StatCard: View {
     }
 }
 
-// MARK: - WindowTint environment bridge
-//
-// The tint is passed to the stub/detail area via the M3.1 view; stat
-// cards read it optionally so they render sensibly inside previews or
-// unit tests that don't install a tint.
-
-private struct WindowTintEnvironmentKey: EnvironmentKey {
-    static let defaultValue: WindowTint? = nil
-}
-
-extension EnvironmentValues {
-    var windowTint: WindowTint? {
-        get { self[WindowTintEnvironmentKey.self] }
-        set { self[WindowTintEnvironmentKey.self] = newValue }
-    }
-}
-
-extension View {
-    /// Install a `WindowTint` in the environment so descendant surfaces
-    /// (stat cards, etc.) pick up matching card / hover backgrounds.
-    func windowTint(_ tint: WindowTint) -> some View {
-        environment(\.windowTint, tint)
-    }
-}

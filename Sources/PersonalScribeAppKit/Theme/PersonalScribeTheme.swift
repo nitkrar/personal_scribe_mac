@@ -141,6 +141,57 @@ public enum PersonalScribeTheme {
             @unknown default: return .dark
             }
         }
+
+        /// WindowTint-aware palette accessor.
+        ///
+        /// * `.dark` tint forces the dark palette regardless of scheme —
+        ///   the dark-tinted window must not render light content.
+        /// * `.warm` tint always returns the light base with warm
+        ///   overrides (brandChampagne, elevatedSurface, hoverState).
+        ///   Warm windows render cream; a dark palette would clash.
+        /// * `.neutral` and `nil` delegate to `for(scheme:)`.
+        ///
+        /// Pill tokens (`pillBackground`, `pillStopRed`,
+        /// `pillForegroundText`) are NOT affected — the pill is
+        /// intentionally isolated from `WindowTint` per project contract.
+        public static func `for`(scheme: ColorScheme, tint: WindowTint?) -> Palette {
+            guard let tint else {
+                return Self.for(scheme: scheme)
+            }
+            switch tint {
+            case .dark:
+                return .dark
+            case .neutral:
+                return Self.for(scheme: scheme)
+            case .warm:
+                return .warmLight
+            }
+        }
+
+        /// Light palette with warm-tint overrides. Used when the user
+        /// selects `WindowTint.warm`. Only three tokens differ from
+        /// `.light`: `elevatedSurface`, `hoverState`, `brandChampagne`.
+        /// Every other token (status colours, pill chrome, text,
+        /// `appBackground` which is already `F5F5F0` on light,
+        /// `surface` which is already `FFFFFF`) matches `.light`.
+        static let warmLight = Palette(
+            scheme: .light,
+            appBackground: Color(hex: "F5F5F0"),
+            surface: Color(hex: "FFFFFF"),
+            elevatedSurface: Color(hex: "F0EDE8"),
+            hoverState: Color(hex: "DCDCD7"),
+            brandChampagne: Color(hex: "D4D0C8"),
+            pillBackground: Color(hex: "1A1B2E"),
+            pillStopRed: Color(hex: "EF5350"),
+            pillForegroundText: Color(hex: "E8E6E0"),
+            primaryTextBase: Color(hex: "1A1A1A"),
+            primaryTextOpacity: 1.0,
+            secondaryTextBase: Color(hex: "1A1A1A"),
+            secondaryTextOpacity: 0.45,
+            statusReady: Color(hex: "28A745"),
+            statusRecording: Color(hex: "D93025"),
+            statusLink: Color(hex: "0066CC")
+        )
     }
 
     // MARK: - Typography

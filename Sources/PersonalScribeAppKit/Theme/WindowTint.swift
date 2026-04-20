@@ -91,3 +91,32 @@ public enum WindowTint: String, CaseIterable, Identifiable, Sendable {
         }
     }
 }
+
+// MARK: - WindowTint environment bridge
+//
+// The tint is installed at the unified-window root (see
+// `UnifiedWindowView.swift`) and read by any descendant surface that
+// needs warm/neutral/dark-aware card backgrounds or accent swaps. Views
+// that don't care (previews, unit-test harnesses without a tint) see
+// `nil` and fall back to `PersonalScribeTheme.Palette.for(scheme:)`.
+
+public struct WindowTintEnvironmentKey: EnvironmentKey {
+    public static let defaultValue: WindowTint? = nil
+}
+
+extension EnvironmentValues {
+    public var windowTint: WindowTint? {
+        get { self[WindowTintEnvironmentKey.self] }
+        set { self[WindowTintEnvironmentKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Install a `WindowTint` in the environment so descendant surfaces
+    /// (stat cards, settings cards, mode cards, etc.) pick up matching
+    /// card / hover / accent values via
+    /// `PersonalScribeTheme.Palette.for(scheme:tint:)`.
+    public func windowTint(_ tint: WindowTint) -> some View {
+        environment(\.windowTint, tint)
+    }
+}

@@ -358,6 +358,74 @@ final class PersonalScribeThemeTests: XCTestCase {
         XCTAssertEqual(PersonalScribeTheme.Layout.windowMinHeight, 520, accuracy: 0.001)
     }
 
+    // MARK: - for(scheme:tint:) — WindowTint-aware factory
+
+    func testForSchemeTintNilMatchesSchemeOnlyOverload() {
+        let lightNil = PersonalScribeTheme.Palette.for(scheme: .light, tint: nil)
+        let darkNil = PersonalScribeTheme.Palette.for(scheme: .dark, tint: nil)
+        XCTAssertEqual(lightNil.scheme, .light)
+        XCTAssertEqual(darkNil.scheme, .dark)
+        assertColor(lightNil.brandChampagne, equalsHex: "6B6760")
+        assertColor(darkNil.brandChampagne, equalsHex: "D4D0C8")
+    }
+
+    func testForSchemeTintNeutralMatchesSchemeOnlyOverload() {
+        let light = PersonalScribeTheme.Palette.for(scheme: .light, tint: .neutral)
+        let dark = PersonalScribeTheme.Palette.for(scheme: .dark, tint: .neutral)
+        assertColor(light.elevatedSurface, equalsHex: "F0EFE9")
+        assertColor(dark.elevatedSurface, equalsHex: "252525")
+        assertColor(light.brandChampagne, equalsHex: "6B6760")
+        assertColor(dark.brandChampagne, equalsHex: "D4D0C8")
+    }
+
+    func testForSchemeTintDarkForcesDarkPaletteRegardlessOfScheme() {
+        let fromLight = PersonalScribeTheme.Palette.for(scheme: .light, tint: .dark)
+        let fromDark = PersonalScribeTheme.Palette.for(scheme: .dark, tint: .dark)
+        XCTAssertEqual(fromLight.scheme, .dark)
+        XCTAssertEqual(fromDark.scheme, .dark)
+        assertColor(fromLight.appBackground, equalsHex: "0E0E14")
+        assertColor(fromLight.elevatedSurface, equalsHex: "252525")
+        assertColor(fromLight.brandChampagne, equalsHex: "D4D0C8")
+    }
+
+    func testForSchemeTintWarmOverridesBrandChampagne() {
+        let palette = PersonalScribeTheme.Palette.for(scheme: .light, tint: .warm)
+        assertColor(palette.brandChampagne, equalsHex: "D4D0C8")
+    }
+
+    func testForSchemeTintWarmOverridesElevatedSurface() {
+        let palette = PersonalScribeTheme.Palette.for(scheme: .light, tint: .warm)
+        assertColor(palette.elevatedSurface, equalsHex: "F0EDE8")
+    }
+
+    func testForSchemeTintWarmOverridesHoverState() {
+        let palette = PersonalScribeTheme.Palette.for(scheme: .light, tint: .warm)
+        assertColor(palette.hoverState, equalsHex: "DCDCD7")
+    }
+
+    func testForSchemeTintWarmIgnoresDarkSystemSchemeAndReturnsLightBase() {
+        // Warm renders a cream window — a dark palette would clash. Warm
+        // always uses the light base with warm overrides.
+        let palette = PersonalScribeTheme.Palette.for(scheme: .dark, tint: .warm)
+        XCTAssertEqual(palette.scheme, .light)
+        assertColor(palette.brandChampagne, equalsHex: "D4D0C8")
+        assertColor(palette.elevatedSurface, equalsHex: "F0EDE8")
+    }
+
+    func testForSchemeTintWarmPreservesNonOverriddenLightTokens() {
+        let palette = PersonalScribeTheme.Palette.for(scheme: .light, tint: .warm)
+        // Card surface white unchanged.
+        assertColor(palette.surface, equalsHex: "FFFFFF")
+        // Status colours stay on the light spec.
+        assertColor(palette.statusReady, equalsHex: "28A745")
+        assertColor(palette.statusRecording, equalsHex: "D93025")
+        assertColor(palette.statusLink, equalsHex: "0066CC")
+        // Pill tokens stay dark navy — pill is intentionally isolated
+        // from WindowTint per project contract.
+        assertColor(palette.pillBackground, equalsHex: "1A1B2E")
+        assertColor(palette.pillForegroundText, equalsHex: "E8E6E0")
+    }
+
     // MARK: - Test helpers
 
     /// Compares a `Color` to a hex spec by extracting RGB from a platform
