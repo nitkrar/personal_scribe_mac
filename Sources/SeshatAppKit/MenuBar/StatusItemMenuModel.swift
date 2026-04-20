@@ -138,24 +138,6 @@ struct StatusItemMenuModel: Equatable {
         return StatusItemMenuModel(items: items)
     }
 
-    /// Compatibility bridge for callers that still provide the pre-AppStore
-    /// permission enums. Stage 3 can delete this once the legacy seam is gone.
-    static func make(
-        sessionState: SessionState,
-        micPermission: MicrophonePermissionState,
-        inputMonitoringPermission: InputMonitoringPermissionState,
-        activeModeName: String? = nil,
-        isOnboardingComplete: Bool = true
-    ) -> StatusItemMenuModel {
-        makeUnified(
-            sessionState: sessionState,
-            micPermission: micPermission.unifiedPermissionStatus,
-            inputMonitoringPermission: inputMonitoringPermission.unifiedPermissionStatus,
-            activeModeName: activeModeName,
-            isOnboardingComplete: isOnboardingComplete
-        )
-    }
-
     // MARK: - Record/stop toggle helpers
 
     static func recordingItemTitle(for sessionState: SessionState) -> String {

@@ -10,7 +10,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     // MARK: - Base structure
 
     func testIdleGrantedMenuHasExpectedItemsInOrder() {
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
@@ -27,7 +27,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     }
 
     func testActiveModeNameIsReflectedInHeader() {
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
@@ -43,7 +43,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         // no way to reopen onboarding). Menu items should always be
         // enabled; routing into the Settings window handles the
         // permissions-needed UX instead.
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
@@ -67,7 +67,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     // MARK: - Recording-toggle title switching
 
     func testRecordingStateSwitchesTitleToStop() {
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .recording,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
@@ -77,7 +77,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     }
 
     func testTranscribingStateDisablesRecordingItem() {
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .transcribing,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
@@ -92,7 +92,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     }
 
     func testErrorStateShowsStartRecording() {
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .error(.modelLoadFailure),
             micPermission: .granted,
             inputMonitoringPermission: .granted,
@@ -104,7 +104,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     // MARK: - Permission warnings prepended
 
     func testDeniedMicrophonePrependsPermissionsNoteAndWarningItem() {
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .denied,
             inputMonitoringPermission: .granted
@@ -121,7 +121,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     }
 
     func testDeniedInputMonitoringPrependsPermissionsNoteAndWarningItem() {
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .denied
@@ -138,7 +138,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     }
 
     func testBothPermissionsDeniedPrependsBothWarningsInOrder() {
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .denied,
             inputMonitoringPermission: .denied
@@ -159,14 +159,14 @@ final class StatusItemMenuModelTests: XCTestCase {
         XCTAssertEqual(model.items[3], .separator)
     }
 
-    func testNotYetRequestedDoesNotPrependWarning() {
-        // Fresh install: permission is not determined yet. The menu
+    func testPendingDoesNotPrependWarning() {
+        // Fresh install: permission is still pending. The menu
         // should NOT show a warning before the user has even been
         // prompted — onboarding (Phase 3) covers that flow.
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
-            micPermission: .notYetRequested,
-            inputMonitoringPermission: .notDetermined,
+            micPermission: .pending,
+            inputMonitoringPermission: .pending,
             activeModeName: ModeRegistry.dictation.name
         )
         // First item is the mode header, not a warning.
@@ -180,7 +180,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     // MARK: - Action identifiers
 
     func testAllActionIdentifiersAreDistinct() {
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .denied,
             inputMonitoringPermission: .denied
@@ -193,7 +193,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     }
 
     func testQuitItemHasCommandQKeyEquivalent() {
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
@@ -212,7 +212,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         // no key-equivalent is published — the ⌥⌥ hint lives in the
         // title instead. Guards against re-introducing a wrong
         // shortcut like ⌥⌘R that doesn't actually trigger recording.
-        let model = StatusItemMenuModel.make(
+        let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
