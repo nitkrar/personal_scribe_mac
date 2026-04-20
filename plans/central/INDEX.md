@@ -1,5 +1,10 @@
 # Central-layers refactor — INDEX
 
+## Status (2026-04-20): Stage 3 executed
+
+All 7 approved-now delete rows landed on trunk. `swift build --build-tests` green. L1 + L7 re-inventory confirmed 0 new approvals — remaining `[QUESTION]` rows are Stage 2 follow-up work, not Stage 3 scope. See `STAGE_3_DELETION.md` §Execution-status and §Retrospective (parallel-commit race).
+
+
 Overview of the 9-layer parallel-build-then-swap-then-delete refactor on `trunk`. The full Stage 3 deletion plan lives at [`plans/central/STAGE_3_DELETION.md`](./STAGE_3_DELETION.md). Master reference is [`plans/CENTRAL_LAYERS_PROMPT.md`](../CENTRAL_LAYERS_PROMPT.md); per-layer plans at `plans/central/LAYER_<N>_*.md`; per-layer progress snapshot at `plans/central/PROGRESS.md` (may be stale — prefer `git log`).
 
 ## Critical discipline

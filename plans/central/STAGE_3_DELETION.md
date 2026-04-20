@@ -2,6 +2,29 @@
 
 > **Do NOT diverge from this plan. Silent divergence is the cardinal sin. To deviate, surface the proposed divergence in a commit-message comment AND in the hand-off report; wait for main-session confirmation. Paraphrasing the contract is divergence. Deleting a symbol not listed here is divergence. Deleting in an order other than the one specified is divergence.**
 
+## Execution status (2026-04-20, post-execution)
+
+**DONE.** All 7 approved-now delete rows landed on trunk across 3 commits:
+- `f0d258e` — landed L2 `SeshatConfig.modesDirectory()`, L6 `SeshatConfig.modelId` shim, L2 `SeshatConfigScaffoldingTests.swift`, L9 `BuildInfo.swift`, L9 `BuildInfoTests.swift` (commit subject says only "layer 9 delete BuildInfo + BuildInfoTests" — parallel-chunk staging race absorbed multiple chunks into one commit).
+- `aed5406` — landed L3 `typealias SeshatPasteMode = PasteMode` (subject says "layer 2 delete SeshatConfigScaffoldingTests" — misattributed from same race).
+- `45e94da` — landed L7 `SessionCoordinator.seconds(from:)` dead method (main-session commit after chunk 2 subagent declined a non-existent diff).
+
+`swift build --build-tests` green post-execution.
+
+**Post-execution L1 + L7 re-inventory** (drafts at `plans/central/drafts/stage3/layer_<1,7>_inventory.md`): **0 new approved rows**. All remaining candidates blocked on Stage 2 follow-up work (PermissionServiceAdapter cleanup, canonical coordinator move L7.S3.1.x, PostProcessor call-site migration, etc.), NOT on additional Stage 3 deletions. Stage 3 is as-complete-as-scope-allows.
+
+**Known retrospective issues (do not re-execute):**
+- Parallel chunk agents running `git commit` without `--only <path>` swept each other's staged changes → commit messages don't describe actual contents. See §Retrospective below.
+- `swift build --build-tests` green confirms the *functional* state is correct even if the git history is misleading.
+
+## Retrospective — parallel-commit race (2026-04-20)
+
+5 chunk agents dispatched in parallel with `git add <specific-path>` instructions, but each ran `git commit` (not `git commit -o <path>`). Consequence: the commit that fired first swept every currently-staged path from sibling agents. Result:
+- 5 chunk subagents → 3 actual commits, 2 with misattributed subjects, 1 subagent blocked (Chunk 3 found its targets already absorbed into f0d258e).
+- Chunk 1 subagent blocked because the typealias it was about to remove wasn't in HEAD — it had been staged by another chunk's `git add` then committed by a third chunk. Main session couldn't have prevented this without a lockfile or `git commit -o`.
+
+**Guideline updated** in `~/Projects/nitkrar/ENGINEERING_GUIDELINES.md` §"Give subagents the smallest possible unit of work": parallel chunk execution must either (a) use `git commit --only <path>` to scope commits, (b) serialize via a single-writer dispatch, or (c) use isolated worktrees for each chunk. Plain `git add <path>` + `git commit` is not enough when multiple agents stage concurrently.
+
 ## Snapshot drift callout (read before executing)
 
 This plan is synthesized from per-layer inventory drafts at `plans/central/drafts/stage3/` that were produced across a moving-target trunk. Two sources of staleness remain to address **before execution** (down from three — L5 resolved post-initial-synthesis):
