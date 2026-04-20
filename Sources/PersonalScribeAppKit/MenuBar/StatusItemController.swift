@@ -288,7 +288,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private static func onboardingCompletionPreference(defaults: UserDefaults) -> Preference<Bool> {
         Preference(
-            key: "SeshatOnboardingCompleted",
+            key: "OnboardingCompleted",
             default: false,
             defaults: defaults
         )

@@ -150,7 +150,7 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         Preference(
-            key: "SeshatOnboardingCompleted",
+            key: "OnboardingCompleted",
             default: false,
             defaults: defaults
         ).persist(true)

@@ -2,7 +2,7 @@ import Foundation
 
 /// UserDefaults-backed first-run onboarding completion state.
 ///
-/// Stored under `UserDefaults["SeshatOnboardingCompleted"]`. Default is
+/// Stored under `UserDefaults["OnboardingCompleted"]`. Default is
 /// `.incomplete` so first launch presents onboarding until the app records
 /// that the window has been dismissed once.
 public struct OnboardingState: RawRepresentable, Sendable, Equatable {
@@ -16,7 +16,7 @@ public struct OnboardingState: RawRepresentable, Sendable, Equatable {
     public static let completed = OnboardingState(rawValue: true)
 
     public static let `default`: OnboardingState = .incomplete
-    public static let userDefaultsKey = "SeshatOnboardingCompleted"
+    public static let userDefaultsKey = "OnboardingCompleted"
 
     public static func resolve(from defaults: UserDefaults = .standard) -> OnboardingState {
         guard let value = defaults.object(forKey: userDefaultsKey) as? Bool else {

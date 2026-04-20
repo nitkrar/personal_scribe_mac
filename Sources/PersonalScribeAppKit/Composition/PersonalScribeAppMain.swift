@@ -43,6 +43,10 @@ struct PersonalScribeAppMain: App {
         },
         startupCoordinator: AppStartupCoordinator? = nil
     ) {
+        // Run the one-shot UserDefaults rename migration before any preference
+        // read. Idempotent; bounded by PreferenceMigrator.currentMigrationVersion.
+        PreferenceMigrator.migrate(defaults: defaults)
+
         let resolvedPermissionService = permissionService ?? AppComposition.makePermissionService()
         let appPermissionService = Self.makePermissionServiceAdapter(wrapping: resolvedPermissionService)
         let appStore = AppStore(
@@ -183,7 +187,7 @@ struct PersonalScribeAppMain: App {
 extension PersonalScribeAppMain {
     fileprivate static func onboardingCompletionPreference(defaults: UserDefaults) -> Preference<Bool> {
         Preference(
-            key: "SeshatOnboardingCompleted",
+            key: "OnboardingCompleted",
             default: false,
             defaults: defaults
         )
