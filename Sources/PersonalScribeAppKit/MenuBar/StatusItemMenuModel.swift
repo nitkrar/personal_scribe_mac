@@ -38,6 +38,7 @@ struct StatusItemMenuModel: Equatable {
     /// assert on the model without matching localised titles.
     enum ActionID: String, Equatable {
         case startStopRecording
+        case openHome
         case openHistory
         case openSettings
         case openMicrophoneSystemSettings
@@ -57,7 +58,8 @@ struct StatusItemMenuModel: Equatable {
     /// [separator]                            (present when any warning shows)
     /// Dictation                              (header, non-interactive)
     /// Start Recording ⌥⌘                     (or "Stop Recording")
-    /// History
+    /// Home                                    (opens unified window)
+    /// History                                 (legacy NotesWindow — kept until M4)
     /// Settings
     /// ---
     /// Quit <AppBrand.displayName>
@@ -110,6 +112,13 @@ struct StatusItemMenuModel: Equatable {
             title: recordingItemTitle(for: sessionState),
             keyEquivalent: recordingItemKeyEquivalent(for: sessionState),
             isEnabled: recordingItemIsEnabled(for: sessionState)
+        )))
+
+        items.append(.action(ActionItem(
+            id: .openHome,
+            title: "Home",
+            keyEquivalent: "",
+            isEnabled: true
         )))
 
         items.append(.action(ActionItem(

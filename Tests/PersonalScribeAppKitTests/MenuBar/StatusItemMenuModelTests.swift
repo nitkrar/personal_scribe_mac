@@ -17,13 +17,14 @@ final class StatusItemMenuModelTests: XCTestCase {
             activeModeName: ModeRegistry.dictation.name
         )
 
-        XCTAssertEqual(model.items.count, 6)
+        XCTAssertEqual(model.items.count, 7)
         assertHeader(model.items[0], ModeRegistry.dictation.name)
         assertAction(model.items[1], id: .startStopRecording, title: "Start Recording   ⌥⌥")
-        assertAction(model.items[2], id: .openHistory, title: "History")
-        assertAction(model.items[3], id: .openSettings, title: "Settings")
-        XCTAssertEqual(model.items[4], .separator)
-        assertAction(model.items[5], id: .quit, title: "Quit \(AppBrand.displayName)")
+        assertAction(model.items[2], id: .openHome, title: "Home")
+        assertAction(model.items[3], id: .openHistory, title: "History")
+        assertAction(model.items[4], id: .openSettings, title: "Settings")
+        XCTAssertEqual(model.items[5], .separator)
+        assertAction(model.items[6], id: .quit, title: "Quit \(AppBrand.displayName)")
     }
 
     func testActiveModeNameIsReflectedInHeader() {
@@ -51,11 +52,11 @@ final class StatusItemMenuModelTests: XCTestCase {
             isOnboardingComplete: false
         )
 
-        guard case let .action(history) = model.items[2] else {
-            return XCTFail("Expected History action at index 2")
+        guard case let .action(history) = model.items[3] else {
+            return XCTFail("Expected History action at index 3")
         }
-        guard case let .action(settings) = model.items[3] else {
-            return XCTFail("Expected Settings action at index 3")
+        guard case let .action(settings) = model.items[4] else {
+            return XCTFail("Expected Settings action at index 4")
         }
 
         XCTAssertEqual(history.id, .openHistory)
@@ -174,7 +175,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             XCTAssertNotEqual(first.id, .openMicrophoneSystemSettings)
             XCTAssertNotEqual(first.id, .openInputMonitoringSystemSettings)
         }
-        XCTAssertEqual(model.items.count, 6, "No warning items expected")
+        XCTAssertEqual(model.items.count, 7, "No warning items expected")
     }
 
     // MARK: - Action identifiers

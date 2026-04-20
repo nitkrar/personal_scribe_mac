@@ -16,6 +16,7 @@ struct PersonalScribeAppMain: App {
     @StateObject private var onboardingController: OnboardingWindowControllerHost
     @StateObject private var notesWindowController: NotesWindowControllerHost
     @StateObject private var settingsWindowController: SettingsWindowControllerHost
+    @StateObject private var unifiedWindowController: UnifiedWindowControllerHost
 
     init() {
         self.init(
@@ -114,11 +115,20 @@ struct PersonalScribeAppMain: App {
         let notesWindowControllerHost = NotesWindowControllerHost(
             controllerFactory: notesWindowControllerFactory
         )
+        let unifiedWindowControllerHost = UnifiedWindowControllerHost(
+            controllerFactory: {
+                UnifiedWindowController(defaults: defaults)
+            }
+        )
         var showNotesWindow: @MainActor () -> Void = {}
         var showSettingsWindow: @MainActor () -> Void = {}
+        let showUnifiedWindow: @MainActor () -> Void = {
+            unifiedWindowControllerHost.showWindow(nil)
+        }
         let statusItemControllerHost = StatusItemControllerHost(
             sceneModel: sceneModel,
             appStore: appStore,
+            openHome: showUnifiedWindow,
             openHistory: {
                 showNotesWindow()
             },
@@ -165,6 +175,9 @@ struct PersonalScribeAppMain: App {
         )
         _settingsWindowController = StateObject(
             wrappedValue: settingsWindowControllerHost
+        )
+        _unifiedWindowController = StateObject(
+            wrappedValue: unifiedWindowControllerHost
         )
 
         sceneModel.startObserving()
@@ -246,6 +259,7 @@ final class StatusItemControllerHost: ObservableObject {
     init(
         sceneModel: MenuBarSceneModel,
         appStore: AppStore,
+        openHome: @escaping @MainActor () -> Void = {},
         openHistory: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
@@ -255,6 +269,7 @@ final class StatusItemControllerHost: ObservableObject {
         self.controller = StatusItemController(
             sceneModel: sceneModel,
             appStore: appStore,
+            openHome: openHome,
             openHistory: openHistory,
             openSettings: openSettings,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider

@@ -129,6 +129,60 @@ by XCTest. Reviewer performs this checklist in a dogfood build:
     paste-restore slider) still work after the Appearance card is
     added.
 
+## M3.1 unified window shell scaffold
+
+The unified NavigationSplitView window opens and navigates between 4 tab
+stubs (Home / Transcriptions / Modes / Settings). Real tab content lands
+in M3.2–M3.5; this milestone proves the shell + routing + menu-bar entry
++ WindowTint integration are production-shape.
+
+### Menu bar entry point
+
+1. Launch a dogfood build. Menu bar should show the quill icon.
+2. Click the menu bar icon. The menu now has a **Home** item between
+   "Start Recording" and "History". "History" is still present (opens
+   the legacy NotesWindow — will be retired in M4).
+3. Click "Home". A new window titled with the app display name opens,
+   distinct from Settings and Notes.
+
+### Window shell
+
+4. Window uses `NavigationSplitView` with a 200pt sidebar.
+5. Sidebar top shows the quill logo + display name.
+6. Sidebar body shows 4 nav rows with SF Symbols: Home (`house.fill`),
+   Transcriptions (`text.alignleft`), Modes (`square.grid.2x2`),
+   Settings (`gearshape`).
+7. Sidebar bottom shows a placeholder "Microphone" row with the `mic`
+   icon (real mic indicator lands later).
+
+### Tab navigation
+
+8. Clicking each sidebar row switches the detail area:
+   - **Home** header with "Stats and recent transcriptions land in M3.5."
+   - **Transcriptions** header with "Search + grouped transcript list
+     migrate from NotesView in M3.2."
+   - **Modes** header with "Mode cards (Dictation, Command, Notes)
+     land in M3.4."
+   - **Settings** header with "General / Permissions / About sub-tabs
+     land in M3.3."
+9. Each detail header uses `Typography.largeTitle`; body text uses
+   `Typography.body` at 60% opacity.
+
+### WindowTint integration
+
+10. Open Settings → General → Appearance. Flip Window tint to **Dark**.
+    The unified window (if open) immediately adopts dark-aqua
+    NSAppearance; the sidebar background shifts to `#111318`; detail
+    area to `#0E0E14`.
+11. Flip Window tint to **Warm**. Unified window reverts to system
+    theme; sidebar `#EBEBE6` on light, detail `#F5F5F0`.
+
+### Regression checks
+
+12. Legacy NotesWindow still opens via menu bar → "History".
+13. Settings NSWindow still opens via menu bar → "Settings".
+14. Onboarding flow still triggers for a fresh install.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift

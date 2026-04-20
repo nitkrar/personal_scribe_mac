@@ -8,6 +8,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let sceneModel: MenuBarSceneModel
     private let appStore: AppStore
+    private let openHome: @MainActor () -> Void
     private let openHistory: @MainActor () -> Void
     private let openSettings: @MainActor () -> Void
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
@@ -20,6 +21,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     convenience init(
         sceneModel: MenuBarSceneModel,
         defaults: UserDefaults = .standard,
+        openHome: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "Home"),
         openHistory: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "History"),
         openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
@@ -32,6 +34,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             sceneModel: sceneModel,
             appStore: sceneModel.appStore,
             defaults: defaults,
+            openHome: openHome,
             openHistory: openHistory,
             openSettings: openSettings,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
@@ -46,6 +49,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         sceneModel: MenuBarSceneModel,
         appStore: AppStore,
         defaults: UserDefaults = .standard,
+        openHome: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "Home"),
         openHistory: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "History"),
         openSettings: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
@@ -57,6 +61,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
         self.sceneModel = sceneModel
         self.appStore = appStore
+        self.openHome = openHome
         self.openHistory = openHistory
         self.openSettings = openSettings
         self.isOnboardingCompleteProvider = isOnboardingCompleteProvider ?? {
@@ -119,6 +124,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             Task { @MainActor in
                 await sceneModel.handleRecordButtonTap()
             }
+        case .openHome:
+            openHome()
         case .openHistory:
             openHistory()
         case .openSettings:
