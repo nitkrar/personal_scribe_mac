@@ -3,34 +3,34 @@
 import PackageDescription
 
 let package = Package(
-    name: "Seshat",
+    name: "PersonalScribe",
     platforms: [
         .macOS(.v14),
     ],
     products: [
         .library(
-            name: "SeshatCore",
-            targets: ["SeshatCore"]
+            name: "PersonalScribeCore",
+            targets: ["PersonalScribeCore"]
         ),
         .library(
-            name: "SeshatAudio",
-            targets: ["SeshatAudio"]
+            name: "PersonalScribeAudio",
+            targets: ["PersonalScribeAudio"]
         ),
         .library(
-            name: "SeshatTranscription",
-            targets: ["SeshatTranscription"]
+            name: "PersonalScribeTranscription",
+            targets: ["PersonalScribeTranscription"]
         ),
         .library(
-            name: "SeshatSession",
-            targets: ["SeshatSession"]
+            name: "PersonalScribeSession",
+            targets: ["PersonalScribeSession"]
         ),
         .library(
-            name: "SeshatTestSupport",
-            targets: ["SeshatTestSupport"]
+            name: "PersonalScribeTestSupport",
+            targets: ["PersonalScribeTestSupport"]
         ),
         .executable(
-            name: "SeshatAppKit",
-            targets: ["SeshatAppKit"]
+            name: "PersonalScribeAppKit",
+            targets: ["PersonalScribeAppKit"]
         ),
     ],
     dependencies: [
@@ -45,94 +45,94 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "SeshatCore",
+            name: "PersonalScribeCore",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
-            path: "Sources/SeshatCore"
+            path: "Sources/PersonalScribeCore"
         ),
         .target(
-            name: "SeshatAudio",
+            name: "PersonalScribeAudio",
             dependencies: [
-                "SeshatCore",
+                "PersonalScribeCore",
             ],
-            path: "Sources/SeshatAudio"
+            path: "Sources/PersonalScribeAudio"
         ),
         .target(
-            name: "SeshatTranscription",
+            name: "PersonalScribeTranscription",
             dependencies: [
-                "SeshatCore",
+                "PersonalScribeCore",
                 .product(name: "FluidAudio", package: "FluidAudio"),
             ],
-            path: "Sources/SeshatTranscription"
+            path: "Sources/PersonalScribeTranscription"
         ),
         .target(
-            name: "SeshatSession",
+            name: "PersonalScribeSession",
             dependencies: [
-                "SeshatCore",
-                "SeshatAudio",
-                "SeshatTranscription",
+                "PersonalScribeCore",
+                "PersonalScribeAudio",
+                "PersonalScribeTranscription",
             ],
-            path: "Sources/SeshatSession"
+            path: "Sources/PersonalScribeSession"
         ),
         .target(
-            name: "SeshatTestSupport",
+            name: "PersonalScribeTestSupport",
             dependencies: [
-                "SeshatCore",
+                "PersonalScribeCore",
             ],
-            path: "Sources/SeshatTestSupport"
+            path: "Sources/PersonalScribeTestSupport"
         ),
         .executableTarget(
-            name: "SeshatAppKit",
+            name: "PersonalScribeAppKit",
             dependencies: [
-                "SeshatCore",
-                "SeshatSession",
-                "SeshatAudio",
-                "SeshatTranscription",
+                "PersonalScribeCore",
+                "PersonalScribeSession",
+                "PersonalScribeAudio",
+                "PersonalScribeTranscription",
             ],
-            path: "Sources/SeshatAppKit",
+            path: "Sources/PersonalScribeAppKit",
             resources: [
                 .process("Resources"),
             ]
         ),
         .testTarget(
-            name: "SeshatCoreTests",
+            name: "PersonalScribeCoreTests",
             dependencies: [
-                "SeshatCore",
+                "PersonalScribeCore",
             ],
-            path: "Tests/SeshatCoreTests"
+            path: "Tests/PersonalScribeCoreTests"
         ),
         .testTarget(
-            name: "SeshatAudioTests",
+            name: "PersonalScribeAudioTests",
             dependencies: [
-                "SeshatAudio",
-                "SeshatTestSupport",
+                "PersonalScribeAudio",
+                "PersonalScribeTestSupport",
             ],
-            path: "Tests/SeshatAudioTests"
+            path: "Tests/PersonalScribeAudioTests"
         ),
         .testTarget(
-            name: "SeshatTranscriptionTests",
+            name: "PersonalScribeTranscriptionTests",
             dependencies: [
-                "SeshatTranscription",
-                "SeshatTestSupport",
+                "PersonalScribeTranscription",
+                "PersonalScribeTestSupport",
             ],
-            path: "Tests/SeshatTranscriptionTests"
+            path: "Tests/PersonalScribeTranscriptionTests"
         ),
         .testTarget(
-            name: "SeshatSessionTests",
+            name: "PersonalScribeSessionTests",
             dependencies: [
-                "SeshatSession",
-                "SeshatTestSupport",
+                "PersonalScribeSession",
+                "PersonalScribeTestSupport",
             ],
-            path: "Tests/SeshatSessionTests"
+            path: "Tests/PersonalScribeSessionTests"
         ),
         .testTarget(
-            name: "SeshatAppKitTests",
+            name: "PersonalScribeAppKitTests",
             dependencies: [
-                "SeshatAppKit",
-                "SeshatTestSupport",
+                "PersonalScribeAppKit",
+                "PersonalScribeTestSupport",
             ],
-            path: "Tests/SeshatAppKitTests"
+            path: "Tests/PersonalScribeAppKitTests"
         ),
     ],
     swiftLanguageModes: [
