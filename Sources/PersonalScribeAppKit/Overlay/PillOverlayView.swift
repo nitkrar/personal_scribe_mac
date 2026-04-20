@@ -196,7 +196,7 @@ public struct PillOverlayView: View {
                 .controlSize(.small)
                 .tint(palette.brandChampagne)
 
-            Text("Warming up…")
+            Text("Loading model…")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(palette.pillForegroundText)
         }
