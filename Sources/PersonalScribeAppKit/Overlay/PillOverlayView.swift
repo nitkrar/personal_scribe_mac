@@ -20,11 +20,12 @@ import PersonalScribeCore
 /// * `.hidden` — `EmptyView()` (pill not rendered).
 ///
 /// ## Theme compliance
-/// All colours resolve from `PersonalScribeTheme.Palette.for(scheme:)`. Pill
-/// background + stop-red are the scheme-invariant pill tokens
-/// (`pillBackground`, `pillStopRed`, `pillForegroundText`). No raw
-/// hex-color helpers or inline RGB values — grepping for those outside
-/// `PersonalScribeTheme.swift` must return zero hits.
+/// The pill background is scheme-invariant (always dark navy `#1A1B2E`).
+/// All pill FOREGROUND colours therefore also use the scheme-invariant
+/// `PersonalScribeTheme.Pill.Dark.*` constants — NOT the window-palette
+/// `brandChampagne` token, which resolves to a low-contrast grey-brown
+/// in light mode. This ensures the spinner, waveform, icons, and text
+/// remain legible regardless of the user's WindowTint preference.
 @MainActor
 public struct PillOverlayView: View {
     @ObservedObject private var model: PillOverlayViewModel
@@ -42,6 +43,12 @@ public struct PillOverlayView: View {
     static let errorSize = CGSize(width: 220, height: 36)
 
     static let cornerRadius: CGFloat = 14
+
+    // Scheme-invariant pill foreground tokens.
+    // The pill surface is always dark navy — these must always be light.
+    private let fg   = PersonalScribeTheme.Pill.Dark.waveform   // #D4D0C8 champagne
+    private let fgDim = PersonalScribeTheme.Pill.Dark.cancel     // #99999E secondary
+    private let fgStop = PersonalScribeTheme.Pill.Dark.stop      // #F75138 stop red
 
     public init(model: PillOverlayViewModel) {
         self._model = ObservedObject(wrappedValue: model)
@@ -80,7 +87,8 @@ public struct PillOverlayView: View {
         let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
 
         return HStack {
-            PersonalScribeLogoView(color: palette.brandChampagne.opacity(0.9))
+            // Logo uses the scheme-invariant champagne fg token.
+            PersonalScribeLogoView(color: fg.opacity(0.9))
                 .frame(width: 14, height: 14)
         }
         .frame(width: Self.idleSize.width, height: Self.idleSize.height)
@@ -95,27 +103,22 @@ public struct PillOverlayView: View {
         let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
 
         return HStack(spacing: 12) {
-            // Cancel (passive — tap-to-dismiss affordance carries via the
-            // panel's onTap + cancel handling in future wiring).
+            // Cancel glyph — dimmed secondary fg.
             Image(systemName: "xmark")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(palette.brandChampagne.opacity(0.7))
+                .foregroundColor(fgDim)
 
-            // Voice-modulated waveform. Amplitude tracks `model.audioLevel`
-            // with a 500 ms linear-interp smoothing (matches WaveformView's
-            // `.animated` decay shape) so mic-RMS jitter never makes the wave
-            // jump between frames.
+            // Voice-modulated waveform.
             SineWaveView(
                 audioLevel: model.audioLevel,
                 decayMode: .animated,
-                tint: palette.brandChampagne
+                tint: fg
             )
             .frame(width: 120, height: 28)
 
-            // Stop button (visual only; the outer panel onTap triggers
-            // SessionCoordinator.toggle()).
+            // Stop button.
             Circle()
-                .fill(palette.pillStopRed)
+                .fill(fgStop)
                 .frame(width: 18, height: 18)
                 .overlay(
                     RoundedRectangle(cornerRadius: 2)
@@ -137,11 +140,11 @@ public struct PillOverlayView: View {
         return HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
-                .tint(palette.brandChampagne)
+                .tint(fg)
 
             Text("Transcribing…")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(palette.pillForegroundText)
+                .foregroundColor(fg)
         }
         .frame(width: Self.transcribingSize.width, height: Self.transcribingSize.height)
         .modifier(PillChrome(palette: palette))
@@ -156,7 +159,7 @@ public struct PillOverlayView: View {
 
         return Image(systemName: "checkmark")
             .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(palette.brandChampagne)
+            .foregroundColor(fg)
             .frame(width: Self.doneSize.width, height: Self.doneSize.height)
             .modifier(PillChrome(palette: palette))
             .accessibilityElement()
@@ -172,16 +175,16 @@ public struct PillOverlayView: View {
         return HStack(spacing: 8) {
             Image(systemName: "arrow.down.circle")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(palette.brandChampagne)
+                .foregroundColor(fg)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Downloading model \(percent)%")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(palette.pillForegroundText)
+                    .foregroundColor(fg)
 
                 ProgressView(value: max(0, min(fraction, 1)))
                     .progressViewStyle(.linear)
-                    .tint(palette.brandChampagne)
+                    .tint(fg)
                     .frame(height: 2)
             }
         }
@@ -198,11 +201,11 @@ public struct PillOverlayView: View {
         return HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
-                .tint(palette.brandChampagne)
+                .tint(fg)
 
             Text("Loading model…")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(palette.pillForegroundText)
+                .foregroundColor(fg)
         }
         .frame(width: Self.loadingSize.width, height: Self.loadingSize.height)
         .modifier(PillChrome(palette: palette))
@@ -216,11 +219,11 @@ public struct PillOverlayView: View {
         return HStack(spacing: 8) {
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(palette.statusRecording)
+                .foregroundColor(fgStop)   // red — same stop/error red
 
             Text(message)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(palette.pillForegroundText)
+                .foregroundColor(fg)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
@@ -255,8 +258,6 @@ private struct PillChrome: ViewModifier {
                     style: .continuous
                 )
                 // Vertical gradient: top face ~7% brighter than base.
-                // Achieved by layering a white-to-clear gradient over
-                // the solid base fill — no Color.blended() needed.
                 .fill(base.opacity(0.94))
                 .overlay {
                     RoundedRectangle(
@@ -271,8 +272,7 @@ private struct PillChrome: ViewModifier {
                         )
                     )
                 }
-                // Specular rim — 1px white stroke at low opacity
-                // creates a visible top edge on dark backgrounds.
+                // Specular rim — 1px white stroke at low opacity.
                 .overlay {
                     RoundedRectangle(
                         cornerRadius: PillOverlayView.cornerRadius,
@@ -291,56 +291,4 @@ private struct PillChrome: ViewModifier {
             .shadow(color: .black.opacity(0.18), radius: 24, y: 8)  // ambient
             .shadow(color: .black.opacity(0.45), radius: 8,  y: 4)  // key
     }
-}
-
-#Preview("PillOverlayView — state tour") {
-    VStack(spacing: 16) {
-        PillOverlayView(model: previewModel(visibility: .idle))
-        PillOverlayView(model: previewModel(visibility: .recording))
-        PillOverlayView(model: previewModel(visibility: .transcribing))
-        PillOverlayView(model: previewModel(visibility: .done))
-        PillOverlayView(model: previewModel(visibility: .loading))
-        PillOverlayView(model: previewModel(visibility: .downloading(fractionCompleted: 0.42)))
-    }
-    .padding(24)
-    .background(Color(.windowBackgroundColor))
-    .preferredColorScheme(.dark)
-}
-
-@MainActor
-private func previewModel(visibility: PillOverlayViewModel.Visibility) -> PillOverlayViewModel {
-    let m = PillOverlayViewModel(visibilityMode: .alwaysOn)
-    // Drive the internal state machine via apply(); the stub SessionState
-    // isn't public on PreviewModel, so reuse alwaysOn + matching session.
-    switch visibility {
-    case .hidden:
-        m.setVisibilityMode(.hidden)
-    case .idle:
-        m.apply(sessionState: .idle, preparationProgress: nil)
-    case .recording:
-        m.apply(sessionState: .recording, preparationProgress: nil)
-    case .transcribing:
-        m.apply(sessionState: .transcribing, preparationProgress: nil)
-    case .done:
-        // Simulate a transcribing → idle transition to enter .done.
-        m.apply(sessionState: .transcribing, preparationProgress: nil)
-        m.apply(sessionState: .idle, preparationProgress: nil)
-    case .downloading(let fraction):
-        m.apply(sessionState: .idle, preparationProgress: ModelDownloadProgress(
-            phase: .downloading,
-            fractionCompleted: fraction,
-            receivedBytes: Int64(fraction * 100),
-            expectedBytes: 100
-        ))
-    case .loading:
-        m.apply(sessionState: .idle, preparationProgress: ModelDownloadProgress(
-            phase: .loading,
-            fractionCompleted: 1.0,
-            receivedBytes: 100,
-            expectedBytes: 100
-        ))
-    case .error:
-        m.apply(sessionState: .error(.recordingTooShort), preparationProgress: nil)
-    }
-    return m
 }
