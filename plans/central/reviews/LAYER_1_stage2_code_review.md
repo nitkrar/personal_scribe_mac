@@ -1,109 +1,162 @@
-# Layer 1 Stage 2 Code Review
+# 1. Verdict
 
-## 1. Verdict
-NEEDS REVISION
+REQUEST-CHANGES
 
-## 2. Scope & inputs
+# 2. Scope summary
 
-- Reviewed commits: `d6d3171` (`trunk: step permissions.2 — Layer 1 Stage 2 consumer swap`) and `05a2035` (`trunk: layer 1 stage 2 fix-forward — publicity + arg-label compile fixes`).
-- Plan doc: `plans/central/LAYER_1_permissions.md`
-- Prior reviews referenced: `plans/central/reviews/LAYER_1_review.md`, `plans/central/reviews/LAYER_1_stage1_code_review.md`
-- Scope note: trunk contains an unrelated intervening commit, `e299b2e`, that only touches `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift`; functional findings below stay anchored to the Stage 2 source diffs and fix-forward.
+- Reviewed commits:
+  - `883daddbc30925626023c36c08936ad311eaa3ca` (`trunk: step permissions.2 — Layer 1 Stage 2 consumer swap`)
+  - `d6d31711b8c88e523f204056373defd51b69eb9d` (`trunk: step permissions.2 — Layer 1 Stage 2 consumer swap`)
+- `git show --stat` is identical for both SHAs: 11 `Sources/**` files, `720 insertions(+), 110 deletions(-)`.
+- Direct Layer 1 write set (11 files):
+  - `Sources/SeshatAppKit/Composition/AppComposition.swift`
+  - `Sources/SeshatAppKit/Composition/SeshatAppMain.swift`
+  - `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift`
+  - `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift`
+  - `Sources/SeshatAppKit/MenuBar/StatusItemController.swift`
+  - `Sources/SeshatAppKit/MenuBar/StatusItemMenuModel.swift`
+  - `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift`
+  - `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift`
+  - `Sources/SeshatAppKit/Paste/PasteInjector.swift`
+  - `Sources/SeshatAppKit/Permissions/Service/PermissionServiceAdapter.swift`
+  - `Sources/SeshatAppKit/SeshatApp.swift`
+- `git diff 883dadd d6d3171 -- Sources/SeshatAppKit` is empty. The broader `git diff 883dadd~1..d6d3171 -- Sources/` expands to 21 files because `d6d3171` sits on unrelated later work.
+- Extra non-Layer-1 files in that broader range (10 files):
+  - `Sources/SeshatCore/AppStore/AppStore.swift`
+  - `Sources/SeshatCore/AppStore/AppStoreActiveModeProviding.swift`
+  - `Sources/SeshatCore/AppStore/AppStoreClock.swift`
+  - `Sources/SeshatCore/AppStore/AppStoreSessionProviding.swift`
+  - `Sources/SeshatCore/AppStore/AppStoreSnapshot.swift`
+  - `Sources/SeshatCore/AppStore/AppStoreVisibilityMode.swift`
+  - `Sources/SeshatCore/AppStore/AppStoreVisibilityModeProviding.swift`
+  - `Sources/SeshatCore/AppStore/PillVisibilityState.swift`
+  - `Sources/SeshatCore/Storage/DiskSpaceSnapshot.swift`
+  - `Sources/SeshatCore/Storage/FileManagerAtomicFileWriter.swift`
 
-## 3. Per-consumer audit table
+# 3. Findings grouped by severity
 
-| Site | Migrated? | Behavior preserved? | Notes |
-|---|---|---|---|
-| `PasteInjector` | Partial | Yes | Main injected path now checks `Permission.accessibility` and calls `request(.accessibility)` before leaving the transcript on the clipboard, matching Step 2.1 at `plans/central/LAYER_1_permissions.md:119-131`. The consumer still stores `PermissionServiceAdapter` and keeps a raw-AX compatibility initializer in `Sources/SeshatAppKit/Paste/PasteInjector.swift:101-133,287-324`. |
-| `GlobalHotkeyMonitor` | Partial | Yes | Failed monitor install now reads `.inputMonitoring` through the unified service and preserves the same denied/pending/granted log text from `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift:110-138`, matching Step 2.2 at `plans/central/LAYER_1_permissions.md:133-145`. The public initializer still keeps `PermissionProbing` as compatibility input. |
-| `MenuBarSceneModel` | Partial | Yes | Record-button flow now uses unified microphone status/request and routes Settings through `systemSettingsDeepLink(for: .microphone)` in `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:119-141`, preserving the no-onboarding-reroute behavior required by Step 2.3 at `plans/central/LAYER_1_permissions.md:147-159`. The boundary is still `PermissionServiceAdapter`, not `any PermissionService`. |
-| `OnboardingViewModel` | Partial | Yes | Requests now go through the unified service and `.skipped` stays view-model-local in `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:48-98`, matching Step 2.4 at `plans/central/LAYER_1_permissions.md:161-176`. The compatibility path still depends on `OnboardingPermissionProbing`. |
-| `OnboardingWindowControllerHost` | Partial | Yes | `areCriticalPermissionsGranted` now requires only onboarding completion, microphone, and Input Monitoring in `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:106-110`, fixing the old AX-required mismatch called out in Step 2.4. The host still retains `SeshatOnboardingCompleted` per the plan’s open question at `plans/central/LAYER_1_permissions.md:170`. |
-| `StatusItemController` | Partial | Yes | Menu rebuild now consumes the unified snapshot and service-owned deep links in `Sources/SeshatAppKit/MenuBar/StatusItemController.swift:125-139,204-239`, preserving warning ordering through `StatusItemMenuModel.makeUnified(...)`, consistent with Step 2.5 at `plans/central/LAYER_1_permissions.md:178-190`. The controller still depends on `PermissionServiceAdapter` and keeps fallback URL helpers. |
-| `SeshatAppMain` | Partial | Mostly | The parameterless `init()` now creates one shared live service and injects it into onboarding, paste, menu bar, and hotkey composition in `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:20-35,54-97,120-130`, matching Step 2.6 at `plans/central/LAYER_1_permissions.md:192-204`. The injectable initializer still has a default `PasteInjector()` path that can bypass that shared service. |
-| `SeshatApp` | Partial | Yes | The injectable shell now resolves a unified service and passes it into `MenuBarSceneModel` in `Sources/SeshatAppKit/SeshatApp.swift:15-45`, which is the intended compile-coverage mirror for Step 2.6. It still relies on `PermissionServiceAdapter` and the `SeshatAppMain.makeCompatibilityPermissionService(...)` bridge instead of accepting `any PermissionService` directly. |
-
-## 4. Findings by severity
-
-### Critical
-
-- None.
-
-### Major
-
-1. `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:13`
-
-   Quote:
-   ```swift
-   private let permissionService: PermissionServiceAdapter
-   ```
-
-   Issue:
-   Stage 2 did not actually move the consumers to the `PermissionService` protocol boundary the plan requires. The same concrete-adapter dependency appears across the Stage 2 consumers in `Sources/SeshatAppKit/Paste/PasteInjector.swift:68`, `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift:34`, `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:27`, `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:70`, `Sources/SeshatAppKit/MenuBar/StatusItemController.swift:31`, `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:21,41`, and `Sources/SeshatAppKit/SeshatApp.swift:18`. That diverges from the locked contract in `plans/central/LAYER_1_permissions.md:68-70,122,136,150,164,181,195`, which says the consumers should consume `PermissionService` and observe the single published snapshot through that protocol. The new code also subscribes to adapter-specific `$statuses` publishers, for example in `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:41-45` and `Sources/SeshatAppKit/MenuBar/StatusItemController.swift:92-101`, rather than observing the protocol surface directly.
-
-   Suggested fix shape:
-   Move consumer fields and initializer parameters to `any PermissionService` or a generic `Permissions: PermissionService`, and observe via `objectWillChange` plus `statusSnapshot()`/`statuses` at the protocol boundary. If a concrete bridge is still needed for a SwiftUI seam, keep that type-erasure private and local instead of making every consumer depend on it.
-
-2. `Sources/SeshatAppKit/Permissions/Service/PermissionServiceAdapter.swift:29`
-
-   Quote:
-   ```swift
-   self.observation = service.objectWillChange.sink { [weak self] _ in
-       self?.statuses = service.statusSnapshot()
-   }
-   ```
-
-   Issue:
-   The adapter’s observation bridge is wrong for the fake-service compatibility path that Stage 2 is supposed to preserve. `objectWillChange` fires before `@Published` storage changes, so this sink snapshots the wrapped service too early. That is harmless for `AppKitPermissionService`, because its `statusSnapshot()` re-probes the OS (`Sources/SeshatAppKit/Permissions/Service/AppKitPermissionService.swift:55-65`), but it is incorrect for stored-status services such as `Tests/SeshatCoreTests/AppStore/Fakes/FakePermissionService.swift:35-40`, where `statusSnapshot()` just returns `statuses`. In that case the adapter mirrors the pre-update snapshot and the first published update is stale. This is a Stage 2 regression in the advertised “wrap a fake `PermissionService`” test path, and it is currently unpinned because no test exercises `PermissionServiceAdapter` directly.
-
-   Suggested fix shape:
-   Defer the snapshot onto the next main-actor turn inside the sink, or expose a post-mutation publisher/read hook from the wrapped service. `Sources/SeshatCore/AppStore/AppStore.swift:46-50` already shows the safer pattern: it observes `objectWillChange` and then hops to a later main-actor task before re-reading `statusSnapshot()`.
-
-3. `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:43`
-
-   Quote:
-   ```swift
-   pasteInjector: any PasteInjecting = PasteInjector(),
-   ```
-
-   Issue:
-   The injectable `SeshatAppMain` initializer does not actually default paste wiring to the shared permission service it resolves later in the body. `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:54-59` computes a shared `permissionService`, but if a caller omits `pasteInjector`, the default argument has already built a standalone `PasteInjector()` on the raw compatibility path. That breaks Step 2.6’s “inject one shared `PermissionService` into ... paste” guarantee from `plans/central/LAYER_1_permissions.md:195,202`, except in the parameterless production `init()` that remembers to override the argument explicitly at `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:24-35`.
-
-   Suggested fix shape:
-   Make `pasteInjector` optional, resolve the permission service first inside the initializer body, and then default to `PasteInjector(permissionService: permissionService)` when the caller does not provide a custom injector.
-
-### Minor
+## Blocker
 
 - None.
 
-### Nit
+## Major
+
+- The core Stage 2 swap did not actually remove the old Layer 1 constructor surface; several plan-listed consumers still accept legacy types and then synthesize a `PermissionServiceAdapter` from them. Evidence: `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:85-129`, `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:227-275`, `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift:48-78`, `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift:338-364`, `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:80-103`, `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:165-193`, `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:35-61`, and `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:226-306`.
+
+- The onboarding flow was not consumer-swapped off the old onboarding-only model. `OnboardingPermissionOutcome` still drives the view and view model, `OnboardingViewModel` still defaults to `OnboardingPermissionProbing`, and the old `PermissionRequester` actor remains live. Evidence: `Sources/SeshatAppKit/Onboarding/OnboardingView.swift:205-326`, `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:5-39`, `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:97-167`, and `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:9-63`.
+
+- `SeshatOnboardingCompleted` / `OnboardingState` remain live in the exact Step 2.5 and Step 2.6 consumers the plan said had to remove them or explicitly block on the open Step 2.4 question. I found no such explicit block in `883dadd` or `d6d3171`; the dependency was quietly preserved. Evidence: `Sources/SeshatAppKit/MenuBar/StatusItemController.swift:20-29`, `Sources/SeshatAppKit/MenuBar/StatusItemController.swift:45-55`, `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:103`, `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:154`, `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:92-94`, and `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:338-341`.
+
+- Neither `permissions.2` commit updated any tests even though the Stage 2 plan names test migrations for the hotkey path, menu bar path, onboarding flow, and app entry point. `git show --stat 883dadd` and `git show --stat d6d3171` touch only `Sources/**`, and the targeted tests still bind to the old symbols. Evidence: commit SHAs `883daddbc30925626023c36c08936ad311eaa3ca` and `d6d31711b8c88e523f204056373defd51b69eb9d`; `Tests/SeshatAppKitTests/GlobalHotkeyMonitorTests.swift:386-388`; `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:630-632`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:62`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:72`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:82`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:104`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:109`; and `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:125-149`.
+
+## Minor
+
+- `d6d3171` is not a second Layer 1 consumer-swap revision; for the Layer 1 AppKit surface it is a no-op relative to `883dadd`. Evidence: `git diff 883dadd d6d3171 -- Sources/SeshatAppKit` is empty, while `git diff 883dadd~1..d6d3171 -- Sources/` adds unrelated `Sources/SeshatCore/AppStore/*` and `Sources/SeshatCore/Storage/*` files.
+
+## Nit
 
 - None.
 
-## 5. Cross-layer concerns
+# 4. Consumer-swap completeness audit
 
-- `PermissionServiceAdapter`
-  Temporary scaffolding is understandable here: Stage 2 needed a bridge while old initializers and tests still traffic in legacy probes/requesters. The current implementation is only robust for the live `AppKitPermissionService` and the closure-backed compatibility constructors, though; it is not a sound long-term public abstraction for arbitrary fake `PermissionService` values because of the pre-mutation observation bug above. If the adapter survives past Stage 2, it should become an implementation detail behind protocol-typed consumers.
+Classification key:
 
-- `AppKitMicrophonePermissionRequester`
-  Keeping this around as a Stage 2 legacy shim is reasonable. `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:229-233` uses a narrow downcast to seed microphone status when constructing the compatibility adapter, which is acceptable as temporary glue. This should disappear in Stage 3 once the shell/tests inject fake or live `PermissionService` values directly.
+- `(a)` legitimate remaining bridge/composition seam
+- `(b)` test-only reference OK to survive Stage 2
+- `(c)` genuine missed-consumer-swap that Stage 2 was supposed to handle
 
-- `SeshatAppMain.makeCompatibilityPermissionService`
-  This is the right short-term pattern only if it is treated as disposable compatibility code. It keeps `SeshatApp` and the injectable `SeshatAppMain` compiling while legacy requester/probe-based tests still exist, but it also carries the only remaining `AppKitMicrophonePermissionRequester` downcast in app composition and it interacts poorly with the default `pasteInjector` parameter. It is removable in Stage 3 and should be removed there.
+## `MicrophonePermissionState`
 
-## 6. Test coverage gaps
+- Live refs: 12 across 7 files.
+- `(a)` `Sources/SeshatAppKit/MenuBar/MicrophonePermissionState.swift:4`; `Sources/SeshatAppKit/MenuBar/StatusItemMenuModel.swift:143`; `Sources/SeshatAppKit/Permissions/AppKitMicrophonePermissionRequester.swift:41`; `Sources/SeshatAppKit/Permissions/AppKitMicrophonePermissionRequester.swift:45`; `Sources/SeshatAppKit/Permissions/Service/PermissionServiceAdapter.swift:107`; `Sources/SeshatAppKit/Permissions/Service/PermissionServiceAdapter.swift:134`.
+- `(c)` `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:55`; `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:88`; `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:229`; `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:84`; `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:166`; `Sources/SeshatAppKit/SeshatApp.swift:19`.
 
-- `PermissionServiceAdapter` has no direct test coverage. The new bridge in `Sources/SeshatAppKit/Permissions/Service/PermissionServiceAdapter.swift:6-89` is now part of the consumer-swap path, but no suite wraps a fake/live `PermissionService` and verifies observation, refresh, or request semantics through the adapter.
-- The plan’s named Stage 2 consumer suites were not converted to fake `PermissionService` usage:
-  - `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:8,18,30,86,106` still drive `OnboardingViewModel` through `OnboardingPermissionProbing`.
-  - `Tests/SeshatAppKitTests/GlobalHotkeyMonitorTests.swift:289-292,307-310` still drive `GlobalHotkeyMonitor` through `PermissionProbing`.
-  - `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:13-20,28-35,51-58` still exercise mic-only requester/state inputs instead of a fake shared service.
-  - `Tests/SeshatAppKitTests/AppEntryPointTests.swift:17-25` and `Tests/SeshatAppKitTests/MenuBarFlowIntegrationTests.swift:116-125` do not exercise the shared-service injection path.
-  - `Tests/SeshatAppKitTests/MenuBar/StatusItemMenuModelTests.swift:12-217` still cover the legacy `make(...)` wrapper, not the unified `makeUnified(...)` path that `StatusItemController` now uses.
-- Manual verification runbooks were not extended with the Stage 2 refresh checks requested by the plan:
-  - `Tests/SeshatAppKitTests/ManualOnboardingVerification.md:18-25` has no “return from System Settings and verify refresh” step.
-  - `Tests/SeshatAppKitTests/ManualStatusItemVerification.md:13-26` has no menu-warning refresh check after `NSApplication.didBecomeActiveNotification`.
+## `InputMonitoringPermissionState`
 
-## 7. Summary
+- Live refs: 16 across 8 files.
+- `(a)` `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift:135`; `Sources/SeshatAppKit/MenuBar/StatusItemMenuModel.swift:144`; `Sources/SeshatAppKit/Permissions/Service/PermissionServiceAdapter.swift:120`; `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:6`; `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:13`; `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:29`.
+- `(b)` `Tests/SeshatCoreTests/PermissionStatusTests.swift:6`; `Tests/SeshatCoreTests/PermissionStatusTests.swift:7`; `Tests/SeshatCoreTests/PermissionStatusTests.swift:8`; `Tests/SeshatCoreTests/PermissionStatusTests.swift:9`; `Tests/SeshatCoreTests/PermissionStatusTests.swift:14`; `Tests/SeshatCoreTests/PermissionStatusTests.swift:15`.
+- `(c)` `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:55`; `Tests/SeshatAppKitTests/GlobalHotkeyMonitorTests.swift:387`; `Tests/SeshatAppKitTests/GlobalHotkeyMonitorTests.swift:388`; `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:631`.
 
-The live production composition mostly preserves Stage 2 behavior: paste still falls back to the clipboard, hotkey failure logging still distinguishes denied vs pending vs granted, menu-bar mic prompting still happens in the same order, and onboarding now correctly treats Accessibility as optional in both the view model and the host gate. The two substantive blockers are architectural rather than UX-facing: the consumer swap stopped at a new concrete `PermissionServiceAdapter` instead of the `PermissionService` protocol boundary the plan requires, and that adapter’s observation bridge is incorrect for wrapped fake services, which undercuts the very compatibility path it was added to provide. `SeshatAppMain` also still has one integration seam where the default paste injector can bypass the shared service outside the parameterless production init.
+## `OnboardingPermissionOutcome`
+
+- Live refs: 27 across 5 files.
+- `(a)` `Sources/SeshatAppKit/Permissions/Service/PermissionServiceAdapter.swift:145`.
+- `(c)` `Sources/SeshatAppKit/Onboarding/OnboardingView.swift:210`; `Sources/SeshatAppKit/Onboarding/OnboardingView.swift:276`; `Sources/SeshatAppKit/Onboarding/OnboardingView.swift:295`; `Sources/SeshatAppKit/Onboarding/OnboardingView.swift:320`; `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:5`; `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:14`; `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:15`; `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:16`; `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:157`; `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:10`; `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:11`; `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:12`; `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:16`; `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:34`; `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:38`; `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:43`; `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:55`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:126`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:127`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:128`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:131`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:132`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:133`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:140`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:144`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:148`.
+
+## `PermissionProbing`
+
+- Live refs: 11 across 6 files.
+- `(a)` `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:12`; `Sources/SeshatCore/InputMonitoringPermissionProbe.swift:26`.
+- `(b)` `Tests/SeshatCoreTests/PermissionStatusTests.swift:13`.
+- `(c)` `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:45`; `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:228`; `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift:65`; `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift:339`; `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:85`; `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:167`; `Tests/SeshatAppKitTests/GlobalHotkeyMonitorTests.swift:386`; `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift:630`.
+
+## `OnboardingPermissionProbing`
+
+- Live refs: 6 across 3 files.
+- `(c)` `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:34`; `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:114`; `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:9`; `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift:15`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:104`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:125`.
+
+## `AppKitMicrophonePermissionRequester`
+
+- Live refs: 12 across 6 files.
+- `(a)` `Sources/SeshatAppKit/Permissions/AppKitMicrophonePermissionRequester.swift:5`.
+- `(b)` `Tests/SeshatAppKitTests/AppCompositionTests.swift:19`; `Tests/SeshatAppKitTests/AppKitMicrophonePermissionRequesterTests.swift:9`; `Tests/SeshatAppKitTests/AppKitMicrophonePermissionRequesterTests.swift:14`; `Tests/SeshatAppKitTests/AppKitMicrophonePermissionRequesterTests.swift:23`; `Tests/SeshatAppKitTests/AppKitMicrophonePermissionRequesterTests.swift:32`; `Tests/SeshatAppKitTests/AppKitMicrophonePermissionRequesterTests.swift:42`; `Tests/SeshatAppKitTests/AppKitMicrophonePermissionRequesterTests.swift:58`.
+- `(c)` `Sources/SeshatAppKit/Composition/AppComposition.swift:117-119`; `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:241`; `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:87`; `Sources/SeshatAppKit/SeshatApp.swift:36`.
+
+## `SeshatOnboardingCompleted`
+
+- Live refs: 12 across 5 files.
+- `(a)` `Sources/SeshatCore/OnboardingState.swift:5`; `Sources/SeshatCore/OnboardingState.swift:19`; `Sources/SeshatCore/OnboardingState.swift:34`.
+- `(c)` `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:93`; `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:340`; `Sources/SeshatAppKit/MenuBar/StatusItemController.swift:25`; `Sources/SeshatAppKit/MenuBar/StatusItemController.swift:51`; `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:103`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:62`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:72`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:82`; `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift:109`.
+
+## `OnboardingState.swift`
+
+- Live refs: 0 string refs in `Sources/**` and `Tests/**`.
+- The file still exists at `Sources/SeshatCore/OnboardingState.swift`.
+- This plan row is a filename, not a grep-able symbol. The real live dependency is already captured under `SeshatOnboardingCompleted` and `OnboardingState.completed.persist(...)` at `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift:154`.
+
+## `InputMonitoringPermissionProbe.swift`
+
+- Live refs: 0 string refs in `Sources/**` and `Tests/**`.
+- The file still exists at `Sources/SeshatCore/InputMonitoringPermissionProbe.swift`.
+- This plan row is a filename, not a grep-able symbol. The real live dependencies are already captured under `PermissionProbing` and `InputMonitoringPermissionState`.
+
+## Cleanup matrix
+
+| Symbol | Live ref count | Classification | Action |
+|---|---:|---|---|
+| `MicrophonePermissionState` | 12 | mixed (`a=6`, `c=6`) | needs S2 retry |
+| `InputMonitoringPermissionState` | 16 | mixed (`a=6`, `b=6`, `c=4`) | needs S2 retry |
+| `OnboardingPermissionOutcome` | 27 | mixed (`a=1`, `c=26`) | needs S2 retry |
+| `PermissionProbing` | 11 | mixed (`a=2`, `b=1`, `c=8`) | needs S2 retry |
+| `OnboardingPermissionProbing` | 6 | missed swap only (`c=6`) | needs S2 retry |
+| `AppKitMicrophonePermissionRequester` | 12 | mixed (`a=1`, `b=7`, `c=4`) | needs S2 retry |
+| `SeshatOnboardingCompleted` | 12 | mixed (`a=3`, `c=9`) | needs S2 retry |
+| `OnboardingState.swift` | 0 string refs | filename-only plan entry; real dependency captured under `SeshatOnboardingCompleted` | needs plan update |
+| `InputMonitoringPermissionProbe.swift` | 0 string refs | filename-only plan entry; real dependency captured under `PermissionProbing` / `InputMonitoringPermissionState` | needs plan update |
+
+- Result: 0 symbols are fully `OK`.
+- Result: 7 symbols have genuine missed-swap refs (`(c)` present).
+- Result: 2 plan entries need wording cleanup because they are filename rows rather than symbol rows.
+
+# 5. Plan Fidelity Summary
+
+- `Step 2.1 - PasteInjector`: landed. `Sources/SeshatAppKit/Paste/PasteInjector.swift` has no live refs to any Stage 3 Layer 1 symbol and now gates Accessibility through `PermissionService`.
+- `Step 2.2 - GlobalHotkeyMonitor`: partial. Runtime permission reads moved to the unified service, but the consumer still exposes `PermissionProbing` and `InputMonitoringPermissionState` compatibility surface in `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift:65`, `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift:135`, and `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift:339`.
+- `Step 2.3 - MenuBarSceneModel`: partial. Runtime state is unified, but `MicrophonePermissionState` and `AppKitMicrophonePermissionRequester` remain live in `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:55`, `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:87-88`, and `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift:229`.
+- `Step 2.4 - onboarding flow`: missed/partial. `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift:32-39` can accept a `PermissionService`, but the flow still centers on `OnboardingPermissionOutcome`, `OnboardingPermissionProbing`, `PermissionRequester`, `MicrophonePermissionState`, `PermissionProbing`, and `SeshatOnboardingCompleted`.
+- `Step 2.5 - StatusItemController`: partial. The controller now rebuilds from `StatusItemMenuModel.makeUnified(...)`, but it still reads `SeshatOnboardingCompleted` in `Sources/SeshatAppKit/MenuBar/StatusItemController.swift:25` and `Sources/SeshatAppKit/MenuBar/StatusItemController.swift:51`, which the plan explicitly said must be removed or explicitly blocked.
+- `Step 2.6 - SeshatAppMain`: partial. The default path can compose `AppKitPermissionService`, but `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:37-46`, `Sources/SeshatAppKit/Composition/SeshatAppMain.swift:226-306`, `Sources/SeshatAppKit/Composition/AppComposition.swift:117-123`, and `Sources/SeshatAppKit/SeshatApp.swift:17-43` still preserve the legacy mic/IM/onboarding composition path.
+- Acceptance-test fidelity: missed. Both reviewed commits touch zero `Tests/**` files even though the plan names concrete test migrations for Steps 2.2, 2.4, 2.5, and 2.6.
+- Stage 3 readiness: not ready. The delete list still has genuine missed-swap refs for 7 of 9 plan-listed entries, and the remaining 2 entries need plan wording cleanup before a delete audit can be mechanically accurate.
+
+# 6. Summary + Recommendation
+
+- This Stage 2 swap is not complete enough to support the Layer 1 Stage 3 delete pass. The runtime path clearly moved toward `PermissionService`, but most of the old Layer 1 surfaces were wrapped rather than retired.
+- Recommended L1 S2 retry PR order:
+  1. Onboarding cluster first: `Sources/SeshatAppKit/Onboarding/OnboardingView.swift`, `Sources/SeshatAppKit/Onboarding/OnboardingViewModel.swift`, `Sources/SeshatAppKit/Onboarding/OnboardingWindowController.swift`, `Sources/SeshatAppKit/Onboarding/PermissionRequester.swift`, and `Tests/SeshatAppKitTests/OnboardingViewModelTests.swift`. This clears the densest missed-swap set: `OnboardingPermissionOutcome`, `OnboardingPermissionProbing`, `PermissionProbing`, `MicrophonePermissionState`, and `SeshatOnboardingCompleted`.
+  2. Composition cluster second: `Sources/SeshatAppKit/Composition/SeshatAppMain.swift`, `Sources/SeshatAppKit/Composition/AppComposition.swift`, and `Sources/SeshatAppKit/SeshatApp.swift`. This removes the compatibility builders that keep rehydrating the old mic/IM/requester surface.
+  3. Menu bar cluster third: `Sources/SeshatAppKit/MenuBar/MenuBarSceneModel.swift`, `Sources/SeshatAppKit/MenuBar/StatusItemController.swift`, `Sources/SeshatAppKit/MenuBar/StatusItemMenuModel.swift`, and `Tests/SeshatAppKitTests/MenuBarSceneModelTests.swift`.
+  4. Hotkey cluster fourth: `Sources/SeshatAppKit/Hotkeys/GlobalHotkeyMonitor.swift` and `Tests/SeshatAppKitTests/GlobalHotkeyMonitorTests.swift`.
+  5. After the retry PR, rerun the delete audit and update the Stage 3 plan rows for `OnboardingState.swift` and `InputMonitoringPermissionProbe.swift` so the delete matrix tracks exported symbols instead of filename strings.
+- `PasteInjector` does not appear to need a retry; it is the only plan-listed Stage 2 consumer that looks fully migrated off the old Layer 1 symbols.
