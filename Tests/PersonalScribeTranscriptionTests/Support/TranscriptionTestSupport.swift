@@ -26,44 +26,25 @@ enum TestModelArtifacts {
             to: directory.appendingPathComponent("parakeet_vocab.json", isDirectory: false)
         )
     }
-
-    static func writeCorrupt(to directory: URL) throws {
-        try FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true
-        )
-        try Data().write(
-            to: directory.appendingPathComponent("parakeet_vocab.json", isDirectory: false)
-        )
-    }
 }
 
-actor RecordingURLSession {
-    private(set) var requests: [URLRequest] = []
-
-    func record(_ request: URLRequest) throws {
-        requests.append(request)
-        throw URLError(.cannotConnectToHost)
-    }
-}
-
+/// Legacy downloader stub retained only for `ModelAwareFluidAudioTranscriber`
+/// tests during the transcriber-downloader removal (step 1.3 → step 1.4).
+/// Step 1.4 deletes this along with the `ModelDownloading` protocol.
 actor StubModelDownloader: ModelDownloading {
     private(set) var ensureCallCount = 0
 
     private let scriptedProgress: [ModelDownloadProgress]
     private let error: Error?
-    private let recordingSession: RecordingURLSession?
     private let writer: @Sendable (URL) throws -> Void
 
     init(
         scriptedProgress: [ModelDownloadProgress] = [],
         error: Error? = nil,
-        recordingSession: RecordingURLSession? = nil,
         writer: @escaping @Sendable (URL) throws -> Void = TestModelArtifacts.writeValid(to:)
     ) {
         self.scriptedProgress = scriptedProgress
         self.error = error
-        self.recordingSession = recordingSession
         self.writer = writer
     }
 
@@ -72,13 +53,6 @@ actor StubModelDownloader: ModelDownloading {
         progress: @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws -> URL {
         ensureCallCount += 1
-
-        if let recordingSession {
-            let descriptor = BuiltInModelCatalog.parakeetTDT06Bv2
-            try await recordingSession.record(
-                URLRequest(url: descriptor.resolveURL(for: descriptor.requiredRelativePaths[0]))
-            )
-        }
 
         for snapshot in scriptedProgress {
             progress(snapshot)
@@ -154,39 +128,5 @@ actor StubInferenceClient: FluidAudioInferencing {
         }
 
         return result
-    }
-}
-
-actor RetryingStubModelDownloader: ModelDownloading {
-    enum ResultKind {
-        case corrupt
-        case valid
-    }
-
-    private(set) var attemptCount = 0
-
-    private let firstResult: ResultKind
-    private let secondResult: ResultKind
-
-    init(firstResult: ResultKind, secondResult: ResultKind) {
-        self.firstResult = firstResult
-        self.secondResult = secondResult
-    }
-
-    func ensureModelAvailable(
-        at directory: URL,
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws -> URL {
-        attemptCount += 1
-        progress(.init(phase: .downloading, fractionCompleted: 1, receivedBytes: 1, expectedBytes: 1))
-
-        switch attemptCount == 1 ? firstResult : secondResult {
-        case .corrupt:
-            try TestModelArtifacts.writeCorrupt(to: directory)
-        case .valid:
-            try TestModelArtifacts.writeValid(to: directory)
-        }
-
-        return directory
     }
 }

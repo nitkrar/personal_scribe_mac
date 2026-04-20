@@ -11,7 +11,6 @@ final class FluidAudioTranscriberTests: PersonalScribeTranscriptionFilesystemTes
 
         let recorder = LogRecorder()
         let transcriber = FluidAudioTranscriber(
-            downloader: StubModelDownloader(),
             inference: StubInferenceClient(
                 loadError: NSError(
                     domain: "CoreMLFake",

@@ -11,7 +11,6 @@ protocol ModelDownloading: Sendable {
 }
 
 public actor FluidAudioTranscriber: Transcribing {
-    private let downloader: any ModelDownloading
     private let inference: any FluidAudioInferencing
     private let logger: PersonalScribeLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
@@ -25,10 +24,6 @@ public actor FluidAudioTranscriber: Transcribing {
         descriptor: ModelDescriptor = BuiltInModelCatalog.parakeetTDT06Bv2,
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.transcription)
     ) {
-        self.downloader = PrivateModelDownloader(
-            descriptor: descriptor,
-            storageLocator: AppConfig.liveStorageLocator()
-        )
         self.inference = PrivateFluidAudioInferenceClient()
         self.logger = logger
         self.logSink = nil
@@ -37,13 +32,11 @@ public actor FluidAudioTranscriber: Transcribing {
     }
 
     init(
-        downloader: any ModelDownloading,
         inference: any FluidAudioInferencing,
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.transcription),
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil,
         descriptor: ModelDescriptor = BuiltInModelCatalog.parakeetTDT06Bv2
     ) {
-        self.downloader = downloader
         self.inference = inference
         self.logger = logger
         self.logSink = logSink
@@ -88,11 +81,6 @@ public actor FluidAudioTranscriber: Transcribing {
         defer { signposter.endInterval(prepareInterval, prepareState) }
 
         let modelDirectory = try modelDirectory()
-
-        if !ModelArtifactStaging.modelArtifactsAreValid(in: modelDirectory, descriptor: descriptor) {
-            try await ensureValidDownloadedModel(at: modelDirectory)
-        }
-
         let progressBroadcaster = self.progressBroadcaster
 
         do {
@@ -252,47 +240,6 @@ private extension FluidAudioTranscriber {
         try AppConfig.directory(for: descriptor)
     }
 
-    func ensureValidDownloadedModel(at modelDirectory: URL) async throws {
-        let fileManager = FileManager.default
-        let progressBroadcaster = self.progressBroadcaster
-        let stagingDirectory = ModelArtifactStaging.stagingDirectory(
-            base: modelDirectory.deletingLastPathComponent(),
-            descriptor: descriptor
-        )
-
-        for attempt in 0..<2 {
-            do {
-                _ = try await downloader.ensureModelAvailable(
-                    at: modelDirectory,
-                    progress: { snapshot in
-                        let current = progressBroadcaster.currentSnapshot
-                        let normalized = ModelArtifactStaging.normalizedProgress(
-                            snapshot,
-                            current: current
-                        )
-                        progressBroadcaster.update(normalized)
-                    }
-                )
-
-                guard ModelArtifactStaging.modelArtifactsAreValid(
-                    in: modelDirectory,
-                    descriptor: descriptor
-                ) else {
-                    throw ModelArtifactValidationError.invalidArtifacts
-                }
-
-                return
-            } catch {
-                try? fileManager.removeItem(at: stagingDirectory)
-
-                if attempt == 1 {
-                    logError("Model download failed", error: error)
-                    throw PersonalScribeError.modelDownloadFailure
-                }
-            }
-        }
-    }
-
     func logError(_ message: String, error: Error) {
         logger.error("\(message): \(error.localizedDescription)", error: error)
         logSink?("error", "\(message): \(error.localizedDescription)")
@@ -300,6 +247,5 @@ private extension FluidAudioTranscriber {
 }
 
 private enum ModelArtifactValidationError: Error {
-    case invalidArtifacts
     case invalidStreamShape
 }

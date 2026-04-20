@@ -1,33 +1,35 @@
 import XCTest
+import FluidAudio
 import PersonalScribeCore
 @testable import PersonalScribeTranscription
 
 final class ModelDownloadFailureTests: PersonalScribeTranscriptionFilesystemTestCase {
-    func testPrepareMapsDownloadFailureToSharedError() async {
+    func testPrepareMapsLoadFailureToSharedError() async {
+        // FluidAudio owns both the download and load phases now, so any
+        // network/load error surfaces through the single loadModel path and
+        // maps to `.modelLoadFailure`.
         let transcriber = FluidAudioTranscriber(
-            downloader: StubModelDownloader(error: URLError(.notConnectedToInternet)),
-            inference: StubInferenceClient()
+            inference: StubInferenceClient(loadError: URLError(.notConnectedToInternet))
         )
 
         do {
             try await transcriber.prepare()
             XCTFail("Expected prepare() to throw")
         } catch let error as PersonalScribeError {
-            XCTAssertEqual(error, .modelDownloadFailure)
+            XCTAssertEqual(error, .modelLoadFailure)
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
     }
 
-    func testPrepareResetsProgressToIdleAfterDownloadFailure() async {
+    func testPrepareResetsProgressToIdleAfterLoadFailure() async {
         let transcriber = FluidAudioTranscriber(
-            downloader: StubModelDownloader(
-                scriptedProgress: [
-                    .init(phase: .downloading, fractionCompleted: 0.5, receivedBytes: 50, expectedBytes: 100)
-                ],
-                error: URLError(.notConnectedToInternet)
-            ),
-            inference: StubInferenceClient()
+            inference: StubInferenceClient(
+                loadError: URLError(.notConnectedToInternet),
+                scriptedLoadProgress: [
+                    .init(fractionCompleted: 0.5, phase: .downloading(completedFiles: 2, totalFiles: 4)),
+                ]
+            )
         )
 
         let stream = transcriber.modelDownloadProgress()
@@ -35,7 +37,7 @@ final class ModelDownloadFailureTests: PersonalScribeTranscriptionFilesystemTest
             var snapshots: [ModelDownloadProgress] = []
             for await value in stream {
                 snapshots.append(value)
-                if snapshots.count == 4 { break }
+                if snapshots.count > 1, snapshots.last?.phase == .idle { break }
             }
             return snapshots
         }
@@ -51,6 +53,6 @@ final class ModelDownloadFailureTests: PersonalScribeTranscriptionFilesystemTest
 
         XCTAssertEqual(snapshots.first?.phase, .idle)
         XCTAssertEqual(snapshots.last?.phase, .idle)
-        XCTAssertEqual(snapshots.filter { $0.phase == .downloading }.count, 2)
+        XCTAssertTrue(snapshots.contains(where: { $0.phase == .downloading }))
     }
 }

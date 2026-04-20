@@ -32,7 +32,6 @@ final class FluidAudioTranscriberCompileTests: XCTestCase {
             engine: .parakeetTDT
         )
         let transcriber = FluidAudioTranscriber(
-            downloader: StubModelDownloader(),
             inference: StubInferenceClient(),
             descriptor: descriptor
         )

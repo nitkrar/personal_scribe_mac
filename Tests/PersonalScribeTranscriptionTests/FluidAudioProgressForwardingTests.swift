@@ -8,12 +8,6 @@ import PersonalScribeCore
 /// `ModelDownloadProgress` stream in the expected phase order.
 final class FluidAudioProgressForwardingTests: PersonalScribeTranscriptionFilesystemTestCase {
     func testPrepareForwardsFluidAudioProgressThroughModelDownloadStream() async throws {
-        // Pre-seed a model directory so the current (pre-step-1.3) pre-flight
-        // validator is satisfied and does NOT trigger the legacy stub
-        // downloader — we are testing the load-path forwarding specifically.
-        let modelRoot = try AppConfig.directory(for: BuiltInModelCatalog.parakeetTDT06Bv2)
-        try TestModelArtifacts.writeValid(to: modelRoot)
-
         let inference = StubInferenceClient(
             scriptedLoadProgress: [
                 .init(fractionCompleted: 0.1, phase: .downloading(completedFiles: 1, totalFiles: 5)),
@@ -21,10 +15,7 @@ final class FluidAudioProgressForwardingTests: PersonalScribeTranscriptionFilesy
                 .init(fractionCompleted: 0.95, phase: .compiling(modelName: "Decoder")),
             ]
         )
-        let transcriber = FluidAudioTranscriber(
-            downloader: StubModelDownloader(),
-            inference: inference
-        )
+        let transcriber = FluidAudioTranscriber(inference: inference)
 
         let stream = transcriber.modelDownloadProgress()
         // Expect: .idle (initial), .downloading(0.1), .downloading(0.5),

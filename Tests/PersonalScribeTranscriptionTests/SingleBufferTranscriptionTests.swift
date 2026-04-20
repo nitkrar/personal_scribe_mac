@@ -11,7 +11,6 @@ final class SingleBufferTranscriptionTests: PersonalScribeTranscriptionFilesyste
             timestamp: .now
         )
         let transcriber = FluidAudioTranscriber(
-            downloader: StubModelDownloader(),
             inference: StubInferenceClient(
                 result: FluidAudioInferenceResult(
                     text: "hello world",
