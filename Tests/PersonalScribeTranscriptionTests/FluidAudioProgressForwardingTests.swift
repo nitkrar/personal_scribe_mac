@@ -56,13 +56,6 @@ final class FluidAudioProgressForwardingTests: PersonalScribeTranscriptionFilesy
         }
 
         let storageLocator = ModelAwareProgressTestStorageLocator(baseDirectory: rootDirectory)
-        let modelDirectory = storageLocator
-            .url(for: .models)
-            .appendingPathComponent(descriptor.id, isDirectory: true)
-            .standardizedFileURL
-
-        try writeValidModelArtifacts(descriptor: descriptor, to: modelDirectory)
-
         let inference = ModelAwareProgressStubInferenceClient(
             scriptedLoadProgress: [
                 .init(fractionCompleted: 0.1, phase: .downloading(completedFiles: 1, totalFiles: 5)),
@@ -74,7 +67,6 @@ final class FluidAudioProgressForwardingTests: PersonalScribeTranscriptionFilesy
             descriptor: descriptor,
             runtimeVariant: .parakeetTDTCTC110M,
             storageLocator: storageLocator,
-            downloader: StubModelDownloader(),
             inference: inference
         )
 
@@ -105,27 +97,6 @@ final class FluidAudioProgressForwardingTests: PersonalScribeTranscriptionFilesy
         XCTAssertEqual(snapshots[4].phase, .finished)
     }
 
-    private func writeValidModelArtifacts(descriptor: ModelDescriptor, to directory: URL) throws {
-        try FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true
-        )
-
-        for relativePath in descriptor.requiredRelativePaths {
-            let destinationURL = directory.appendingPathComponent(relativePath, isDirectory: false)
-            try FileManager.default.createDirectory(
-                at: destinationURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-
-            if destinationURL.lastPathComponent == "parakeet_vocab.json" {
-                let contents = descriptor.id == BuiltInModelCatalog.parakeetTDTCTC110M.id ? "[]" : "{}"
-                try Data(contents.utf8).write(to: destinationURL)
-            } else {
-                try Data([1]).write(to: destinationURL)
-            }
-        }
-    }
 }
 
 private struct ModelAwareProgressTestStorageLocator: StorageLocator {

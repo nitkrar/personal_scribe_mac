@@ -7,7 +7,6 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
     private let descriptor: ModelDescriptor
     private let runtimeVariantResult: Result<FluidAudioRuntimeVariant, ModelSelectionError>
     private let storageLocator: any StorageLocator
-    private let downloader: any ModelDownloading
     private let inference: any ModelAwareFluidAudioInferencing
     private let logger: PersonalScribeLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
@@ -25,10 +24,6 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
             descriptor: descriptor,
             runtimeVariantResult: Self.resolveRuntimeVariant(for: descriptor),
             storageLocator: storageLocator,
-            downloader: PrivateModelDownloader(
-                descriptor: descriptor,
-                storageLocator: storageLocator
-            ),
             inference: PrivateModelAwareFluidAudioInferenceClient(),
             logger: logger
         )
@@ -38,7 +33,6 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
         descriptor: ModelDescriptor,
         runtimeVariant: FluidAudioRuntimeVariant,
         storageLocator: any StorageLocator,
-        downloader: any ModelDownloading,
         inference: any ModelAwareFluidAudioInferencing,
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.transcription),
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
@@ -47,7 +41,6 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
             descriptor: descriptor,
             runtimeVariantResult: .success(runtimeVariant),
             storageLocator: storageLocator,
-            downloader: downloader,
             inference: inference,
             logger: logger,
             logSink: logSink
@@ -58,7 +51,6 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
         descriptor: ModelDescriptor,
         runtimeVariantResult: Result<FluidAudioRuntimeVariant, ModelSelectionError>,
         storageLocator: any StorageLocator,
-        downloader: any ModelDownloading,
         inference: any ModelAwareFluidAudioInferencing,
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.transcription),
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
@@ -66,7 +58,6 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
         self.descriptor = descriptor
         self.runtimeVariantResult = runtimeVariantResult
         self.storageLocator = storageLocator
-        self.downloader = downloader
         self.inference = inference
         self.logger = logger
         self.logSink = logSink
@@ -103,17 +94,19 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
     public func download(
         progress: @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws {
-        _ = try resolvedRuntimeVariant()
+        let runtimeVariant = try resolvedRuntimeVariant()
         let modelDirectory = try modelDirectory()
-
-        guard !Self.modelArtifactsAreValid(in: modelDirectory, descriptor: descriptor) else {
-            return
-        }
+        let progressBroadcaster = self.progressBroadcaster
 
         do {
-            try await ensureValidDownloadedModel(
-                at: modelDirectory,
-                externalProgress: progress
+            try await inference.loadModel(
+                from: modelDirectory,
+                runtimeVariant: runtimeVariant,
+                progressHandler: { snapshot in
+                    let mapped = Self.map(snapshot)
+                    progressBroadcaster.update(mapped)
+                    progress(mapped)
+                }
             )
 
             let finished = Self.finishedSnapshot(from: progressBroadcaster.currentSnapshot)
@@ -121,7 +114,8 @@ public actor ModelAwareFluidAudioTranscriber: Transcribing {
             progress(finished)
         } catch {
             progressBroadcaster.update(Self.idleSnapshot)
-            throw error
+            logError("FluidAudio model load failed", error: error)
+            throw PersonalScribeError.modelLoadFailure
         }
     }
 
@@ -218,11 +212,6 @@ private extension ModelAwareFluidAudioTranscriber {
         defer { signposter.endInterval(prepareInterval, prepareState) }
 
         let modelDirectory = try modelDirectory()
-
-        if !Self.modelArtifactsAreValid(in: modelDirectory, descriptor: descriptor) {
-            try await ensureValidDownloadedModel(at: modelDirectory, externalProgress: nil)
-        }
-
         let progressBroadcaster = self.progressBroadcaster
 
         do {
@@ -278,63 +267,9 @@ private extension ModelAwareFluidAudioTranscriber {
         return directory
     }
 
-    func ensureValidDownloadedModel(
-        at modelDirectory: URL,
-        externalProgress: (@Sendable (ModelDownloadProgress) -> Void)?
-    ) async throws {
-        let fileManager = FileManager.default
-        let stagingDirectory = ModelArtifactStaging.stagingDirectory(
-            base: modelDirectory.deletingLastPathComponent(),
-            descriptor: descriptor
-        )
-
-        for attempt in 0..<2 {
-            do {
-                _ = try await downloader.ensureModelAvailable(
-                    at: modelDirectory,
-                    progress: { [progressBroadcaster] snapshot in
-                        let current = progressBroadcaster.currentSnapshot
-                        let normalized = Self.normalizedProgress(snapshot, current: current)
-                        progressBroadcaster.update(normalized)
-                        externalProgress?(normalized)
-                    }
-                )
-
-                guard Self.modelArtifactsAreValid(in: modelDirectory, descriptor: descriptor) else {
-                    throw ModelSelectionArtifactValidationError.invalidArtifacts
-                }
-
-                return
-            } catch {
-                try? fileManager.removeItem(at: stagingDirectory)
-
-                if attempt == 1 {
-                    logError("Model download failed", error: error)
-                    throw PersonalScribeError.modelDownloadFailure
-                }
-            }
-        }
-    }
-
     func logError(_ message: String, error: Error) {
         logger.error("\(message): \(error.localizedDescription)", error: error)
         logSink?("error", "\(message): \(error.localizedDescription)")
-    }
-
-    static func normalizedProgress(
-        _ snapshot: ModelDownloadProgress,
-        current: ModelDownloadProgress
-    ) -> ModelDownloadProgress {
-        guard snapshot.phase == .downloading, current.phase == .downloading else {
-            return snapshot
-        }
-
-        return .init(
-            phase: .downloading,
-            fractionCompleted: max(snapshot.fractionCompleted, current.fractionCompleted),
-            receivedBytes: max(snapshot.receivedBytes, current.receivedBytes),
-            expectedBytes: snapshot.expectedBytes ?? current.expectedBytes
-        )
     }
 
     static func finishedSnapshot(from snapshot: ModelDownloadProgress) -> ModelDownloadProgress {
@@ -344,39 +279,6 @@ private extension ModelAwareFluidAudioTranscriber {
             receivedBytes: snapshot.receivedBytes,
             expectedBytes: snapshot.expectedBytes
         )
-    }
-
-    static func modelArtifactsAreValid(in directory: URL, descriptor: ModelDescriptor) -> Bool {
-        guard ModelArtifactStaging.modelsExist(in: directory, descriptor: descriptor) else {
-            return false
-        }
-
-        let fileManager = FileManager.default
-
-        for path in ModelArtifactStaging.requiredModelPaths(in: directory, descriptor: descriptor)
-        where path.lastPathComponent == "coremldata.bin" {
-            guard
-                let attributes = try? fileManager.attributesOfItem(atPath: path.path),
-                let size = attributes[.size] as? NSNumber,
-                size.intValue > 0
-            else {
-                return false
-            }
-        }
-
-        let vocabURL = directory.appendingPathComponent("parakeet_vocab.json", isDirectory: false)
-        guard
-            let data = try? Data(contentsOf: vocabURL),
-            !data.isEmpty,
-            let first = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .first,
-            first == "{" || first == "["
-        else {
-            return false
-        }
-
-        return true
     }
 }
 
@@ -425,6 +327,5 @@ private final class ModelSelectionDownloadProgressBroadcaster: @unchecked Sendab
 }
 
 private enum ModelSelectionArtifactValidationError: Error {
-    case invalidArtifacts
     case invalidStreamShape
 }

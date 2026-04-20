@@ -28,45 +28,6 @@ enum TestModelArtifacts {
     }
 }
 
-/// Legacy downloader stub retained only for `ModelAwareFluidAudioTranscriber`
-/// tests during the transcriber-downloader removal (step 1.3 → step 1.4).
-/// Step 1.4 deletes this along with the `ModelDownloading` protocol.
-actor StubModelDownloader: ModelDownloading {
-    private(set) var ensureCallCount = 0
-
-    private let scriptedProgress: [ModelDownloadProgress]
-    private let error: Error?
-    private let writer: @Sendable (URL) throws -> Void
-
-    init(
-        scriptedProgress: [ModelDownloadProgress] = [],
-        error: Error? = nil,
-        writer: @escaping @Sendable (URL) throws -> Void = TestModelArtifacts.writeValid(to:)
-    ) {
-        self.scriptedProgress = scriptedProgress
-        self.error = error
-        self.writer = writer
-    }
-
-    func ensureModelAvailable(
-        at directory: URL,
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws -> URL {
-        ensureCallCount += 1
-
-        for snapshot in scriptedProgress {
-            progress(snapshot)
-        }
-
-        if let error {
-            throw error
-        }
-
-        try writer(directory)
-        return directory
-    }
-}
-
 actor StubInferenceClient: FluidAudioInferencing {
     private(set) var loadCallCount = 0
     private(set) var transcribeCallCount = 0
