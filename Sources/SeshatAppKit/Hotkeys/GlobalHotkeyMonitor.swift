@@ -101,10 +101,9 @@ public final class GlobalHotkeyMonitor {
 
     /// Emits the Input Monitoring warning when `addGlobalMonitorForEvents`
     /// returns nil. Probes the current TCC state so the log message can tell
-    /// the reader whether permission is denied vs. not-yet-prompted. UI
-    /// remediation is deferred to Phase 2's NSMenu rebuild; until then,
-    /// `log stream --predicate 'subsystem == "com.nitkrar.seshat"'` is how
-    /// dogfood users discover the state.
+    /// the reader whether permission is denied vs. still pending. Menu-bar
+    /// warnings now surface the same remediation path; the log remains a
+    /// secondary breadcrumb for startup failures and transient AppKit errors.
     internal func handleMonitorInstallFailure() {
         let state = permissionService.status(for: .inputMonitoring)
         let message = Self.monitorInstallFailureMessage(for: state)
@@ -113,14 +112,14 @@ public final class GlobalHotkeyMonitor {
     }
 
     internal static func monitorInstallFailureMessage(for state: PermissionStatus) -> String {
-        let suffix = "Visible remediation will land with Phase 2 NSMenu; until then, grant access in "
-            + "System Settings -> Privacy & Security -> Input Monitoring and restart."
+        let suffix = "Use the menu bar warning or grant access in System Settings -> "
+            + "Privacy & Security -> Input Monitoring, then restart."
         switch state {
         case .denied:
             return "Global hotkey monitor failed to register — Input Monitoring permission denied. " + suffix
         case .pending:
-            return "Global hotkey monitor failed to register — Input Monitoring permission not yet "
-                + "determined (system may surface the TCC prompt on next attempt). " + suffix
+            return "Global hotkey monitor failed to register — Input Monitoring permission still "
+                + "pending (system may surface the TCC prompt on next attempt). " + suffix
         case .granted:
             return "Global hotkey monitor failed to register despite Input Monitoring reporting granted "
                 + "— likely a transient AppKit failure. " + suffix

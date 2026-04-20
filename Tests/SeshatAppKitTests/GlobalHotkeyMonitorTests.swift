@@ -301,10 +301,10 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertEqual(captured.count, 1)
         XCTAssertEqual(captured.first?.level, "error")
         XCTAssertTrue(captured.first?.message.contains("Input Monitoring permission denied") == true)
-        XCTAssertTrue(captured.first?.message.contains("Phase 2 NSMenu") == true)
+        XCTAssertTrue(captured.first?.message.contains("menu bar warning") == true)
     }
 
-    func testNilMonitorFailureReportsNotDeterminedWhenTCCUnresolved() {
+    func testNilMonitorFailureReportsPendingWhenTCCUnresolved() {
         let permissionService = FakePermissionService(
             statuses: [.inputMonitoring: .pending]
         )
@@ -317,7 +317,7 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
 
         monitor.handleMonitorInstallFailure()
 
-        XCTAssertTrue(sink.snapshot().first?.message.contains("not yet determined") == true)
+        XCTAssertTrue(sink.snapshot().first?.message.contains("still pending") == true)
     }
 
     func testFailureMessageMentionsGrantedPathWhenProbeReportsGrantedDespiteNilMonitor() {
