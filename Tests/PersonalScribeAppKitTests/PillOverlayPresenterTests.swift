@@ -262,6 +262,156 @@ final class PillOverlayPresenterTests: XCTestCase {
         )
     }
 
+    // MARK: - #044 — panel resizes per visibility state
+
+    /// Visibility transition from `.idle` to `.recording` must drive
+    /// `PillOverlayPaneling.setFrame(_:animate:)` with the recording
+    /// pill's footprint. Pre-#044 the panel stayed at the default
+    /// 280×60 canvas; clicks outside the visible pill but inside that
+    /// canvas landed on an invisible click-halo.
+    func testFrameResizesOnVisibilityTransition() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn, visibility: .idle)
+        let panelBuilder = RecordingPanelBuilder()
+
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder
+        )
+        _ = presenter
+        // Sanity — presenter should have sized to idle on first show.
+        XCTAssertFalse(panelBuilder.panel.setFrameCalls.isEmpty,
+                       "Presenter must resize the panel on first show")
+        let idleCall = panelBuilder.panel.setFrameCalls.last!
+        XCTAssertEqual(idleCall.frame.size, PillOverlayView.idleSize)
+        XCTAssertFalse(idleCall.animate,
+                       "First sizing after show must be non-animated")
+
+        viewModel.apply(visibility: .recording)
+
+        // Second call must be the recording-pill size and should be
+        // animated (pill↔pill morph owned by AppKit).
+        XCTAssertGreaterThanOrEqual(panelBuilder.panel.setFrameCalls.count, 2)
+        let recordingCall = panelBuilder.panel.setFrameCalls.last!
+        XCTAssertEqual(recordingCall.frame.size, PillOverlayView.recordingSize)
+        XCTAssertTrue(recordingCall.animate,
+                      "Pill↔pill morph must animate via NSPanel.setFrame(animate:)")
+    }
+
+    /// Bottom-center anchor is preserved across a pill resize: whatever
+    /// midX / minY the panel sat at before the visibility change, the
+    /// same midX / minY must carry into the new frame. Uses the
+    /// frame-after-first-sizing as the baseline (the presenter's
+    /// default placement may have moved it).
+    func testBottomCenterPreservedAcrossResize() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn, visibility: .idle)
+        let panelBuilder = RecordingPanelBuilder()
+
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder
+        )
+        _ = presenter
+
+        // Baseline from first sizing (to idle) — whatever the default
+        // placement chose, this is where the visible bottom-center is.
+        let idleFrame = panelBuilder.panel.setFrameCalls.last!.frame
+        let baselineMidX = idleFrame.midX
+        let baselineMinY = idleFrame.minY
+
+        viewModel.apply(visibility: .recording)
+
+        // After the pill↔pill morph, the bottom-center must still be
+        // pinned to the same point.
+        let recordingFrame = panelBuilder.panel.setFrameCalls.last!.frame
+        XCTAssertEqual(recordingFrame.midX, baselineMidX, accuracy: 0.5,
+                       "bottom-center x must remain fixed during pill↔pill morph")
+        XCTAssertEqual(recordingFrame.minY, baselineMinY, accuracy: 0.5,
+                       "bottom y must remain fixed during pill↔pill morph")
+        XCTAssertEqual(recordingFrame.size, PillOverlayView.recordingSize)
+    }
+
+    /// pill → Cancel Card transition is a crossfade, not a morph. The
+    /// panel frame jumps to the cancel-card size with `animate: false`
+    /// (SwiftUI owns the opacity tween inside `PillOverlayView`).
+    func testCancelCardCrossfade() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn, visibility: .recording)
+        let panelBuilder = RecordingPanelBuilder()
+
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder
+        )
+        _ = presenter
+
+        let callsBeforeCancel = panelBuilder.panel.setFrameCalls.count
+        viewModel.apply(visibility: .cancelled)
+
+        XCTAssertGreaterThan(panelBuilder.panel.setFrameCalls.count, callsBeforeCancel,
+                             "Cancel Card resize must hit setFrame")
+        let cancelCall = panelBuilder.panel.setFrameCalls.last!
+        XCTAssertEqual(cancelCall.frame.size, PillOverlayView.cancelCardSize)
+        XCTAssertFalse(cancelCall.animate,
+                       "Cancel Card transition must NOT animate panel frame — SwiftUI owns the opacity crossfade")
+    }
+
+    /// First show from `.hidden` must land at the target state size,
+    /// not the legacy 280×60 canvas. Covers the #044 symptom where a
+    /// pill first rendered at `.recording` would otherwise flash at
+    /// 280×60 before morphing down.
+    func testHiddenToShownUsesTargetSize() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .autoShow, visibility: .hidden)
+        let panelBuilder = RecordingPanelBuilder()
+
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder
+        )
+        _ = presenter
+        // `.hidden` + autoShow → no panel yet.
+        XCTAssertEqual(panelBuilder.makePanelCallCount, 0)
+
+        viewModel.apply(visibility: .recording)
+
+        // Panel must have been built + sized to the recording footprint.
+        XCTAssertEqual(panelBuilder.makePanelCallCount, 1)
+        XCTAssertFalse(panelBuilder.panel.setFrameCalls.isEmpty)
+        let first = panelBuilder.panel.setFrameCalls.last!
+        XCTAssertEqual(first.frame.size, PillOverlayView.recordingSize,
+                       "Panel must arrive at target-state size on first show, not default canvas")
+        XCTAssertFalse(first.animate,
+                       "First sizing after show must be non-animated")
+    }
+
+    /// Response card stays visually anchored to the pill's bottom-center
+    /// during pipeline resizes. The presenter calls
+    /// `ResponseCardPresenting.reanchor(abovePillFrame:)` each time it
+    /// drives a pill resize while the card is visible.
+    func testResponseCardReanchorsOnPillResize() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn, visibility: .recording)
+        let panelBuilder = RecordingPanelBuilder()
+        let responseCardBuilder = RecordingResponseCardBuilder()
+
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            responseCardBuilder: responseCardBuilder
+        )
+        presenter.showRecordingStatusCard(text: "Recording — transcribing when model is ready (10%)")
+
+        let reanchorCallsBefore = responseCardBuilder.card.reanchorCalls.count
+
+        viewModel.apply(visibility: .transcribing)
+
+        XCTAssertGreaterThan(
+            responseCardBuilder.card.reanchorCalls.count,
+            reanchorCallsBefore,
+            "Response card must reanchor above the pill's new frame on resize"
+        )
+        let lastPillFrame = responseCardBuilder.card.reanchorCalls.last!
+        XCTAssertEqual(lastPillFrame.size, PillOverlayView.transcribingSize,
+                       "Reanchor frame must be the freshly-resized pill frame")
+    }
+
     // MARK: - Non-activating panel contract (Issue 6)
     //
     // The pill must not steal keyboard focus or promote the app to
@@ -379,6 +529,9 @@ private final class RecordingPanel: PillOverlayPaneling {
     )
     private(set) var orderFrontCallCount = 0
     private(set) var orderOutCallCount = 0
+    /// Records every `setFrame(_:animate:)` call the presenter makes so
+    /// tests can assert the resize path (#044).
+    private(set) var setFrameCalls: [(frame: NSRect, animate: Bool)] = []
 
     func orderFrontRegardless() {
         orderFrontCallCount += 1
@@ -392,6 +545,11 @@ private final class RecordingPanel: PillOverlayPaneling {
 
     func setFrameOrigin(_ point: NSPoint) {
         frame.origin = point
+    }
+
+    func setFrame(_ frame: NSRect, animate: Bool) {
+        setFrameCalls.append((frame, animate))
+        self.frame = frame
     }
 }
 
@@ -413,6 +571,7 @@ private final class RecordingResponseCard: ResponseCardPresenting {
     private(set) var lastAutoDismissAfter: TimeInterval?
     private(set) var showCallCount = 0
     private(set) var updateCallCount = 0
+    private(set) var reanchorCalls: [NSRect] = []
 
     func show(
         text: String,
@@ -428,6 +587,10 @@ private final class RecordingResponseCard: ResponseCardPresenting {
     func update(text: String) {
         lastText = text
         updateCallCount += 1
+    }
+
+    func reanchor(abovePillFrame pillFrame: NSRect) {
+        reanchorCalls.append(pillFrame)
     }
 
     func hide() {}

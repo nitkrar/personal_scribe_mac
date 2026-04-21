@@ -290,6 +290,48 @@ rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
   presenter/controller visibility pipeline should be checked for any
   transient `.hidden` bounce before the panel is ordered front.
 
+## Pill panel resize per state (#044 — 2026-04-21)
+
+Pre-#044 the pill panel was a fixed 280×60 canvas; the visible pill
+sized itself via SwiftUI's `.frame(...)` but the NSPanel hit-test area
+extended to the full canvas, producing an invisible "click halo" (the
+#044 repro: clicking ~100pt left of the visible pill stopped the
+recording). #044 makes the panel resize per visibility so panel frame
+== visible pill frame.
+
+- [ ] **MV-PILL-RESIZE-1 (pill↔pill morph preserves bottom-center)**
+  Trigger a full record → transcribe → done cycle (hotkey or click).
+  The pill visibly GROWS idle→hold (80→160), hold→recording
+  (160→220), shrinks recording→transcribing (220→160), and shrinks
+  again transcribing→done (160→100). On each morph the pill's BOTTOM
+  edge and horizontal CENTER remain fixed on screen — the pill grows /
+  shrinks upward and outward, not sideways. The tween is smooth (AppKit
+  `NSPanel.setFrame(_:display:animate:)`), ≈200-300ms per step.
+- [ ] **MV-PILL-RESIZE-2 (halo click test)** Start a recording so the
+  pill sits at 220×36. Click ~100pt to the LEFT of the visible pill
+  (where the old 280×60 canvas extended). Nothing happens — the
+  recording continues. Regression: if the click stops the recording,
+  the panel is still sized larger than the visible pill.
+- [ ] **MV-PILL-RESIZE-3 (drag starts inside visible pill only)** Start
+  a recording. Drag from INSIDE the visible 220×36 pill — the pill
+  follows the cursor. Dismiss the recording. Start another and try to
+  drag from ~100pt left of the visible pill — nothing happens (not a
+  drag handle). The pill stays put.
+- [ ] **MV-PILL-RESIZE-4 (Cancel Card crossfade)** Start a recording.
+  Press Esc. The pill transitions to the 280×44 Cancel Card by
+  CROSSFADING (opacity tween), not by morphing size — the pill fades
+  out as the card fades in at the same bottom-center anchor. Pill↔pill
+  morphs (MV-PILL-RESIZE-1) are size tweens; pill↔cancel is a pure
+  opacity crossfade.
+- [ ] **MV-PILL-RESIZE-5 (Response card live-follow)** With `PasteMode
+  "clipboard-only"`, trigger a dictation from another app while the
+  pill cycles idle → recording → done. The `Copied to clipboard · ⌘V
+  to paste` card that appears above the pill stays anchored to the
+  visible pill's bottom-center through every pill resize: it does NOT
+  drift left / right or stop tracking when the pill shrinks from
+  recording (220) back to done (100). If user drags the pill, the
+  card follows.
+
 ## Known spec deviations (flagged in commits)
 
 - Esc currently lets the recording transcribe + auto-paste, and the

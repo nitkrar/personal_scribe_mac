@@ -12,6 +12,12 @@ protocol ResponseCardPresenting: AnyObject {
     /// the pending dismiss timer. Caller contract: `show(...)` must have
     /// been called first.
     func update(text: String)
+    /// Reanchor the card above the given pill frame (screen
+    /// coordinates). #044: called from `PillOverlayPresenter` on every
+    /// pill resize so the card's x-midpoint follows the pill's visible
+    /// bottom-center (which may shift when the pill grows / shrinks if
+    /// the presenter also moved it). No-op if the card isn't visible.
+    func reanchor(abovePillFrame pillFrame: NSRect)
     func hide()
 }
 
@@ -167,6 +173,26 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
                 width: currentWidth,
                 height: newHeight
             ),
+            display: true
+        )
+    }
+
+    /// Reanchor the card above an updated pill frame. #044: the card's
+    /// x-midpoint must match the pill's CURRENT bottom-center, so when
+    /// the pill resizes per state (idle 80→recording 220→transcribing
+    /// 160 etc.) the card slides with it. Called by
+    /// `PillOverlayPresenter` on every pill resize; no-op when the
+    /// card isn't visible.
+    func reanchor(abovePillFrame pillFrame: NSRect) {
+        guard isVisible else {
+            return
+        }
+        let currentWidth = frame.width
+        let currentHeight = frame.height
+        let newX = pillFrame.midX - currentWidth / 2
+        let newY = pillFrame.maxY + Self.gapAbovePill
+        setFrame(
+            NSRect(x: newX, y: newY, width: currentWidth, height: currentHeight),
             display: true
         )
     }

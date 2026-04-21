@@ -53,6 +53,41 @@ public struct PillOverlayView: View {
     /// transitions to `.cancelled`.
     static let cancelCardSize = CGSize(width: 280, height: 44)
 
+    /// Pure mapping from a `PillOverlayVisibility` case to the panel
+    /// footprint the overlay must render at. Used by
+    /// `PillOverlayPresenter` (#044) to drive per-state panel resize:
+    /// the NSPanel frame matches the visible pill's bounds so clicks
+    /// outside the pill don't land on an invisible "halo" of the
+    /// fixed-size panel canvas.
+    ///
+    /// `.hidden` returns `.zero` because nothing is rendered; the
+    /// presenter short-circuits to `orderOut` on that case and never
+    /// resizes the panel to zero in practice.
+    public static func size(for visibility: PillVisibilityState) -> CGSize {
+        switch visibility {
+        case .hidden:
+            return .zero
+        case .idle:
+            return idleSize
+        case .holdToRecord:
+            return holdToRecordSize
+        case .recording:
+            return recordingSize
+        case .transcribing:
+            return transcribingSize
+        case .done:
+            return doneSize
+        case .downloading:
+            return downloadingSize
+        case .loading:
+            return loadingSize
+        case .error:
+            return errorSize
+        case .cancelled:
+            return cancelCardSize
+        }
+    }
+
     /// Corner radius for idle (spec §2a — 14pt) and a few non-spec
     /// states. `PillChrome(state:)` picks this per state; the
     /// hold-to-record / recording / transcribing variants use 18pt per
@@ -118,10 +153,21 @@ public struct PillOverlayView: View {
                 errorPill(message: message)
             }
         }
-        .animation(
-            .spring(response: 0.3, dampingFraction: 0.7),
-            value: model.visibility
-        )
+        // Visibility-keyed SwiftUI spring removed as part of #044:
+        // AppKit now owns the per-state panel frame tween via
+        // `NSPanel.setFrame(_:display:animate:)`, driven by the
+        // presenter. Per-content animations (equaliser bars, sine wave
+        // decay, spinner rotation) continue to live inside each
+        // variant — those don't key on `model.visibility` and are
+        // unaffected.
+        //
+        // ONE visibility-keyed SwiftUI animation is retained on purpose:
+        // pill↔CancelCard is a crossfade (scope spec "Cancel Card is not
+        // a pill"), not a morph. Keying the opacity transition on the
+        // derived `isCancelled` bool means pill↔pill transitions don't
+        // trigger any SwiftUI animation (AppKit owns that morph via
+        // setFrame animate); only the pill↔cancel flip does.
+        .animation(.easeInOut(duration: 0.2), value: model.visibility == .cancelled)
     }
 
     // MARK: - Idle

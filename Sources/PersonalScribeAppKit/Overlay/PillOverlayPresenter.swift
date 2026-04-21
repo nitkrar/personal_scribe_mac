@@ -195,6 +195,13 @@ protocol PillOverlayPaneling: AnyObject {
     func orderFrontRegardless()
     func orderOut(_ sender: Any?)
     func setFrameOrigin(_ point: NSPoint)
+    /// Resize + reposition the panel atomically. `animate: true` routes
+    /// to AppKit's `NSPanel.setFrame(_:display:animate:)` spring, which
+    /// owns the per-state panel frame tween (#044). `animate: false` is
+    /// used on the initial show from `.hidden` so the panel arrives
+    /// already at the target state's footprint instead of morphing out
+    /// of the stale default.
+    func setFrame(_ frame: NSRect, animate: Bool)
 }
 
 extension PillOverlayPaneling {
@@ -203,6 +210,10 @@ extension PillOverlayPaneling {
 
 extension DraggablePanel: PillOverlayPaneling {
     var anchorWindow: NSWindow? { self }
+
+    func setFrame(_ frame: NSRect, animate: Bool) {
+        setFrame(frame, display: true, animate: animate)
+    }
 }
 
 @MainActor
@@ -287,12 +298,21 @@ public final class PillOverlayPresenter {
     /// for tests — NSPanel's real `isVisible` depends on AppKit runtime
     /// state that isn't reliable in unit tests.
     public private(set) var intendsToShow: Bool = false
-    /// Panel must be wide enough to hold the widest pill variant
-    /// (download / loading — 240pt) plus some slack for shadow / padding.
-    /// Height is the 34pt recording-pill height + headroom for the
-    /// download pill's two-line layout.
+    /// Fallback panel canvas size used ONLY when the view-model's
+    /// current visibility is `.hidden` (e.g. first construction before
+    /// any visibility push). Pre-#044 this was the single canonical
+    /// panel footprint and created the invisible click-halo bug; it is
+    /// now superseded by per-state sizing driven through
+    /// `PillOverlayView.size(for:)` on every visibility transition.
     private let panelSize = NSSize(width: 280, height: 60)
     private var hasUserRepositioned = false
+    /// The last visibility we sized the panel for. Used to decide
+    /// whether `animate: true` should be passed to `setFrame` — the
+    /// first transition out of `.hidden` must arrive at the target
+    /// size with NO animation (panel is being shown for the first
+    /// time), and pill↔cancel transitions are crossfaded by SwiftUI so
+    /// the frame update itself is not animated.
+    private var lastSizedVisibility: PillOverlayViewModel.Visibility?
 
     public convenience init(
         model: PillOverlayViewModel,
@@ -329,17 +349,75 @@ public final class PillOverlayPresenter {
             case .cancelled,
                  .idle, .downloading, .loading,
                  .holdToRecord, .recording, .transcribing, .done, .error:
-                // `.cancelled` keeps the panel visible: the Cancel Card
-                // (spec §2f) replaces the pill surface at the same
-                // screen anchor for 4s. `CancelCardView` (280×44) fits
-                // within the existing 280×60 panel canvas, so no panel
-                // resize is needed — the view model's body switch
-                // renders the card directly.
-                if !isVisible {
-                    show()
+                // #044: panel must be sized per visibility so the panel
+                // frame == visible pill frame (no invisible click-halo).
+                // First show from `.hidden`: `show()` pre-sizes the
+                // panel to the target state's footprint BEFORE
+                // `orderFrontRegardless`, so the panel appears already
+                // at the right size (no default-280×60 flash). Later
+                // transitions call `applyVisibilityResize`, which
+                // animates the frame via
+                // `NSPanel.setFrame(_:display:animate:)`.
+                if isVisible {
+                    applyVisibilityResize(to: visibility)
+                } else {
+                    show(initialVisibility: visibility)
                 }
             }
         }
+    }
+
+    /// Core #044 resize logic. Given the new visibility, compute the
+    /// target panel footprint and reposition to preserve the visible
+    /// pill's bottom-center. Animation is driven by
+    /// `NSPanel.setFrame(_:display:animate:)` for pill↔pill morphs and
+    /// suppressed for pill↔CancelCard crossfades (SwiftUI owns that
+    /// fade via the `.animation(_, value:isCancelled)` in
+    /// `PillOverlayView`).
+    private func applyVisibilityResize(to visibility: PillOverlayViewModel.Visibility) {
+        guard let panel else {
+            return
+        }
+
+        let newSize = PillOverlayView.size(for: visibility)
+        guard newSize != .zero else {
+            // `.hidden` is routed to `hide()` already — defensive no-op.
+            return
+        }
+
+        // Bottom-center anchor: preserve the x-midpoint and bottom-Y of
+        // the currently-visible pill so the user's reading point stays
+        // fixed across state morphs. For first-show the default
+        // `updatePanelPosition` has already centered the panel at
+        // screen.midX / screen.minY + 64; for subsequent transitions
+        // the panel's own frame carries the (possibly user-dragged)
+        // anchor forward.
+        let previousFrame = panel.frame
+        let newOrigin = NSPoint(
+            x: previousFrame.midX - newSize.width / 2,
+            y: previousFrame.minY
+        )
+        let newFrame = NSRect(origin: newOrigin, size: newSize)
+
+        // Animation policy:
+        // - first sizing after show (`lastSizedVisibility == nil`): no
+        //   animate — panel arrives already at target size.
+        // - pill↔cancel transitions: no animate — SwiftUI crossfades
+        //   the content; the panel just jumps to the cancel footprint.
+        // - pill↔pill transitions: animate — AppKit tweens the frame.
+        let isFirstSizing = (lastSizedVisibility == nil)
+        let wasCancelled = (lastSizedVisibility == .cancelled)
+        let becomingCancelled = (visibility == .cancelled)
+        let involvesCancelCrossfade = wasCancelled || becomingCancelled
+        let shouldAnimate = !isFirstSizing && !involvesCancelCrossfade
+
+        panel.setFrame(newFrame, animate: shouldAnimate)
+        lastSizedVisibility = visibility
+
+        // Response card follows the pill's bottom-center. A SwiftUI
+        // `.animation` on the card itself is not viable (NSPanel-based),
+        // so reanchor on every pill resize where the card is visible.
+        reanchorResponseCard(pillFrame: newFrame)
     }
 
     public var isVisible: Bool {
@@ -347,6 +425,16 @@ public final class PillOverlayPresenter {
     }
 
     public func show() {
+        show(initialVisibility: nil)
+    }
+
+    /// Internal overload used by the visibility sink to hand the
+    /// presenter the target state at the moment of first show. #044:
+    /// when `initialVisibility` is non-nil, the panel is sized to the
+    /// matching pill footprint BEFORE `orderFrontRegardless`, so the
+    /// panel appears already at the correct state size instead of
+    /// flashing at the default 280×60 canvas.
+    private func show(initialVisibility: PillOverlayViewModel.Visibility?) {
         // Deliberately NOT reading `model.visibility` here. `@Published`
         // emits its new value in `willSet`, so during a sink callback
         // `model.visibility` still reflects the *previous* value — reading
@@ -380,8 +468,19 @@ public final class PillOverlayPresenter {
             updatePanelPosition(panel)
         }
 
+        // #044: pre-size the panel to the target state's footprint
+        // before ordering it front so the very first frame shown is
+        // already at the correct size.
+        if let initialVisibility {
+            applyVisibilityResize(to: initialVisibility)
+        }
+
         panel.orderFrontRegardless()
         diagnosticLogger.info("PillOverlayPresenter.show — panelExisted=\(panelExisted) frame=\(panel.frame) isVisible=\(panel.isVisible)")
+    }
+
+    private func reanchorResponseCard(pillFrame: NSRect) {
+        responseCard?.reanchor(abovePillFrame: pillFrame)
     }
 
     func showClipboardOnlyNotice() {
@@ -434,6 +533,12 @@ public final class PillOverlayPresenter {
     public func hide() {
         intendsToShow = false
         panel?.orderOut(nil)
+        // Clear the "last sized" flag so the next transition out of
+        // `.hidden` performs a non-animated initial size (panel arrives
+        // already at the target footprint instead of morphing from the
+        // stale prior state). Matches the first-show contract in
+        // `applyVisibilityResize`.
+        lastSizedVisibility = nil
         diagnosticLogger.info("PillOverlayPresenter.hide — panel=\(panel == nil ? "nil" : "exists")")
     }
 
