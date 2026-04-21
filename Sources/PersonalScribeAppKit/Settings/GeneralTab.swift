@@ -27,10 +27,36 @@ public struct GeneralTab: View {
                 description: "Core defaults for the pill overlay, menu bar surface, and transcript delivery."
             ) {
                 VStack(alignment: .leading, spacing: SettingsLayout.itemSpacing) {
-                    launchCard
-                    visibilityCard
+                    recordingWindowCard
                     appearanceCard
+                    visibilityCard
+                    launchCard
                     behaviorCard
+                }
+            }
+        }
+    }
+
+    /// RECORDING WINDOW section — mockup-gaps D.1 centerpiece.
+    /// Live SwiftUI pill previews, one card per `PillStyle` case,
+    /// champagne border on the selected card. Reads
+    /// `viewModel.pillAppearance` so the preview adapts (navy
+    /// `#1A1B2E` for `.dark`, pale `#F0EDE8` for `.light`).
+    private var recordingWindowCard: some View {
+        SettingsCard {
+            Text("Style")
+                .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+
+            HStack(alignment: .top, spacing: SettingsLayout.itemSpacing) {
+                ForEach(PillStyle.allCases) { style in
+                    PillStyleSelectorCard(
+                        style: style,
+                        isSelected: viewModel.pillStyle == style,
+                        pillAppearance: viewModel.pillAppearance
+                    ) {
+                        viewModel.setPillStyle(style)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
@@ -206,6 +232,7 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var pasteMode: PasteMode
     @Published private(set) var windowTint: WindowTint
     @Published private(set) var pillAppearance: PillAppearance
+    @Published private(set) var pillStyle: PillStyle
     @Published private(set) var pasteRestoreDelay: PasteRestoreDelay
     @Published private(set) var visibilityError: VisibilityConfigError?
     @Published private(set) var launchAtLogin: Bool
@@ -232,6 +259,7 @@ final class GeneralTabViewModel: ObservableObject {
         self.pasteMode = PasteMode.resolve(from: defaults)
         self.windowTint = WindowTint.resolve(from: defaults)
         self.pillAppearance = PillAppearance.resolve(from: defaults)
+        self.pillStyle = PillStyle.resolve(from: defaults)
         self.pasteRestoreDelay = PasteRestoreDelay.resolve(from: defaults)
         // SMAppService.mainApp.status reflects the current registration
         // state. .enabled means the app is registered to launch at login.
@@ -278,6 +306,11 @@ final class GeneralTabViewModel: ObservableObject {
         appearance.persist(to: defaults)
     }
 
+    func setPillStyle(_ style: PillStyle) {
+        pillStyle = style
+        style.persist(to: defaults)
+    }
+
     func setLaunchAtLogin(_ enabled: Bool) {
         do {
             if enabled {
@@ -305,5 +338,158 @@ final class GeneralTabViewModel: ObservableObject {
 
     private static func formatSeconds(_ seconds: TimeInterval) -> String {
         String(format: "%.1f", seconds)
+    }
+}
+
+// MARK: - Pill-style selector card (mockup-gaps D.1)
+
+/// One of three cards shown under RECORDING WINDOW → Style. Renders a
+/// LIVE SwiftUI preview of the pill shape (Classic / Mini / None),
+/// reacts to `pillAppearance` so the preview's background matches the
+/// resolved pill theme (`#1A1B2E` dark / `#F0EDE8` light), and
+/// paints a champagne border when the card is the selected style.
+///
+/// Per the mockup-gaps D brief, this view does NOT wire the preference
+/// back to `PillOverlayView` runtime rendering — that wiring is a
+/// separate follow-up. Selecting a style here only persists the
+/// preference and updates the Settings UI selection chrome.
+@MainActor
+private struct PillStyleSelectorCard: View {
+    let style: PillStyle
+    let isSelected: Bool
+    let pillAppearance: PillAppearance
+    let onSelect: @MainActor () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// Mockup annotation: each selector card is ~72pt tall.
+    private static let cardHeight: CGFloat = 72
+    private static let cardCornerRadius: CGFloat = 10
+    private static let selectedBorderWidth: CGFloat = 2
+    private static let unselectedBorderWidth: CGFloat = 1
+
+    var body: some View {
+        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+
+        Button(action: onSelect) {
+            VStack(spacing: 8) {
+                preview
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                Text(style.rawValue)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(isSelected ? palette.primaryText : palette.secondaryText)
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .frame(height: Self.cardHeight + 24)  // extra height for label + padding
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: Self.cardCornerRadius, style: .continuous)
+                    .fill(palette.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Self.cardCornerRadius, style: .continuous)
+                    .strokeBorder(
+                        isSelected
+                            ? palette.brandChampagne
+                            : palette.brandChampagne.opacity(0.12),
+                        lineWidth: isSelected
+                            ? Self.selectedBorderWidth
+                            : Self.unselectedBorderWidth
+                    )
+            )
+            .shadow(
+                color: isSelected ? .black.opacity(0.15) : .clear,
+                radius: isSelected ? 4 : 0,
+                y: isSelected ? 2 : 0
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Pill style \(style.rawValue)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    // MARK: - Per-style previews
+
+    /// Resolves the pill surface colour the preview should render against.
+    /// Mirrors the `PillOverlayView` fg/bg selection rule so the preview
+    /// matches what the user will see at runtime.
+    private var pillBackgroundColor: Color {
+        let systemIsDark = colorScheme == .dark
+        let pillIsDark = pillAppearance.effectiveIsDark(systemIsDark: systemIsDark)
+        return pillIsDark
+            ? PersonalScribeTheme.Pill.Dark.background
+            : PersonalScribeTheme.Pill.Light.background
+    }
+
+    private var pillForegroundColor: Color {
+        let systemIsDark = colorScheme == .dark
+        let pillIsDark = pillAppearance.effectiveIsDark(systemIsDark: systemIsDark)
+        return pillIsDark
+            ? PersonalScribeTheme.Pill.Dark.waveform
+            : PersonalScribeTheme.Pill.Light.waveform
+    }
+
+    @ViewBuilder
+    private var preview: some View {
+        switch style {
+        case .classic:
+            classicPreview
+        case .mini:
+            miniPreview
+        case .none:
+            nonePreview
+        }
+    }
+
+    /// Classic — dark-navy pill with a short waveform sketch inside.
+    /// Hand-rolled mini-waveform (4 bars) rather than reusing
+    /// `WaveformView` so the preview is decoupled from audio-level
+    /// bindings and the `TimelineView` animation it manages.
+    private var classicPreview: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(pillBackgroundColor)
+            .overlay(
+                HStack(spacing: 3) {
+                    ForEach(0..<5, id: \.self) { index in
+                        Capsule()
+                            .fill(pillForegroundColor)
+                            .frame(width: 2, height: classicBarHeight(for: index))
+                    }
+                }
+            )
+            .frame(height: 28)
+    }
+
+    /// 4-bar preview heights — evoke a short waveform snapshot. Static
+    /// so the preview is stable across redraws (no TimelineView).
+    private func classicBarHeight(for index: Int) -> CGFloat {
+        let heights: [CGFloat] = [6, 12, 16, 10, 7]
+        return heights[index % heights.count]
+    }
+
+    /// Mini — smaller flat pill, no content. Just the shape.
+    private var miniPreview: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(pillBackgroundColor)
+            .frame(width: 40, height: 14)
+    }
+
+    /// None — communicates "hidden". Low-opacity surface + eye.slash glyph.
+    private var nonePreview: some View {
+        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(pillBackgroundColor.opacity(0.25))
+                .frame(width: 56, height: 28)
+
+            Image(systemName: "eye.slash")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(palette.primaryText)
+        }
     }
 }
