@@ -32,6 +32,31 @@
 - After the migration completes, confirm the selected directory now contains the expected `models`, `modes`, and/or `recordings` folders, and the old base directory is left behind without those moved folders.
 - Relaunch `<AppBrand.displayName>`, then confirm the app reads from the new base directory by finding an existing downloaded model and recent transcripts there without re-downloading or losing history.
 
+## Advanced — base-directory row layout + Open-in-Finder target (#006)
+
+Regression guard for bug #006 — the previous row stacked a metadata
+block above two full-width action buttons, which wrapped onto a second
+line at the default Settings width (760pt). Finder was also being
+handed the base directory via `activateFileViewerSelecting([url])`,
+which opens the PARENT folder with `personal_scribe` highlighted
+instead of its contents.
+
+- [ ] **MV-BASE-DIR-1 — Single-line compact row:** open `Settings >
+  Advanced` at the default window width. The base-directory row
+  renders on ONE visual line: bold caption `Base directory`, the
+  resolved path in a middle-truncated monospaced label (so long paths
+  show `/Users/…/personal_scribe`), followed by two icon-only buttons
+  (magnifying-glass + folder). The row must NOT wrap to two lines; the
+  two buttons must NOT be full-width pill buttons.
+- [ ] **MV-BASE-DIR-2 — Open-in-Finder opens the folder, not the
+  parent:** click the magnifying-glass icon in the base-directory row.
+  Finder opens a window titled `personal_scribe` whose contents
+  (`models/`, `modes/`, `recordings/`, etc.) are visible. Finder must
+  NOT instead surface `~/Library/Application Support/` with
+  `personal_scribe` highlighted — that's the bug #006 regression.
+- Hover tooltips: hovering the magnifying-glass icon shows `Open in
+  Finder`; hovering the folder icon shows `Change base directory…`.
+
 ## AI Models tab — Stage A (step 3.2)
 
 Stage A replaces the inert AIModelsTab with one `SettingsCard` row per registered voice model. Chip + button are driven by `DefaultModelService.downloadStates[descriptor.id]`. A single `SettingsSection` header (`Voice models`) is used for now; Stage B will add an `AI models` section below without restructuring.

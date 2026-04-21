@@ -34,6 +34,53 @@ final class AdvancedTabViewModelTests: XCTestCase {
         XCTAssertEqual(recordedDestinations, [selectedBase])
     }
 
+    // Bug #006 regression: `openInFinder` must receive the resolved base
+    // directory, not its parent. Prior behaviour used
+    // `NSWorkspace.activateFileViewerSelecting([url])`, which opens the
+    // PARENT with `url` highlighted — so clicking "Open in Finder" on
+    // the Advanced tab surfaced `~/Library/Application Support/` with
+    // `personal_scribe` selected, not the contents of `personal_scribe/`.
+    func testRevealInFinder_opensResolvedBaseDirectory_notParent() {
+        let baseDirectory = URL(
+            fileURLWithPath: "/Users/example/Library/Application Support/personal_scribe",
+            isDirectory: true
+        ).standardizedFileURL
+        var openedURLs: [URL] = []
+
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(baseDirectory),
+            migrator: FakeBaseDirectoryMigrator(
+                outcome: .success(.noOp)
+            ),
+            selectDirectory: { _ in nil },
+            openInFinder: { openedURLs.append($0) }
+        )
+
+        viewModel.revealInFinder()
+
+        XCTAssertEqual(openedURLs, [baseDirectory])
+        XCTAssertNotEqual(
+            openedURLs.first,
+            baseDirectory.deletingLastPathComponent(),
+            "Opening the parent directory is the bug #006 regression — must open `personal_scribe/` itself."
+        )
+    }
+
+    func testRevealInFinder_isNoOpWhenBaseDirectoryResolutionFailed() {
+        var openedURLs: [URL] = []
+
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .failure(StubMigrationError(message: "unresolvable")),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil },
+            openInFinder: { openedURLs.append($0) }
+        )
+
+        viewModel.revealInFinder()
+
+        XCTAssertTrue(openedURLs.isEmpty, "Must not call openInFinder when the base directory is unresolvable.")
+    }
+
     func testChangeBaseDirectory_reportsErrorMessageOnFailure() async {
         let currentBase = URL(fileURLWithPath: "/tmp/current-base", isDirectory: true).standardizedFileURL
         let selectedBase = URL(fileURLWithPath: "/tmp/next-base", isDirectory: true).standardizedFileURL
