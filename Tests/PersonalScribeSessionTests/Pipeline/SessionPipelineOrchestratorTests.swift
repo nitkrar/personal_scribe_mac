@@ -288,6 +288,49 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(recordingDurations, expectedDurations)
     }
 
+    func testStartRecordingKicksOffPrepareBeforePublishingRecording() async throws {
+        // Regression: before the session-start race fix, startRecording()
+        // published `.recording` and *then* spawned a `.background`-
+        // priority detached Task for prepare. If the user stopped
+        // recording quickly, the pipeline would transition to
+        // `.transcribing` and sit there for minutes because prepare had
+        // never been scheduled. This test pins the corrected ordering:
+        // prepare begins executing BEFORE the user can observe the
+        // `.recording` snapshot externally.
+        let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.1)
+        let transcriber = SlowPrepareTranscriber(
+            result: TranscriptionResult(
+                text: "",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(1)
+            )
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturing(buffers: [buffer]),
+            transcriber: transcriber
+        )
+
+        defer {
+            Task {
+                await transcriber.releasePrepare()
+            }
+        }
+
+        await orchestrator.toggleCapture()
+
+        // At `.userInitiated` priority prepare should enter its body
+        // within a few ms of being spawned. A 2s window is generous and
+        // robust to CI load. Timing out indicates either reorder or
+        // priority fix regressed.
+        try await withTimeout(.seconds(2)) {
+            await transcriber.waitUntilPrepareStarted()
+        }
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .recording,
+                       "startRecording must have published `.recording` by the time prepare has entered")
+    }
+
     func testStopCompletesWhileBackgroundPrepareIsStillRunning() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
         let transcriber = SlowPrepareTranscriber(

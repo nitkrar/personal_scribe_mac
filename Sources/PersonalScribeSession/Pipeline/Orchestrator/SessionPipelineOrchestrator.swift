@@ -175,6 +175,17 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 await self?.publishAudioLevel(0.0)
             }
 
+            // Kick off prepare BEFORE publishing `.recording` so the
+            // detached Task is scheduled before observers see the state
+            // transition. Combined with the `.userInitiated` priority in
+            // `prepareTranscriberInBackground()`, this closes the first-
+            // launch race where prepare wouldn't get scheduler time until
+            // the user had already stopped recording — the pill would
+            // then sit on `.loading` for minutes. See
+            // `plans/backlog/model-download-ux-bug-research.md`
+            // (session-start race).
+            prepareTranscriberInBackground()
+
             publish { snapshot in
                 snapshot.sessionState = .recording
                 snapshot.activeStage = .capture
@@ -183,7 +194,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.context = activeContext
             }
 
-            prepareTranscriberInBackground()
             captureTask = Task { [weak self] in
                 await self?.consumeCaptureStream(stream)
             }
@@ -454,7 +464,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         let transcriber = transcriber
         let logger = logger
 
-        Task.detached(priority: .background) {
+        // `.userInitiated` (was `.background`) so the scheduler runs
+        // prepare quickly after it's spawned. At `.background`, prepare
+        // could be starved for seconds — the user might stop recording
+        // before the first `.downloading` progress tick fires,
+        // surfacing the stale `.loading` pill for minutes. See
+        // `plans/backlog/model-download-ux-bug-research.md`
+        // (session-start race).
+        Task.detached(priority: .userInitiated) {
             do {
                 try await transcriber.prepare()
             } catch is CancellationError {

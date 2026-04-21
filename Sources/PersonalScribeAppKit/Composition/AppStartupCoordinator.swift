@@ -37,7 +37,13 @@ final class AppStartupCoordinator {
         }
 
         let startHotkeyMonitor = self.startHotkeyMonitor
-        startupTask = Task(priority: .background) { [hotkeyDelay, prepareDelay, sleep, prepareTranscriber, logger] in
+        // `.userInitiated` (was `.background`) so the eager prefetch of
+        // the voice model gets scheduler priority comparable to app
+        // launch. At `.background`, prefetch would often not progress
+        // until the user had already hit the hotkey, defeating the
+        // purpose. See `plans/backlog/model-download-ux-bug-research.md`
+        // (session-start race).
+        startupTask = Task(priority: .userInitiated) { [hotkeyDelay, prepareDelay, sleep, prepareTranscriber, logger] in
             do {
                 try await sleep(hotkeyDelay)
             } catch is CancellationError {
