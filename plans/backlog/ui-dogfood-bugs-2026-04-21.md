@@ -29,7 +29,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` fixed (reference commit)
 
 - [ ] **3. "Launch at Login" toggle doesn't trigger the system-settings / permission flow.** Toggling ON silently flips state but never prompts or requests the Login Items permission. Verify `SMAppService` / helper invocation is actually firing.
 - [x] **8. "Settings" section label above the tab strip is redundant and wraps on default width.** — FIXED: removed the redundant "Settings" largeTitle above the sub-tab picker in SettingsTab.swift — window chrome + sidebar row already identify this as Settings.
-- [ ] **14. "Shortcuts" setting is just one row — promote it.** Currently one lonely shortcut row. Move into its own General subsection (standalone tab is a later option).
+- [ ] **14. "Shortcuts" tab has only one row — demote to a subsection inside General.** Currently Shortcuts is its own standalone Settings sub-tab containing a single row (`Record / stop dictation` hotkey). That's wasted surface. Move the row into a new **"Shortcuts"** subsection at the bottom of the General sub-tab; remove the standalone Shortcuts sub-tab + its enum case. Delete `ShortcutsTab.swift` after relocating its content.
 
 ## Settings — Advanced
 
