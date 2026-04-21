@@ -11,16 +11,25 @@ final class HotkeyPreferenceTests: XCTestCase {
         return defaults
     }
 
-    func testResolveReturnsDefaultDoubleTapRightOptionWhenKeyAbsent() {
+    func testResolveReturnsOptSlashDefaultWhenKeyAbsent() {
         let defaults = isolatedDefaults()
 
+        // Pill UX spec §3 (2026-04-21): default hotkey is `opt + /`.
+        // keyCode 44 is the `/` key on a US keyboard; tapCount `1`
+        // means single-tap (tap count is retained for Codable
+        // compatibility but ignored by the monitor, which now handles
+        // tap / hold / double-tap-debounce uniformly).
         XCTAssertEqual(
             HotkeyPreference.resolve(from: defaults),
             .default
         )
         XCTAssertEqual(
             HotkeyPreference.default,
-            HotkeyPreference(keyCode: 61, tapCount: 2, modifiers: 0)
+            HotkeyPreference(
+                keyCode: 44,
+                tapCount: 1,
+                modifiers: NSEvent.ModifierFlags.option.rawValue
+            )
         )
     }
 

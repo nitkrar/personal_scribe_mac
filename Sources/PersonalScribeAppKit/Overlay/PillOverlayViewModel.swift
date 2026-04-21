@@ -34,6 +34,10 @@ public final class PillOverlayViewModel: ObservableObject {
         visibility == .cancelled
     }
 
+    public var isShowingHoldToRecord: Bool {
+        visibility == .holdToRecord
+    }
+
     public var isAudioActive: Bool {
         visibility == .recording || visibility == .holdToRecord
     }
@@ -64,6 +68,17 @@ public final class PillOverlayViewModel: ObservableObject {
         // the session's own `.recording → .idle` cancel transition
         // from wiping the Cancel Card before the user can see it.
         if isShowingCancelCard && visibility != .cancelled && visibility != .idle {
+            return
+        }
+
+        // Sticky Hold-to-Record: while the user is holding the hotkey,
+        // the session-state mapping wants to push `.recording` (because
+        // SessionCoordinator.toggle() started a real capture). That
+        // would replace the distinct hold-to-record visuals with the
+        // committed-recording pill mid-gesture. Block `.recording`
+        // specifically; let transcribing / idle / cancelled / error
+        // through (those are the legitimate transitions out of hold).
+        if isShowingHoldToRecord && visibility == .recording {
             return
         }
 

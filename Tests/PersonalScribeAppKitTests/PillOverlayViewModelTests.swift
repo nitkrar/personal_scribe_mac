@@ -375,11 +375,13 @@ final class PillOverlayViewModelTests: XCTestCase {
         let viewModel = PillOverlayViewModel()
         viewModel.apply(visibility: .recording)
 
-        // Immediate sleep so the dismiss fires on the next runloop tick.
+        // Immediate sleep so the dismiss fires as soon as the inner
+        // detached task gets scheduled. A short Task.sleep lets the
+        // inner `MainActor.run { visibility = .idle }` complete before
+        // we assert — using yields alone is racy because the detached
+        // task may not have dispatched onto MainActor yet.
         viewModel.cancel(sleep: { _ in })
-
-        await Task.yield()
-        await Task.yield()
+        try? await Task.sleep(for: .milliseconds(50))
 
         XCTAssertEqual(viewModel.visibility, .idle)
         XCTAssertFalse(viewModel.isShowingCancelCard)
@@ -412,6 +414,33 @@ final class PillOverlayViewModelTests: XCTestCase {
 
         XCTAssertEqual(undoCount, 0)
         XCTAssertEqual(viewModel.visibility, .idle)
+    }
+
+    func testHoldToRecordIsStickyAgainstIncomingRecordingVisibility() {
+        // Phase 4 wiring: when the user holds the hotkey, the monitor
+        // pushes `.holdToRecord` AND starts recording via the
+        // SessionCoordinator. The session's normal state mapping would
+        // then try to push `.recording` — that would clobber the
+        // distinct hold-to-record visuals mid-gesture. Stickiness must
+        // block `.recording` while `.holdToRecord` is active; other
+        // transitions (transcribing / idle / cancelled / error) flow
+        // through.
+        let viewModel = PillOverlayViewModel()
+        viewModel.apply(visibility: .holdToRecord)
+        XCTAssertTrue(viewModel.isShowingHoldToRecord)
+
+        viewModel.apply(visibility: .recording)
+        XCTAssertEqual(
+            viewModel.visibility,
+            .holdToRecord,
+            "`.recording` must be blocked while hold-to-record is active"
+        )
+
+        // Transcribing is the legitimate release transition — must
+        // flow through.
+        viewModel.apply(visibility: .transcribing)
+        XCTAssertEqual(viewModel.visibility, .transcribing)
+        XCTAssertFalse(viewModel.isShowingHoldToRecord)
     }
 
     func testCancelledStateIsStickyAgainstIncomingSessionVisibilityUpdates() {

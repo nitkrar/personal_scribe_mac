@@ -58,14 +58,6 @@ struct PersonalScribeAppMain: App {
                 defaults: defaults,
                 isAccessibilityTrusted: isAccessibilityTrusted
             )
-        let startupCoordinator = startupCoordinator
-            ?? AppComposition.makeStartupCoordinator(
-                coordinator: coordinator,
-                hotkeyMonitor: AppComposition.makeGlobalHotkeyMonitor(
-                    permissionService: appPermissionService,
-                    coordinator: coordinator
-                )
-            )
         var clipboardOnlyNotice: (@MainActor () -> Void)?
         let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
         let isOnboardingCompleteProvider: @MainActor () -> Bool = {
@@ -73,7 +65,6 @@ struct PersonalScribeAppMain: App {
         }
 
         self.coordinator = coordinator
-        self.startupCoordinator = startupCoordinator
         let sceneModel = MenuBarSceneModel(
             appStore: appStore,
             coordinator: coordinator,
@@ -112,6 +103,24 @@ struct PersonalScribeAppMain: App {
         clipboardOnlyNotice = {
             pillController.showClipboardOnlyNotice()
         }
+
+        // Hotkey monitor construction is deferred until AFTER the pill
+        // controller exists so `onHoldStartVisibilityPush` can capture
+        // the view model reference directly and push `.holdToRecord`
+        // on hold-start. Order-dependent: pillController must be ready
+        // before the startup coordinator schedules the monitor start.
+        let startupCoordinator = startupCoordinator
+            ?? AppComposition.makeStartupCoordinator(
+                coordinator: coordinator,
+                hotkeyMonitor: AppComposition.makeGlobalHotkeyMonitor(
+                    permissionService: appPermissionService,
+                    coordinator: coordinator,
+                    onHoldStartVisibilityPush: { [weak pillController] in
+                        pillController?.viewModel.apply(visibility: .holdToRecord)
+                    }
+                )
+            )
+        self.startupCoordinator = startupCoordinator
         let metricsReader: any MetricsReading = {
             do {
                 return try AppComposition.makeMetricsReader()

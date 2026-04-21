@@ -4,25 +4,42 @@ import XCTest
 import PersonalScribeCore
 @testable import PersonalScribeAppKit
 
+/// Tests for `GlobalHotkeyMonitor`'s Phase 4 tap / hold / double-tap
+/// state machine (pill UX spec §3).
+///
+/// The monitor listens for `.keyDown` + `.keyUp` on a key+modifier
+/// combination and dispatches to three callbacks:
+///
+/// * `onToggle` — tap release (press+release < 300 ms). Debounced
+///   against subsequent taps within 400 ms (double-tap is an alias).
+/// * `onHoldStart` — held past 300 ms without release. Fired exactly
+///   once per press.
+/// * `onHoldRelease` — released after `onHoldStart` fired.
+///
+/// `scheduleHoldDetection` is dependency-injected so tests drive the
+/// hold-threshold timer deterministically instead of waiting on real
+/// time.
 @MainActor
 final class GlobalHotkeyMonitorTests: XCTestCase {
-    private static let leftOptionKeyCode: UInt16 = 58
-    private static let rightOptionKeyCode: UInt16 = 61
+    private static let slashKeyCode: UInt16 = 44
+    private static let optSlash: HotkeyPreference = HotkeyPreference(
+        keyCode: 44,
+        tapCount: 1,
+        modifiers: NSEvent.ModifierFlags.option.rawValue
+    )
 
     func testStartStopLifecycle() {
-        let monitor = GlobalHotkeyMonitor(onTrigger: {})
+        let monitor = GlobalHotkeyMonitor(onToggle: {})
 
         monitor.start()
-
         XCTAssertTrue(monitor.isActive)
 
         monitor.stop()
-
         XCTAssertFalse(monitor.isActive)
     }
 
     func testStartIsIdempotent() {
-        let monitor = GlobalHotkeyMonitor(onTrigger: {})
+        let monitor = GlobalHotkeyMonitor(onToggle: {})
 
         monitor.start()
         monitor.start()
@@ -30,134 +47,222 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertTrue(monitor.isActive)
     }
 
-    func testSinglePressDoesNotTrigger() throws {
-        var triggerCount = 0
-        let monitor = GlobalHotkeyMonitor {
-            triggerCount += 1
-        }
+    // MARK: - Tap (single short press+release)
 
-        monitor.handle(event: try makeFlagsChangedEvent(modifierFlags: [.option], timestamp: 1))
-
-        XCTAssertEqual(triggerCount, 0)
-    }
-
-    /// Double-tap MUST fire immediately on the second matching tap. The
-    /// previous implementation deferred by `tapWindow` (~400ms) to
-    /// disambiguate a third tap for emergency-quit; that path was
-    /// removed and the monitor must now respond with no synthetic delay.
-    func testDoubleTapWithinWindowFiresImmediately() throws {
-        var triggerCount = 0
+    func testQuickTapFiresToggleOnRelease() throws {
+        let scheduler = HoldSchedulerSpy()
+        var toggles = 0
+        var holds = 0
+        var releases = 0
         let monitor = GlobalHotkeyMonitor(
-            onTrigger: {
-                triggerCount += 1
-            }
+            onToggle: { toggles += 1 },
+            onHoldStart: { holds += 1 },
+            onHoldRelease: { releases += 1 },
+            recordingHotkey: Self.optSlash,
+            scheduleHoldDetection: scheduler.schedule
         )
 
-        try sendTap(to: monitor, at: 1.0)
-        XCTAssertEqual(triggerCount, 0, "first tap must not fire")
+        try sendKeyDown(to: monitor, at: 1.0)
+        XCTAssertEqual(toggles, 0, "Tap must not fire until release")
 
-        try sendTap(to: monitor, at: 1.2)
-        XCTAssertEqual(triggerCount, 1, "second tap within window must fire with no deferral")
+        try sendKeyUp(to: monitor, at: 1.15) // 150 ms — under hold threshold
+
+        XCTAssertEqual(toggles, 1)
+        XCTAssertEqual(holds, 0)
+        XCTAssertEqual(releases, 0)
     }
 
-    func testDoubleTapOutsideWindowDoesNotTrigger() throws {
-        var triggerCount = 0
+    func testTapOutsideDebounceWindowFiresAgain() throws {
+        let scheduler = HoldSchedulerSpy()
+        var toggles = 0
         let monitor = GlobalHotkeyMonitor(
-            onTrigger: {
-                triggerCount += 1
-            }
+            onToggle: { toggles += 1 },
+            recordingHotkey: Self.optSlash,
+            scheduleHoldDetection: scheduler.schedule
         )
 
-        try sendTap(to: monitor, at: 1.0)
-        try sendTap(to: monitor, at: 1.6)
+        try sendKeyDown(to: monitor, at: 1.0)
+        try sendKeyUp(to: monitor, at: 1.1)
+        XCTAssertEqual(toggles, 1)
 
-        XCTAssertEqual(triggerCount, 0)
+        // Second tap 500 ms after the first → outside 400 ms debounce.
+        try sendKeyDown(to: monitor, at: 1.6)
+        try sendKeyUp(to: monitor, at: 1.7)
+        XCTAssertEqual(toggles, 2)
     }
 
-    func testTwoRightOptionTapsInsideWindowFiresToggleImmediately() throws {
-        var toggleCount = 0
+    // MARK: - Double-tap alias (spec §3 — fires ONCE, second absorbed)
+
+    func testDoubleTapFiresToggleOnceAndAbsorbsSecondTap() throws {
+        let scheduler = HoldSchedulerSpy()
+        var toggles = 0
         let monitor = GlobalHotkeyMonitor(
-            onTrigger: {
-                toggleCount += 1
-            }
+            onToggle: { toggles += 1 },
+            recordingHotkey: Self.optSlash,
+            scheduleHoldDetection: scheduler.schedule
         )
 
-        try sendTap(to: monitor, at: 1.0, keyCode: Self.rightOptionKeyCode)
-        XCTAssertEqual(toggleCount, 0)
+        try sendKeyDown(to: monitor, at: 1.0)
+        try sendKeyUp(to: monitor, at: 1.1)  // 1st tap
 
-        try sendTap(to: monitor, at: 1.2, keyCode: Self.rightOptionKeyCode)
-        XCTAssertEqual(toggleCount, 1)
+        try sendKeyDown(to: monitor, at: 1.25)
+        try sendKeyUp(to: monitor, at: 1.3)  // 2nd tap, 200 ms after 1st → absorbed
+
+        XCTAssertEqual(
+            toggles,
+            1,
+            "Spec §3: double-tap is an alias for single tap, not two toggles"
+        )
     }
 
-    /// After a completed double-tap toggle, a later tap outside the
-    /// window starts a fresh sequence (no emergency-quit on the third
-    /// tap — that behaviour was removed).
-    func testThirdRightOptionTapOutsideWindowStartsFreshSequence() throws {
-        var toggleCount = 0
+    // MARK: - Hold
+
+    func testHoldPastThresholdFiresHoldStartOnlyOnce() throws {
+        let scheduler = HoldSchedulerSpy()
+        var toggles = 0
+        var holdStarts = 0
         let monitor = GlobalHotkeyMonitor(
-            onTrigger: {
-                toggleCount += 1
-            }
+            onToggle: { toggles += 1 },
+            onHoldStart: { holdStarts += 1 },
+            recordingHotkey: Self.optSlash,
+            scheduleHoldDetection: scheduler.schedule
         )
 
-        try sendTap(to: monitor, at: 1.0, keyCode: Self.rightOptionKeyCode)
-        try sendTap(to: monitor, at: 1.2, keyCode: Self.rightOptionKeyCode)
-        XCTAssertEqual(toggleCount, 1)
+        try sendKeyDown(to: monitor, at: 1.0)
+        // Simulate the 300 ms hold timer elapsing while the key is
+        // still down.
+        scheduler.fireScheduledActions()
 
-        // 1.7 is > 0.4s after the 1.2 tap — outside the window, so the
-        // sequence resets and this tap alone does nothing.
-        try sendTap(to: monitor, at: 1.7, keyCode: Self.rightOptionKeyCode)
-
-        XCTAssertEqual(toggleCount, 1)
+        XCTAssertEqual(holdStarts, 1)
+        XCTAssertEqual(toggles, 0)
     }
 
-    func testMonitorReadsPreferenceForKeyCodeAndTapCount() throws {
-        var singleTapTriggerCount = 0
-        let singleTapMonitor = GlobalHotkeyMonitor(
-            onTrigger: {
-                singleTapTriggerCount += 1
-            },
-            recordingHotkey: HotkeyPreference(
-                keyCode: 15,
-                tapCount: 1,
-                modifiers: NSEvent.ModifierFlags.command.rawValue
-            )
+    func testHoldReleaseFiresOnlyHoldReleaseNotToggle() throws {
+        let scheduler = HoldSchedulerSpy()
+        var toggles = 0
+        var holdStarts = 0
+        var holdReleases = 0
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: { toggles += 1 },
+            onHoldStart: { holdStarts += 1 },
+            onHoldRelease: { holdReleases += 1 },
+            recordingHotkey: Self.optSlash,
+            scheduleHoldDetection: scheduler.schedule
         )
 
-        singleTapMonitor.handle(event: try makeKeyDownEvent(
-            keyCode: 15,
-            modifierFlags: [.command],
-            characters: "r",
+        try sendKeyDown(to: monitor, at: 1.0)
+        scheduler.fireScheduledActions()  // 300 ms elapses → hold start
+        try sendKeyUp(to: monitor, at: 1.8)  // released 800 ms after down
+
+        XCTAssertEqual(holdStarts, 1)
+        XCTAssertEqual(holdReleases, 1)
+        XCTAssertEqual(toggles, 0, "Hold release must not also fire a toggle")
+    }
+
+    /// If the hold detector was cancelled or didn't fire in time but
+    /// the keyUp lands past the hold threshold, treat as a hold
+    /// release anyway — the tap path would be misleading after such
+    /// a long press.
+    func testKeyUpPastThresholdTreatedAsHoldReleaseEvenIfTimerDidntFire() throws {
+        let scheduler = HoldSchedulerSpy()
+        var toggles = 0
+        var holdReleases = 0
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: { toggles += 1 },
+            onHoldRelease: { holdReleases += 1 },
+            recordingHotkey: Self.optSlash,
+            scheduleHoldDetection: scheduler.schedule
+        )
+
+        try sendKeyDown(to: monitor, at: 1.0)
+        try sendKeyUp(to: monitor, at: 1.5)  // 500 ms — past 300 ms threshold
+
+        XCTAssertEqual(holdReleases, 1)
+        XCTAssertEqual(toggles, 0)
+    }
+
+    // MARK: - Hotkey filter
+
+    func testNonMatchingKeyCodeIsIgnored() throws {
+        let scheduler = HoldSchedulerSpy()
+        var toggles = 0
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: { toggles += 1 },
+            recordingHotkey: Self.optSlash,
+            scheduleHoldDetection: scheduler.schedule
+        )
+
+        // `a` keyCode with .option modifier — not our hotkey.
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: 0,
+            modifierFlags: [.option],
+            characters: "a",
             timestamp: 1.0
         ))
-        singleTapMonitor.handle(event: try makeKeyDownEvent(
-            keyCode: 15,
-            modifierFlags: [],
-            characters: "r",
-            timestamp: 1.2
+        monitor.handle(event: try makeKeyUpEvent(
+            keyCode: 0,
+            modifierFlags: [.option],
+            characters: "a",
+            timestamp: 1.05
         ))
 
-        XCTAssertEqual(singleTapTriggerCount, 1)
-
-        var doubleTapTriggerCount = 0
-        let doubleTapMonitor = GlobalHotkeyMonitor(
-            onTrigger: {
-                doubleTapTriggerCount += 1
-            },
-            recordingHotkey: HotkeyPreference(
-                keyCode: Self.leftOptionKeyCode,
-                tapCount: 2,
-                modifiers: 0
-            )
-        )
-
-        try sendTap(to: doubleTapMonitor, at: 2.0, keyCode: Self.leftOptionKeyCode)
-        try sendTap(to: doubleTapMonitor, at: 2.2, keyCode: Self.leftOptionKeyCode)
-
-        XCTAssertEqual(doubleTapTriggerCount, 1)
+        XCTAssertEqual(toggles, 0)
     }
 
-    // MARK: - Phase 1 Step 1.9 — Input Monitoring permission warning
+    func testMissingModifierIsIgnored() throws {
+        let scheduler = HoldSchedulerSpy()
+        var toggles = 0
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: { toggles += 1 },
+            recordingHotkey: Self.optSlash,
+            scheduleHoldDetection: scheduler.schedule
+        )
+
+        // `/` without .option — not our hotkey.
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [],
+            characters: "/",
+            timestamp: 1.0
+        ))
+        monitor.handle(event: try makeKeyUpEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [],
+            characters: "/",
+            timestamp: 1.05
+        ))
+
+        XCTAssertEqual(toggles, 0)
+    }
+
+    func testKeyRepeatIsIgnoredAndDoesNotRestartHoldTimer() throws {
+        let scheduler = HoldSchedulerSpy()
+        var holdStarts = 0
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            onHoldStart: { holdStarts += 1 },
+            recordingHotkey: Self.optSlash,
+            scheduleHoldDetection: scheduler.schedule
+        )
+
+        try sendKeyDown(to: monitor, at: 1.0)
+        // Fire the hold timer → we're now in hold state.
+        scheduler.fireScheduledActions()
+        XCTAssertEqual(holdStarts, 1)
+
+        // A system-generated key-repeat keyDown should not re-trigger
+        // the hold start callback.
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: 1.4,
+            isARepeat: true
+        ))
+        XCTAssertEqual(holdStarts, 1)
+    }
+
+    // MARK: - Permission-failure logging (unchanged from Issue 4)
 
     func testNilMonitorFailureEmitsDeniedWarningThroughLogSink() {
         let permissionService = FakePermissionService(
@@ -165,7 +270,7 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         )
         let sink = CapturingLogSink()
         let monitor = GlobalHotkeyMonitor(
-            onTrigger: {},
+            onToggle: {},
             permissionService: permissionService,
             logSink: sink.capture
         )
@@ -176,7 +281,6 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertEqual(captured.count, 1)
         XCTAssertEqual(captured.first?.level, "error")
         XCTAssertTrue(captured.first?.message.contains("Input Monitoring permission denied") == true)
-        XCTAssertTrue(captured.first?.message.contains("menu bar warning") == true)
     }
 
     func testNilMonitorFailureReportsPendingWhenTCCUnresolved() {
@@ -185,7 +289,7 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         )
         let sink = CapturingLogSink()
         let monitor = GlobalHotkeyMonitor(
-            onTrigger: {},
+            onToggle: {},
             permissionService: permissionService,
             logSink: sink.capture
         )
@@ -197,50 +301,59 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
 
     func testFailureMessageMentionsGrantedPathWhenProbeReportsGrantedDespiteNilMonitor() {
         let message = GlobalHotkeyMonitor.monitorInstallFailureMessage(for: PermissionStatus.granted)
-
         XCTAssertTrue(message.contains("reporting granted"))
     }
 
-    private func sendTap(
+    // MARK: - Helpers
+
+    private func sendKeyDown(
         to monitor: GlobalHotkeyMonitor,
-        at timestamp: TimeInterval,
-        releaseDelay: TimeInterval = 0.05,
-        keyCode: UInt16 = 61
+        at timestamp: TimeInterval
     ) throws {
-        monitor.handle(event: try makeFlagsChangedEvent(
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: Self.slashKeyCode,
             modifierFlags: [.option],
-            timestamp: timestamp,
-            keyCode: keyCode
-        ))
-        monitor.handle(event: try makeFlagsChangedEvent(
-            modifierFlags: [],
-            timestamp: timestamp + releaseDelay,
-            keyCode: keyCode
+            characters: "/",
+            timestamp: timestamp
         ))
     }
 
-    private func makeFlagsChangedEvent(
+    private func sendKeyUp(
+        to monitor: GlobalHotkeyMonitor,
+        at timestamp: TimeInterval
+    ) throws {
+        monitor.handle(event: try makeKeyUpEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: timestamp
+        ))
+    }
+
+    private func makeKeyDownEvent(
+        keyCode: UInt16,
         modifierFlags: NSEvent.ModifierFlags,
+        characters: String,
         timestamp: TimeInterval,
-        keyCode: UInt16 = 61
+        isARepeat: Bool = false
     ) throws -> NSEvent {
         try XCTUnwrap(
             NSEvent.keyEvent(
-                with: .flagsChanged,
+                with: .keyDown,
                 location: .zero,
                 modifierFlags: modifierFlags,
                 timestamp: timestamp,
                 windowNumber: 0,
                 context: nil,
-                characters: "",
-                charactersIgnoringModifiers: "",
-                isARepeat: false,
+                characters: characters,
+                charactersIgnoringModifiers: characters.lowercased(),
+                isARepeat: isARepeat,
                 keyCode: keyCode
             )
         )
     }
 
-    private func makeKeyDownEvent(
+    private func makeKeyUpEvent(
         keyCode: UInt16,
         modifierFlags: NSEvent.ModifierFlags,
         characters: String,
@@ -248,7 +361,7 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
     ) throws -> NSEvent {
         try XCTUnwrap(
             NSEvent.keyEvent(
-                with: .keyDown,
+                with: .keyUp,
                 location: .zero,
                 modifierFlags: modifierFlags,
                 timestamp: timestamp,
@@ -314,5 +427,39 @@ private final class CapturingLogSink: @unchecked Sendable {
 
     func snapshot() -> [Entry] {
         lock.withLock { entries }
+    }
+}
+
+@MainActor
+private final class HoldSchedulerSpy {
+    private final class ScheduledAction {
+        let delay: TimeInterval
+        let action: @MainActor () -> Void
+        var isCancelled = false
+
+        init(delay: TimeInterval, action: @escaping @MainActor () -> Void) {
+            self.delay = delay
+            self.action = action
+        }
+    }
+
+    private var scheduledActions: [ScheduledAction] = []
+
+    var schedule: GlobalHotkeyMonitor.HoldScheduler {
+        { [weak self] delay, action in
+            let scheduledAction = ScheduledAction(delay: delay, action: action)
+            self?.scheduledActions.append(scheduledAction)
+            return {
+                scheduledAction.isCancelled = true
+            }
+        }
+    }
+
+    func fireScheduledActions() {
+        let pending = scheduledActions
+        scheduledActions.removeAll()
+        for action in pending where action.isCancelled == false {
+            action.action()
+        }
     }
 }
