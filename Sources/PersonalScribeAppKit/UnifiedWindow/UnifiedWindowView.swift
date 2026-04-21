@@ -45,7 +45,13 @@ struct UnifiedWindowView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        // Pin column visibility to `.all` so macOS never auto-collapses
+        // the sidebar — either via the toolbar chevron or when detail
+        // content requests more width than the current window fits.
+        // The sidebar is the only way to route between top-level tabs,
+        // so losing it leaves the user stranded on whatever tab is
+        // active (see bug #1b, 2026-04-21 dogfood).
+        NavigationSplitView(columnVisibility: .constant(.all)) {
             sidebar
                 .navigationSplitViewColumnWidth(
                     min: PersonalScribeTheme.Layout.sidebarWidth,

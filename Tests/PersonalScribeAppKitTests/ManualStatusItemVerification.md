@@ -43,3 +43,10 @@ or `StatusItemIconLoader`.
   tab — not whatever tab was last active. Regression guard for the
   `openHome: showUnifiedWindow` bug where the menu item only raised the
   window without switching tabs.
+- [ ] **MV-SI-9** With the unified window open on any tab, the left
+  sidebar (Home / Transcriptions / Modes / Settings) is always visible.
+  Clicking the sidebar toolbar chevron does NOT hide it. Resizing the
+  window down to `windowMinWidth` (760pt) keeps the sidebar pinned —
+  detail pane compresses, sidebar does not collapse. Regression guard
+  for bug #1b (2026-04-21 dogfood) where About forced the sidebar to
+  auto-collapse leaving the user stranded on the About view.
