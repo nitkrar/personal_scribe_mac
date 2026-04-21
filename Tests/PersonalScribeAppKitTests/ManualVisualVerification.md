@@ -490,6 +490,70 @@ against the mockup.
     TEXT INPUT → Behavior. (Visibility card is not in the mockup
     but remains functional and is retained.)
 
+## Settings → General Theme picker — mockup-gaps G
+
+Introduced 2026-04-21 to replace the old `WindowTint.dark` double-duty
+behavior. The Appearance card now carries an `AppTheme` master picker
+at the top (Light / Dark / System); the Window tint picker below it is
+hidden entirely when the effective scheme is dark. Pill theme remains
+independent.
+
+Reference: `plans/backlog/ui-mockup-gaps.md` "Palette bundle — product
+decisions still open" resolution paragraph.
+
+### G.4 — Theme picker presence + default
+1. Fresh install (defaults clear): Settings → General shows
+   `Appearance` card with a segmented Theme picker at the top whose
+   selected segment is **Light**.
+2. Theme segments read left-to-right: Light / Dark / System.
+3. Pill theme picker stays present regardless of Theme selection — the
+   pill is an independent axis.
+
+### G.4 — Conditional tint visibility (live toggle)
+4. Start with Theme = Light. The Window tint picker (Warm / Neutral)
+   is visible directly below the Theme picker, separated by a divider.
+5. Tap the **Dark** segment. The Window tint picker vanishes
+   immediately — not disabled-greyed, not visible-with-banner; entirely
+   absent from layout. The Pill theme picker stays.
+6. Tap the **Light** segment. The Window tint picker reappears in its
+   previous position with its prior selection preserved
+   (Warm / Neutral — whichever was last chosen).
+7. Tap the **System** segment on a Mac whose system theme is Light.
+   The Window tint picker is visible. Flip the Mac into system Dark
+   via the Apple menu → System Settings → Appearance. The picker
+   hides live — the Settings window does not need to be closed/reopened.
+   Flip back to system Light; the picker returns.
+
+### G.4 — NSAppearance propagation to open windows
+8. Open the unified Ninimma window (Menu Bar → Open Ninimma) AND the
+   Settings window side-by-side so both are visible.
+9. With Theme = Light, both windows render the light palette
+   (cream/white surfaces, dark text).
+10. Tap Dark in the Theme picker. Both windows repaint to the dark
+    palette IMMEDIATELY. Sidebar, content area, and window chrome all
+    flip. No close/reopen required.
+11. Tap System. Behavior mirrors the current macOS appearance — light
+    when system is light, dark when system is dark.
+
+### G.4 — Persistence across relaunch
+12. Set Theme = Dark. Quit the app entirely (Cmd-Q from menu). Relaunch.
+    Open Settings. Theme picker's selected segment is **Dark** and
+    windows open in dark palette.
+13. Set Theme = Light. Quit, relaunch. Theme = Light on reopen.
+
+### G.4 — Pill independence invariant
+14. Set Pill theme = Dark, Theme = Light. Pill overlays render dark.
+15. Flip Theme to Dark. Pill overlays STILL render dark — unchanged.
+16. Flip Theme back to Light, then set Pill theme = System. Pill
+    overlays now inherit (depending on current effective scheme).
+    Theme picker does not affect Pill theme selection.
+
+### G.4 — Window tint independence invariant
+17. Set Theme = Light, Window tint = Neutral. Repaint is neutral grey.
+18. Flip Theme = Dark. Tint picker hides; windows go dark.
+19. Flip Theme = Light. Tint picker reappears with selection = Neutral
+    (preserved across the hide/show round-trip).
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift

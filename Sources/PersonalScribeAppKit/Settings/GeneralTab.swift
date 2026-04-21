@@ -1,4 +1,5 @@
 import AppKit
+import AppKit
 import SwiftUI
 import PersonalScribeCore
 import ServiceManagement
@@ -249,17 +250,38 @@ public struct GeneralTab: View {
             Text("Appearance")
                 .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
 
+            // Theme picker — master light/dark selector. Lives above
+            // the Window tint picker; tint is a light-mode-only brand
+            // flavor so it's fully hidden when the effective scheme is
+            // dark (see `viewModel.showsTintPicker`).
             Picker(
-                "Window tint",
+                "Theme",
                 selection: Binding(
-                    get: { viewModel.windowTint },
-                    set: { viewModel.setWindowTint($0) }
+                    get: { viewModel.appTheme },
+                    set: { viewModel.setAppTheme($0) }
                 )
             ) {
-                Text("Warm").tag(WindowTint.warm)
-                Text("Neutral").tag(WindowTint.neutral)
+                Text("Light").tag(AppTheme.light)
+                Text("Dark").tag(AppTheme.dark)
+                Text("System").tag(AppTheme.system)
             }
             .pickerStyle(.segmented)
+
+            if viewModel.showsTintPicker {
+                Divider()
+
+                Picker(
+                    "Window tint",
+                    selection: Binding(
+                        get: { viewModel.windowTint },
+                        set: { viewModel.setWindowTint($0) }
+                    )
+                ) {
+                    Text("Warm").tag(WindowTint.warm)
+                    Text("Neutral").tag(WindowTint.neutral)
+                }
+                .pickerStyle(.segmented)
+            }
 
             Divider()
 
@@ -367,17 +389,36 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var launchAtLogin: Bool
     @Published private(set) var showInDock: Bool
     @Published private(set) var pasteEnabled: Bool
+    /// Master theme (Light / Dark / System). Drives
+    /// `showsTintPicker` — tint is hidden when the effective scheme
+    /// is dark (mockup-gaps G, 2026-04-21).
+    @Published private(set) var appTheme: AppTheme
+    /// Snapshot of the system's effective appearance — `true` when
+    /// macOS resolves to `.darkAqua`. Injected for testability; at
+    /// runtime the default provider reads
+    /// `NSApplication.shared.effectiveAppearance`. Re-published by
+    /// the KVO observer so `showsTintPicker` reacts to system-theme
+    /// flips while Settings is open.
+    @Published private(set) var currentSystemIsDark: Bool
 
     private let defaults: UserDefaults
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
+    private let systemIsDarkProvider: @MainActor () -> Bool
+    private var effectiveAppearanceObservation: NSKeyValueObservation?
 
     init(
         defaults: UserDefaults = .standard,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
-        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
+        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
+        systemIsDarkProvider: @escaping @MainActor () -> Bool = {
+            NSApplication.shared.effectiveAppearance.bestMatch(
+                from: [.aqua, .darkAqua]
+            ) == .darkAqua
+        }
     ) {
         self.defaults = defaults
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
+        self.systemIsDarkProvider = systemIsDarkProvider
         self.pillVisibilityMode = PillVisibilityMode.resolve(from: defaults)
         // Snapshot-at-init: isMenuBarVisible is NOT re-read while the
         // Settings window is open. The General tab is the sole mutator
@@ -397,6 +438,38 @@ final class GeneralTabViewModel: ObservableObject {
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
         self.showInDock = ShowInDockPreference.resolve(from: defaults)
         self.pasteEnabled = PasteEnabledPreference.resolve(from: defaults)
+        self.appTheme = AppTheme.resolve(from: defaults)
+        self.currentSystemIsDark = systemIsDarkProvider()
+
+        // KVO on `NSApplication.effectiveAppearance` so that when the
+        // user flips the system theme while Settings is open and
+        // `AppTheme == .system`, `showsTintPicker` recomputes without
+        // the window needing to close/reopen. In tests we use the
+        // injected provider snapshot and skip the observer — KVO on
+        // the global NSApp instance doesn't fire deterministically in
+        // an XCTest harness.
+        effectiveAppearanceObservation = NSApplication.shared.observe(
+            \.effectiveAppearance,
+            options: [.new]
+        ) { [weak self] _, _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.currentSystemIsDark = self.systemIsDarkProvider()
+            }
+        }
+    }
+
+    deinit {
+        effectiveAppearanceObservation?.invalidate()
+    }
+
+    /// `true` when the Window-tint picker should be visible. Tint is
+    /// a light-mode-only brand flavor; when the effective scheme is
+    /// dark (`AppTheme == .dark`, or `AppTheme == .system` and the
+    /// system resolves to dark) the picker is fully hidden from the
+    /// Settings card.
+    var showsTintPicker: Bool {
+        appTheme.effectiveScheme(systemIsDark: currentSystemIsDark) == .light
     }
 
     var visibilityErrorMessage: String? {
@@ -441,6 +514,23 @@ final class GeneralTabViewModel: ObservableObject {
     func setWindowTint(_ tint: WindowTint) {
         windowTint = tint
         tint.persist(to: defaults)
+    }
+
+    /// Persists the master theme and applies the resolved
+    /// `NSAppearance` to every currently-open app window. Persisting
+    /// also triggers `UserDefaults.didChangeNotification` which the
+    /// `UnifiedWindowController` observer picks up for next-open
+    /// windows, so both live and future windows stay in sync.
+    ///
+    /// Pill appearance and window tint are NOT mutated — they are
+    /// independent axes per user direction (2026-04-21).
+    func setAppTheme(_ theme: AppTheme) {
+        appTheme = theme
+        theme.persist(to: defaults)
+        let appearance = theme.nsAppearance(systemIsDark: currentSystemIsDark)
+        for window in NSApplication.shared.windows {
+            window.appearance = appearance
+        }
     }
 
     func setPillAppearance(_ appearance: PillAppearance) {
