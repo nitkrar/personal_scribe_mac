@@ -45,12 +45,6 @@ public enum PersonalScribeTheme {
         // mockup.
         public let pillBackground: Color
 
-        // Stop-button red for the pill recording state. Softer coral
-        // than `statusRecording` (iOS system red) to avoid overpowering
-        // the champagne accent — keeps the stop affordance visible
-        // without screaming.
-        public let pillStopRed: Color
-
         // Pill foreground text / glyph colour. Warm pale cream; keeps
         // legibility on the dark navy pill surface in both schemes.
         public let pillForegroundText: Color
@@ -89,7 +83,6 @@ public enum PersonalScribeTheme {
             hoverState: Color(hex: "2A2A2A"),
             brandChampagne: Color(hex: "D4D0C8"),
             pillBackground: Color(hex: "1A1B2E"),
-            pillStopRed: Color(hex: "EF5350"),
             pillForegroundText: Color(hex: "E8E6E0"),
             primaryTextBase: Color(hex: "FFFFFF"),
             primaryTextOpacity: 0.60,
@@ -112,7 +105,6 @@ public enum PersonalScribeTheme {
             hoverState: Color(hex: "E8E7E0"),
             brandChampagne: Color(hex: "6B6760"),
             pillBackground: Color(hex: "1A1B2E"),
-            pillStopRed: Color(hex: "EF5350"),
             pillForegroundText: Color(hex: "E8E6E0"),
             primaryTextBase: Color(hex: "1A1A1A"),
             primaryTextOpacity: 1.0,
@@ -151,9 +143,9 @@ public enum PersonalScribeTheme {
         ///   Warm windows render cream; a dark palette would clash.
         /// * `.neutral` and `nil` delegate to `for(scheme:)`.
         ///
-        /// Pill tokens (`pillBackground`, `pillStopRed`,
-        /// `pillForegroundText`) are NOT affected — the pill is
-        /// intentionally isolated from `WindowTint` per project contract.
+        /// Pill tokens (`pillBackground`, `pillForegroundText`) are
+        /// NOT affected — the pill is intentionally isolated from
+        /// `WindowTint` per project contract.
         public static func `for`(scheme: ColorScheme, tint: WindowTint?) -> Palette {
             guard let tint else {
                 return Self.for(scheme: scheme)
@@ -182,7 +174,6 @@ public enum PersonalScribeTheme {
             hoverState: Color(hex: "DCDCD7"),
             brandChampagne: Color(hex: "D4D0C8"),
             pillBackground: Color(hex: "1A1B2E"),
-            pillStopRed: Color(hex: "EF5350"),
             pillForegroundText: Color(hex: "E8E6E0"),
             primaryTextBase: Color(hex: "1A1A1A"),
             primaryTextOpacity: 1.0,
