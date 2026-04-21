@@ -368,6 +368,38 @@ public final class PillOverlayPresenter {
         )
     }
 
+    /// Show a persistent response card above the pill for the "record-
+    /// without-transcribe" window — user is recording while the model is
+    /// still downloading or loading. The card stays up until
+    /// `hideRecordingStatusCard()` is called or replaced via
+    /// `updateRecordingStatusCard(text:)`.
+    func showRecordingStatusCard(text: String) {
+        guard let anchorWindow = panel?.anchorWindow else {
+            diagnosticLogger.info("PillOverlayPresenter.showRecordingStatusCard — skipped because no anchor window is available")
+            return
+        }
+
+        let responseCard = responseCard ?? responseCardBuilder.makeResponseCard()
+        self.responseCard = responseCard
+        responseCard.show(
+            text: text,
+            above: anchorWindow,
+            autoDismissAfter: nil
+        )
+    }
+
+    /// Update the text of the persistent recording-status card without
+    /// rebuilding it. No-op if the card isn't currently visible.
+    func updateRecordingStatusCard(text: String) {
+        responseCard?.update(text: text)
+    }
+
+    /// Dismiss the persistent recording-status card. Called when the
+    /// model reaches `.finished` or the user cancels recording.
+    func hideRecordingStatusCard() {
+        responseCard?.hide()
+    }
+
     public func hide() {
         intendsToShow = false
         panel?.orderOut(nil)

@@ -166,6 +166,53 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(panelBuilder.panel.orderFrontCallCount, 1)
     }
 
+    func testShowRecordingStatusCardUsesPersistentAutoDismiss() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
+        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        let panelBuilder = RecordingPanelBuilder()
+        let responseCardBuilder = RecordingResponseCardBuilder()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            responseCardBuilder: responseCardBuilder
+        )
+
+        presenter.showRecordingStatusCard(
+            text: "Recording — transcribing when model is ready (10%)"
+        )
+
+        XCTAssertEqual(responseCardBuilder.makeResponseCardCallCount, 1)
+        XCTAssertEqual(
+            responseCardBuilder.card.lastText,
+            "Recording — transcribing when model is ready (10%)"
+        )
+        XCTAssertNil(responseCardBuilder.card.lastAutoDismissAfter,
+                     "recording-status card stays up until hideRecordingStatusCard()")
+    }
+
+    func testUpdateRecordingStatusCardReusesSameCardInstance() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
+        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        let panelBuilder = RecordingPanelBuilder()
+        let responseCardBuilder = RecordingResponseCardBuilder()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            responseCardBuilder: responseCardBuilder
+        )
+
+        presenter.showRecordingStatusCard(text: "Recording — transcribing when model is ready (10%)")
+        presenter.updateRecordingStatusCard(text: "Recording — transcribing when model is ready (50%)")
+
+        XCTAssertEqual(responseCardBuilder.makeResponseCardCallCount, 1,
+                       "update must reuse the already-shown card")
+        XCTAssertEqual(responseCardBuilder.card.updateCallCount, 1)
+        XCTAssertEqual(
+            responseCardBuilder.card.lastText,
+            "Recording — transcribing when model is ready (50%)"
+        )
+    }
+
     func testResponseCardPersistentShowAndUpdatePreserveContract() {
         let card = RecordingResponseCard()
         let anchor = NSWindow(
