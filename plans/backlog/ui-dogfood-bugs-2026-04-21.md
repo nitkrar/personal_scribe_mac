@@ -52,6 +52,12 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` fixed (reference commit)
 - [ ] **10. Waveform decay** — not-now; revisit once core bugs are cleared. Tune falloff on the pill waveform so bars don't snap to zero.
 - [ ] **11. Hold-hotkey mode bar visuals** — needs a pass for spacing / contrast / motion; capture specifics when we get here.
 
+## Architecture / Refactor (follow-up to #5a)
+
+- [ ] **19. Central `KeyEventRouter` — consolidate scattered hotkey / key monitors.** Today keyboard listening is fragmented across `GlobalHotkeyMonitor` (⌥+/ tap/hold/double-tap), `EscapeKeyMonitor` (plain Esc → pill cancel), `HotkeyRecorder` (Settings > Shortcuts capture UI), and ad-hoc `NSEvent.addLocalMonitorForEvents` callers. Each owns its own lifecycle, install/teardown, and swallow logic. After #5a-v1 lands, #5a-v1 adds a *fourth* seam (a standalone `HotkeyEventTap` class backing only `GlobalHotkeyMonitor`). This backlog entry is the planned **5a-v2** follow-up: introduce a single `KeyEventRouter` that owns the CGEventTap + NSEvent local monitor pair and exposes a subscription API; migrate `EscapeKeyMonitor`, `HotkeyRecorder`, and any ad-hoc callers to subscribe through the router. Scope ≈ 3–5 commits, dedicated planning pass required before coding.
+  - Dependency: #5a-v1 must ship first so the `HotkeyEventTap` class exists as the starting point.
+  - Guiding principle: consolidation should not be bundled into the bug fix — doing them together risks hiding the #5a behavior change under a big rewrite.
+
 ---
 
 ## Notes for triage
