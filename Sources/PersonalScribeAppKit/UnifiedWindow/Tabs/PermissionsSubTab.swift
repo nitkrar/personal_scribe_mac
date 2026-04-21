@@ -71,7 +71,13 @@ private struct PermissionRow: View {
     let status: PermissionStatus
     let grantAction: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.windowTint) private var windowTint
+
     var body: some View {
+        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+        let background = windowTint?.cardBackground ?? palette.elevatedSurface
+
         HStack(alignment: .center, spacing: PersonalScribeTheme.Spacing.md) {
             Image(systemName: systemImageName)
                 .font(.system(size: 18, weight: .semibold))
@@ -97,7 +103,19 @@ private struct PermissionRow: View {
                     .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
             }
         }
-        .padding(.vertical, PersonalScribeTheme.Spacing.sm)
+        .padding(.horizontal, PersonalScribeTheme.Spacing.md)
+        .padding(.vertical, PersonalScribeTheme.Spacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.md, style: .continuous)
+                .fill(background)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.md, style: .continuous)
+                .strokeBorder(
+                    palette.brandChampagne.opacity(0.12),
+                    lineWidth: 0.5
+                )
+        )
     }
 
     private var statusDot: some View {
