@@ -15,6 +15,10 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` fixed (reference commit)
 - [ ] **9. Menu bar "Copy last transcript" is a no-op.** Click does nothing — no clipboard write, no toast, no error. Check action wiring and last-transcript accessor.
 - [ ] **12. Esc during recording behaves like Stop, not Cancel.** Esc should discard the in-flight recording *without* writing anything to the clipboard. Today it commits whatever was captured so far (same behavior as Stop). See Phase 8 cancel-without-transcribe backlog — this is the user-visible symptom.
 
+## Sidebar
+
+- [ ] **18. Microphone footer label in left pane is inert.** A small "Microphone" label sits at the bottom of the left sidebar but clicking / hovering does nothing — no menu, no picker, no tooltip. Decide intent: should it (a) open a mic picker popover, (b) route to Settings → input device, (c) display the currently selected input as a status readout only, or (d) be removed? Pick one and wire it (or strip the label).
+
 ## Menu bar
 
 - [ ] **2. Hide "Check for Updates" from menu bar.** No auto-update pipeline yet; the current item is a stub. Remove it (or gate behind a debug flag) until updater ships.
