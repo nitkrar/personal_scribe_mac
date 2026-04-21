@@ -304,6 +304,118 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertTrue(message.contains("reporting granted"))
     }
 
+    // MARK: - Bug #4 — local monitor for in-app key events
+
+    /// `NSEvent.addGlobalMonitorForEvents` only fires when the event is
+    /// headed to *another* application; when Ninimma's own window is
+    /// frontmost, key events never reach that monitor. `start()` must
+    /// also install `addLocalMonitorForEvents` so the hotkey works when
+    /// our window has focus (bug #4, 2026-04-21 dogfood).
+    func testStartInstallsBothLocalAndGlobalMonitors() {
+        let monitor = GlobalHotkeyMonitor(onToggle: {})
+
+        monitor.start()
+        XCTAssertTrue(
+            monitor.isGlobalMonitorActive,
+            "global monitor must be installed — fires when user is focused on another app"
+        )
+        XCTAssertTrue(
+            monitor.isLocalMonitorActive,
+            "local monitor must be installed — fires when Ninimma's window is frontmost (bug #4)"
+        )
+
+        monitor.stop()
+        XCTAssertFalse(monitor.isGlobalMonitorActive)
+        XCTAssertFalse(monitor.isLocalMonitorActive)
+    }
+
+    func testShouldSwallowLocalSwallowsMatchingHotkeyKeyDown() throws {
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            recordingHotkey: Self.optSlash
+        )
+        let event = try makeKeyDownEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: 1.0
+        )
+        XCTAssertTrue(
+            monitor.shouldSwallowLocal(event),
+            "Matching hotkey keyDown must be swallowed so `÷` doesn't leak into our own text fields"
+        )
+    }
+
+    func testShouldSwallowLocalSwallowsRepeatKeyDownSoAutoRepeatDoesNotType() throws {
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            recordingHotkey: Self.optSlash
+        )
+        let event = try makeKeyDownEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: 1.2,
+            isARepeat: true
+        )
+        XCTAssertTrue(
+            monitor.shouldSwallowLocal(event),
+            "Auto-repeat keyDowns during hold must also be swallowed — otherwise our text fields get `÷÷÷÷`"
+        )
+    }
+
+    func testShouldSwallowLocalPassesThroughNonHotkeyKeyDown() throws {
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            recordingHotkey: Self.optSlash
+        )
+        // `/` without `.option` — normal slash typing.
+        let event = try makeKeyDownEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [],
+            characters: "/",
+            timestamp: 1.0
+        )
+        XCTAssertFalse(
+            monitor.shouldSwallowLocal(event),
+            "Non-hotkey keyDowns must pass through so normal typing works"
+        )
+    }
+
+    func testShouldSwallowLocalSwallowsHotkeyKeyUpEvenWithoutModifiers() throws {
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            recordingHotkey: Self.optSlash
+        )
+        // User may release option before /, so keyUp arrives with no
+        // modifiers — matches what `handleKeyUp` checks (keyCode only).
+        let event = try makeKeyUpEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [],
+            characters: "/",
+            timestamp: 1.1
+        )
+        XCTAssertTrue(
+            monitor.shouldSwallowLocal(event),
+            "Matching-keyCode keyUp must be swallowed even if user released option first"
+        )
+    }
+
+    func testShouldSwallowLocalPassesThroughNonHotkeyKeyUp() throws {
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            recordingHotkey: Self.optSlash
+        )
+        // `a` keyCode — unrelated keyUp must pass through.
+        let event = try makeKeyUpEvent(
+            keyCode: 0,
+            modifierFlags: [.option],
+            characters: "a",
+            timestamp: 1.0
+        )
+        XCTAssertFalse(monitor.shouldSwallowLocal(event))
+    }
+
     // MARK: - Helpers
 
     private func sendKeyDown(

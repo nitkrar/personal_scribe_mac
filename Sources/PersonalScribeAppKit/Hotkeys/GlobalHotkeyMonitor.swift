@@ -24,6 +24,15 @@ import Foundation
 import PersonalScribeCore
 import PersonalScribeSession
 
+/// AppKit marks `NSEvent` as explicitly non-Sendable, but `NSEvent`
+/// monitor callbacks are documented to run on the main thread — there
+/// is no real cross-thread hop to guard against. This box lets us hand
+/// the event into a `MainActor.assumeIsolated` block without fighting
+/// the strict-concurrency checker.
+private struct NSEventBox: @unchecked Sendable {
+    let event: NSEvent
+}
+
 @MainActor
 public final class GlobalHotkeyMonitor {
     public typealias HoldScheduler = @MainActor (
@@ -58,7 +67,8 @@ public final class GlobalHotkeyMonitor {
     private let logger: PersonalScribeLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
 
-    private var monitor: Any?
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
     private var keyDownTimestamp: TimeInterval?
     private var isHolding = false
     private var lastToggleTimestamp: TimeInterval?
@@ -99,17 +109,23 @@ public final class GlobalHotkeyMonitor {
     }
 
     public var isActive: Bool {
-        monitor != nil
+        globalMonitor != nil || localMonitor != nil
     }
 
+    /// Introspection hooks for tests — `NSEvent` monitor handles are
+    /// opaque `Any?` tokens, so tests check non-nil-ness here rather
+    /// than invoke the real OS event system.
+    internal var isGlobalMonitorActive: Bool { globalMonitor != nil }
+    internal var isLocalMonitorActive: Bool { localMonitor != nil }
+
     public func start() {
-        guard monitor == nil else {
+        guard globalMonitor == nil, localMonitor == nil else {
             logger.info("Global hotkey monitor already active; ignoring duplicate start")
             return
         }
 
         resetState()
-        monitor = NSEvent.addGlobalMonitorForEvents(
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.flagsChanged, .keyDown, .keyUp]
         ) { [weak self] event in
             Task { @MainActor [weak self] in
@@ -117,7 +133,27 @@ public final class GlobalHotkeyMonitor {
             }
         }
 
-        if monitor == nil {
+        // Local monitor fires for events headed to our own app — needed
+        // so the hotkey works when Ninimma's window is frontmost (bug #4
+        // 2026-04-21 dogfood). `addGlobalMonitorForEvents` only fires
+        // for events to *other* apps. We swallow matching events so
+        // `÷` doesn't leak into our own text fields while recording.
+        localMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.flagsChanged, .keyDown, .keyUp]
+        ) { [weak self] event in
+            guard let self else { return event }
+            let box = NSEventBox(event: event)
+            // Run gesture-state + swallow decision on main actor; return
+            // only `Bool` across the isolation boundary so NSEvent's
+            // non-Sendable status doesn't poison the transfer.
+            let shouldSwallow = MainActor.assumeIsolated {
+                self.handle(event: box.event)
+                return self.shouldSwallowLocal(box.event)
+            }
+            return shouldSwallow ? nil : event
+        }
+
+        if globalMonitor == nil {
             handleMonitorInstallFailure()
         }
     }
@@ -148,13 +184,39 @@ public final class GlobalHotkeyMonitor {
     }
 
     public func stop() {
-        guard let handle = monitor else {
-            return
+        if let handle = globalMonitor {
+            NSEvent.removeMonitor(handle)
+            globalMonitor = nil
         }
-
-        NSEvent.removeMonitor(handle)
-        monitor = nil
+        if let handle = localMonitor {
+            NSEvent.removeMonitor(handle)
+            localMonitor = nil
+        }
         resetState()
+    }
+
+    /// Local-monitor swallow decision. Returning `true` means the event
+    /// will NOT be delivered to the downstream view chain (field editors
+    /// etc.), preventing `÷` leakage in our own text fields.
+    ///
+    /// Rules:
+    /// * `.keyDown` matching the hotkey (keyCode + modifiers, including
+    ///   auto-repeat) → swallow.
+    /// * `.keyUp` with the hotkey's keyCode → swallow. Modifiers may
+    ///   already have been released by the time keyUp lands, which is
+    ///   why this ignores them (mirrors `handleKeyUp`).
+    /// * `.flagsChanged` → pass through so unrelated keybindings that
+    ///   care about modifier edges still work.
+    /// * Everything else → pass through.
+    internal func shouldSwallowLocal(_ event: NSEvent) -> Bool {
+        switch event.type {
+        case .keyDown:
+            return matchesHotkey(event)
+        case .keyUp:
+            return event.keyCode == recordingHotkey.keyCode
+        default:
+            return false
+        }
     }
 
     internal func handle(event: NSEvent) {

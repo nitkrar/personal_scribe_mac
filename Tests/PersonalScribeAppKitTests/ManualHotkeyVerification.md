@@ -22,3 +22,25 @@ composition wiring.
   triple-tap emergency-quit path was removed — the last survival of
   accidental triple-taps is "recording started" rather than "app
   terminated".
+
+## Hotkey fires when Ninimma is frontmost (bug #4)
+
+`NSEvent.addGlobalMonitorForEvents` only fires for events headed to
+*other* apps. A matching `addLocalMonitorForEvents` is now installed
+alongside, so the hotkey still works when our own window is frontmost.
+Matching events are swallowed so `÷` doesn't leak into Ninimma's text
+fields. This does NOT address `÷` leakage into *other* apps during
+hold (bug #5 — requires a CGEventTap).
+
+- [ ] **MV-HK-5** Open the unified window and click to make it
+  frontmost. Tap ⌥+/ — the pill appears and recording starts. Tap
+  again — recording stops and transcription fires. Regression guard
+  for bug #4 (2026-04-21 dogfood) where the hotkey was dead whenever
+  Ninimma was focused.
+- [ ] **MV-HK-6** With the unified window frontmost, focus a text
+  field (Shortcuts → Record field, or any Settings text input). Tap
+  ⌥+/ — recording starts AND the text field must remain empty (no `÷`
+  inserted). Regression guard for local-monitor swallow logic.
+- [ ] **MV-HK-7** Switch to another app (e.g. Notes) until Ninimma's
+  window is NOT frontmost. Tap ⌥+/ — recording still starts. Regression
+  guard that the original global-monitor path still works.
