@@ -40,7 +40,11 @@ public final class GlobalHotkeyMonitor {
         _ action: @escaping @MainActor () -> Void
     ) -> HoldCanceller
     public typealias HoldCanceller = @MainActor () -> Void
-    internal typealias GlobalMonitorInstaller = @MainActor (_ handler: @escaping (NSEvent) -> Void) -> Any?
+    /// DI seam for substituting a fake `HotkeyEventTap` in tests —
+    /// production uses the default factory that builds a real one.
+    internal typealias EventTapFactory = @MainActor (
+        _ decider: @escaping HotkeyEventTap.Decider
+    ) -> HotkeyEventTap
 
     /// Threshold (seconds) separating tap vs hold. Matches spec §3
     /// ("press + release < 300 ms" = tap).
@@ -67,9 +71,9 @@ public final class GlobalHotkeyMonitor {
     private let permissionService: any PermissionService
     private let logger: PersonalScribeLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
-    private var installGlobalMonitor: GlobalMonitorInstaller
+    private var eventTapFactory: EventTapFactory
 
-    private var globalMonitor: Any?
+    private var eventTap: HotkeyEventTap?
     private var localMonitor: Any?
     private var keyDownTimestamp: TimeInterval?
     private var hotkeyKeyDownSwallowed = false
@@ -109,11 +113,8 @@ public final class GlobalHotkeyMonitor {
         self.permissionService = permissionService ?? AppKitPermissionService()
         self.logger = logger
         self.logSink = logSink
-        self.installGlobalMonitor = { handler in
-            NSEvent.addGlobalMonitorForEvents(
-                matching: [.flagsChanged, .keyDown, .keyUp],
-                handler: handler
-            )
+        self.eventTapFactory = { decider in
+            HotkeyEventTap(decider: decider, logger: logger)
         }
     }
 
@@ -138,7 +139,7 @@ public final class GlobalHotkeyMonitor {
         permissionService: (any PermissionService)? = nil,
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil,
-        installGlobalMonitor: @escaping GlobalMonitorInstaller
+        eventTapFactory: @escaping EventTapFactory
     ) {
         self.init(
             onToggle: onToggle,
@@ -152,42 +153,48 @@ public final class GlobalHotkeyMonitor {
             logger: logger,
             logSink: logSink
         )
-        self.installGlobalMonitor = installGlobalMonitor
+        self.eventTapFactory = eventTapFactory
     }
 
     public var isActive: Bool {
-        globalMonitor != nil || localMonitor != nil
+        eventTap != nil || localMonitor != nil
     }
 
-    /// Introspection hooks for tests — `NSEvent` monitor handles are
-    /// opaque `Any?` tokens, so tests check non-nil-ness here rather
-    /// than invoke the real OS event system.
-    internal var isGlobalMonitorActive: Bool { globalMonitor != nil }
+    /// Introspection hooks for tests. `eventTap.isActive` reflects
+    /// whether the CGEventTap's `CFMachPort` was successfully created.
+    internal var isGlobalMonitorActive: Bool {
+        eventTap?.isActive == true
+    }
     internal var isLocalMonitorActive: Bool { localMonitor != nil }
 
     public func start() {
-        guard globalMonitor == nil, localMonitor == nil else {
+        guard eventTap == nil, localMonitor == nil else {
             logger.info("Global hotkey monitor already active; ignoring duplicate start")
             return
         }
 
         resetState()
-        // Keep `isActive` as an OR by refusing partial local-only setup.
-        guard let globalMonitor = installGlobalMonitor({ [weak self] event in
-            Task { @MainActor [weak self] in
-                self?.handle(event: event)
-            }
-        }) else {
+
+        // Global path is now a CGEventTap — can swallow events headed to
+        // OTHER apps (fixes bug #5a: `÷÷÷÷` leak during hold). The tap
+        // runs at `.cgSessionEventTap` + `.headInsertEventTap`; see
+        // `HotkeyEventTap` for placement rationale.
+        let tap = eventTapFactory { [weak self] event in
+            guard let self else { return false }
+            self.handle(event: event)
+            return self.shouldSwallowEvent(event)
+        }
+        guard tap.start() else {
+            // tap creation failed (Input Monitoring denied / OS failure).
+            // Keep `isActive` false by refusing partial local-only setup.
             handleMonitorInstallFailure()
             return
         }
-        self.globalMonitor = globalMonitor
+        self.eventTap = tap
 
         // Local monitor fires for events headed to our own app — needed
         // so the hotkey works when Ninimma's window is frontmost (bug #4
-        // 2026-04-21 dogfood). `addGlobalMonitorForEvents` only fires
-        // for events to *other* apps. We swallow matching events so
-        // `÷` doesn't leak into our own text fields while recording.
+        // 2026-04-21 dogfood). The CGEventTap above covers other apps.
         localMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.flagsChanged, .keyDown, .keyUp]
         ) { [weak self] event in
@@ -230,15 +237,36 @@ public final class GlobalHotkeyMonitor {
     }
 
     public func stop() {
-        if let handle = globalMonitor {
-            NSEvent.removeMonitor(handle)
-            globalMonitor = nil
-        }
+        eventTap?.stop()
+        eventTap = nil
         if let handle = localMonitor {
             NSEvent.removeMonitor(handle)
             localMonitor = nil
         }
         resetState()
+    }
+
+    /// Swallow decision for the CGEventTap (global path). Same logic as
+    /// `shouldSwallowLocal` — swallow matching keyDown (setting the
+    /// balance flag), swallow matching-keyCode keyUp only when the
+    /// prior keyDown was swallowed, pass flagsChanged through. Both
+    /// paths share the `hotkeyKeyDownSwallowed` flag so a keyDown on
+    /// one path + keyUp on the other stays balanced.
+    internal func shouldSwallowEvent(_ event: HotkeyEvent) -> Bool {
+        switch event.type {
+        case .keyDown:
+            let shouldSwallow = matchesHotkey(event)
+            if shouldSwallow {
+                hotkeyKeyDownSwallowed = true
+            }
+            return shouldSwallow
+        case .keyUp:
+            let shouldSwallow = hotkeyKeyDownSwallowed && event.keyCode == recordingHotkey.keyCode
+            hotkeyKeyDownSwallowed = false
+            return shouldSwallow
+        case .flagsChanged:
+            return false
+        }
     }
 
     /// Local-monitor swallow decision. Returning `true` means the event

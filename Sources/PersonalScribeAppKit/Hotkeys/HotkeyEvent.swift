@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import Foundation
 
 /// Source-neutral representation of a keyboard event consumed by
@@ -46,5 +47,50 @@ extension HotkeyEvent {
         self.modifierFlags = nsEvent.modifierFlags
         self.timestamp = nsEvent.timestamp
         self.isARepeat = (nsEvent.type == .keyDown) ? nsEvent.isARepeat : false
+    }
+
+    /// Adapter from a `CGEvent` delivered through `CGEventTap`. Returns
+    /// `nil` for non-key event types (including tap-disabled events,
+    /// which `HotkeyEventTap` handles separately before converting).
+    ///
+    /// Timestamp uses `ProcessInfo.systemUptime` — seconds since boot,
+    /// matching `NSEvent.timestamp` semantics. Mixing sources in the
+    /// state machine's timing math (e.g., keyDown from NSEvent +
+    /// keyUp from CGEvent) remains consistent.
+    init?(cgEvent: CGEvent, type: CGEventType) {
+        let eventType: EventType
+        switch type {
+        case .keyDown:
+            eventType = .keyDown
+        case .keyUp:
+            eventType = .keyUp
+        case .flagsChanged:
+            eventType = .flagsChanged
+        default:
+            return nil
+        }
+        self.type = eventType
+        self.keyCode = UInt16(cgEvent.getIntegerValueField(.keyboardEventKeycode))
+        self.modifierFlags = NSEvent.ModifierFlags(cgEventFlags: cgEvent.flags)
+        self.timestamp = ProcessInfo.processInfo.systemUptime
+        self.isARepeat = (type == .keyDown)
+            ? (cgEvent.getIntegerValueField(.keyboardEventAutorepeat) != 0)
+            : false
+    }
+}
+
+extension NSEvent.ModifierFlags {
+    /// Bitmask translation from `CGEventFlags` (CoreGraphics) to the
+    /// `NSEvent.ModifierFlags` used by `HotkeyEvent.modifierFlags` and
+    /// `HotkeyPreference`. Keeps modifier-matching logic in the state
+    /// machine source-agnostic.
+    init(cgEventFlags flags: CGEventFlags) {
+        var result: NSEvent.ModifierFlags = []
+        if flags.contains(.maskCommand) { result.insert(.command) }
+        if flags.contains(.maskControl) { result.insert(.control) }
+        if flags.contains(.maskAlternate) { result.insert(.option) }
+        if flags.contains(.maskShift) { result.insert(.shift) }
+        if flags.contains(.maskAlphaShift) { result.insert(.capsLock) }
+        self = result
     }
 }

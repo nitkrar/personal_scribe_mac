@@ -514,24 +514,33 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
     }
 
     func testStartDoesNotInstallLocalMonitorWhenGlobalInstallFails() {
-        var globalInstallAttempts = 0
+        // Simulate CGEvent.tapCreate returning nil (Input Monitoring
+        // permission denied). HotkeyEventTap.start() returns false;
+        // GlobalHotkeyMonitor.start() must route that through
+        // handleMonitorInstallFailure and leave both monitors inactive.
+        var installerAttempts = 0
+        let failingInstaller: HotkeyEventTap.Installer = { _, _ in
+            installerAttempts += 1
+            return nil
+        }
         let monitor = GlobalHotkeyMonitor(
             onToggle: {},
-            installGlobalMonitor: { _ in
-                globalInstallAttempts += 1
-                return nil
+            eventTapFactory: { decider in
+                HotkeyEventTap(decider: decider, installer: failingInstaller)
             }
         )
 
         monitor.start()
 
-        XCTAssertEqual(globalInstallAttempts, 1)
+        XCTAssertEqual(installerAttempts, 1)
         XCTAssertFalse(monitor.isGlobalMonitorActive)
         XCTAssertFalse(monitor.isLocalMonitorActive)
 
+        // Subsequent start() must retry — the guard at the top of
+        // start() is only triggered when a monitor is already active.
         monitor.start()
 
-        XCTAssertEqual(globalInstallAttempts, 2)
+        XCTAssertEqual(installerAttempts, 2)
         XCTAssertFalse(monitor.isGlobalMonitorActive)
         XCTAssertFalse(monitor.isLocalMonitorActive)
     }
