@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import XCTest
+import PersonalScribeCore
 @testable import PersonalScribeAppKit
 
 @MainActor
@@ -270,7 +271,7 @@ final class PillOverlayPresenterTests: XCTestCase {
     /// 280×60 canvas; clicks outside the visible pill but inside that
     /// canvas landed on an invisible click-halo.
     func testFrameResizesOnVisibilityTransition() {
-        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn, visibility: .idle)
+        let viewModel = PillOverlayViewModel(visibility: .idle, visibilityMode: .alwaysOn)
         let panelBuilder = RecordingPanelBuilder()
 
         let presenter = PillOverlayPresenter(
@@ -286,7 +287,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertFalse(idleCall.animate,
                        "First sizing after show must be non-animated")
 
-        viewModel.apply(visibility: .recording)
+        viewModel.apply(visibility: PillVisibilityState.recording)
 
         // Second call must be the recording-pill size and should be
         // animated (pill↔pill morph owned by AppKit).
@@ -303,7 +304,7 @@ final class PillOverlayPresenterTests: XCTestCase {
     /// frame-after-first-sizing as the baseline (the presenter's
     /// default placement may have moved it).
     func testBottomCenterPreservedAcrossResize() {
-        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn, visibility: .idle)
+        let viewModel = PillOverlayViewModel(visibility: .idle, visibilityMode: .alwaysOn)
         let panelBuilder = RecordingPanelBuilder()
 
         let presenter = PillOverlayPresenter(
@@ -318,7 +319,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         let baselineMidX = idleFrame.midX
         let baselineMinY = idleFrame.minY
 
-        viewModel.apply(visibility: .recording)
+        viewModel.apply(visibility: PillVisibilityState.recording)
 
         // After the pill↔pill morph, the bottom-center must still be
         // pinned to the same point.
@@ -334,7 +335,7 @@ final class PillOverlayPresenterTests: XCTestCase {
     /// panel frame jumps to the cancel-card size with `animate: false`
     /// (SwiftUI owns the opacity tween inside `PillOverlayView`).
     func testCancelCardCrossfade() {
-        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn, visibility: .recording)
+        let viewModel = PillOverlayViewModel(visibility: .recording, visibilityMode: .alwaysOn)
         let panelBuilder = RecordingPanelBuilder()
 
         let presenter = PillOverlayPresenter(
@@ -344,7 +345,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         _ = presenter
 
         let callsBeforeCancel = panelBuilder.panel.setFrameCalls.count
-        viewModel.apply(visibility: .cancelled)
+        viewModel.apply(visibility: PillVisibilityState.cancelled)
 
         XCTAssertGreaterThan(panelBuilder.panel.setFrameCalls.count, callsBeforeCancel,
                              "Cancel Card resize must hit setFrame")
@@ -359,7 +360,7 @@ final class PillOverlayPresenterTests: XCTestCase {
     /// pill first rendered at `.recording` would otherwise flash at
     /// 280×60 before morphing down.
     func testHiddenToShownUsesTargetSize() {
-        let viewModel = PillOverlayViewModel(visibilityMode: .autoShow, visibility: .hidden)
+        let viewModel = PillOverlayViewModel(visibility: .hidden, visibilityMode: .autoShow)
         let panelBuilder = RecordingPanelBuilder()
 
         let presenter = PillOverlayPresenter(
@@ -370,7 +371,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         // `.hidden` + autoShow → no panel yet.
         XCTAssertEqual(panelBuilder.makePanelCallCount, 0)
 
-        viewModel.apply(visibility: .recording)
+        viewModel.apply(visibility: PillVisibilityState.recording)
 
         // Panel must have been built + sized to the recording footprint.
         XCTAssertEqual(panelBuilder.makePanelCallCount, 1)
@@ -387,7 +388,7 @@ final class PillOverlayPresenterTests: XCTestCase {
     /// `ResponseCardPresenting.reanchor(abovePillFrame:)` each time it
     /// drives a pill resize while the card is visible.
     func testResponseCardReanchorsOnPillResize() {
-        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn, visibility: .recording)
+        let viewModel = PillOverlayViewModel(visibility: .recording, visibilityMode: .alwaysOn)
         let panelBuilder = RecordingPanelBuilder()
         let responseCardBuilder = RecordingResponseCardBuilder()
 
@@ -400,7 +401,7 @@ final class PillOverlayPresenterTests: XCTestCase {
 
         let reanchorCallsBefore = responseCardBuilder.card.reanchorCalls.count
 
-        viewModel.apply(visibility: .transcribing)
+        viewModel.apply(visibility: PillVisibilityState.transcribing)
 
         XCTAssertGreaterThan(
             responseCardBuilder.card.reanchorCalls.count,

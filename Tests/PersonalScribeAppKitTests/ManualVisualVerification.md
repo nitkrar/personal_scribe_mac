@@ -554,6 +554,48 @@ decisions still open" resolution paragraph.
 19. Flip Theme = Light. Tint picker reappears with selection = Neutral
     (preserved across the hide/show round-trip).
 
+## Unified-window dark shell (#040)
+
+`UnifiedWindowView` shell surfaces (sidebar background, detail
+backdrop, brand-header text, sidebar/detail separator, sidebar
+footers) route through `UnifiedWindowChrome.{sidebarBackground,
+detailBackground, chromeText, chromeSeparator}` — scheme-aware.
+`WindowTint.*` is the light-mode brand flavor; dark resolves to
+`PersonalScribeTheme.Palette.dark.{surface, appBackground,
+primaryTextBase}` regardless of the stored tint. Unit-tested via
+`UnifiedWindowChromeTests` (14 cases). The runbook entries below are
+the runtime contract.
+
+- [ ] **MV-DARK-SHELL-1 (sidebar repaints dark)** Open the unified
+  window, go to Settings → General → Appearance, flip Theme from
+  Light to Dark. The left sidebar (Home / Transcriptions / Modes /
+  Settings) repaints to a dark surface at the same moment the detail
+  pane does — no "half light / half dark" split. Regression: if the
+  sidebar stays cream, `UnifiedWindowChrome.sidebarBackground` was
+  bypassed or the `@Environment(\.colorScheme)` dependency was
+  dropped from `UnifiedWindowView.sidebar`.
+- [ ] **MV-DARK-SHELL-2 (chrome text stays legible)** Still in Dark
+  theme, confirm: the "Ninimma" brand header at the top of the
+  sidebar is legible (white, not dark-on-dark); the "Microphone"
+  footer and "About" footer row are readable at ~60% alpha, not
+  invisible. Regression: if the header is invisible,
+  `UnifiedWindowChrome.chromeText` still returns
+  `windowTint.primaryText` (near-black) in dark mode.
+- [ ] **MV-DARK-SHELL-3 (detail backdrop matches)** The detail pane
+  backdrop (behind tab content) is the same dark `#0E0E14` family as
+  other dark surfaces; Settings cards still render cleanly over it;
+  no cream fringe around the detail content's padding.
+- [ ] **MV-DARK-SHELL-4 (flip back to Light)** Flip Theme back to
+  Light. Sidebar + detail + chrome text all repaint to cream / near-
+  black instantly. Verify with Window tint = Warm AND Window tint =
+  Neutral — both tints should render correctly in Light. Regression:
+  if either tint now looks wrong in Light, the scheme-branch logic
+  has been inverted.
+- [ ] **MV-DARK-SHELL-5 (Pill independence preserved)** Set Pill
+  theme = Light, Theme = Dark. The pill overlay remains light
+  regardless of the dark shell — the shell fix is isolated from the
+  pill's independent appearance setting.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift

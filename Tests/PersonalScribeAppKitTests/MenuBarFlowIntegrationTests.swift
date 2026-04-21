@@ -255,4 +255,8 @@ private final class RecordingOverlayPanel: PillOverlayPaneling {
     func setFrameOrigin(_ point: NSPoint) {
         frame.origin = point
     }
+
+    func setFrame(_ frame: NSRect, animate: Bool) {
+        self.frame = frame
+    }
 }

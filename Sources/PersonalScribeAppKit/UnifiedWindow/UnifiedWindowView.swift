@@ -94,11 +94,11 @@ struct UnifiedWindowView: View {
                 .padding(.top, PersonalScribeTheme.Spacing.xs)
                 .padding(.bottom, PersonalScribeTheme.Spacing.md)
         }
-        .background(windowTint.secondaryBackground)
+        .background(UnifiedWindowChrome.sidebarBackground(scheme: colorScheme, tint: windowTint))
         // Thin 1px separator between sidebar and detail pane.
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(windowTint.primaryText.opacity(0.08))
+                .fill(UnifiedWindowChrome.chromeSeparator(scheme: colorScheme, tint: windowTint))
                 .frame(width: 1)
         }
     }
@@ -126,7 +126,7 @@ struct UnifiedWindowView: View {
                 .frame(width: 24, height: 24)
             Text(AppBrand.displayName)
                 .font(PersonalScribeTheme.Typography.title.font)
-                .foregroundStyle(windowTint.primaryText)
+                .foregroundStyle(UnifiedWindowChrome.chromeText(scheme: colorScheme, tint: windowTint))
         }
     }
 
@@ -139,7 +139,7 @@ struct UnifiedWindowView: View {
             Text("Microphone")
                 .font(PersonalScribeTheme.Typography.caption.font)
         }
-        .foregroundStyle(windowTint.primaryText.opacity(0.6))
+        .foregroundStyle(UnifiedWindowChrome.chromeText(scheme: colorScheme, tint: windowTint).opacity(0.6))
     }
 
     /// Clickable footer row for the About tab. Styled to match the
@@ -157,7 +157,7 @@ struct UnifiedWindowView: View {
                 Spacer(minLength: 0)
             }
             .foregroundStyle(
-                windowTint.primaryText.opacity(
+                UnifiedWindowChrome.chromeText(scheme: colorScheme, tint: windowTint).opacity(
                     model.activeTab == .about ? 1.0 : 0.6
                 )
             )
@@ -178,7 +178,7 @@ struct UnifiedWindowView: View {
                 alignment: .topLeading
             )
             .padding(PersonalScribeTheme.Spacing.xl)
-            .background(windowTint.primaryBackground)
+            .background(UnifiedWindowChrome.detailBackground(scheme: colorScheme, tint: windowTint))
             .windowTint(windowTint)
     }
 
