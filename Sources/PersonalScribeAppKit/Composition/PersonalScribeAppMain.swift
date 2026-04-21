@@ -172,6 +172,13 @@ struct PersonalScribeAppMain: App {
         let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader()
         let appKitActiveModeProvider = AppComposition.activeModeProvider
         let modelService = AppComposition.modelService
+        // Shared input-device provider — one `AVFoundationInputDeviceProvider`
+        // instance backs both the menu-bar Microphone submenu AND the
+        // unified-window sidebar footer readout (#008). The provider is
+        // stateless (reads from AVFoundation + UserDefaults on each pull)
+        // so sharing is safe and keeps both surfaces in sync.
+        let inputDeviceProvider: any AudioInputDeviceProviding =
+            AVFoundationInputDeviceProvider(defaults: defaults)
         let unifiedWindowControllerHost = UnifiedWindowControllerHost(
             controllerFactory: {
                 UnifiedWindowController(
@@ -179,6 +186,7 @@ struct PersonalScribeAppMain: App {
                     transcriptReader: unifiedTranscriptReader,
                     metricsReader: metricsReader,
                     permissionService: appPermissionService,
+                    inputDeviceProvider: inputDeviceProvider,
                     modes: ModeRegistry.all,
                     activeModeProvider: { appKitActiveModeProvider.currentActiveMode() },
                     activeModeStream: { appKitActiveModeProvider.activeModeStream() },
@@ -234,7 +242,7 @@ struct PersonalScribeAppMain: App {
                 Task { await copyLastTranscriptAction.perform() }
             },
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
-            inputDeviceProvider: AVFoundationInputDeviceProvider(defaults: defaults)
+            inputDeviceProvider: inputDeviceProvider
         )
         _sceneModel = StateObject(wrappedValue: sceneModel)
         _pillController = StateObject(

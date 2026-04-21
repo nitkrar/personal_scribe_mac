@@ -23,6 +23,7 @@ final class UnifiedWindowController: NSWindowController {
     private let homeViewModel: HomeTabViewModel
     private let transcriptionsViewModel: TranscriptionsTabViewModel
     private let modesViewModel: ModesTabViewModel
+    private let microphoneFooterViewModel: MicrophoneFooterViewModel
     private let permissionService: any PermissionService
     private var windowTintObserver: NSObjectProtocol?
 
@@ -32,6 +33,7 @@ final class UnifiedWindowController: NSWindowController {
         transcriptReader: any TranscriptReading,
         metricsReader: any MetricsReading,
         permissionService: any PermissionService,
+        inputDeviceProvider: any AudioInputDeviceProviding,
         modes: [ModeDescriptor] = ModeRegistry.all,
         activeModeProvider: @escaping @MainActor () -> ModeDescriptor? = { nil },
         activeModeStream: (@MainActor () -> AsyncStream<ModeDescriptor?>)? = nil,
@@ -48,6 +50,10 @@ final class UnifiedWindowController: NSWindowController {
             activeModeStream: activeModeStream,
             setActiveHandler: setActiveMode
         )
+        self.microphoneFooterViewModel = MicrophoneFooterViewModel(
+            provider: inputDeviceProvider,
+            defaults: defaults
+        )
 
         let initialTint = WindowTint.resolve(from: defaults)
         let rootView = UnifiedWindowView(
@@ -56,6 +62,7 @@ final class UnifiedWindowController: NSWindowController {
             homeViewModel: homeViewModel,
             transcriptionsViewModel: transcriptionsViewModel,
             modesViewModel: modesViewModel,
+            microphoneFooterViewModel: microphoneFooterViewModel,
             permissionService: permissionService,
             defaults: defaults
         )
@@ -114,6 +121,12 @@ final class UnifiedWindowController: NSWindowController {
     }
 
     override func showWindow(_ sender: Any?) {
+        // Poll the provider whenever the unified window is shown —
+        // covers hotplug events (USB mic unplugged / plugged while
+        // the window was offscreen) without the view model having
+        // to observe AVCaptureDevice notifications directly.
+        microphoneFooterViewModel.refresh()
+
         guard let window else { return }
 
         // Bug #041: if the persisted frame's midpoint isn't on any screen
@@ -190,6 +203,7 @@ final class UnifiedWindowController: NSWindowController {
             homeViewModel: homeViewModel,
             transcriptionsViewModel: transcriptionsViewModel,
             modesViewModel: modesViewModel,
+            microphoneFooterViewModel: microphoneFooterViewModel,
             permissionService: permissionService,
             defaults: defaults
         )

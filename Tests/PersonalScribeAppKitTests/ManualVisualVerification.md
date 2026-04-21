@@ -152,8 +152,9 @@ in M3.2–M3.5; this milestone proves the shell + routing + menu-bar entry
 6. Sidebar body shows 4 nav rows with SF Symbols: Home (`house.fill`),
    Transcriptions (`waveform`), Modes (`square.grid.2x2`),
    Settings (`gearshape`).
-7. Sidebar bottom shows a placeholder "Microphone" row with the `mic`
-   icon (real mic indicator lands later).
+7. Sidebar bottom shows the current input device name (e.g. "MacBook
+   Pro Microphone", "AirPods Pro") with the `mic` icon prefix — see
+   "#008 microphone footer" checklist below for live-update checks.
 
 ### Tab navigation
 
@@ -274,6 +275,7 @@ Reviewer runs this checklist with at least two input devices attached
    to the built-in mic) — `AudioEngineDriver.applyInputDevice` logs a
    warning and proceeds rather than blocking.
 
+<<<<<<< HEAD
 ## Transcriptions tab (mockup-gaps A.1–A.5)
 
 Closes Group A of `plans/backlog/ui-mockup-gaps.md` — aligns the
@@ -621,6 +623,40 @@ the runtime contract.
   theme = Light, Theme = Dark. The pill overlay remains light
   regardless of the dark shell — the shell fix is isolated from the
   pill's independent appearance setting.
+
+## #008 — Sidebar microphone footer status readout
+
+The unified-window sidebar footer now renders the currently-configured
+input device name (e.g. "MacBook Pro Microphone", "AirPods Pro") instead
+of the hardcoded "Microphone" placeholder. Click / hover stays inert —
+the clickable title-bar accessory is tracked as backlog #037.
+
+Source:
+- `Sources/PersonalScribeAppKit/UnifiedWindow/MicrophoneFooterViewModel.swift`
+- `Sources/PersonalScribeAppKit/UnifiedWindow/UnifiedWindowView.swift`
+  (`microphoneFooter`)
+
+Unit tests cover selection change, device disappearance, and the
+`UserDefaults.didChangeNotification` bridge — see
+`MicrophoneFooterViewModelTests`. The reviewer runs the visual checks
+below once per dogfood cycle:
+
+- [ ] **MV-MIC-FOOTER-1** Launch the app with at least one input device
+  attached and a prior selection persisted (e.g. the built-in mic).
+  Open the unified window from the menu bar → Home. The sidebar footer
+  shows the `mic` SF Symbol followed by the selected device's name
+  (NOT the generic word "Microphone"). Long device names truncate at
+  the sidebar's trailing edge with `…`.
+- [ ] **MV-MIC-FOOTER-2** With the unified window visible, open the
+  menu-bar Microphone submenu and pick a different device (e.g. switch
+  from built-in mic to AirPods Pro). The sidebar footer updates live
+  within a second — no click on the sidebar, no window re-open needed.
+- [ ] **MV-MIC-FOOTER-3** With the currently-selected device an
+  external USB mic / AirPods, unplug it. Open the unified window (or
+  close + reopen it). The sidebar footer falls back to either the
+  new default's name or "No input device" if there are no enumerable
+  inputs. Reconnecting the device + reopening the window brings the
+  name back.
 
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)

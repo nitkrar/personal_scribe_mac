@@ -23,6 +23,7 @@ struct UnifiedWindowView: View {
     @ObservedObject var homeViewModel: HomeTabViewModel
     @ObservedObject var transcriptionsViewModel: TranscriptionsTabViewModel
     @ObservedObject var modesViewModel: ModesTabViewModel
+    @ObservedObject var microphoneFooterViewModel: MicrophoneFooterViewModel
     let permissionService: any PermissionService
     let defaults: UserDefaults
 
@@ -32,6 +33,7 @@ struct UnifiedWindowView: View {
         homeViewModel: HomeTabViewModel,
         transcriptionsViewModel: TranscriptionsTabViewModel,
         modesViewModel: ModesTabViewModel,
+        microphoneFooterViewModel: MicrophoneFooterViewModel,
         permissionService: any PermissionService,
         defaults: UserDefaults = .standard
     ) {
@@ -40,6 +42,7 @@ struct UnifiedWindowView: View {
         self.homeViewModel = homeViewModel
         self.transcriptionsViewModel = transcriptionsViewModel
         self.modesViewModel = modesViewModel
+        self.microphoneFooterViewModel = microphoneFooterViewModel
         self.permissionService = permissionService
         self.defaults = defaults
     }
@@ -130,16 +133,25 @@ struct UnifiedWindowView: View {
         }
     }
 
-    // Placeholder for M3.1 — the real indicator (current selected
-    // input device + level meter) lands alongside microphone
-    // selection in a later milestone.
+    // Status readout of the currently-configured input device
+    // (issue #008). Click / hover stays inert — the clickable
+    // title-bar accessory is tracked separately as #037.
+    //
+    // The view model observes `UserDefaults.didChangeNotification` so
+    // the label updates live when the user picks a device from the
+    // menu-bar Microphone submenu (which writes `SelectedAudioInputDeviceID`).
     private var microphoneFooter: some View {
         HStack(spacing: PersonalScribeTheme.Spacing.xs) {
             Image(systemName: "mic")
-            Text("Microphone")
+            Text(microphoneFooterViewModel.currentDeviceName ?? "No input device")
                 .font(PersonalScribeTheme.Typography.caption.font)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
         .foregroundStyle(UnifiedWindowChrome.chromeText(scheme: colorScheme, tint: windowTint).opacity(0.6))
+        .accessibilityLabel(
+            "Current input device: \(microphoneFooterViewModel.currentDeviceName ?? "None")"
+        )
     }
 
     /// Clickable footer row for the About tab. Styled to match the
