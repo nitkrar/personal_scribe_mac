@@ -22,8 +22,8 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` fixed (reference commit)
 ## Menu bar
 
 - [x] **2. Hide "Check for Updates" from menu bar.** — FIXED: removed the stub entry entirely; will be re-added when the updater pipeline ships.
-- [ ] **6. "Ninimma — dictation" wraps to 2 lines in the menu bar.** Expected: single compact line. Likely label width / separator issue.
-- [ ] **16. Add "Settings" and "History" entries to the menu bar.** Today the menu bar only opens Home via "Open Home". Add two more actions that route to their respective tabs: Settings → `showWindow(selecting: .settings)`, History (aka Transcriptions) → `showWindow(selecting: .transcriptions)`. Same pattern as the #1a fix.
+- [x] **6. "Ninimma — dictation" wraps to 2 lines in the menu bar.** — FIXED: merged the brand and mode headers into one row ("<displayName> — <mode>", em-dash separator, falls back to brand-only when no mode is active). Single non-interactive header emission in `StatusItemMenuModel.makeUnified`.
+- [x] **16. Add "Settings" and "History" entries to the menu bar.** — FIXED: added `.openTranscriptions` and `.openSettings` ActionIDs, inserted History (waveform icon) + Settings (gearshape icon) under Home, wired through `showWindow(selecting:)` using the #1a pattern.
 
 ## Settings — General
 

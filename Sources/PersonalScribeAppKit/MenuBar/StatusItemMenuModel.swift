@@ -82,6 +82,8 @@ struct StatusItemMenuModel: Equatable {
     enum ActionID: String, Equatable {
         case startStopRecording
         case openHome
+        case openTranscriptions
+        case openSettings
         case copyLastTranscript
         case openMicrophoneSystemSettings
         case openInputMonitoringSystemSettings
@@ -103,9 +105,12 @@ struct StatusItemMenuModel: Equatable {
     /// [warning: microphone access required] (prepended when mic is not granted)
     /// [warning: input monitoring required]  (prepended when IM is not granted)
     /// [separator]                            (present when any warning shows)
-    /// <AppBrand.displayName>                 (brand header, non-interactive)
-    /// <active mode name>                     (mode header, non-interactive)
-    /// Home                                    (opens unified window)
+    /// <AppBrand.displayName> — <active mode> (header, non-interactive;
+    ///                                         falls back to brand-only
+    ///                                         when no mode is active)
+    /// Home                                    (opens unified window on Home tab)
+    /// History                                 (opens unified window on Transcriptions tab)
+    /// Settings                                (opens unified window on Settings tab)
     /// ---
     /// Start Recording ⌥⌥                     (or "Stop Recording")
     /// Copy Last Transcript                    (writes most-recent transcript to clipboard)
@@ -161,17 +166,18 @@ struct StatusItemMenuModel: Equatable {
             items.append(.separator)
         }
 
-        // Brand header — title is always the app display name. Icon
-        // choice: `pencil.and.scribble` is the closest stock SF Symbol
-        // to the project's quill motif (no exact "quill-ink" symbol
-        // exists). Keeping it in one place here so a future design
-        // swap (custom asset, different SF Symbol) touches just this
-        // literal.
-        items.append(.header(title: AppBrand.displayName, iconName: "pencil.and.scribble"))
-
-        if let activeModeName {
-            items.append(.header(title: activeModeName))
-        }
+        // Single compact header row. When a mode is active we inline it
+        // after the brand (em-dash separator) to avoid two adjacent grey
+        // headers reading as a wrapped string (bug #6, 2026-04-21 dogfood).
+        // Icon `pencil.and.scribble` — closest stock SF Symbol to the
+        // project's quill motif — stays on the combined row.
+        let brandHeaderTitle: String = {
+            if let activeModeName {
+                return "\(AppBrand.displayName) — \(activeModeName)"
+            }
+            return AppBrand.displayName
+        }()
+        items.append(.header(title: brandHeaderTitle, iconName: "pencil.and.scribble"))
 
         items.append(.action(ActionItem(
             id: .openHome,
@@ -179,6 +185,22 @@ struct StatusItemMenuModel: Equatable {
             keyEquivalent: "",
             isEnabled: true,
             iconName: "house.fill"
+        )))
+
+        items.append(.action(ActionItem(
+            id: .openTranscriptions,
+            title: "History",
+            keyEquivalent: "",
+            isEnabled: true,
+            iconName: "waveform"
+        )))
+
+        items.append(.action(ActionItem(
+            id: .openSettings,
+            title: "Settings",
+            keyEquivalent: "",
+            isEnabled: true,
+            iconName: "gearshape"
         )))
 
         items.append(.separator)

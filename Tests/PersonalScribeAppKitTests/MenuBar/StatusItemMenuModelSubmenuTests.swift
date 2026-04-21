@@ -30,9 +30,10 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             }),
             "Empty device list must omit the submenu entirely"
         )
-        // The M5.2 baseline shape (8 items) must not drift when no
-        // devices are discoverable.
-        XCTAssertEqual(model.items.count, 8)
+        // Post-#6+#16 baseline (mode active): 9 items — combined brand/
+        // mode header + Home + History + Settings + --- + Start + Copy
+        // + --- + Quit.
+        XCTAssertEqual(model.items.count, 9)
     }
 
     // MARK: - Parent title reflects current selection
@@ -178,10 +179,10 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
     // MARK: - Position inside the menu
 
     /// The submenu must land between the `Copy Last Transcript`
-    /// action and `Quit`. The post-fix baseline has 8 items:
-    /// [brand, mode, Home, ---, Start, Copy, ---, Quit]. M5.3 adds
-    /// the submenu after that separator, so the layout becomes
-    /// 9 items with the submenu at index 7 and Quit at index 8.
+    /// action and `Quit`. Post-#6+#16 baseline (mode active) is 9 items:
+    /// [brand/mode, Home, History, Settings, ---, Start, Copy, ---, Quit].
+    /// M5.3 adds the submenu after the trailing separator, so the layout
+    /// becomes 10 items with the submenu at index 8 and Quit at index 9.
     func testSubmenuIsInsertedBetweenCopyLastTranscriptAndQuit() {
         let devices = [
             AudioInputDevice(id: "uid-1", name: "MacBook Pro Microphone"),
@@ -195,23 +196,23 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             currentInputDeviceID: "uid-1"
         )
 
-        XCTAssertEqual(model.items.count, 9)
+        XCTAssertEqual(model.items.count, 10)
 
-        // Copy Last Transcript sits at index 5 (same as the baseline).
-        guard case let .action(copy) = model.items[5] else {
-            return XCTFail("Expected Copy Last Transcript action at index 5")
+        // Copy Last Transcript sits at index 6 in the post-#6+#16 layout.
+        guard case let .action(copy) = model.items[6] else {
+            return XCTFail("Expected Copy Last Transcript action at index 6")
         }
         XCTAssertEqual(copy.id, .copyLastTranscript)
 
-        // Separator + submenu at 6 / 7.
-        XCTAssertEqual(model.items[6], .separator)
-        guard case .submenu = model.items[7] else {
-            return XCTFail("Expected microphone submenu at index 7")
+        // Separator + submenu at 7 / 8.
+        XCTAssertEqual(model.items[7], .separator)
+        guard case .submenu = model.items[8] else {
+            return XCTFail("Expected microphone submenu at index 8")
         }
 
         // Quit still terminates the menu.
-        guard case let .action(quit) = model.items[8] else {
-            return XCTFail("Expected Quit action at index 8")
+        guard case let .action(quit) = model.items[9] else {
+            return XCTFail("Expected Quit action at index 9")
         }
         XCTAssertEqual(quit.id, .quit)
     }

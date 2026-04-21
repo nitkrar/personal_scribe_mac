@@ -9,6 +9,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let sceneModel: MenuBarSceneModel
     private let appStore: AppStore
     private let openHome: @MainActor () -> Void
+    private let openTranscriptions: @MainActor () -> Void
+    private let openSettings: @MainActor () -> Void
     private let openCopyLastTranscript: @MainActor () -> Void
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
     private let openURL: @MainActor (URL) -> Void
@@ -22,6 +24,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         sceneModel: MenuBarSceneModel,
         defaults: UserDefaults = .standard,
         openHome: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "Home"),
+        openTranscriptions: @escaping @MainActor () -> Void = {},
+        openSettings: @escaping @MainActor () -> Void = {},
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
@@ -35,6 +39,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             appStore: sceneModel.appStore,
             defaults: defaults,
             openHome: openHome,
+            openTranscriptions: openTranscriptions,
+            openSettings: openSettings,
             openCopyLastTranscript: openCopyLastTranscript,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             openURL: openURL,
@@ -50,6 +56,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         appStore: AppStore,
         defaults: UserDefaults = .standard,
         openHome: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "Home"),
+        openTranscriptions: @escaping @MainActor () -> Void = {},
+        openSettings: @escaping @MainActor () -> Void = {},
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
@@ -62,6 +70,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.sceneModel = sceneModel
         self.appStore = appStore
         self.openHome = openHome
+        self.openTranscriptions = openTranscriptions
+        self.openSettings = openSettings
         self.openCopyLastTranscript = openCopyLastTranscript
         self.isOnboardingCompleteProvider = isOnboardingCompleteProvider ?? {
             onboardingCompletionPreference.resolve()
@@ -126,6 +136,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
         case .openHome:
             openHome()
+        case .openTranscriptions:
+            openTranscriptions()
+        case .openSettings:
+            openSettings()
         case .copyLastTranscript:
             openCopyLastTranscript()
         case .openMicrophoneSystemSettings:

@@ -197,6 +197,12 @@ struct PersonalScribeAppMain: App {
         let openHomeTab: @MainActor () -> Void = {
             unifiedWindowControllerHost.showWindow(selecting: .home)
         }
+        let openTranscriptionsTab: @MainActor () -> Void = {
+            unifiedWindowControllerHost.showWindow(selecting: .transcriptions)
+        }
+        let openSettingsTab: @MainActor () -> Void = {
+            unifiedWindowControllerHost.showWindow(selecting: .settings)
+        }
         // Menu-bar "Copy Last Transcript" is strict copy-to-clipboard —
         // no auto-paste, no AX probe. The paste-at-cursor flow is
         // served by the hotkey / pill path where cursor context is
@@ -220,6 +226,8 @@ struct PersonalScribeAppMain: App {
             sceneModel: sceneModel,
             appStore: appStore,
             openHome: openHomeTab,
+            openTranscriptions: openTranscriptionsTab,
+            openSettings: openSettingsTab,
             openCopyLastTranscript: {
                 Task { await copyLastTranscriptAction.perform() }
             },
@@ -346,6 +354,8 @@ final class StatusItemControllerHost: ObservableObject {
         sceneModel: MenuBarSceneModel,
         appStore: AppStore,
         openHome: @escaping @MainActor () -> Void = {},
+        openTranscriptions: @escaping @MainActor () -> Void = {},
+        openSettings: @escaping @MainActor () -> Void = {},
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
@@ -356,6 +366,8 @@ final class StatusItemControllerHost: ObservableObject {
             sceneModel: sceneModel,
             appStore: appStore,
             openHome: openHome,
+            openTranscriptions: openTranscriptions,
+            openSettings: openSettings,
             openCopyLastTranscript: openCopyLastTranscript,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider

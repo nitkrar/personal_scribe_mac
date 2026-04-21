@@ -50,8 +50,9 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
         XCTAssertEqual(stateDuringTranscribing, .transcribing)
 
         await stopTask.value
-        let stateAfterStop = await coordinator.state()
-        XCTAssertEqual(stateAfterStop, .idle)
+        // `stopIfRecording` returns before transcription finishes
+        // flushing to `.idle`; poll instead of snapshotting.
+        try await waitUntilState(.idle, coordinator: coordinator)
     }
 
     func testStopIfRecordingFromRecordingStopsSession() async throws {
@@ -97,8 +98,9 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
         XCTAssertEqual(stateDuringTranscribing, .transcribing)
 
         await stopTask.value
-        let stateAfterStop = await coordinator.state()
-        XCTAssertEqual(stateAfterStop, .idle)
+        // `stopIfRecording` returns before transcription finishes
+        // flushing to `.idle`; poll instead of snapshotting.
+        try await waitUntilState(.idle, coordinator: coordinator)
     }
 
     func testOnHoldReleaseWithoutPriorStartDoesNotStartRecording() async throws {

@@ -9,17 +9,18 @@ import PersonalScribeCore
 final class StatusItemMenuModelTests: XCTestCase {
     // MARK: - Base structure
 
-    /// M5.1 granted-mode baseline:
+    /// Post-#6 + #16 granted-mode baseline:
     ///
     /// ```
-    /// [0] brand header (AppBrand.displayName)
-    /// [1] mode header  (dictation)
-    /// [2] Home                       house.fill
-    /// [3] ---
-    /// [4] Start Recording   ⌥⌥      waveform
-    /// [5] Copy Last Transcript      doc.on.clipboard
-    /// [6] ---
-    /// [7] Quit <displayName>        xmark.circle
+    /// [0] brand — mode header        (combined: "<displayName> — <mode>")
+    /// [1] Home                       house.fill
+    /// [2] History                    waveform
+    /// [3] Settings                   gearshape
+    /// [4] ---
+    /// [5] Start Recording   ⌥⌥      waveform
+    /// [6] Copy Last Transcript      doc.on.clipboard
+    /// [7] ---
+    /// [8] Quit <displayName>        xmark.circle
     /// ```
     func testIdleGrantedMenuHasExpectedItemsInOrder() {
         let model = StatusItemMenuModel.makeUnified(
@@ -29,26 +30,27 @@ final class StatusItemMenuModelTests: XCTestCase {
             activeModeName: ModeRegistry.dictation.name
         )
 
-        XCTAssertEqual(model.items.count, 8)
-        assertHeader(model.items[0], AppBrand.displayName)
-        assertHeader(model.items[1], ModeRegistry.dictation.name)
-        assertAction(model.items[2], id: .openHome, title: "Home", iconName: "house.fill")
-        XCTAssertEqual(model.items[3], .separator)
+        XCTAssertEqual(model.items.count, 9)
+        assertHeader(model.items[0], "\(AppBrand.displayName) — \(ModeRegistry.dictation.name)")
+        assertAction(model.items[1], id: .openHome, title: "Home", iconName: "house.fill")
+        assertAction(model.items[2], id: .openTranscriptions, title: "History", iconName: "waveform")
+        assertAction(model.items[3], id: .openSettings, title: "Settings", iconName: "gearshape")
+        XCTAssertEqual(model.items[4], .separator)
         assertAction(
-            model.items[4],
+            model.items[5],
             id: .startStopRecording,
             title: "Start Recording   ⌥⌥",
             iconName: "waveform"
         )
         assertAction(
-            model.items[5],
+            model.items[6],
             id: .copyLastTranscript,
             title: "Copy Last Transcript",
             iconName: "doc.on.clipboard"
         )
-        XCTAssertEqual(model.items[6], .separator)
+        XCTAssertEqual(model.items[7], .separator)
         assertAction(
-            model.items[7],
+            model.items[8],
             id: .quit,
             title: "Quit \(AppBrand.displayName)",
             iconName: "xmark.circle"
@@ -62,8 +64,19 @@ final class StatusItemMenuModelTests: XCTestCase {
             inputMonitoringPermission: .granted,
             activeModeName: "Long-form"
         )
-        // items[0] is the brand header; items[1] is the mode header.
-        assertHeader(model.items[1], "Long-form")
+        // Post-#6: brand + mode collapse into a single header at index 0.
+        assertHeader(model.items[0], "\(AppBrand.displayName) — Long-form")
+    }
+
+    func testBrandHeaderFallsBackToDisplayNameWhenNoActiveMode() {
+        let model = StatusItemMenuModel.makeUnified(
+            sessionState: .idle,
+            micPermission: .granted,
+            inputMonitoringPermission: .granted,
+            activeModeName: nil
+        )
+        // No em-dash / mode suffix when activeModeName is nil.
+        assertHeader(model.items[0], AppBrand.displayName)
     }
 
     // MARK: - Recording-toggle title switching
@@ -75,9 +88,9 @@ final class StatusItemMenuModelTests: XCTestCase {
             inputMonitoringPermission: .granted,
             activeModeName: ModeRegistry.dictation.name
         )
-        // Start/Stop Recording sits at index 4 in the new layout.
+        // Start/Stop Recording sits at index 5 in the post-#6+#16 layout.
         assertAction(
-            model.items[4],
+            model.items[5],
             id: .startStopRecording,
             title: "Stop Recording   ⌥⌥",
             iconName: "waveform"
@@ -91,8 +104,8 @@ final class StatusItemMenuModelTests: XCTestCase {
             inputMonitoringPermission: .granted,
             activeModeName: ModeRegistry.dictation.name
         )
-        guard case let .action(item) = model.items[4] else {
-            return XCTFail("Expected action at index 4")
+        guard case let .action(item) = model.items[5] else {
+            return XCTFail("Expected action at index 5")
         }
         XCTAssertEqual(item.id, .startStopRecording)
         XCTAssertEqual(item.title, "Transcribing…")
@@ -107,7 +120,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             activeModeName: ModeRegistry.dictation.name
         )
         assertAction(
-            model.items[4],
+            model.items[5],
             id: .startStopRecording,
             title: "Start Recording   ⌥⌥",
             iconName: "waveform"
@@ -182,9 +195,9 @@ final class StatusItemMenuModelTests: XCTestCase {
             inputMonitoringPermission: .pending,
             activeModeName: ModeRegistry.dictation.name
         )
-        // First item is the brand header, not a warning.
-        assertHeader(model.items[0], AppBrand.displayName)
-        XCTAssertEqual(model.items.count, 8, "No warning items expected")
+        // First item is the combined brand — mode header, not a warning.
+        assertHeader(model.items[0], "\(AppBrand.displayName) — \(ModeRegistry.dictation.name)")
+        XCTAssertEqual(model.items.count, 9, "No warning items expected")
     }
 
     // MARK: - Action identifiers
@@ -228,9 +241,9 @@ final class StatusItemMenuModelTests: XCTestCase {
             inputMonitoringPermission: .granted,
             activeModeName: ModeRegistry.dictation.name
         )
-        // Start/Stop Recording lives at index 4 in the M5.1 layout.
-        guard case let .action(record) = model.items[4] else {
-            return XCTFail("Expected record action at index 4")
+        // Start/Stop Recording lives at index 5 in the post-#6+#16 layout.
+        guard case let .action(record) = model.items[5] else {
+            return XCTFail("Expected record action at index 5")
         }
         XCTAssertEqual(record.keyEquivalent, "")
     }
@@ -238,21 +251,27 @@ final class StatusItemMenuModelTests: XCTestCase {
     // MARK: - SF Symbol icons (M5.1)
 
     func testBrandHeaderHasDisplayName() {
+        // Post-#6: no active mode → brand-only title. With an active
+        // mode the format is `<displayName> — <modeName>` (covered by
+        // testActiveModeNameIsReflectedInHeader).
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name
+            activeModeName: nil
         )
-        // With permissions granted there are no warnings, so the
-        // brand header is at index 0. It carries AppBrand.displayName
-        // as its title — tests never hard-code the brand string; they
-        // compare against AppBrand.displayName so a future rebrand
-        // touches just the single source-of-truth constant.
         guard case let .header(title, _) = model.items[0] else {
             return XCTFail("Expected brand header at index 0")
         }
         XCTAssertEqual(title, AppBrand.displayName)
+    }
+
+    func testHistoryItemHasWaveformIcon() {
+        assertIcon(actionID: .openTranscriptions, expectedIcon: "waveform")
+    }
+
+    func testSettingsItemHasGearshapeIcon() {
+        assertIcon(actionID: .openSettings, expectedIcon: "gearshape")
     }
 
     func testHomeItemHasHouseFillIcon() {
