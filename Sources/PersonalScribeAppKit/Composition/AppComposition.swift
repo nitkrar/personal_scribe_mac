@@ -95,17 +95,18 @@ public enum AppComposition {
 
     /// Build the hotkey monitor wired to the session coordinator.
     ///
-    /// The three gestures from `GlobalHotkeyMonitor` map to the same
-    /// underlying session action (`coordinator.toggle()`):
+    /// The hotkey gestures map to explicit session actions:
     /// * **Tap** (onToggle) → single-tap release starts or stops recording
-    ///   depending on current session state.
-    /// * **Hold start** (onHoldStart) → 300 ms hold starts recording AND
+    ///   via `coordinator.toggle()`.
+    /// * **Hold start** (onHoldStart) → 300 ms hold starts recording via
+    ///   `coordinator.startIfIdle()` AND
     ///   pushes `.holdToRecord` visibility via `onHoldStartVisibilityPush`.
     ///   The visibility push is stickied in `PillOverlayViewModel` so the
     ///   session-state mapping doesn't immediately clobber it with
     ///   `.recording`.
-    /// * **Hold release** (onHoldRelease) → release stops recording; the
-    ///   session-state mapping takes over and shows `.transcribing`.
+    /// * **Hold release** (onHoldRelease) → release stops recording via
+    ///   `coordinator.stopIfRecording()`; the session-state mapping takes
+    ///   over and shows `.transcribing`.
     ///
     /// `onHoldStartVisibilityPush` is a `@MainActor` closure passed in by
     /// the caller — it has the `PillOverlayViewModel` reference which
@@ -124,12 +125,12 @@ public enum AppComposition {
             onHoldStart: {
                 onHoldStartVisibilityPush()
                 Task {
-                    await coordinator.toggle()
+                    await coordinator.startIfIdle()
                 }
             },
             onHoldRelease: {
                 Task {
-                    await coordinator.toggle()
+                    await coordinator.stopIfRecording()
                 }
             },
             permissionService: makePermissionServiceAdapter(wrapping: permissionService)

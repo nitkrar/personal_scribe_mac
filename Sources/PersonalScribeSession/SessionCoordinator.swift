@@ -96,10 +96,30 @@ public actor SessionCoordinator {
     }
 
     public func toggle() async {
-        await startAudioLevelRelayIfNeeded()
-        await pipeline.toggleCapture()
-        let snapshot = await pipeline.snapshot()
-        applyPipelineSnapshot(snapshot)
+        switch currentState {
+        case .idle:
+            await performStart()
+        case .recording:
+            await performStop()
+        case .transcribing, .error:
+            await performToggle()
+        }
+    }
+
+    public func startIfIdle() async {
+        guard currentState == .idle else {
+            return
+        }
+
+        await performStart()
+    }
+
+    public func stopIfRecording() async {
+        guard currentState == .recording else {
+            return
+        }
+
+        await performStop()
     }
 
     public func state() -> SessionState {
@@ -167,6 +187,25 @@ public actor SessionCoordinator {
 
     private func removeAudioLevelContinuation(id: UUID) {
         audioLevelContinuations[id] = nil
+    }
+
+    private func performStart() async {
+        await performToggle()
+    }
+
+    private func performStop() async {
+        await performToggle()
+    }
+
+    private func performToggle() async {
+        await startAudioLevelRelayIfNeeded()
+        await pipeline.toggleCapture()
+        await refreshFromPipelineSnapshot()
+    }
+
+    private func refreshFromPipelineSnapshot() async {
+        let snapshot = await pipeline.snapshot()
+        applyPipelineSnapshot(snapshot)
     }
 
     private func startAudioLevelRelayIfNeeded() async {
