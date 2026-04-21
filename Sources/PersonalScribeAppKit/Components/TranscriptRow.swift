@@ -148,7 +148,11 @@ public struct TranscriptRow: View {
         }
         .padding(.horizontal, PersonalScribeTheme.Spacing.rowPadding)
         .padding(.vertical, PersonalScribeTheme.Spacing.iconPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: displayStyle == .detail ? Layout.detailMinHeight : nil,
+            alignment: .leading
+        )
         .background(
             RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.row, style: .continuous)
                 .fill(isSelected ? palette.hoverState : palette.surface)
@@ -174,6 +178,10 @@ public struct TranscriptRow: View {
         static let titleTimestampSpacing: CGFloat = 8
         static let borderWidth: CGFloat = 0.5
         static let borderOpacity: Double = 0.12
+        /// Detail-style (Transcriptions-tab) minimum row height — pinned
+        /// to `PersonalScribeTheme.RowHeight.tall` (56pt) per the mockup
+        /// (`plans/App UI design/screen_transcriptions.png`).
+        static let detailMinHeight: CGFloat = PersonalScribeTheme.RowHeight.tall
     }
 
     // MARK: - Pure formatting helpers (tested)

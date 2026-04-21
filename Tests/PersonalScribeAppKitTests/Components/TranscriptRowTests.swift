@@ -234,4 +234,24 @@ final class TranscriptRowTests: XCTestCase {
         XCTAssertEqual(row.displayStyle, .summary)
         XCTAssertEqual(row.displayTitle, "Sync notes")
     }
+
+    // MARK: - Row height (mockup-gap A.3)
+
+    func testDetailMinHeightEqualsRowHeightTall() {
+        // Detail-style rows are pinned to RowHeight.tall (56pt) so the
+        // Transcriptions list matches the mockup's two-line body + time
+        // cadence.
+        XCTAssertEqual(
+            TranscriptRow.Layout.detailMinHeight,
+            PersonalScribeTheme.RowHeight.tall
+        )
+    }
+
+    func testDetailMinHeightIs56() {
+        // Direct-value lock-in — guards against a future
+        // `RowHeight.tall` tweak silently shrinking the Transcriptions
+        // row cadence. Source of truth confirmed in
+        // PersonalScribeThemeTests.testRowHeightTallIs56.
+        XCTAssertEqual(TranscriptRow.Layout.detailMinHeight, 56)
+    }
 }
