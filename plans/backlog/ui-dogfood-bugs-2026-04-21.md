@@ -1,0 +1,50 @@
+# UI Dogfood Bugs — 2026-04-21
+
+User-reported issues from a dogfood build of Ninimma. Captured verbatim as a punch list; triage / root-cause / fix commits come later. Each item is a discrete bug-or-polish — do NOT collapse into one mega-commit.
+
+Legend: `[ ]` open · `[~]` in progress · `[x]` fixed (reference commit)
+
+## Critical (blocks usable flow)
+
+- [ ] **1. About tab traps navigation.** Opening the About tab disables tab switching — no way to return to Home/other tabs. After About is opened once, subsequent "Open Home" actions still land on About. Likely a tab-state / default-selection bug that latches onto About.
+- [ ] **4. Global hotkey dies when app window is frontmost.** Switching between full-screen apps and the main desktop (where Ninimma's window is focused) kills the hotkey on the focused space. Hotkey only works when app is NOT in the foreground. Event-tap scope / key-down capture regression.
+- [ ] **5. Hold-to-record writes `÷÷÷÷÷÷÷` then drops the transcript.** Holding `opt + /` types the `÷` character repeatedly for the duration of the hold and then does NOT paste the transcription. Two bugs: (a) key-swallow failing on hold, (b) paste-on-release broken. Revisit the opt+/ tap/hold/double-tap model (phase 7 pill UX work).
+- [ ] **9. Menu bar "Copy last transcript" is a no-op.** Click does nothing — no clipboard write, no toast, no error. Check action wiring and last-transcript accessor.
+- [ ] **12. Esc during recording behaves like Stop, not Cancel.** Esc should discard the in-flight recording *without* writing anything to the clipboard. Today it commits whatever was captured so far (same behavior as Stop). See Phase 8 cancel-without-transcribe backlog — this is the user-visible symptom.
+
+## Menu bar
+
+- [ ] **2. Hide "Check for Updates" from menu bar.** No auto-update pipeline yet; the current item is a stub. Remove it (or gate behind a debug flag) until updater ships.
+- [ ] **6. "Ninimma — dictation" wraps to 2 lines in the menu bar.** Expected: single compact line. Likely label width / separator issue.
+
+## Settings — General
+
+- [ ] **3. "Launch at Login" toggle doesn't trigger the system-settings / permission flow.** Toggling ON silently flips state but never prompts or requests the Login Items permission. Verify `SMAppService` / helper invocation is actually firing.
+- [ ] **8. "Settings" section label above the tab strip is redundant and wraps on default width.** Remove the standalone "Settings" header — the window chrome already conveys it.
+- [ ] **14. "Shortcuts" setting is just one row — promote it.** Currently one lonely shortcut row. Move into its own General subsection (standalone tab is a later option).
+
+## Settings — Advanced
+
+- [ ] **15. Base-directory control is clunky.** Full "Base directory" label plus oversized buttons stack onto the next line. Compact the layout. Also: "Open in Finder" opens the *parent* (`~/Library/Application Support/`) instead of the project's own folder (`…/personal_scribe/`). Fix the URL being passed to `NSWorkspace.open`.
+
+## Settings — AI Models
+
+- [ ] **13. Model labels ("Parakeet TDT", "Parakeet CTC") are opaque.** Size is helpful but users can't tell what's different. Add a one-line description or an info popover per row, and tighten row density so multiple models fit without scrolling.
+
+## Theming
+
+- [ ] **7. Pill theme / window tint consolidation isn't reflected in the latest build.** Recent commits supposedly unified these into a single theme-driven setting, but the build still exposes them independently (or the single setting doesn't propagate). Verify which commit *actually* landed the consolidation; confirm the Settings UI now reads from one source of truth and that both surfaces subscribe to it.
+
+## Polish (later)
+
+- [ ] **10. Waveform decay** — not-now; revisit once core bugs are cleared. Tune falloff on the pill waveform so bars don't snap to zero.
+- [ ] **11. Hold-hotkey mode bar visuals** — needs a pass for spacing / contrast / motion; capture specifics when we get here.
+
+---
+
+## Notes for triage
+
+- Items **1, 4, 5, 9, 12** are the ship-blockers for the current dogfood loop — nothing else matters if the hotkey doesn't work or Esc commits the transcript.
+- Item **5** and item **12** both live in the recording-lifecycle state machine; likely one fix stream.
+- Item **7** needs a commit-log audit before code changes — confirm what actually merged.
+- Each fix should come with a manual-verification line appended to the relevant `Tests/*/Manual*Verification.md` runbook, per project TDD policy.
