@@ -338,6 +338,25 @@ SwiftUI view body; not XCTest-reachable.
    "Mins saved" (previously "Minutes saved"). Numeric value, rounding,
    and layout unchanged.
 
+## Home tab WPM formatting — mockup-gaps B.4
+
+Reference: `plans/App UI design/screen_home.png`. The WPM formatter is
+a private static on `HomeTab`; its output is only visible through the
+rendered stat card. Not XCTest-reachable without extracting the
+formatter, which isn't worth the blast radius for a 2-line change.
+
+1. Fresh install (no recordings yet): "WPM avg" card shows `0`, not
+   `0.0`. (Previously `0.0` because `minimumFractionDigits = 1`.)
+2. Record until `averageWPMThisWeek` rolls to an integer (or inspect a
+   debug build where the rollup is synthesised): the card shows e.g.
+   `12`, not `12.0`.
+3. Record until `averageWPMThisWeek` is fractional (e.g. 12.4): the
+   card still shows `12.4` — one fractional digit is preserved.
+4. Note: the inline `String(format: "%.1f", ...)` fallback (used only
+   if `NumberFormatter.string(from:)` unexpectedly returns nil) still
+   emits `.0`. Low-hit path; leave until we see it surface in
+   practice.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift

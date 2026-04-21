@@ -170,10 +170,20 @@ struct HomeTab: View {
         return formatter
     }()
 
+    /// WPM formatter (mockup-gaps B.4).
+    ///
+    /// Mockup (`plans/App UI design/screen_home.png`) shows `0` as an
+    /// integer — the previous `minimumFractionDigits = 1` rendered
+    /// `0.0`. Dropping the floor to 0 yields:
+    ///   - `0`       for 0
+    ///   - `12`      for 12.0
+    ///   - `12.4`    for 12.4
+    /// which matches the desired mockup behaviour without losing the
+    /// single-fractional-digit precision for non-integer values.
     private static let wpmFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 1
+        formatter.minimumFractionDigits = 0
         formatter.maximumFractionDigits = 1
         return formatter
     }()
