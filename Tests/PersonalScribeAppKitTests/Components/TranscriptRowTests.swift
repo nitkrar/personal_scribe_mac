@@ -277,7 +277,12 @@ final class TranscriptRowTests: XCTestCase {
             timeZone: TimeZone(identifier: "UTC")!
         )
 
-        XCTAssertEqual(out, "2:34 PM")
+        // Foundation emits U+202F (narrow no-break space) between time and
+        // AM/PM on macOS 13+. Normalize to regular space before comparing.
+        let normalized = out
+            .replacingOccurrences(of: "\u{202F}", with: " ")
+            .replacingOccurrences(of: "\u{00A0}", with: " ")
+        XCTAssertEqual(normalized, "2:34 PM")
     }
 
     func testDetailStyleUsesWallClockTimestamp() {
