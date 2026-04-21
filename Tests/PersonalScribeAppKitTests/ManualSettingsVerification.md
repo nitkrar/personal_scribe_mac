@@ -1,7 +1,7 @@
 # Manual Settings Verification
 
 - Opening via menu bar: with onboarding completed, click the status-item `Settings` row and confirm the `<AppBrand.displayName> Settings` window opens in front of the app.
-- All 5 tabs visible: confirm `General`, `AI Models`, `Modes`, `Shortcuts`, and `Advanced` render and can each be selected from the tab strip.
+- **MV-SETT-1 — All 5 tabs visible:** confirm `General`, `AI Models`, `Advanced`, `Permissions`, and `About` render and can each be selected from the tab strip.
 - General-tab toggles persist across relaunch: change pill visibility, waveform decay, and paste mode, relaunch Ninimma, and confirm the three selections remain at their last chosen values.
 - Both-hidden combination blocked with visible error state: hide the menu bar item, then try to set pill visibility to `Hidden`, and confirm the UI rejects the change with an inline explanation that one surface must remain visible.
 - [ ] **MV-SETT-1** Open Settings. The segmented sub-tab picker (General / AI Models / Shortcuts / Advanced / Permissions) renders on a single line at the default window width (760pt). The redundant "Settings" largeTitle above the picker must NOT be present — window title bar + sidebar row already identify the tab.
@@ -16,11 +16,15 @@
 ## Permissions sub-tab — fresh status on render
 
 - Fresh install mic accept refreshes correctly: install a build whose bundle ID has no existing TCC grants, launch, accept the microphone TCC prompt that appears on first launch, navigate to `Settings > Permissions`, and confirm the Microphone row shows the green dot + no "Grant Access" button (mic TCC dialogs are system-modal and do not fire `didBecomeActiveNotification`, so this exercises the `.onAppear` refresh path).
-- Returning to Permissions after a silent external change picks it up: with the app running, open `Settings > Permissions`, switch to a different sub-tab (General / Modes), then toggle a permission in System Settings from another window, return to `Permissions`, and confirm the row updates on the next tab render without needing to restart the app.
+- Returning to Permissions after a silent external change picks it up: with the app running, open `Settings > Permissions`, switch to a different sub-tab (General / AI Models / Advanced / About), then toggle a permission in System Settings from another window, return to `Permissions`, and confirm the row updates on the next tab render without needing to restart the app.
 
 ## Change recording hotkey
 
-- In `Shortcuts`, click `Change…` on `Record / stop dictation`, record a new shortcut, confirm `Cmd+Space` is rejected inline, click `Set`, confirm a restart-required note appears, relaunch `<AppBrand.displayName>`, and verify the new recording shortcut works.
+- **MV-SETT-2 — Change recording hotkey:** in `General > Shortcuts`, click `Change…` on `Record / stop dictation`, record a new shortcut, confirm `Cmd+Space` is rejected inline, click `Set`, confirm a restart-required note appears, relaunch `<AppBrand.displayName>`, and verify the new recording shortcut works.
+- [ ] **MV-SETT-3** Settings > General renders a `Shortcuts` subsection
+  at the bottom containing the `Record / stop dictation` hotkey row.
+  The top-level `Shortcuts` sub-tab must NOT exist. Regression guard for
+  bug #14 (2026-04-21 dogfood).
 
 ## Change base directory
 

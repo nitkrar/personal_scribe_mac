@@ -6,14 +6,13 @@ final class SettingsSubTabTests: XCTestCase {
     func testCasesInOrder() {
         XCTAssertEqual(
             SettingsSubTab.allCases,
-            [.general, .aiModels, .shortcuts, .advanced, .permissions]
+            [.general, .aiModels, .advanced, .permissions]
         )
     }
 
     func testRawValuesAreStable() {
         XCTAssertEqual(SettingsSubTab.general.rawValue, "General")
         XCTAssertEqual(SettingsSubTab.aiModels.rawValue, "AI Models")
-        XCTAssertEqual(SettingsSubTab.shortcuts.rawValue, "Shortcuts")
         XCTAssertEqual(SettingsSubTab.advanced.rawValue, "Advanced")
         XCTAssertEqual(SettingsSubTab.permissions.rawValue, "Permissions")
     }
@@ -28,7 +27,7 @@ final class SettingsSubTabTests: XCTestCase {
         let ids = SettingsSubTab.allCases.map(\.id)
         XCTAssertEqual(
             ids,
-            ["General", "AI Models", "Shortcuts", "Advanced", "Permissions"]
+            ["General", "AI Models", "Advanced", "Permissions"]
         )
         XCTAssertEqual(Set(ids).count, SettingsSubTab.allCases.count)
     }
