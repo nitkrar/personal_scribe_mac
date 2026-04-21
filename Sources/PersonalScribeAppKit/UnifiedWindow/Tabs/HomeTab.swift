@@ -116,7 +116,7 @@ struct HomeTab: View {
                 ) ?? "\(viewModel.rollups.recordingsThisWeek)"
             )
             StatCard(
-                label: "Minutes saved",
+                label: "Mins saved",
                 value: Self.minutesFormatter.string(
                     from: NSNumber(value: viewModel.rollups.minutesSavedThisWeek.rounded())
                 ) ?? "\(Int(viewModel.rollups.minutesSavedThisWeek.rounded()))"

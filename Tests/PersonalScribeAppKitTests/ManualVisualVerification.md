@@ -329,6 +329,15 @@ reachable from XCTest.
 2. The header still uses `Typography.sectionLabel` — no weight / size
    regression.
 
+## Home tab stat card label — mockup-gaps B.3
+
+Reference: `plans/App UI design/screen_home.png`. String lives in the
+SwiftUI view body; not XCTest-reachable.
+
+1. Open Ninimma → Home tab. The third stat card label reads
+   "Mins saved" (previously "Minutes saved"). Numeric value, rounding,
+   and layout unchanged.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift
