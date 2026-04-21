@@ -32,7 +32,10 @@ final class UnifiedWindowModelTests: XCTestCase {
     // MARK: - AppTab contract
 
     func testAppTabCasesInOrder() {
-        XCTAssertEqual(AppTab.allCases, [.home, .transcriptions, .modes, .settings])
+        XCTAssertEqual(
+            AppTab.allCases,
+            [.home, .transcriptions, .modes, .settings, .about]
+        )
     }
 
     func testAppTabRawValuesAreStable() {
@@ -40,6 +43,7 @@ final class UnifiedWindowModelTests: XCTestCase {
         XCTAssertEqual(AppTab.transcriptions.rawValue, "Transcriptions")
         XCTAssertEqual(AppTab.modes.rawValue, "Modes")
         XCTAssertEqual(AppTab.settings.rawValue, "Settings")
+        XCTAssertEqual(AppTab.about.rawValue, "About")
     }
 
     func testAppTabSystemImageNames() {
@@ -47,5 +51,18 @@ final class UnifiedWindowModelTests: XCTestCase {
         XCTAssertEqual(AppTab.transcriptions.systemImageName, "text.alignleft")
         XCTAssertEqual(AppTab.modes.systemImageName, "square.grid.2x2")
         XCTAssertEqual(AppTab.settings.systemImageName, "gearshape")
+        XCTAssertEqual(AppTab.about.systemImageName, "info.circle")
+    }
+
+    /// About is rendered as a clickable footer row (next to the
+    /// Microphone footer), not as a regular sidebar-list tab. Keep
+    /// the two lists semantically distinct so SidebarListView can
+    /// iterate `sidebarListCases` without accidentally including About.
+    func testSidebarListCasesExcludesAbout() {
+        XCTAssertEqual(
+            AppTab.sidebarListCases,
+            [.home, .transcriptions, .modes, .settings]
+        )
+        XCTAssertFalse(AppTab.sidebarListCases.contains(.about))
     }
 }

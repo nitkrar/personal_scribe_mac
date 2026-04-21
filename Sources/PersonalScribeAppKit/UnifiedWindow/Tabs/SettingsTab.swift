@@ -45,8 +45,6 @@ public struct SettingsTab: View {
                             permissionService: permissionService
                         )
                     )
-                case .about:
-                    AboutSubTab()
                 }
             }
         }

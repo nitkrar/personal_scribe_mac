@@ -49,3 +49,26 @@ Wired in `PersonalScribeAppMain.body` via `CommandGroup(replacing: .appSettings)
 - **MV-CMD-1 — `⌘,` with unified window already open:** click the menu bar status item → `Home` (or any tab), then press `⌘,`. The tab selector jumps to `Settings`. Pressing `⌘,` a second time is a no-op (already there).
 - **MV-CMD-2 — `⌘,` with unified window closed but app frontmost:** close the unified window (red traffic light), then immediately press `⌘,` while Ninimma is still frontmost. The unified window reappears with the Settings tab selected.
 - **MV-CMD-3 — `⌘,` from another app:** while a non-Ninimma app is frontmost (e.g. Finder), press `⌘,`. Expected: Finder's own Preferences opens; Ninimma's shortcut must NOT steal the keystroke (LSUIElement apps only receive menu shortcuts when their own window is key).
+
+## About — sidebar footer (bug #1c)
+
+`About` is NOT a Settings sub-tab; it's a clickable footer row under the
+Microphone footer in the unified-window sidebar, styled as a muted caption
+row (not a tab-row).
+
+- **MV-ABOUT-1 — About row visible at sidebar bottom:** open the unified
+  window. The sidebar shows `Home / Transcriptions / Modes / Settings`
+  as tab rows, a `Microphone` footer, and directly below it an `About`
+  footer row with an info-circle icon. Neither footer has a tab-row
+  accent bar.
+- **MV-ABOUT-2 — About is NOT in Settings:** click `Settings`. The
+  segmented sub-tab picker shows `General / AI Models / Shortcuts /
+  Advanced / Permissions` — no `About` entry.
+- **MV-ABOUT-3 — Clicking About routes to the About view:** click the
+  `About` footer row. The detail pane swaps to the About card (app icon,
+  version/build, origin copy, mythlok link). The sidebar list stays
+  visible throughout; neither the footer nor any sidebar tab-row shows
+  a tab-row accent bar.
+- **MV-ABOUT-4 — Active-state affordance:** while on About, the footer
+  row reads at full opacity; the Microphone footer above remains muted.
+  Click Home — the About footer dims back to muted caption opacity.

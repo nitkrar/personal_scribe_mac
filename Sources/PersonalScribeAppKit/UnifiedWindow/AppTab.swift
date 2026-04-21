@@ -7,12 +7,16 @@ import Foundation
 /// label so tab rename requires a single edit.
 ///
 /// Reference: `plans/App UI design/Claude_Final_Bundle_Prompt.md` §3
-/// (4 tabs: Home / Transcriptions / Modes / Settings).
+/// (4 nav tabs: Home / Transcriptions / Modes / Settings). `.about`
+/// is routable but rendered as a sidebar footer row next to the
+/// Microphone footer — see `sidebarListCases` for the regular-tab
+/// subset consumed by `UnifiedWindowView`'s sidebar `List`.
 public enum AppTab: String, CaseIterable, Identifiable, Sendable {
     case home           = "Home"
     case transcriptions = "Transcriptions"
     case modes          = "Modes"
     case settings       = "Settings"
+    case about          = "About"
 
     public var id: String { rawValue }
 
@@ -23,6 +27,14 @@ public enum AppTab: String, CaseIterable, Identifiable, Sendable {
         case .transcriptions: return "text.alignleft"
         case .modes:          return "square.grid.2x2"
         case .settings:       return "gearshape"
+        case .about:          return "info.circle"
         }
     }
+
+    /// Tabs rendered as regular rows in the sidebar `List`. `.about`
+    /// is intentionally excluded — it lives as a clickable footer row
+    /// next to the Microphone footer (bug #1c, 2026-04-21 dogfood).
+    public static let sidebarListCases: [AppTab] = [
+        .home, .transcriptions, .modes, .settings,
+    ]
 }

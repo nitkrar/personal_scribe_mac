@@ -76,7 +76,7 @@ struct UnifiedWindowView: View {
                 .padding(.horizontal, PersonalScribeTheme.Spacing.lg)
                 .padding(.vertical, PersonalScribeTheme.Spacing.lg)
 
-            List(AppTab.allCases, selection: tabBinding) { tab in
+            List(AppTab.sidebarListCases, selection: tabBinding) { tab in
                 sidebarRow(for: tab)
                     .tag(tab)
             }
@@ -86,7 +86,13 @@ struct UnifiedWindowView: View {
 
             microphoneFooter
                 .padding(.horizontal, PersonalScribeTheme.Spacing.lg)
-                .padding(.vertical, PersonalScribeTheme.Spacing.md)
+                .padding(.top, PersonalScribeTheme.Spacing.md)
+                .padding(.bottom, PersonalScribeTheme.Spacing.xs)
+
+            aboutFooter
+                .padding(.horizontal, PersonalScribeTheme.Spacing.lg)
+                .padding(.top, PersonalScribeTheme.Spacing.xs)
+                .padding(.bottom, PersonalScribeTheme.Spacing.md)
         }
         .background(windowTint.secondaryBackground)
         // Thin 1px separator between sidebar and detail pane.
@@ -136,6 +142,31 @@ struct UnifiedWindowView: View {
         .foregroundStyle(windowTint.primaryText.opacity(0.6))
     }
 
+    /// Clickable footer row for the About tab. Styled to match the
+    /// Microphone footer (muted caption + symbol) rather than the
+    /// sidebar-list tab rows, so it reads as a secondary affordance
+    /// rather than a peer of Home / Transcriptions / Modes / Settings.
+    private var aboutFooter: some View {
+        Button {
+            model.setActiveTab(.about)
+        } label: {
+            HStack(spacing: PersonalScribeTheme.Spacing.xs) {
+                Image(systemName: AppTab.about.systemImageName)
+                Text(AppTab.about.rawValue)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(
+                windowTint.primaryText.opacity(
+                    model.activeTab == .about ? 1.0 : 0.6
+                )
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("About \(AppBrand.displayName)"))
+    }
+
     // MARK: - Detail
 
     @ViewBuilder
@@ -162,6 +193,8 @@ struct UnifiedWindowView: View {
             ModesTab(viewModel: modesViewModel)
         case .settings:
             SettingsTab(defaults: defaults, permissionService: permissionService)
+        case .about:
+            AboutSubTab()
         }
     }
 
