@@ -183,6 +183,32 @@ in M3.2–M3.5; this milestone proves the shell + routing + menu-bar entry
 13. Settings NSWindow still opens via menu bar → "Settings".
 14. Onboarding flow still triggers for a fresh install.
 
+### Window space / screen pinning (bug #041 regression guards)
+
+- [ ] **MV-WINDOW-PIN-1 (no full-screen pin)** Put another app (e.g.
+  Safari) into **full-screen** mode — that creates its own dedicated
+  space. While on that full-screen space, click the Ninimma menu bar
+  icon → Home. Confirm the unified window appears on the full-screen
+  app's space (expected). Close the window. Press `^+↑` /
+  Mission Control and exit the full-screen app (or swipe back to the
+  main desktop). Trigger **Home** again from the menu bar. The
+  unified window MUST open on the current desktop — NOT warp the user
+  back to the former full-screen app's space.
+- [ ] **MV-WINDOW-PIN-2 (multi-monitor follows cursor)** On a
+  multi-monitor setup, move the mouse cursor to the **secondary**
+  display (so the menu bar focus is effectively on that screen).
+  Trigger **Home** from the menu bar. The window opens centered on
+  the secondary display — NOT stranded on the primary display at the
+  previously-saved origin. Move the cursor to the primary display,
+  close the window, trigger Home again → the window centers on the
+  primary display.
+- [ ] **MV-WINDOW-PIN-3 (single-space no regression)** Single-display
+  setup, no full-screen apps. Open Home from the menu bar. Confirm
+  the window opens where expected (last-saved frame within the
+  visible screen, or centered on first launch). Close and re-open —
+  the window should remember its position between opens on the same
+  space (no spurious re-centering).
+
 ## M4.1 voice-modulated pill waveform
 
 The pill's recording-state `SineWaveView` now tracks live mic level

@@ -80,6 +80,14 @@ final class UnifiedWindowController: NSWindowController {
         window.appearance = initialTheme.nsAppearance(
             systemIsDark: Self.systemIsDark()
         )
+        // Bug #041: without `.moveToActiveSpace` the window re-opens on the
+        // space it was last shown on — so triggering Home from the menu bar
+        // after a full-screen session warps the user back to that space.
+        // `.fullScreenAuxiliary` lets the window surface over any full-screen
+        // app without forcing a space switch. Deliberately do NOT set
+        // `.canJoinAllSpaces` / `.stationary` — those are pill-overlay
+        // pinning flags that would re-create the bug.
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
 
         super.init(window: window)
 
@@ -108,8 +116,21 @@ final class UnifiedWindowController: NSWindowController {
     override func showWindow(_ sender: Any?) {
         guard let window else { return }
 
+        // Bug #041: if the persisted frame's midpoint isn't on any screen
+        // that currently exists (e.g. the user left a multi-monitor setup,
+        // or the window is about to be dragged over from a dismissed
+        // full-screen space) re-center it on the screen the user is
+        // actually looking at. `.moveToActiveSpace` ensures the window
+        // follows to the current space; this ensures it lands on-screen.
         if !window.isVisible {
-            window.center()
+            let activeScreenFrame = UnifiedWindowController.activeScreenVisibleFrame()
+            let reconciled = UnifiedWindowController.reconciledFrame(
+                for: window.frame,
+                activeScreenVisibleFrame: activeScreenFrame
+            )
+            if reconciled != window.frame {
+                window.setFrame(reconciled, display: false)
+            }
         }
 
         super.showWindow(sender)
@@ -122,6 +143,39 @@ final class UnifiedWindowController: NSWindowController {
     func showWindow(selecting tab: AppTab) {
         model.setActiveTab(tab)
         showWindow(nil)
+    }
+
+    /// Pure helper (bug #041): if `windowFrame`'s midpoint is already inside
+    /// `activeScreenVisibleFrame`, return the frame unchanged. Otherwise
+    /// return a copy re-centered over the active screen (preserving size).
+    ///
+    /// Kept `static` + `internal` so it can be unit-tested without an
+    /// NSWindow — NSWindow is `@MainActor` + hard to fake.
+    static func reconciledFrame(
+        for windowFrame: NSRect,
+        activeScreenVisibleFrame: NSRect
+    ) -> NSRect {
+        if activeScreenVisibleFrame == .zero {
+            return windowFrame
+        }
+        let midpoint = NSPoint(x: windowFrame.midX, y: windowFrame.midY)
+        if activeScreenVisibleFrame.contains(midpoint) {
+            return windowFrame
+        }
+        let x = activeScreenVisibleFrame.midX - (windowFrame.width / 2.0)
+        let y = activeScreenVisibleFrame.midY - (windowFrame.height / 2.0)
+        return NSRect(x: x, y: y, width: windowFrame.width, height: windowFrame.height)
+    }
+
+    /// Returns the visible frame of the screen the user is most likely
+    /// interacting with — the screen containing the mouse cursor, falling
+    /// back to `NSScreen.main`, then `.zero` if nothing is attached.
+    static func activeScreenVisibleFrame() -> NSRect {
+        let mouseLocation = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) {
+            return screen.visibleFrame
+        }
+        return NSScreen.main?.visibleFrame ?? .zero
     }
 
     private func applyWindowTint() {
