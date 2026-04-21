@@ -248,6 +248,46 @@ Reviewer runs this checklist with at least two input devices attached
    to the built-in mic) — `AudioEngineDriver.applyInputDevice` logs a
    warning and proceeds rather than blocking.
 
+## Transcriptions tab (mockup-gaps A.1–A.5)
+
+Closes Group A of `plans/backlog/ui-mockup-gaps.md` — aligns the
+Transcriptions tab with `plans/App UI design/screen_transcriptions.png`.
+SwiftUI layout bits that XCTest can't reach go here.
+
+1. Open the unified window → **Transcriptions** tab. Have at least 1
+   entry from today, 1 from yesterday, and 1 older than 7 days (or
+   inject fixtures via the dogfood harness).
+2. **A.1 Row structure** — each row shows a single line of preview
+   text truncated to 2 lines with "…" when longer. There is NO
+   separate bold title above the preview. The first line of the row
+   is a timestamp on the leading edge; if the row has a single short
+   sentence, it does NOT appear twice.
+3. **A.2 Date buckets** — the group headers read:
+   - `TODAY` and `YESTERDAY` for the two most recent buckets.
+   - Compact `APR 18` (uppercased `MMM d`) for older buckets — NOT
+     `APRIL 18, 2026` or `APRIL 18`.
+4. **A.3 Row height** — each row is at least 56pt tall (roughly the
+   height of "wall-clock line + 2 preview lines + vertical padding").
+   Compare against the mockup PNG — rows should feel roomy, not
+   crammed.
+5. **A.4 Wall-clock timestamps** — the leading-edge timestamp on each
+   row reads in wall-clock form (`2:34 PM` on a 12h locale, `14:34`
+   on a 24h locale) — NOT relative (`5m ago`). Home tab rows still
+   show relative timestamps; the split is per-row-style.
+6. **A.5 Window tint** — open Settings → General → Appearance.
+   - Flip Window tint to **Warm**. The Transcriptions tab root
+     background becomes `#F5F5F0` (warm cream) — including the
+     regions outside the rows / search bar / header.
+   - Flip Window tint to **Neutral**. Transcriptions tab root becomes
+     `#F2F2F7` (system grey).
+   - Flip Window tint to **Dark**. Transcriptions tab root becomes
+     `#0E0E14` regardless of system appearance.
+7. **Deferred — mode pill**. The mockup shows a trailing "Dictation
+   Mode" / "Command Mode" pill on each row. This is NOT rendered
+   (`TranscriptEntry` has no `mode` field; schema change required).
+   A `TODO: mockup-gap — trailing mode pill deferred` comment marks
+   the attachment point in `TranscriptionsTab.swift`.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift

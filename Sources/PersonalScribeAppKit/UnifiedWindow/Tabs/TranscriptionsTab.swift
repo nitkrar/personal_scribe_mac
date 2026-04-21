@@ -19,9 +19,26 @@ import SwiftUI
 struct TranscriptionsTab: View {
     @ObservedObject private var viewModel: TranscriptionsTabViewModel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.windowTint) private var windowTint
 
     init(viewModel: TranscriptionsTabViewModel) {
         self.viewModel = viewModel
+    }
+
+    /// Resolve the tab-root background: prefer the injected
+    /// `WindowTint.primaryBackground` when present (ensures warm / neutral
+    /// / forced-dark surfaces paint through to the Transcriptions tab
+    /// root), otherwise fall back to the palette's `appBackground` so
+    /// previews and test harnesses still have an opaque surface rather
+    /// than inheriting transparently from the ancestor. Mockup-gap A.5.
+    static func resolvedBackground(
+        windowTint: WindowTint?,
+        palette: PersonalScribeTheme.Palette
+    ) -> Color {
+        if let tint = windowTint {
+            return tint.primaryBackground
+        }
+        return palette.appBackground
     }
 
     var body: some View {
@@ -83,6 +100,7 @@ struct TranscriptionsTab: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Self.resolvedBackground(windowTint: windowTint, palette: palette))
         .task {
             await viewModel.load()
         }
