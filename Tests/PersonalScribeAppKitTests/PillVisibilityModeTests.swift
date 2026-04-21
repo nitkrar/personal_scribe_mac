@@ -41,15 +41,22 @@ final class PillVisibilityModeTests: XCTestCase {
 
     // MARK: - Default on first launch
 
-    func testResolveReturnsAutoShowWhenKeyAbsent() {
-        let defaults = isolatedDefaults()
-        XCTAssertEqual(PillVisibilityMode.resolve(from: defaults), .autoShow)
+    func testDefaultIsAlwaysOn() {
+        // First-launch default was auto-show matching the original mockup;
+        // switched to always-on per user preference (dogfood feedback —
+        // the pill is a useful visible affordance even between sessions).
+        XCTAssertEqual(PillVisibilityMode.default, .alwaysOn)
     }
 
-    func testResolveReturnsAutoShowForUnrecognizedRawValue() {
+    func testResolveReturnsAlwaysOnWhenKeyAbsent() {
+        let defaults = isolatedDefaults()
+        XCTAssertEqual(PillVisibilityMode.resolve(from: defaults), .alwaysOn)
+    }
+
+    func testResolveReturnsAlwaysOnForUnrecognizedRawValue() {
         let defaults = isolatedDefaults()
         defaults.set("legacy-value", forKey: PillVisibilityMode.userDefaultsKey)
-        XCTAssertEqual(PillVisibilityMode.resolve(from: defaults), .autoShow)
+        XCTAssertEqual(PillVisibilityMode.resolve(from: defaults), .alwaysOn)
     }
 
     // MARK: - Round-trip

@@ -8,13 +8,13 @@ import PersonalScribeCore
 /// canonical representation.
 ///
 /// ## Semantics
-/// * **`.alwaysOn`** — the pill is visible at all times (Mode 1 row). It
-///   shows the idle quill + flat wave when there is no active session,
-///   swaps to the recording layout during recording, and remains visible
-///   between sessions.
-/// * **`.autoShow` (default)** — the pill appears only while a
-///   recording / transcription / download is in flight, and fades back
-///   out when idle. The menu bar is the always-visible surface.
+/// * **`.alwaysOn` (default)** — the pill is visible at all times (Mode
+///   1 row). It shows the idle quill + flat wave when there is no
+///   active session, swaps to the recording layout during recording,
+///   and remains visible between sessions.
+/// * **`.autoShow`** — the pill appears only while a recording /
+///   transcription / download is in flight, and fades back out when
+///   idle. The menu bar is the always-visible surface.
 /// * **`.hidden`** — the pill never shows; the menu bar + hotkeys are
 ///   the only user-reachable surfaces. Invariant: at least one of
 ///   `hidden` pill / `hidden` menu bar must be false — the menu bar
@@ -23,9 +23,12 @@ import PersonalScribeCore
 ///   (see PLAN_PHASES.md line 293).
 ///
 /// ## Persistence
-/// Stored in `UserDefaults` at `PillVisibilityMode`. On first
-/// launch (key absent), the default is `.autoShow`, matching the mockup
-/// row labelled "Mode 2 — Auto-show (default)".
+/// Stored in `UserDefaults` at `PillVisibilityMode`. On first launch
+/// (key absent), the default is `.alwaysOn`. The original mockup
+/// labelled Mode 2 as default (`.autoShow`), but dogfood feedback
+/// surfaced that a persistent visible pill is a more useful affordance
+/// between sessions — seeing the quill idle tells the user the app is
+/// ready without requiring a menu-bar glance.
 public enum PillVisibilityMode: String, CaseIterable, Codable, Sendable, Equatable {
     case alwaysOn = "always-on"
     case autoShow = "auto-show"
@@ -34,7 +37,7 @@ public enum PillVisibilityMode: String, CaseIterable, Codable, Sendable, Equatab
     /// The UserDefaults key used across the app. Centralised here so
     /// the Phase 3 Settings UI and the Phase 2 pill overlay agree on
     /// exactly one string.
-    public static let `default`: Self = .autoShow
+    public static let `default`: Self = .alwaysOn
     public static let userDefaultsKey = "PillVisibilityMode"
 
     public static func preference(defaults: UserDefaults = .standard) -> Preference<Self> {
@@ -42,7 +45,7 @@ public enum PillVisibilityMode: String, CaseIterable, Codable, Sendable, Equatab
     }
 
     /// Resolve the currently persisted mode, falling back to
-    /// `.autoShow` if the key is missing or holds an unrecognised
+    /// `.alwaysOn` if the key is missing or holds an unrecognised
     /// value (defensive: an older build might have written a legacy
     /// string).
     public static func resolve(from defaults: UserDefaults = .standard) -> PillVisibilityMode {

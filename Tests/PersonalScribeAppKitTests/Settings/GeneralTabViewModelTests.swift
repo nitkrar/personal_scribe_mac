@@ -30,9 +30,14 @@ final class GeneralTabViewModelTests: XCTestCase {
 
         XCTAssertEqual(conflict, .conflict)
         XCTAssertEqual(viewModel.visibilityError, .conflict)
-        XCTAssertEqual(viewModel.pillVisibilityMode, .autoShow)
+        // View model's init resolved the fallback mode from defaults when no
+        // key was set — the stored default flipped from `.autoShow` to
+        // `.alwaysOn` per dogfood feedback. The conflict-rejection path
+        // leaves the pre-apply mode in place, so the assertion tracks the
+        // new persisted default.
+        XCTAssertEqual(viewModel.pillVisibilityMode, .alwaysOn)
         XCTAssertTrue(viewModel.isMenuBarVisible)
-        XCTAssertEqual(PillVisibilityMode.resolve(from: defaults), .autoShow)
+        XCTAssertEqual(PillVisibilityMode.resolve(from: defaults), .alwaysOn)
         XCTAssertTrue(menuBarVisible)
 
         let hidePillOnly = viewModel.applyVisibilityConfig(
