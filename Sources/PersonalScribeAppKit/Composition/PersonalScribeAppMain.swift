@@ -303,14 +303,11 @@ extension PersonalScribeAppMain {
     static func defaultTranscriptReader(
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
     ) -> any TranscriptReading {
-        do {
-            let storageLocator = AppConfig.liveStorageLocator()
-            let store = try SQLiteTranscriptStore(storageLocator: storageLocator)
-            return SQLiteTranscriptReader(store: store)
-        } catch {
-            logger.error("NotesWindow transcript reader init failed; falling back to empty history", error: error)
+        guard let repository = AppComposition.transcriptRepository else {
+            logger.error("NotesWindow transcript reader: shared AppDatabase unavailable; falling back to empty history")
             return EmptyTranscriptReader()
         }
+        return repository
     }
 
     static let defaultClipboardWriter: @MainActor (String) -> Void = { text in

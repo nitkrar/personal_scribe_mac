@@ -5,9 +5,33 @@ import PersonalScribeCore
 import PersonalScribeSession
 import PersonalScribeTranscription
 
+public enum AppCompositionError: Error {
+    case databaseUnavailable
+}
+
 @MainActor
 public enum AppComposition {
-    private static let transcriptDatabaseFileName = "transcripts.sqlite"
+    /// Single shared `AppDatabase` instance per plan §3: "exactly one instance
+    /// per app process, held as a shared reference inside `AppComposition` —
+    /// never re-constructed by callers." If init fails (disk read-only, path
+    /// not writable), the whole persistence surface degrades to nil; callers
+    /// treat missing history as "nothing to show" rather than crashing.
+    public static let appDatabase: AppDatabase? = {
+        let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+        do {
+            return try AppDatabase(locator: AppConfig.liveStorageLocator())
+        } catch {
+            logger.error("AppDatabase init failed; continuing without persistence", error: error)
+            return nil
+        }
+    }()
+
+    /// The single shared `TranscriptRepository` wrapping `appDatabase`. Nil
+    /// only when `appDatabase` failed to open.
+    public static let transcriptRepository: TranscriptRepository? = {
+        guard let appDatabase else { return nil }
+        return TranscriptRepository(database: appDatabase)
+    }()
 
     public static let modelService: DefaultModelService = {
         DefaultModelService(
@@ -32,55 +56,34 @@ public enum AppComposition {
             modelService: modelService,
             transcriberProvider: transcriberProvider,
             logger: logger,
-            transcriptStore: makeTranscriptStore()
+            transcriptRepository: transcriptRepository
         )
     }()
-
-    /// SQLiteTranscriptStore persists transcripts under
-    /// `<base>/recordings/transcripts.sqlite` and migrates any legacy
-    /// `transcripts.jsonl` sidecar atomically while leaving the JSONL file in
-    /// place as a rollback artifact. Failures are logged and swallowed —
-    /// losing history is preferable to blocking the app from starting when
-    /// disk is read-only or the path isn't writable.
-    private static func makeTranscriptStore() -> SQLiteTranscriptStore? {
-        let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
-        do {
-            let storageLocator = AppConfig.liveStorageLocator()
-            return try SQLiteTranscriptStore(storageLocator: storageLocator)
-        } catch {
-            logger.error("SQLiteTranscriptStore init failed; continuing without persistence", error: error)
-            return nil
-        }
-    }
 
     public static func makeSessionCoordinator() -> SessionCoordinator {
         sessionCoordinator
     }
 
     public static func makeMetricsService() throws -> SQLiteMetricsService {
-        let databaseURL = AppConfig.liveStorageLocator()
-            .url(for: .recordings)
-            .appendingPathComponent(transcriptDatabaseFileName, isDirectory: false)
-            .standardizedFileURL
-
-        return try SQLiteMetricsService(
-            databaseURL: databaseURL,
+        guard let appDatabase else {
+            throw AppCompositionError.databaseUnavailable
+        }
+        return SQLiteMetricsService(
+            appDatabase: appDatabase,
             calendar: .current,
             referenceDateProvider: Date.init
         )
     }
 
     /// Read-only snapshot accessor used by the unified window's Home tab.
-    /// Returns a `MetricsReading` backed by the same SQLite database as
-    /// `makeMetricsService()`, so rollups + recents stay consistent.
+    /// Returns a `MetricsReading` backed by the shared `AppDatabase`, so
+    /// rollups + recents stay consistent with `makeMetricsService()`.
     public static func makeMetricsReader() throws -> any MetricsReading {
-        let databaseURL = AppConfig.liveStorageLocator()
-            .url(for: .recordings)
-            .appendingPathComponent(transcriptDatabaseFileName, isDirectory: false)
-            .standardizedFileURL
-
-        return try SQLiteMetricsReader(
-            databaseURL: databaseURL,
+        guard let appDatabase else {
+            throw AppCompositionError.databaseUnavailable
+        }
+        return SQLiteMetricsReader(
+            appDatabase: appDatabase,
             referenceDateProvider: Date.init
         )
     }
