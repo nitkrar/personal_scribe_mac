@@ -21,6 +21,31 @@ final class StatusPillTests: XCTestCase {
         XCTAssertEqual(all.count, 3)
     }
 
+    func testStatusEnumExposesWarningAndFailedForDownloadStates() {
+        // AIModels tab (Stage A step 3.2) introduces amber / red dot
+        // variants so a single pill API can render all five
+        // ModelDownloadState chips. Warning = downloading / loading;
+        // failed = download errored.
+        let extended: Set<StatusPill.Status> = [.warning, .failed]
+        XCTAssertEqual(extended.count, 2)
+    }
+
+    func testStatusColorForWarningUsesSystemOrange() {
+        let dark = PersonalScribeTheme.Palette.dark
+        XCTAssertEqual(
+            StatusPill.Status.warning.color(for: dark),
+            Color.orange
+        )
+    }
+
+    func testStatusColorForFailedReusesStatusRecordingRed() {
+        let light = PersonalScribeTheme.Palette.light
+        XCTAssertEqual(
+            StatusPill.Status.failed.color(for: light),
+            light.statusRecording
+        )
+    }
+
     func testStatusColorForReadyUsesThemeStatusReady() {
         let dark = PersonalScribeTheme.Palette.dark
         XCTAssertEqual(

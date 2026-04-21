@@ -17,6 +17,14 @@ public struct StatusPill: View {
         case ready
         case recording
         case neutral
+        /// Warning / in-flight state (e.g. a model download in progress).
+        /// Renders an amber dot — distinguishes "something is happening"
+        /// from `.ready` (done) and `.failed` (errored).
+        case warning
+        /// Failure state (e.g. a model download errored). Reuses the
+        /// palette's `statusRecording` red so it reads as a clear error
+        /// without introducing a new palette token.
+        case failed
 
         /// The colour to use for the dot. The palette drives the choice
         /// so callers don't need to reason about dark/light variants.
@@ -25,6 +33,8 @@ public struct StatusPill: View {
             case .ready: return palette.statusReady
             case .recording: return palette.statusRecording
             case .neutral: return palette.brandChampagne
+            case .warning: return Color.orange
+            case .failed: return palette.statusRecording
             }
         }
     }
@@ -76,6 +86,8 @@ public struct StatusPill: View {
         case .ready: return "ready"
         case .recording: return "recording"
         case .neutral: return "idle"
+        case .warning: return "in progress"
+        case .failed: return "failed"
         }
     }
 }
