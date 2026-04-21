@@ -39,7 +39,8 @@ public struct SettingsTab: View {
                 case .permissions:
                     PermissionsSubTab(
                         viewModel: PermissionsSubTabViewModel(
-                            permissionService: permissionService
+                            permissionService: permissionService,
+                            defaults: defaults
                         )
                     )
                 }

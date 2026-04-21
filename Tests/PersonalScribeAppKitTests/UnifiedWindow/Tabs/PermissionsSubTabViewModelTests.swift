@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import XCTest
@@ -192,6 +193,54 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.statusLabel(for: .accessibility), "Granted")
     }
 
+    // MARK: - Input Monitoring hotkey hint (mockup-gaps C.7)
+
+    /// Input Monitoring subtitle reads `"Required for global hotkey <hint>"`
+    /// where `hint` comes from `HotkeyShortcutFormatter.displayString`
+    /// applied to the currently-bound `HotkeyPreference`. Default
+    /// preference (option + `/`) formats to `⌥/`, so the default
+    /// subtitle is `"Required for global hotkey ⌥/"`.
+    func testInputMonitoringSubtitleEmbedsDefaultHotkeyHint() {
+        let defaults = Self.ephemeralUserDefaults()
+        let service = FakePermissionService()
+        let viewModel = PermissionsSubTabViewModel(
+            permissionService: service,
+            defaults: defaults,
+            openURL: { _ in }
+        )
+
+        let expectedHint = HotkeyShortcutFormatter.displayString(for: .default)
+        XCTAssertEqual(
+            viewModel.subtitle(for: .inputMonitoring),
+            "Required for global hotkey \(expectedHint)"
+        )
+    }
+
+    /// Custom hotkey preference flows into the subtitle.
+    func testInputMonitoringSubtitleReflectsCustomHotkey() {
+        let defaults = Self.ephemeralUserDefaults()
+        let custom = HotkeyPreference(
+            keyCode: 49, // spacebar
+            tapCount: 1,
+            modifiers: NSEvent.ModifierFlags.control.rawValue
+        )
+        custom.persist(to: defaults)
+
+        let service = FakePermissionService()
+        let viewModel = PermissionsSubTabViewModel(
+            permissionService: service,
+            defaults: defaults,
+            openURL: { _ in }
+        )
+
+        let expectedHint = HotkeyShortcutFormatter.displayString(for: custom)
+        XCTAssertEqual(
+            viewModel.subtitle(for: .inputMonitoring),
+            "Required for global hotkey \(expectedHint)"
+        )
+        XCTAssertEqual(viewModel.recordingHotkey, custom)
+    }
+
     // MARK: - Subtitle copy (mockup-gaps C.6)
 
     /// Microphone subtitle matches the mockup verbatim — the existing
@@ -282,6 +331,18 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 1.0)
+    }
+
+    /// Ephemeral UserDefaults suite so `HotkeyPreference.persist(to:)`
+    /// in a test doesn't bleed into `.standard` — the test runner
+    /// shares `.standard` with the dogfood app on the same machine.
+    private static func ephemeralUserDefaults() -> UserDefaults {
+        let suite = "PermissionsSubTabViewModelTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            fatalError("Failed to create ephemeral UserDefaults suite")
+        }
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
     }
 }
 
