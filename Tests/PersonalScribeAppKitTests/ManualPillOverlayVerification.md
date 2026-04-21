@@ -116,6 +116,55 @@ below tells you to change it.
 
 ---
 
+## Record-without-transcribe — status card during model download
+
+Wired in commit series `adb3b60..a63331c` (Apr 2026). Driven by
+`RecordingStatusCardDriver.statusText(sessionState:progress:)` and shown
+via `PillOverlayPresenter.showRecordingStatusCard(text:)` +
+`updateRecordingStatusCard(text:)`.
+
+**MV-RWT-1 — First-launch record during download.**
+1. Fresh install (no model on disk). Grant mic + input-monitoring.
+2. Hit the record hotkey immediately (before model finishes downloading).
+3. Confirm the pill enters the `.recording` variant as normal.
+4. Confirm a ResponseCard fades in above the pill with text
+   `"Recording — transcribing when model is ready (NN%)"`. NN% updates
+   live as the download progresses — no flash, no rebuild.
+5. When the phase switches to `.loading`, confirm the card text updates
+   to `"Recording — model loading, transcription starts shortly"`.
+6. Stop the recording. Confirm the pill goes to `.transcribing` and the
+   card text changes to
+   `"Waiting — finishing model download (NN%)"` (if download is still
+   running) or
+   `"Waiting — model loading"` (if load is in flight).
+7. When the model reaches `.finished`, confirm the card dismisses
+   automatically (150ms fade) and the normal transcribe → done →
+   clipboard flow runs. Audio is NOT lost — captured transcript matches
+   what was spoken.
+
+**MV-RWT-2 — Hotkey during an established download (Settings switch).**
+1. App already has a working model. Go to Modes tab and switch to a
+   model variant that is NOT yet downloaded.
+2. As `DefaultModelService.setActive` kicks off the download, hit the
+   record hotkey.
+3. Confirm the ResponseCard appears with the progress text and updates
+   live.
+
+**MV-RWT-3 — No card when the model is ready.**
+1. With the model already prepared (`.finished` in the app state),
+   record + stop normally.
+2. Confirm NO ResponseCard appears at any point in the record →
+   transcribe → done flow. Only the clipboard-only notice (if triggered)
+   should ever flash.
+
+**MV-RWT-4 — Card text never leaks during idle/error.**
+1. Trigger an error path (e.g. record-too-short by tapping stop within
+   500ms of start).
+2. Confirm the pill shows the error message and NO ResponseCard appears
+   concurrently.
+
+---
+
 ## Notes
 
 - Manual checklist entries above are the only verification path for the
