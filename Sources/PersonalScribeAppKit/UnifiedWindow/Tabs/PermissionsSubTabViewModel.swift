@@ -45,6 +45,20 @@ final class PermissionsSubTabViewModel: ObservableObject {
         statuses[permission] ?? .pending
     }
 
+    /// Label text shown beside the status dot. Granted permissions
+    /// render **Granted** (green); pending / denied permissions render
+    /// **Required** (orange), which sits to the left of the
+    /// "Grant Access" pill in the row's trailing cluster. Mockup:
+    /// `plans/App UI design/final_settings_permissions_v2.png`.
+    func statusLabel(for permission: Permission) -> String {
+        switch status(for: permission) {
+        case .granted:
+            return "Granted"
+        case .pending, .denied:
+            return "Required"
+        }
+    }
+
     /// Re-query TCC and publish the fresh snapshot. Call from
     /// `PermissionsSubTab.onAppear` so navigating to the tab always
     /// shows current state — the `didBecomeActiveNotification` observer

@@ -136,6 +136,43 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         XCTAssertEqual(service.refreshCallCount, 1)
     }
 
+    // MARK: - Status label selection (mockup-gaps C.4 / C.5)
+
+    /// Non-granted permissions render an orange dot + the word
+    /// **Required** beside a "Grant Access" pill button
+    /// (`plans/App UI design/final_settings_permissions_v2.png`). The
+    /// view reads the label string via `statusLabel(for:)` so the
+    /// granted vs non-granted branch is a pure, testable helper.
+    func testStatusLabelIsRequiredForPendingPermission() {
+        let service = FakePermissionService(statuses: [
+            .microphone: .pending,
+        ])
+        let viewModel = PermissionsSubTabViewModel(
+            permissionService: service,
+            openURL: { _ in }
+        )
+
+        XCTAssertEqual(
+            viewModel.statusLabel(for: .microphone),
+            "Required"
+        )
+    }
+
+    func testStatusLabelIsRequiredForDeniedPermission() {
+        let service = FakePermissionService(statuses: [
+            .inputMonitoring: .denied,
+        ])
+        let viewModel = PermissionsSubTabViewModel(
+            permissionService: service,
+            openURL: { _ in }
+        )
+
+        XCTAssertEqual(
+            viewModel.statusLabel(for: .inputMonitoring),
+            "Required"
+        )
+    }
+
     // MARK: - grantAccess URL routing
 
     func testGrantAccessOpensMicrophoneSystemSettingsURL() {

@@ -34,6 +34,7 @@ struct PermissionsSubTab: View {
                 title: "Microphone",
                 subtitle: "Capture audio for transcription.",
                 status: viewModel.status(for: .microphone),
+                statusLabel: viewModel.statusLabel(for: .microphone),
                 grantAction: { viewModel.grantAccess(for: .microphone) }
             )
 
@@ -43,6 +44,7 @@ struct PermissionsSubTab: View {
                 title: "Input Monitoring",
                 subtitle: "Detect the global double-tap option hotkey.",
                 status: viewModel.status(for: .inputMonitoring),
+                statusLabel: viewModel.statusLabel(for: .inputMonitoring),
                 grantAction: { viewModel.grantAccess(for: .inputMonitoring) }
             )
 
@@ -52,6 +54,7 @@ struct PermissionsSubTab: View {
                 title: "Accessibility",
                 subtitle: "Paste transcripts into the current app.",
                 status: viewModel.status(for: .accessibility),
+                statusLabel: viewModel.statusLabel(for: .accessibility),
                 grantAction: { viewModel.grantAccess(for: .accessibility) }
             )
         }
@@ -69,6 +72,7 @@ private struct PermissionRow: View {
     let title: String
     let subtitle: String
     let status: PermissionStatus
+    let statusLabel: String
     let grantAction: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -94,7 +98,15 @@ private struct PermissionRow: View {
 
             Spacer()
 
-            statusDot
+            HStack(spacing: PersonalScribeTheme.Spacing.xs) {
+                statusDot
+
+                if status != .granted {
+                    Text(statusLabel)
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(PersonalScribeTheme.Status.warning)
+                }
+            }
 
             if status != .granted {
                 Button(action: grantAction) {
