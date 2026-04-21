@@ -6,12 +6,18 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` fixed (reference commit)
 
 ## Critical (blocks usable flow)
 
-- [~] **1. About tab traps navigation.** Opening the About tab disables tab switching — no way to return to Home/other tabs. After About is opened once, subsequent "Open Home" actions still land on About. Likely a tab-state / default-selection bug that latches onto About.
+- [x] **1. About tab traps navigation.** Opening the About tab disables tab switching — no way to return to Home/other tabs. After About is opened once, subsequent "Open Home" actions still land on About. Likely a tab-state / default-selection bug that latches onto About.
   - **1a FIXED** (`726e538`) — menu-bar "Home" now routes to the Home tab via `showWindow(selecting: .home)`.
-  - **1b** Left sidebar pane must always be visible — `NavigationSplitView` should pin `columnVisibility = .all`.
-  - **1c** Move "About" out of Settings sub-tabs and render it as a clickable footer row at the bottom of the sidebar (styled like the Microphone footer — compact, muted — NOT like Home/Transcriptions/Modes/Settings tab rows).
-- [x] **4. Global hotkey dies when app window is frontmost.** Switching between full-screen apps and the main desktop (where Ninimma's window is focused) kills the hotkey on the focused space. Hotkey only works when app is NOT in the foreground. Event-tap scope / key-down capture regression. — FIXED: add `addLocalMonitorForEvents` alongside the existing global monitor; swallow matching events so `÷` doesn't leak into our own text fields. Does NOT address `÷` leakage into other apps (that's #5, needs a CGEventTap).
-- [ ] **5. Hold-to-record writes `÷÷÷÷÷÷÷` then drops the transcript.** Holding `opt + /` types the `÷` character repeatedly for the duration of the hold and then does NOT paste the transcription. Two bugs: (a) key-swallow failing on hold, (b) paste-on-release broken. Revisit the opt+/ tap/hold/double-tap model (phase 7 pill UX work).
+  - **1b FIXED** (`1196e73`) — `NavigationSplitView(columnVisibility: .constant(.all), ...)` pins the sidebar; can't auto-collapse via toolbar chevron or content width.
+  - **1c FIXED** (`cd776df`) — About moved out of Settings sub-tabs into a clickable sidebar footer row under the Microphone footer (styled like Microphone, not like the tab rows). New `AppTab.sidebarListCases` excludes `.about` from the regular `List`.
+- [x] **4. Global hotkey dies when app window is frontmost.** Switching between full-screen apps and the main desktop (where Ninimma's window is focused) kills the hotkey on the focused space. Hotkey only works when app is NOT in the foreground. Event-tap scope / key-down capture regression. — FIXED (`a12b7e2` + `f3773e6`): added `addLocalMonitorForEvents` alongside the existing global monitor; swallow matching events so `÷` doesn't leak into our own text fields, with a `hotkeyKeyDownSwallowed` flag preventing unbalanced keyUp delivery. The `÷÷÷÷` leak into *other* apps was a separate bug (#5a) — also now fixed.
+- [~] **5. Hold-to-record writes `÷÷÷÷÷÷÷` then drops the transcript.** Holding `opt + /` types the `÷` character repeatedly for the duration of the hold and then does NOT paste the transcription. Two sub-bugs originally identified: (a) key-swallow failing on hold; (b) paste-on-release broken.
+  - **5a-v1 c1 LANDED** (`fd9d47a`) — `HotkeyEvent` adapter (no-op refactor) + `CGHotkeyEventTapContext.swift` scaffolding in their own files.
+  - **5a-v1 c2 LANDED** (`ce6ba19`) — standalone `HotkeyEventTap` class wires `CGEvent.tapCreate` at `.cgSessionEventTap` + `.headInsertEventTap`; swallow matching ⌥+/ keyDown (incl. auto-repeat) + matching-keyCode keyUp system-wide. Stops the `÷÷÷÷` leak into other apps. **Needs runtime verification** via MV-HK-8/9/10/11.
+  - **5b.A FIXED** (`4d5bf7f` + `4114614` test fix) — replaced symmetric `coordinator.toggle()` on hold with explicit `startIfIdle` / `stopIfRecording`. Prevents the fallback path where `onHoldRelease` could *start* a recording instead of stopping one.
+  - **5b.C deferred** (`231df70`) — pill `collectionBehavior` already has `.canJoinAllSpaces` / `.fullScreenAuxiliary` / `.stationary`. Real cause of the user-reported "pill not visible from full-screen app" symptom is unknown; MV-PUX-17 on trunk points next investigation at `updatePanelPosition(_:)` / `NSScreen.main?.visibleFrame`.
+  - **5b paste race** — codex's third theory (synthetic ⌘V racing trailing `÷` keystrokes) is likely moot now that 5a swallows the `÷` events. Confirm at runtime.
+  - **#19 follow-up:** central `KeyEventRouter` (5a-v2) consolidation queued after dogfood verification.
 - [x] **9. Menu bar "Copy last transcript" is a no-op.** — FIXED: renamed action to "Copy Last Transcript", implementation is now strict copy-to-clipboard via CopyLastTranscriptAction (no paste attempt, no AX branching). Silent no-op on empty history replaced with a logged outcome; a user-visible toast is deferred to a general feedback polish pass.
 - [ ] **12. Esc during recording behaves like Stop, not Cancel.** Esc should discard the in-flight recording *without* writing anything to the clipboard. Today it commits whatever was captured so far (same behavior as Stop). See Phase 8 cancel-without-transcribe backlog — this is the user-visible symptom.
 
@@ -62,7 +68,6 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` fixed (reference commit)
 
 ## Notes for triage
 
-- Items **1, 4, 5, 9, 12** are the ship-blockers for the current dogfood loop — nothing else matters if the hotkey doesn't work or Esc commits the transcript.
-- Item **5** and item **12** both live in the recording-lifecycle state machine; likely one fix stream.
+- Original ship-blockers were **1, 4, 5, 9, 12**. As of `a77724b` (2026-04-21 afternoon): **1, 4, 9 fully shipped + tests pass**; **5 has all source landed but needs runtime verification** (MV-HK-8..11 in `ManualHotkeyVerification.md`); **12 is the only remaining critical, parked pending Esc-vs-✕ semantic call** (spec-literal-discard vs Esc-as-soft-cancel).
 - Item **7** needs a commit-log audit before code changes — confirm what actually merged.
 - Each fix should come with a manual-verification line appended to the relevant `Tests/*/Manual*Verification.md` runbook, per project TDD policy.
