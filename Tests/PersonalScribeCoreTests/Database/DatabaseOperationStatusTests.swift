@@ -13,6 +13,7 @@ import XCTest
 /// `current` value is *not* guaranteed to be updated synchronously
 /// after the repo method returns. Tests use `waitForCondition` to poll
 /// up to the default 1s deadline.
+@MainActor
 final class DatabaseOperationStatusTests: XCTestCase {
     private let fileManager = FileManager.default
 
@@ -32,7 +33,7 @@ final class DatabaseOperationStatusTests: XCTestCase {
     // MARK: - Reads
 
     func test_recent_onPopulatedDB_recordsReadSucceeded() async throws {
-        let harness = try await makeHarness()
+        let harness = try makeHarness()
         defer { cleanup(harness.base) }
 
         try await harness.repository.append(
@@ -61,7 +62,7 @@ final class DatabaseOperationStatusTests: XCTestCase {
         // `database.read { ... }` flow through the existing catch →
         // `.readFailed`. This matches the reframe — FTS compile is just
         // a failed read, not a special case."
-        let harness = try await makeHarness()
+        let harness = try makeHarness()
         defer { cleanup(harness.base) }
 
         try await harness.repository.append(
@@ -80,7 +81,7 @@ final class DatabaseOperationStatusTests: XCTestCase {
     // MARK: - Writes
 
     func test_append_happyPath_recordsWriteSucceeded() async throws {
-        let harness = try await makeHarness()
+        let harness = try makeHarness()
         defer { cleanup(harness.base) }
 
         try await harness.repository.append(
@@ -98,7 +99,7 @@ final class DatabaseOperationStatusTests: XCTestCase {
         // insert the same primary key twice; the second append throws
         // `TranscriptStorageError.queryFailed(underlying:)` and records
         // `.writeFailed` before re-throwing.
-        let harness = try await makeHarness()
+        let harness = try makeHarness()
         defer { cleanup(harness.base) }
 
         let duplicateID = UUID()
@@ -129,7 +130,7 @@ final class DatabaseOperationStatusTests: XCTestCase {
     // MARK: - Non-recording paths
 
     func test_search_emptyQuery_doesNotRecord() async throws {
-        let harness = try await makeHarness()
+        let harness = try makeHarness()
         defer { cleanup(harness.base) }
 
         // Observer starts at .idle (no prior op). An empty-query search
@@ -158,19 +159,14 @@ final class DatabaseOperationStatusTests: XCTestCase {
         let base: URL
     }
 
-    @MainActor
-    private func makeObserver() -> DatabaseOperationObserver {
-        DatabaseOperationObserver()
-    }
-
-    private func makeHarness() async throws -> Harness {
+    private func makeHarness() throws -> Harness {
         let (recordings, base) = try makeTempRecordingsDir()
         let locator = FixedBaseDirectoryStorageLocator(
             baseDirectory: base,
             managedDirectoryOverrides: [.recordings: recordings]
         )
         let database = try AppDatabase(locator: locator)
-        let observer = await makeObserver()
+        let observer = DatabaseOperationObserver()
         let repository = TranscriptRepository(
             database: database,
             operationObserver: observer
