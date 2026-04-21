@@ -210,3 +210,35 @@ final class MetricsSnapshotStoreTests: XCTestCase {
 }
 
 private struct StubReadError: Error {}
+
+final class SQLiteMetricsServiceAppDatabaseInitTests: XCTestCase {
+    func testServiceConstructedFromAppDatabaseProducesRollupsMatchingRepositoryWrites() async throws {
+        let context = try makeMetricsAppDatabaseContext()
+        defer { cleanupMetricsAppDatabaseContext(context) }
+
+        let calendar = makeMetricsTestCalendar()
+        let referenceDate = Date(timeIntervalSince1970: 310_000)
+        let window = MetricsWindow.rollingSevenDays(anchoredAt: referenceDate, calendar: calendar)
+        let entry = makeMetricsTestEntry(
+            timestamp: referenceDate.addingTimeInterval(-30),
+            text: repeatedMetricsWords(80),
+            audioDuration: 60
+        )
+
+        try await context.repository.append(entry)
+
+        let service = SQLiteMetricsService(
+            appDatabase: context.database,
+            calendar: calendar,
+            referenceDateProvider: { referenceDate }
+        )
+
+        let snapshot = try await service.loadSnapshot(window: window, recentLimit: 3)
+        XCTAssertEqual(snapshot.rollups.recordingsThisWeek, 1)
+        XCTAssertEqual(snapshot.rollups.wordsThisWeek, 80)
+        XCTAssertEqual(snapshot.recentTranscriptions, [entry])
+
+        let recent = try await service.recentTranscriptions(limit: 5)
+        XCTAssertEqual(recent, [entry])
+    }
+}

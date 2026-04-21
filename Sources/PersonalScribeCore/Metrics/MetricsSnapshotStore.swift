@@ -23,30 +23,6 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
     private var pendingRefreshReason: MetricsRefreshReason?
     private var isObserving = false
 
-    public convenience init(
-        databaseURL: URL,
-        notificationCenter: NotificationCenter = .default,
-        calendar: Calendar = .current,
-        referenceDateProvider: @escaping @Sendable () -> Date = Date.init,
-        recentLimit: Int = SQLiteMetricsService.defaultRecentLimit,
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.app)
-    ) throws {
-        let metricsService = try SQLiteMetricsService(
-            databaseURL: databaseURL,
-            calendar: calendar,
-            referenceDateProvider: referenceDateProvider,
-            recentLimit: recentLimit
-        )
-        self.init(
-            metricsService: metricsService,
-            notificationCenter: notificationCenter,
-            calendar: calendar,
-            referenceDateProvider: referenceDateProvider,
-            recentLimit: recentLimit,
-            logger: logger
-        )
-    }
-
     public init(
         metricsService: any MetricsService,
         notificationCenter: NotificationCenter = .default,

@@ -27,6 +27,27 @@ public final class SQLiteMetricsService: MetricsSnapshotLoading, @unchecked Send
         )
     }
 
+    /// Pass-2 production entry (plan §4): consume the shared `AppDatabase` via
+    /// a non-throwing reader init. Pass-3 deletes the `databaseURL:` convenience
+    /// above and promotes this to the sole non-designated entry.
+    public convenience init(
+        appDatabase: AppDatabase,
+        calendar: Calendar = .current,
+        referenceDateProvider: @escaping @Sendable () -> Date = Date.init,
+        recentLimit: Int = SQLiteMetricsService.defaultRecentLimit
+    ) {
+        let reader = SQLiteMetricsReader(
+            appDatabase: appDatabase,
+            referenceDateProvider: referenceDateProvider
+        )
+        self.init(
+            reader: reader,
+            calendar: calendar,
+            referenceDateProvider: referenceDateProvider,
+            recentLimit: recentLimit
+        )
+    }
+
     init(
         reader: any MetricsReading,
         calendar: Calendar = .current,

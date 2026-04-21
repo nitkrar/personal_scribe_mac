@@ -128,6 +128,66 @@ final class SQLiteMetricsReaderTests: XCTestCase {
         XCTAssertEqual(snapshot.rollups.averageWPMThisWeek, 120, accuracy: 0.0001)
     }
 
+    // MARK: - AppDatabase-backed init (plan §4 Pass 2)
+
+    func testLoadSnapshotWhenConstructedFromAppDatabaseMatchesTranscriptsWrittenThroughRepository() async throws {
+        let context = try makeMetricsAppDatabaseContext()
+        defer { cleanupMetricsAppDatabaseContext(context) }
+
+        let calendar = makeMetricsTestCalendar()
+        let referenceDate = Date(timeIntervalSince1970: 250_000)
+        let window = MetricsWindow.rollingSevenDays(anchoredAt: referenceDate, calendar: calendar)
+
+        let insideWindow = makeMetricsTestEntry(
+            timestamp: referenceDate.addingTimeInterval(-60),
+            text: "hello world app",
+            audioDuration: 30
+        )
+        let outsideWindow = makeMetricsTestEntry(
+            timestamp: window.start.addingTimeInterval(-1),
+            text: "ignored entry",
+            audioDuration: 15
+        )
+        try await context.repository.append(insideWindow)
+        try await context.repository.append(outsideWindow)
+
+        let reader = SQLiteMetricsReader(
+            appDatabase: context.database,
+            referenceDateProvider: { referenceDate }
+        )
+        let snapshot = try await reader.loadSnapshot(window: window, recentLimit: 3)
+
+        XCTAssertEqual(snapshot.rollups.recordingsThisWeek, 1)
+        XCTAssertEqual(snapshot.rollups.wordsThisWeek, 3)
+        XCTAssertEqual(snapshot.recentTranscriptions.first?.id, insideWindow.id)
+        XCTAssertEqual(snapshot.lastUpdatedAt, referenceDate)
+        XCTAssertEqual(snapshot.lastRefreshReason, .initialLoad)
+    }
+
+    func testRecentTranscriptionsWhenConstructedFromAppDatabaseHonoursLimit() async throws {
+        let context = try makeMetricsAppDatabaseContext()
+        defer { cleanupMetricsAppDatabaseContext(context) }
+
+        let baseTimestamp = Date(timeIntervalSince1970: 420_000)
+        let older = makeMetricsTestEntry(
+            timestamp: baseTimestamp.addingTimeInterval(-120),
+            text: "older",
+            audioDuration: 10
+        )
+        let newer = makeMetricsTestEntry(
+            timestamp: baseTimestamp,
+            text: "newer",
+            audioDuration: 10
+        )
+        try await context.repository.append(older)
+        try await context.repository.append(newer)
+
+        let reader = SQLiteMetricsReader(appDatabase: context.database)
+        let recent = try await reader.recentTranscriptions(limit: 1)
+
+        XCTAssertEqual(recent, [newer])
+    }
+
     func testRecentTranscriptionsReturnsNewestFirstWithRequestedLimit() async throws {
         let context = try makeMetricsTestDatabaseContext()
         defer { cleanupMetricsTestDatabaseContext(context) }

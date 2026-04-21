@@ -2,7 +2,7 @@ import Foundation
 import GRDB
 
 public actor SQLiteMetricsReader: MetricsReading {
-    private let dbQueue: DatabaseQueue
+    private let source: Source
     private let referenceDateProvider: @Sendable () -> Date
 
     public init(
@@ -11,7 +11,19 @@ public actor SQLiteMetricsReader: MetricsReading {
     ) throws {
         var configuration = Configuration()
         configuration.readonly = true
-        self.dbQueue = try DatabaseQueue(path: databaseURL.path, configuration: configuration)
+        let queue = try DatabaseQueue(path: databaseURL.path, configuration: configuration)
+        self.source = .queue(queue)
+        self.referenceDateProvider = referenceDateProvider
+    }
+
+    /// Pass-2 production entry (plan §4): consume the shared `AppDatabase`
+    /// instead of opening a parallel read-only `DatabaseQueue`. Pass-3 deletes
+    /// the legacy `init(databaseURL:)` + queue path entirely.
+    public init(
+        appDatabase: AppDatabase,
+        referenceDateProvider: @escaping @Sendable () -> Date = Date.init
+    ) {
+        self.source = .appDatabase(appDatabase)
         self.referenceDateProvider = referenceDateProvider
     }
 
@@ -19,7 +31,7 @@ public actor SQLiteMetricsReader: MetricsReading {
         window: MetricsWindow,
         recentLimit: Int
     ) async throws -> MetricsSnapshot {
-        let payload = try await dbQueue.read { db in
+        let payload = try await read { db -> ([MetricsTranscriptRow], [MetricsTranscriptRow]) in
             let windowRows = try MetricsTranscriptRow.fetchAll(
                 db,
                 sql: """
@@ -98,7 +110,7 @@ public actor SQLiteMetricsReader: MetricsReading {
             return []
         }
 
-        let rows = try await dbQueue.read { db in
+        let rows = try await read { db in
             try MetricsTranscriptRow.fetchAll(
                 db,
                 sql: """
@@ -120,10 +132,35 @@ public actor SQLiteMetricsReader: MetricsReading {
     }
 
     // Internal characterization seam for tests that assert the queue is truly read-only.
+    // Only meaningful for the `init(databaseURL:)` path; the `AppDatabase` path is
+    // read/write-shared and this helper is not used there.
     func executeWriteForTesting(sql: String) async throws {
-        try await dbQueue.writeWithoutTransaction { db in
-            try db.execute(sql: sql)
+        switch source {
+        case .queue(let dbQueue):
+            try await dbQueue.writeWithoutTransaction { db in
+                try db.execute(sql: sql)
+            }
+        case .appDatabase:
+            throw SQLiteMetricsReaderDataError.writeTestHelperUnavailableForAppDatabasePath
         }
+    }
+
+    // MARK: - Read dispatch
+
+    private func read<T: Sendable>(
+        _ block: @Sendable (Database) throws -> T
+    ) async throws -> T {
+        switch source {
+        case .queue(let dbQueue):
+            return try await dbQueue.read(block)
+        case .appDatabase(let appDatabase):
+            return try await appDatabase.read(block)
+        }
+    }
+
+    private enum Source: Sendable {
+        case queue(DatabaseQueue)
+        case appDatabase(AppDatabase)
     }
 
     private static func wordCount(in text: String) -> Int {
@@ -172,4 +209,5 @@ private struct MetricsTranscriptRow: FetchableRecord, Decodable {
 
 private enum SQLiteMetricsReaderDataError: Error {
     case invalidIdentifier(String)
+    case writeTestHelperUnavailableForAppDatabasePath
 }

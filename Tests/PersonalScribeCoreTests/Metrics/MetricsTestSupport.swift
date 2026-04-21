@@ -27,6 +27,40 @@ func cleanupMetricsTestDatabaseContext(_ context: MetricsTestDatabaseContext) {
     try? FileManager.default.removeItem(at: context.baseDirectory)
 }
 
+struct MetricsAppDatabaseContext {
+    let baseDirectory: URL
+    let database: AppDatabase
+    let repository: TranscriptRepository
+}
+
+func makeMetricsAppDatabaseContext() throws -> MetricsAppDatabaseContext {
+    let baseDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("MetricsAppDatabase-\(UUID().uuidString)", isDirectory: true)
+    let recordingsDirectory = baseDirectory
+        .appendingPathComponent("recordings", isDirectory: true)
+    try FileManager.default.createDirectory(
+        at: recordingsDirectory,
+        withIntermediateDirectories: true
+    )
+
+    let locator = FixedBaseDirectoryStorageLocator(
+        baseDirectory: baseDirectory,
+        managedDirectoryOverrides: [.recordings: recordingsDirectory]
+    )
+    let database = try AppDatabase(locator: locator)
+    let repository = TranscriptRepository(database: database)
+
+    return MetricsAppDatabaseContext(
+        baseDirectory: baseDirectory,
+        database: database,
+        repository: repository
+    )
+}
+
+func cleanupMetricsAppDatabaseContext(_ context: MetricsAppDatabaseContext) {
+    try? FileManager.default.removeItem(at: context.baseDirectory)
+}
+
 func makeMetricsTestEntry(
     timestamp: Date,
     text: String,
