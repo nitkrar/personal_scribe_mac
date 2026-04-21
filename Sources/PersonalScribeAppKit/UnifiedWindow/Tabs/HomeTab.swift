@@ -30,7 +30,7 @@ struct HomeTab: View {
             statCardGrid
 
             VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
-                Text("Recent")
+                Text("Recent transcriptions")
                     .font(PersonalScribeTheme.Typography.sectionLabel.font)
                     .textCase(.uppercase)
 

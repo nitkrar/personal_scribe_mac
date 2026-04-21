@@ -317,6 +317,18 @@ to be eyeballed.
    replaced by the single `TranscriptRow` with no blank gap above or
    below.
 
+## Home tab section header — mockup-gaps B.2
+
+Reference: `plans/App UI design/screen_home.png`. This copy is rendered
+in the SwiftUI view body with `.textCase(.uppercase)` and isn't
+reachable from XCTest.
+
+1. Open Ninimma → Home tab. Under the 4 stat cards, the uppercase
+   section header reads "RECENT TRANSCRIPTIONS" (source string
+   "Recent transcriptions"). Previously read "RECENT".
+2. The header still uses `Typography.sectionLabel` — no weight / size
+   regression.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift
