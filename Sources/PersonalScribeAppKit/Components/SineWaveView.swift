@@ -158,13 +158,64 @@ public struct SineWaveView: View {
 
         /// Maximum positive/negative stroke offset from the horizontal
         /// midline, given the smoothed audio level and canvas height.
+        ///
+        /// ## Amplitude curve — Option A (square root)
+        ///
+        /// Applies `sqrt(level)` before scaling to the canvas so typical
+        /// conversational RMS (0.05-0.15 on a MacBook built-in mic)
+        /// produces visible modulation instead of sub-pixel amplitude.
+        /// Endpoints are preserved: `level = 0 → 0`, `level = 1 → peak`.
+        ///
+        /// Example (canvasHeight = 28, maxAmpFactor = 0.4 → peak = 11.2pt):
+        ///
+        /// | RMS    | Linear (old)  | sqrt (Option A, current) |
+        /// | ------ | ------------- | ------------------------ |
+        /// | 0.05   | 0.56pt        | 2.50pt                   |
+        /// | 0.10   | 1.12pt        | 3.54pt                   |
+        /// | 0.30   | 3.36pt        | 6.13pt                   |
+        /// | 0.60   | 6.72pt        | 8.67pt                   |
+        /// | 1.00   | 11.20pt       | 11.20pt                  |
+        ///
+        /// ## Alternatives considered (kept here for rollback / tuning)
+        ///
+        /// **Option B — Tunable power curve** (`pow(level, exponent)`).
+        /// An exponent of ~0.4 lifts low levels slightly more aggressively
+        /// than sqrt (exponent 0.5). At RMS 0.10, `pow(0.10, 0.4) ≈ 0.398`
+        /// → amp ≈ 4.46pt. One-constant knob if sqrt turns out to be
+        /// either too subtle or too dramatic at extremes. Example:
+        /// ```swift
+        /// let curved = pow(clampedLevel(level), 0.4)
+        /// return canvasHeight * maxAmpFactor * CGFloat(curved)
+        /// ```
+        ///
+        /// **Option C — Bump `maxAmpFactor` alone** (e.g. 0.4 → 0.8) while
+        /// keeping the linear mapping. Doubles amplitude everywhere but
+        /// still leaves typical speech barely visible (RMS 0.10 → 2.24pt)
+        /// because the underlying problem is the linear map's
+        /// compression of low RMS values, not the peak amplitude cap.
+        /// Rejected on its own; could compose with A if the sqrt peak
+        /// ever feels too small (unlikely — sqrt already spans 0-11.2pt).
+        ///
+        /// **Option D — A + bump `maxAmpFactor` to 0.45** for the most
+        /// dramatic modulation. At RMS 0.10: ~3.98pt; at RMS 1.0: ~12.6pt
+        /// (the outer `min(availableHeight, …)` guard in the caller
+        /// already clamps overflow). Hold in reserve if Option A doesn't
+        /// feel punchy enough on the build laptop.
+        ///
+        /// **Rejected alternatives:** log10-scaled perceptual curve
+        /// (over-engineered for this UI; sqrt already tracks loudness
+        /// perception closely enough), and per-frame auto-gain from a
+        /// running RMS max (adds state, fights the silence floor).
         public static func amplitude(
             for level: Double,
             canvasHeight: CGFloat
         ) -> CGFloat {
             let clamped = clampedLevel(level)
+            // Option A: sqrt curve. See block comment above for the
+            // alternatives and why this one was chosen.
+            let curved = clamped.squareRoot()
             let peak = canvasHeight * maxAmpFactor
-            return peak * CGFloat(clamped)
+            return peak * CGFloat(curved)
         }
 
         /// Linearly interpolate from `startLevel` toward `target` over

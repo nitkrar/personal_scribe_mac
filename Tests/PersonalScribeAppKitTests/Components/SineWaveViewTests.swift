@@ -7,11 +7,13 @@ import PersonalScribeCore
 /// recording wave. The actual Canvas drawing can't be XCTest'd, but
 /// the pure geometry + smoothing helpers that feed the canvas can.
 ///
-/// Contract under test (M4.1):
+/// Contract under test (M4.1 + amplitude-curve update 2026-04-21):
 ///
 /// * `audioLevel == 0` → amplitude `0` (flat horizontal line).
 /// * `audioLevel == 1.0` → maximum amplitude for the canvas height.
-/// * Intermediate levels scale linearly.
+/// * Intermediate levels follow a **square-root perceptual curve** —
+///   amplitude(0.25) ≈ 0.5 × amplitude(1.0) — so typical conversational
+///   RMS (0.05-0.15) produces visible, not sub-pixel, modulation.
 /// * Input is clamped to `[0, 1]`; out-of-range values are tolerated.
 /// * `.animated` decay linearly interpolates level across its
 ///   `durationSeconds` window; intermediate samples are strictly
@@ -49,18 +51,49 @@ final class SineWaveViewTests: XCTestCase {
         )
     }
 
-    func testAudioLevelScalesAmplitude() {
+    func testAudioLevelScalesAmplitudeOnSquareRootCurve() {
         let canvasHeight: CGFloat = 28
-        let half = SineWaveView.Geometry.amplitude(
-            for: 0.5,
+        let quarter = SineWaveView.Geometry.amplitude(
+            for: 0.25,
             canvasHeight: canvasHeight
         )
         let full = SineWaveView.Geometry.amplitude(
             for: 1.0,
             canvasHeight: canvasHeight
         )
-        // Linear scaling: amplitude(0.5) ≙ 0.5 * amplitude(1.0).
-        XCTAssertEqual(half, full * 0.5, accuracy: 0.0001)
+        // Square-root curve: amplitude(0.25) ≙ sqrt(0.25) * amplitude(1.0)
+        // = 0.5 * amplitude(1.0). The curve lifts low levels into the
+        // perceptible range while preserving endpoints (0→0, 1→max).
+        XCTAssertEqual(quarter, full * 0.5, accuracy: 0.0001)
+    }
+
+    /// Typical MacBook built-in mic RMS for conversational speech sits
+    /// around 0.05-0.15. Under the previous linear mapping those levels
+    /// produced sub-pixel amplitudes (<1.7pt on a 28pt canvas) and the
+    /// wave read as flat to the user. The sqrt curve must produce
+    /// clearly visible (>= 2pt) amplitude at level 0.10.
+    func testLowConversationalLevelProducesPerceptibleAmplitude() {
+        let canvasHeight: CGFloat = 28
+        let amp = SineWaveView.Geometry.amplitude(
+            for: 0.10,
+            canvasHeight: canvasHeight
+        )
+        XCTAssertGreaterThanOrEqual(
+            amp,
+            2.0,
+            "Amplitude at RMS 0.10 must be perceptible (>= 2pt) on a 28pt canvas"
+        )
+    }
+
+    func testAmplitudeIsMonotonicallyIncreasing() {
+        let canvasHeight: CGFloat = 28
+        let samples: [Double] = [0.0, 0.05, 0.1, 0.2, 0.4, 0.7, 1.0]
+        let amplitudes = samples.map {
+            SineWaveView.Geometry.amplitude(for: $0, canvasHeight: canvasHeight)
+        }
+        for (previous, next) in zip(amplitudes, amplitudes.dropFirst()) {
+            XCTAssertLessThanOrEqual(previous, next)
+        }
     }
 
     // MARK: - Clamping
