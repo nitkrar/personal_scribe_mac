@@ -32,7 +32,7 @@ struct PermissionsSubTab: View {
                 permission: .microphone,
                 systemImageName: "mic.fill",
                 title: "Microphone",
-                subtitle: "Capture audio for transcription.",
+                subtitle: viewModel.subtitle(for: .microphone),
                 status: viewModel.status(for: .microphone),
                 statusLabel: viewModel.statusLabel(for: .microphone),
                 grantAction: { viewModel.grantAccess(for: .microphone) }
@@ -42,7 +42,7 @@ struct PermissionsSubTab: View {
                 permission: .inputMonitoring,
                 systemImageName: "keyboard.fill",
                 title: "Input Monitoring",
-                subtitle: "Detect the global double-tap option hotkey.",
+                subtitle: viewModel.subtitle(for: .inputMonitoring),
                 status: viewModel.status(for: .inputMonitoring),
                 statusLabel: viewModel.statusLabel(for: .inputMonitoring),
                 grantAction: { viewModel.grantAccess(for: .inputMonitoring) }
@@ -52,7 +52,7 @@ struct PermissionsSubTab: View {
                 permission: .accessibility,
                 systemImageName: "accessibility.fill",
                 title: "Accessibility",
-                subtitle: "Paste transcripts into the current app.",
+                subtitle: viewModel.subtitle(for: .accessibility),
                 status: viewModel.status(for: .accessibility),
                 statusLabel: viewModel.statusLabel(for: .accessibility),
                 grantAction: { viewModel.grantAccess(for: .accessibility) }

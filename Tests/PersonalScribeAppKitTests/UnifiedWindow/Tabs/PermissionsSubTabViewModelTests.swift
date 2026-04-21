@@ -192,6 +192,41 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.statusLabel(for: .accessibility), "Granted")
     }
 
+    // MARK: - Subtitle copy (mockup-gaps C.6)
+
+    /// Microphone subtitle matches the mockup verbatim — the existing
+    /// "Capture audio for transcription." string is replaced with
+    /// "Required for voice recording" to match
+    /// `plans/App UI design/final_settings_permissions_v2.png`.
+    func testMicrophoneSubtitleMatchesMockup() {
+        let service = FakePermissionService()
+        let viewModel = PermissionsSubTabViewModel(
+            permissionService: service,
+            openURL: { _ in }
+        )
+
+        XCTAssertEqual(
+            viewModel.subtitle(for: .microphone),
+            "Required for voice recording"
+        )
+    }
+
+    /// Accessibility subtitle matches the mockup verbatim — the
+    /// existing "Paste transcripts into the current app." string is
+    /// replaced with "Required for paste injection".
+    func testAccessibilitySubtitleMatchesMockup() {
+        let service = FakePermissionService()
+        let viewModel = PermissionsSubTabViewModel(
+            permissionService: service,
+            openURL: { _ in }
+        )
+
+        XCTAssertEqual(
+            viewModel.subtitle(for: .accessibility),
+            "Required for paste injection"
+        )
+    }
+
     // MARK: - grantAccess URL routing
 
     func testGrantAccessOpensMicrophoneSystemSettingsURL() {

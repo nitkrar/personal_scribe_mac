@@ -59,6 +59,23 @@ final class PermissionsSubTabViewModel: ObservableObject {
         }
     }
 
+    /// Subtitle text shown beneath each permission title. Copy matches
+    /// the mockup verbatim
+    /// (`plans/App UI design/final_settings_permissions_v2.png`). The
+    /// Input Monitoring subtitle embeds the currently-bound recording
+    /// hotkey hint; the microphone and accessibility subtitles are
+    /// static mockup copy.
+    func subtitle(for permission: Permission) -> String {
+        switch permission {
+        case .microphone:
+            return "Required for voice recording"
+        case .inputMonitoring:
+            return "Required for global hotkey"
+        case .accessibility:
+            return "Required for paste injection"
+        }
+    }
+
     /// Re-query TCC and publish the fresh snapshot. Call from
     /// `PermissionsSubTab.onAppear` so navigating to the tab always
     /// shows current state — the `didBecomeActiveNotification` observer
