@@ -9,9 +9,12 @@ import SwiftUI
 /// so the new window integrates with the existing `StatusItemController`
 /// / menu-bar routing without needing a SwiftUI `Scene`.
 ///
-/// Observes `WindowTint` via `UserDefaults.didChangeNotification` and
-/// forwards the current tint into the hosted view, so the Appearance
-/// picker in Settings updates this window live.
+/// Observes `AppTheme` + `WindowTint` via
+/// `UserDefaults.didChangeNotification` and forwards the current
+/// values into the hosted view + NSWindow appearance, so the
+/// Appearance picker in Settings updates this window live.
+/// `AppTheme` drives the `NSAppearance` (Light/Dark/System); the
+/// `WindowTint` stays as a light-mode brand flavor (warm/neutral).
 @MainActor
 final class UnifiedWindowController: NSWindowController {
     private let defaults: UserDefaults
@@ -73,7 +76,10 @@ final class UnifiedWindowController: NSWindowController {
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.isReleasedWhenClosed = false
         window.title = AppBrand.displayName
-        window.appearance = initialTint.forcesDarkMode ? NSAppearance(named: .darkAqua) : nil
+        let initialTheme = AppTheme.resolve(from: defaults)
+        window.appearance = initialTheme.nsAppearance(
+            systemIsDark: Self.systemIsDark()
+        )
 
         super.init(window: window)
 
@@ -120,7 +126,10 @@ final class UnifiedWindowController: NSWindowController {
 
     private func applyWindowTint() {
         let tint = WindowTint.resolve(from: defaults)
-        window?.appearance = tint.forcesDarkMode ? NSAppearance(named: .darkAqua) : nil
+        let theme = AppTheme.resolve(from: defaults)
+        window?.appearance = theme.nsAppearance(
+            systemIsDark: Self.systemIsDark()
+        )
         hostingController.rootView = UnifiedWindowView(
             model: model,
             windowTint: tint,
@@ -130,6 +139,18 @@ final class UnifiedWindowController: NSWindowController {
             permissionService: permissionService,
             defaults: defaults
         )
+    }
+
+    /// Query the current system appearance — returns `true` when the
+    /// effective appearance best-matches `.darkAqua`. Used only as the
+    /// `systemIsDark` argument to `AppTheme.nsAppearance`, which only
+    /// cares about the system flag for `.system` (where it returns
+    /// `nil` anyway — the argument is unused in the current impl but
+    /// kept for future-proofing).
+    private static func systemIsDark() -> Bool {
+        NSApplication.shared.effectiveAppearance.bestMatch(
+            from: [.aqua, .darkAqua]
+        ) == .darkAqua
     }
 }
 

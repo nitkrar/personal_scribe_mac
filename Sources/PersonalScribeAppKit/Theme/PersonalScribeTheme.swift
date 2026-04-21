@@ -146,12 +146,18 @@ public enum PersonalScribeTheme {
 
         /// WindowTint-aware palette accessor.
         ///
-        /// * `.dark` tint forces the dark palette regardless of scheme —
-        ///   the dark-tinted window must not render light content.
         /// * `.warm` tint always returns the light base with warm
         ///   overrides (brandChampagne, elevatedSurface, hoverState).
         ///   Warm windows render cream; a dark palette would clash.
         /// * `.neutral` and `nil` delegate to `for(scheme:)`.
+        ///
+        /// App-level light/dark is owned by `AppTheme` (Light / Dark /
+        /// System) as of mockup-gaps G — `WindowTint` is a
+        /// light-mode-only brand flavor and no longer carries a `.dark`
+        /// case. When the effective `ColorScheme` is `.dark`, callers
+        /// render against `Palette.dark` (via the `for(scheme:)`
+        /// overload) and the window tint is expected to be hidden from
+        /// the Settings UI — see `GeneralTabViewModel.showsTintPicker`.
         ///
         /// Pill tokens (`pillBackground`, `pillForegroundText`) are
         /// NOT affected — the pill is intentionally isolated from
@@ -161,8 +167,6 @@ public enum PersonalScribeTheme {
                 return Self.for(scheme: scheme)
             }
             switch tint {
-            case .dark:
-                return .dark
             case .neutral:
                 return Self.for(scheme: scheme)
             case .warm:

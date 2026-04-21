@@ -258,7 +258,6 @@ public struct GeneralTab: View {
             ) {
                 Text("Warm").tag(WindowTint.warm)
                 Text("Neutral").tag(WindowTint.neutral)
-                Text("Dark").tag(WindowTint.dark)
             }
             .pickerStyle(.segmented)
 

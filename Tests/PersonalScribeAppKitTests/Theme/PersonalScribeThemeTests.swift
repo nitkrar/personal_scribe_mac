@@ -360,15 +360,11 @@ final class PersonalScribeThemeTests: XCTestCase {
         assertColor(dark.brandChampagne, equalsHex: "D4D0C8")
     }
 
-    func testForSchemeTintDarkForcesDarkPaletteRegardlessOfScheme() {
-        let fromLight = PersonalScribeTheme.Palette.for(scheme: .light, tint: .dark)
-        let fromDark = PersonalScribeTheme.Palette.for(scheme: .dark, tint: .dark)
-        XCTAssertEqual(fromLight.scheme, .dark)
-        XCTAssertEqual(fromDark.scheme, .dark)
-        assertColor(fromLight.appBackground, equalsHex: "0E0E14")
-        assertColor(fromLight.elevatedSurface, equalsHex: "252525")
-        assertColor(fromLight.brandChampagne, equalsHex: "D4D0C8")
-    }
+    // `testForSchemeTintDarkForcesDarkPaletteRegardlessOfScheme` was
+    // removed as part of mockup-gaps G: `WindowTint` no longer has a
+    // `.dark` case (master light/dark is now owned by `AppTheme`).
+    // When the effective scheme is `.dark`, callers render against
+    // `Palette.dark` via the `for(scheme:)` overload.
 
     func testForSchemeTintWarmOverridesBrandChampagne() {
         let palette = PersonalScribeTheme.Palette.for(scheme: .light, tint: .warm)

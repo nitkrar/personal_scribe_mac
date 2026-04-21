@@ -5,11 +5,11 @@ import XCTest
 final class GeneralTabViewModelThemeTests: XCTestCase {
     func testInitReadsWindowTintFromDefaults() {
         let defaults = Self.isolatedDefaults()
-        WindowTint.dark.persist(to: defaults)
+        WindowTint.neutral.persist(to: defaults)
 
         let viewModel = GeneralTabViewModel(defaults: defaults)
 
-        XCTAssertEqual(viewModel.windowTint, .dark)
+        XCTAssertEqual(viewModel.windowTint, .neutral)
     }
 
     func testInitFallsBackToWarmWhenDefaultsEmpty() {
