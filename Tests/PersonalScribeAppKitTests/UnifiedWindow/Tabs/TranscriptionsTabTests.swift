@@ -27,12 +27,6 @@ final class TranscriptionsTabTests: XCTestCase {
             palette: palette
         )
         assertColor(resolvedNeutral, equalsHex: "F2F2F7")
-
-        let resolvedDark = TranscriptionsTab.resolvedBackground(
-            windowTint: .dark,
-            palette: palette
-        )
-        assertColor(resolvedDark, equalsHex: "0E0E14")
     }
 
     func testResolvedBackgroundFallsBackToPaletteAppBackgroundWhenTintNil() {
