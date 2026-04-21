@@ -97,10 +97,18 @@ private struct PermissionRow: View {
             statusDot
 
             if status != .granted {
-                Button("Grant Access", action: grantAction)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(PersonalScribeTheme.Status.link)
-                    .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+                Button(action: grantAction) {
+                    Text("Grant Access")
+                        .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+                        .foregroundStyle(Color.white)
+                        .padding(.horizontal, PersonalScribeTheme.Spacing.md)
+                        .padding(.vertical, PersonalScribeTheme.Spacing.xs)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(PersonalScribeTheme.Status.link)
+                        )
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, PersonalScribeTheme.Spacing.md)
