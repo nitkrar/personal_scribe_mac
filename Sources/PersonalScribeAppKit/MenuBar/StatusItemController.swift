@@ -10,7 +10,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let appStore: AppStore
     private let openHome: @MainActor () -> Void
     private let openCopyLastTranscript: @MainActor () -> Void
-    private let openCheckForUpdates: @MainActor () -> Void
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
     private let openURL: @MainActor (URL) -> Void
     private let inputDeviceProvider: any AudioInputDeviceProviding
@@ -24,7 +23,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         defaults: UserDefaults = .standard,
         openHome: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "Home"),
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
-        openCheckForUpdates: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
@@ -38,7 +36,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             defaults: defaults,
             openHome: openHome,
             openCopyLastTranscript: openCopyLastTranscript,
-            openCheckForUpdates: openCheckForUpdates,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             openURL: openURL,
             openMicrophoneSystemSettings: openMicrophoneSystemSettings,
@@ -54,7 +51,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         defaults: UserDefaults = .standard,
         openHome: @escaping @MainActor () -> Void = StatusItemController.defaultPhase3Placeholder(name: "Home"),
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
-        openCheckForUpdates: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
@@ -67,7 +63,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.appStore = appStore
         self.openHome = openHome
         self.openCopyLastTranscript = openCopyLastTranscript
-        self.openCheckForUpdates = openCheckForUpdates
         self.isOnboardingCompleteProvider = isOnboardingCompleteProvider ?? {
             onboardingCompletionPreference.resolve()
         }
@@ -133,8 +128,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             openHome()
         case .copyLastTranscript:
             openCopyLastTranscript()
-        case .checkForUpdates:
-            openCheckForUpdates()
         case .openMicrophoneSystemSettings:
             openURL(PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .microphone))
         case .openInputMonitoringSystemSettings:

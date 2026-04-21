@@ -347,7 +347,6 @@ final class StatusItemControllerHost: ObservableObject {
         appStore: AppStore,
         openHome: @escaping @MainActor () -> Void = {},
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
-        openCheckForUpdates: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
         },
@@ -358,7 +357,6 @@ final class StatusItemControllerHost: ObservableObject {
             appStore: appStore,
             openHome: openHome,
             openCopyLastTranscript: openCopyLastTranscript,
-            openCheckForUpdates: openCheckForUpdates,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider
         )

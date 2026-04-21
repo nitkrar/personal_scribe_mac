@@ -19,8 +19,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     /// [4] Start Recording   ⌥⌥      waveform
     /// [5] Copy Last Transcript      doc.on.clipboard
     /// [6] ---
-    /// [7] Check for Updates…        arrow.clockwise
-    /// [8] Quit <displayName>        xmark.circle
+    /// [7] Quit <displayName>        xmark.circle
     /// ```
     func testIdleGrantedMenuHasExpectedItemsInOrder() {
         let model = StatusItemMenuModel.makeUnified(
@@ -30,7 +29,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             activeModeName: ModeRegistry.dictation.name
         )
 
-        XCTAssertEqual(model.items.count, 9)
+        XCTAssertEqual(model.items.count, 8)
         assertHeader(model.items[0], AppBrand.displayName)
         assertHeader(model.items[1], ModeRegistry.dictation.name)
         assertAction(model.items[2], id: .openHome, title: "Home", iconName: "house.fill")
@@ -50,12 +49,6 @@ final class StatusItemMenuModelTests: XCTestCase {
         XCTAssertEqual(model.items[6], .separator)
         assertAction(
             model.items[7],
-            id: .checkForUpdates,
-            title: "Check for Updates…",
-            iconName: "arrow.clockwise"
-        )
-        assertAction(
-            model.items[8],
             id: .quit,
             title: "Quit \(AppBrand.displayName)",
             iconName: "xmark.circle"
@@ -191,7 +184,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         )
         // First item is the brand header, not a warning.
         assertHeader(model.items[0], AppBrand.displayName)
-        XCTAssertEqual(model.items.count, 9, "No warning items expected")
+        XCTAssertEqual(model.items.count, 8, "No warning items expected")
     }
 
     // MARK: - Action identifiers
@@ -272,10 +265,6 @@ final class StatusItemMenuModelTests: XCTestCase {
 
     func testCopyLastTranscriptItemHasDocOnClipboardIcon() {
         assertIcon(actionID: .copyLastTranscript, expectedIcon: "doc.on.clipboard")
-    }
-
-    func testCheckForUpdatesItemHasClockwiseIcon() {
-        assertIcon(actionID: .checkForUpdates, expectedIcon: "arrow.clockwise")
     }
 
     func testQuitItemHasXMarkCircleIcon() {

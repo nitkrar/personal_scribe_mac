@@ -6,9 +6,9 @@ import PersonalScribeCore
 /// (`plans/App UI design/Manus_Final_Bundle_Prompt.md` §2).
 ///
 /// The submenu is inserted between the `Copy Last Transcript` action
-/// and the separator before `Check for Updates…`; it is omitted
-/// entirely when no devices are discoverable so the rest of the menu
-/// stays identical to the M5.2 baseline asserted in
+/// and `Quit`; it is omitted entirely when no devices are
+/// discoverable so the rest of the menu stays identical to the M5.2
+/// baseline asserted in
 /// `StatusItemMenuModelTests`.
 @MainActor
 final class StatusItemMenuModelSubmenuTests: XCTestCase {
@@ -30,9 +30,9 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             }),
             "Empty device list must omit the submenu entirely"
         )
-        // The M5.2 baseline shape (9 items) must not drift when no
+        // The M5.2 baseline shape (8 items) must not drift when no
         // devices are discoverable.
-        XCTAssertEqual(model.items.count, 9)
+        XCTAssertEqual(model.items.count, 8)
     }
 
     // MARK: - Parent title reflects current selection
@@ -178,12 +178,11 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
     // MARK: - Position inside the menu
 
     /// The submenu must land between the `Copy Last Transcript`
-    /// action and the separator preceding `Check for Updates…`. The
-    /// M5.2 baseline has 9 items: [brand, mode, Home, ---, Start,
-    /// Copy, ---, Check, Quit]. M5.3 adds `[---, submenu]` between
-    /// index 5 (Copy) and the existing separator at index 6, so the
-    /// new layout is 11 items with the submenu at index 7.
-    func testSubmenuIsInsertedBetweenCopyLastTranscriptAndCheckForUpdates() {
+    /// action and `Quit`. The post-fix baseline has 8 items:
+    /// [brand, mode, Home, ---, Start, Copy, ---, Quit]. M5.3 adds
+    /// the submenu after that separator, so the layout becomes
+    /// 9 items with the submenu at index 7 and Quit at index 8.
+    func testSubmenuIsInsertedBetweenCopyLastTranscriptAndQuit() {
         let devices = [
             AudioInputDevice(id: "uid-1", name: "MacBook Pro Microphone"),
         ]
@@ -196,30 +195,23 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             currentInputDeviceID: "uid-1"
         )
 
-        XCTAssertEqual(model.items.count, 11)
+        XCTAssertEqual(model.items.count, 9)
 
-        // Copy Last Transcript sits at index 5 (same as M5.2).
+        // Copy Last Transcript sits at index 5 (same as the baseline).
         guard case let .action(copy) = model.items[5] else {
             return XCTFail("Expected Copy Last Transcript action at index 5")
         }
         XCTAssertEqual(copy.id, .copyLastTranscript)
 
-        // New separator + submenu at 6 / 7.
+        // Separator + submenu at 6 / 7.
         XCTAssertEqual(model.items[6], .separator)
         guard case .submenu = model.items[7] else {
             return XCTFail("Expected microphone submenu at index 7")
         }
 
-        // Then the existing separator and Check-for-Updates row.
-        XCTAssertEqual(model.items[8], .separator)
-        guard case let .action(check) = model.items[9] else {
-            return XCTFail("Expected Check for Updates action at index 9")
-        }
-        XCTAssertEqual(check.id, .checkForUpdates)
-
         // Quit still terminates the menu.
-        guard case let .action(quit) = model.items[10] else {
-            return XCTFail("Expected Quit action at index 10")
+        guard case let .action(quit) = model.items[8] else {
+            return XCTFail("Expected Quit action at index 8")
         }
         XCTAssertEqual(quit.id, .quit)
     }

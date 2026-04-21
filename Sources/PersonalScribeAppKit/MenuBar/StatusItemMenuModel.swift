@@ -83,7 +83,6 @@ struct StatusItemMenuModel: Equatable {
         case startStopRecording
         case openHome
         case copyLastTranscript
-        case checkForUpdates
         case openMicrophoneSystemSettings
         case openInputMonitoringSystemSettings
         case quit
@@ -111,17 +110,16 @@ struct StatusItemMenuModel: Equatable {
     /// Start Recording ⌥⌥                     (or "Stop Recording")
     /// Copy Last Transcript                    (writes most-recent transcript to clipboard)
     /// ---
-    /// Check for Updates…                      (stub — permanent no-op)
     /// Quit <AppBrand.displayName>
     /// ```
     ///
     /// When `inputDevices` is non-empty (M5.3), a Microphone submenu is
-    /// inserted between `Copy Last Transcript` and the separator
-    /// before `Check for Updates…`, with the submenu's parent title
-    /// showing the currently-selected device name (or "Microphone" if
-    /// no user selection exists yet) and a checkmark on the child row
-    /// whose id equals `currentInputDeviceID`. When `inputDevices` is
-    /// empty the submenu is omitted entirely — no stub row.
+    /// inserted between the separator after `Copy Last Transcript` and
+    /// `Quit`, with the submenu's parent title showing the
+    /// currently-selected device name (or "Microphone" if no user
+    /// selection exists yet) and a checkmark on the child row whose id
+    /// equals `currentInputDeviceID`. When `inputDevices` is empty the
+    /// submenu is omitted entirely.
     static func makeUnified(
         sessionState: SessionState,
         micPermission: PermissionStatus,
@@ -201,11 +199,13 @@ struct StatusItemMenuModel: Equatable {
             iconName: "doc.on.clipboard"
         )))
 
-        // Microphone submenu (M5.3) — omitted entirely when no
-        // devices are discoverable, so the rest of the menu shape
-        // stays identical to M5.2 for unit-test stability.
+        // The final separator is always present; the optional
+        // Microphone submenu (M5.3) slots between it and Quit.
+        // Omitting the submenu when no devices are discoverable keeps
+        // the baseline shape stable for unit tests.
+        items.append(.separator)
+
         if !inputDevices.isEmpty {
-            items.append(.separator)
             items.append(.submenu(
                 title: currentInputDeviceName(
                     in: inputDevices,
@@ -221,16 +221,6 @@ struct StatusItemMenuModel: Equatable {
                 }
             ))
         }
-
-        items.append(.separator)
-
-        items.append(.action(ActionItem(
-            id: .checkForUpdates,
-            title: "Check for Updates…",
-            keyEquivalent: "",
-            isEnabled: true,
-            iconName: "arrow.clockwise"
-        )))
 
         items.append(.action(ActionItem(
             id: .quit,
