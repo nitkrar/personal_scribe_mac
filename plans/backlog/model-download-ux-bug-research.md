@@ -96,11 +96,20 @@ Walk the HuggingFace repo tree for each `.mlmodelc` and list every file (coremld
 
 **Option 1, bundled with three targeted fixes.** Each is a small additional commit:
 
-1. **Delete `PrivateModelDownloader` + stub-permissive validator.** Wire `DownloadUtils.ProgressHandler` into `ModelAwareFluidAudioInferenceClient.loadModel` and `FluidAudioInferenceClient.loadModel`. Map FluidAudio phases → our `ModelDownloadProgress`. Simplify `performPrepare` in both transcribers to `load model → load engine → finished` (no pre-download step; FluidAudio handles it).
-2. **Fix `DefaultModelService.setActive` silent download.** Replace the `{ _ in }` no-op handler with a forward to a service-owned progress stream that Settings/AIModelsTab can subscribe to. Surface progress in AIModelsTab (which is currently inert and safe to enrich).
+1. **Delete `PrivateModelDownloader` + stub-permissive validator.** Wire `DownloadUtils.ProgressHandler` into `ModelAwareFluidAudioInferenceClient.loadModel` and `FluidAudioInferenceClient.loadModel`. Map FluidAudio phases → our `ModelDownloadProgress`. Simplify `performPrepare` in both transcribers to `load model → load engine → finished` (no pre-download step; FluidAudio handles it). **[LANDED — partial]** — AIModels Stage A took the complementary slice (bullet 2 below) first so Settings had something useful to render. The real-bytes FluidAudio wiring is still TODO; tracked in `BACKLOG.md` under the FluidAudio progress-handler entry added for Stage B.
+2. **Fix `DefaultModelService.setActive` silent download.** Replace the `{ _ in }` no-op handler with a forward to a service-owned progress stream that Settings/AIModelsTab can subscribe to. Surface progress in AIModelsTab (which is currently inert and safe to enrich). **[LANDED]** — Stage A step 3.1 (`c0d6712`, service + `@Published downloadStates` + 4 TDD cases) and step 3.2 (`1a3b3b4`, AIModelsTab rewrite + per-row chip + 7 TDD cases + 3 StatusPill cases + MV-AIM-1..4 runbook). Copy-change: dropped the stale "Model switching lands in Phase 3.F." caption from the inert tab.
 3. **Fix the session-start race.** Gate `.recording` publication on "model is ready" (or expose a distinct pill state, e.g. keep `.loading` visible until prepare completes *before* flipping to `.recording`). This is a small change in `SessionPipelineOrchestrator.startRecording:186` ordering.
 
 Commits in separate logical steps so each can be reviewed / reverted independently.
+
+### Stage B / deferred
+
+Explicitly not covered by Stage A (landed as 3.1 + 3.2 above); track as Stage B once the three top-level recommended-path items are fully closed.
+
+- **Delete button** on `ModelRow`: invoke `ModelBoundTranscriberProvider.removeDownloadedFiles(_:)` (or equivalent); requires a confirmation sheet because a delete of the active model should refuse and explain. Surface per-model disk usage (not just `approximateSizeBytes`).
+- **Disk-space precheck.** Read `ModelDescriptor.approximateSizeBytes` at Download-button click, compare against `FileManager.default.attributesOfFileSystem(forPath:)[.systemFreeSize]`, present a confirmation sheet if free space < 2× download size. Currently unread anywhere in the app (see root-cause sweep).
+- **AI models section.** Second `SettingsSection(title: "AI models", …)` below `Voice models`, seeded once Phase 4 Command Mode lands an LLM downloader. The `ModelRow` presenter is already agnostic of engine — it renders whatever `ModelDownloadState` the service reports.
+- **FluidAudio revision-pin follow-up** → add entry to `BACKLOG.md`: our `ModelDescriptor.revision` field is currently decorative because FluidAudio `ModelRegistry.resolveModel` hard-codes `resolve/main/`. Covered as a known limitation in the 2026-04-21 Decisions section above; reinstate the pin once FluidAudio exposes a `revision:` parameter.
 
 ---
 
