@@ -9,7 +9,7 @@ import SwiftUI
 /// * Hero header "Transcriptions" (`Typography.largeTitle`).
 /// * Full-width search bar bound to `viewModel.searchText`.
 /// * Scrollable list grouped by date bucket — "TODAY", "YESTERDAY",
-///   or explicit uppercased "APRIL 17, 2026" for older entries — with
+///   or compact uppercased "APR 17" for older entries — with
 ///   `TranscriptRow` rendering each entry (timestamp + 2-line truncated
 ///   preview).
 ///

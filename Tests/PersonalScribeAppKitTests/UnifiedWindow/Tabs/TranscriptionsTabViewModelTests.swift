@@ -137,7 +137,9 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
         XCTAssertEqual(groups.first?.entries.map(\.text), ["yesterday entry"])
     }
 
-    func testGroupedByDateBucketsOlderAsExplicitFormattedDate() async {
+    func testGroupedByDateBucketsOlderAsCompactMonthDay() async {
+        // mockup-gap A.2 — older buckets use the compact `MMM d` glyph
+        // (e.g. "APR 17"), not the verbose "APRIL 17, 2026".
         let now = makeNow()
         // 2026-04-17 12:00 — 3 days before `now`.
         let entryTimestamp = testCalendar.date(byAdding: .day, value: -3, to: now)!
@@ -148,7 +150,7 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
 
         let groups = viewModel.groupedByDate
         XCTAssertEqual(groups.count, 1)
-        XCTAssertEqual(groups.first?.bucket, "APRIL 17, 2026")
+        XCTAssertEqual(groups.first?.bucket, "APR 17")
         XCTAssertEqual(groups.first?.entries.map(\.text), ["older entry"])
     }
 
@@ -184,11 +186,12 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
         XCTAssertEqual(groups.count, 4)
         XCTAssertEqual(groups[0].bucket, "TODAY")
         XCTAssertEqual(groups[1].bucket, "YESTERDAY")
-        // Older buckets sorted newest-first:
+        // Older buckets sorted newest-first, compact `MMM d` glyph
+        // (mockup-gap A.2):
         // 2026-04-17 (three days ago) before 2026-04-13 (seven days ago).
-        XCTAssertEqual(groups[2].bucket, "APRIL 17, 2026")
+        XCTAssertEqual(groups[2].bucket, "APR 17")
         XCTAssertEqual(groups[2].entries.map(\.text), ["three days ago"])
-        XCTAssertEqual(groups[3].bucket, "APRIL 13, 2026")
+        XCTAssertEqual(groups[3].bucket, "APR 13")
         XCTAssertEqual(groups[3].entries.map(\.text), ["seven days ago"])
     }
 }

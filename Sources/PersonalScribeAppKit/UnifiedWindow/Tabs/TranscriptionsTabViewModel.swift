@@ -5,8 +5,8 @@ import PersonalScribeCore
 /// View model backing the Transcriptions tab of the unified window
 /// (M3.2). Exposes the full transcript history (via `TranscriptReading`)
 /// with case-insensitive search filtering and date-bucketed grouping
-/// ("TODAY" / "YESTERDAY" / explicit uppercased "APRIL 17, 2026"
-/// calendar dates for older entries).
+/// ("TODAY" / "YESTERDAY" / compact uppercased "APR 17" calendar dates
+/// for older entries).
 ///
 /// Clock injection is deliberate — grouping logic needs a stable "now"
 /// so tests can pin the calendar relative to fixture timestamps.
@@ -33,9 +33,10 @@ final class TranscriptionsTabViewModel: ObservableObject {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.locale = locale
-        // Fixed format produces a stable, locale-independent bucket
-        // label ("APRIL 17, 2026") that matches the §3B spec.
-        formatter.dateFormat = "MMMM d, yyyy"
+        // Locale-aware compact month + day (e.g. "Apr 17") — matches the
+        // mockup (`plans/App UI design/screen_transcriptions.png`). The
+        // bucket is uppercased downstream, producing "APR 17".
+        formatter.setLocalizedDateFormatFromTemplate("MMMd")
         self.explicitDateFormatter = formatter
     }
 
@@ -62,7 +63,7 @@ final class TranscriptionsTabViewModel: ObservableObject {
     ///
     /// * Same calendar day as now → `"TODAY"`
     /// * Previous calendar day → `"YESTERDAY"`
-    /// * Older → uppercased `"MMMM d, yyyy"` (e.g. `"APRIL 17, 2026"`)
+    /// * Older → uppercased locale-aware `"MMM d"` (e.g. `"APR 17"`)
     ///
     /// Ordering: TODAY first, then YESTERDAY, then older buckets in
     /// descending chronological order (newest older-bucket first).
