@@ -183,16 +183,6 @@ final class PersonalScribeThemeTests: XCTestCase {
         _ = PersonalScribeTheme.color(hex: "NOTHEX")
     }
 
-    // MARK: - v2 accent tokens
-
-    func testAccentChampagneHex() {
-        assertColor(PersonalScribeTheme.Accent.champagne, equalsHex: "CCB990")
-    }
-
-    func testAccentGoldHex() {
-        assertColor(PersonalScribeTheme.Accent.gold, equalsHex: "B89961")
-    }
-
     // MARK: - v2 status tokens
 
     func testStatusSuccessHex() {

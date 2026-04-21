@@ -324,18 +324,6 @@ public enum PersonalScribeTheme {
         public static let xxl: CGFloat = 32
     }
 
-    // MARK: - Accent (v2 — unified-window redesign)
-
-    /// Champagne-family accent tokens, same in both light and dark mode.
-    /// Reference: `plans/App UI design/SeshatTheme.swift` (adopted verbatim;
-    /// type name adjusted to PersonalScribe naming per project rule).
-    public enum Accent {
-        /// #CCB990 — primary champagne accent.
-        public static let champagne = color(hex: "CCB990")
-        /// #B89961 — deeper gold for hover / active variants.
-        public static let gold = color(hex: "B89961")
-    }
-
     // MARK: - Status semantic colours (v2)
 
     public enum Status {
