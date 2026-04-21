@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import XCTest
 @testable import PersonalScribeAppKit
@@ -140,9 +141,110 @@ final class HomeTabViewModelTests: XCTestCase {
         XCTAssertEqual(reader.lastWindow?.end, expected.end)
     }
 
+    // MARK: - Empty-state hotkey hint (mockup-gaps B.1)
+
+    func testEmptyStateHotkeyHintDefaultsToConfiguredPreference() {
+        let defaults = Self.ephemeralDefaults()
+        let reader = FakeMetricsReading(snapshot: Self.snapshot(
+            rollups: Self.rollups(),
+            recent: []
+        ))
+
+        let viewModel = HomeTabViewModel(
+            reader: reader,
+            referenceDateProvider: { Self.referenceDate },
+            defaults: defaults
+        )
+
+        // When no persisted value is present, the VM should pick up
+        // `HotkeyPreference.default` and format it via the shared
+        // formatter — the mockup's "Press ⌥⌥" must NOT be hardcoded.
+        let expected = HotkeyShortcutFormatter.displayString(for: .default)
+        XCTAssertEqual(viewModel.recordingHotkey, .default)
+        XCTAssertEqual(viewModel.emptyStateHotkeyHint, expected)
+    }
+
+    func testEmptyStateHotkeyHintReflectsCustomPreference() {
+        let defaults = Self.ephemeralDefaults()
+        // Persist a non-default binding: ⌘⇧Space (keyCode 49 = Space).
+        let custom = HotkeyPreference(
+            keyCode: 49,
+            tapCount: 1,
+            modifiers: NSEvent.ModifierFlags.command.union(.shift).rawValue
+        )
+        custom.persist(to: defaults)
+
+        let reader = FakeMetricsReading(snapshot: Self.snapshot(
+            rollups: Self.rollups(),
+            recent: []
+        ))
+
+        let viewModel = HomeTabViewModel(
+            reader: reader,
+            referenceDateProvider: { Self.referenceDate },
+            defaults: defaults
+        )
+
+        XCTAssertEqual(viewModel.recordingHotkey, custom)
+        XCTAssertEqual(
+            viewModel.emptyStateHotkeyHint,
+            HotkeyShortcutFormatter.displayString(for: custom)
+        )
+        // Sanity: the hint differs from the default hint — proves we
+        // are not accidentally hardcoding `.default`.
+        XCTAssertNotEqual(
+            viewModel.emptyStateHotkeyHint,
+            HotkeyShortcutFormatter.displayString(for: .default)
+        )
+    }
+
+    // MARK: - Recent empty / non-empty (mockup-gaps B.1 — VM coverage)
+
+    func testRecentIsEmptyWhenReaderReturnsNoTranscripts() async {
+        let reader = FakeMetricsReading(snapshot: Self.snapshot(
+            rollups: Self.rollups(),
+            recent: []
+        ))
+        let viewModel = HomeTabViewModel(
+            reader: reader,
+            referenceDateProvider: { Self.referenceDate }
+        )
+
+        await viewModel.load()
+
+        XCTAssertTrue(viewModel.recent.isEmpty)
+    }
+
+    func testRecentIsNonEmptyWhenReaderReturnsTranscripts() async {
+        let reader = FakeMetricsReading(snapshot: Self.snapshot(
+            rollups: Self.rollups(),
+            recent: [Self.transcript(text: "hello")]
+        ))
+        let viewModel = HomeTabViewModel(
+            reader: reader,
+            referenceDateProvider: { Self.referenceDate }
+        )
+
+        await viewModel.load()
+
+        XCTAssertFalse(viewModel.recent.isEmpty)
+    }
+
     // MARK: - Helpers
 
     nonisolated private static let referenceDate = Date(timeIntervalSince1970: 1_700_000_000)
+
+    /// An isolated, in-memory `UserDefaults` suite so tests don't read
+    /// or write the real user's preferences. Each call returns a fresh
+    /// suite with a unique name.
+    private static func ephemeralDefaults(
+        function: String = #function
+    ) -> UserDefaults {
+        let suite = "HomeTabViewModelTests.\(function).\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
+    }
 
     private static func rollups(
         recordings: Int = 0,

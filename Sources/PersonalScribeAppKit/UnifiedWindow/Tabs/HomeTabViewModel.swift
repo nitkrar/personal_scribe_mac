@@ -30,18 +30,32 @@ public final class HomeTabViewModel: ObservableObject {
     /// the first `load()` / `refresh()` completes.
     @Published public private(set) var lastRefreshReason: MetricsRefreshReason?
 
+    /// Currently-configured global recording hotkey, resolved once at
+    /// init from the injected `UserDefaults`. Drives the empty-state
+    /// hint so the mockup's "Press ⌥⌥ to start recording" string is not
+    /// hardcoded — it reflects the user's actual binding.
+    ///
+    /// Live-updating when the user re-records the hotkey is tracked as
+    /// nice-to-have; for now the value is resolved at VM creation and on
+    /// every `refresh(reason:)`. TODO: live hotkey refresh via a
+    /// dedicated `HotkeyPreference` notification once one exists.
+    @Published public private(set) var recordingHotkey: HotkeyPreference
+
     private let reader: any MetricsReading
     private let calendar: Calendar
     private let referenceDateProvider: @Sendable () -> Date
+    private let defaults: UserDefaults
 
     public init(
         reader: any MetricsReading,
         calendar: Calendar = .current,
-        referenceDateProvider: @escaping @Sendable () -> Date = Date.init
+        referenceDateProvider: @escaping @Sendable () -> Date = Date.init,
+        defaults: UserDefaults = .standard
     ) {
         self.reader = reader
         self.calendar = calendar
         self.referenceDateProvider = referenceDateProvider
+        self.defaults = defaults
 
         let initialWindow = MetricsWindow.rollingSevenDays(
             anchoredAt: referenceDateProvider(),
@@ -50,6 +64,15 @@ public final class HomeTabViewModel: ObservableObject {
         self.rollups = MetricsRollups.empty(window: initialWindow)
         self.recent = []
         self.lastRefreshReason = nil
+        self.recordingHotkey = HotkeyPreference.resolve(from: defaults)
+    }
+
+    /// Display-ready string for the empty-state "Press <hotkey> to start
+    /// recording" line. Reads the current `recordingHotkey` so the UI
+    /// never hardcodes `⌥⌥` / `⌥/` etc. — the hint always tracks the
+    /// user's configured binding.
+    public var emptyStateHotkeyHint: String {
+        HotkeyShortcutFormatter.displayString(for: recordingHotkey)
     }
 
     /// Initial load — runs on `.task { ... }`.
@@ -64,6 +87,12 @@ public final class HomeTabViewModel: ObservableObject {
     }
 
     private func loadSnapshot(reason: MetricsRefreshReason) async {
+        // Re-resolve the hotkey so the empty-state hint reflects any
+        // binding change the user made since the last refresh. This is
+        // intentionally cheap (UserDefaults read) and covers the
+        // common case without a dedicated notification channel.
+        self.recordingHotkey = HotkeyPreference.resolve(from: defaults)
+
         let window = MetricsWindow.rollingSevenDays(
             anchoredAt: referenceDateProvider(),
             calendar: calendar

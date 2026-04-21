@@ -288,6 +288,35 @@ SwiftUI layout bits that XCTest can't reach go here.
    A `TODO: mockup-gap — trailing mode pill deferred` comment marks
    the attachment point in `TranscriptionsTab.swift`.
 
+## Home tab empty state — mockup-gaps B.1
+
+Reference: `plans/App UI design/screen_home.png`. The empty-state view
+only appears when `HomeTabViewModel.recent.isEmpty`; unit tests cover
+the VM flag and the hotkey-hint string, but the SwiftUI rendering has
+to be eyeballed.
+
+1. Fresh install with no transcripts: open Ninimma → Home tab. Below
+   the 4 stat cards and the "RECENT TRANSCRIPTIONS" header, a
+   centered champagne feather logo is visible with two lines below:
+   - Primary: "No transcriptions yet"
+   - Secondary: "Press ⌥/ to start recording" (with the default
+     `opt + /` binding — see hotkey-hint check below).
+2. Feather logo is roughly 64pt square, horizontally centered, with
+   generous top padding above the first text line.
+3. Primary text uses `Typography.body` at `palette.primaryText`;
+   secondary text uses `Typography.caption` at `palette.secondaryText`.
+4. Change Window tint (Warm / Neutral / Dark). The champagne feather
+   stays champagne (it uses `palette.brandChampagne`), but text
+   colours track the resolved palette.
+5. Settings → change the recording hotkey to something non-default
+   (e.g. ⌘⇧Space). Close Settings, re-open Home tab (or wait for the
+   next `refresh()` tick). The secondary line now reads "Press ⌘⇧Space
+   to start recording" — the hint IS sourced from `HotkeyPreference`
+   and NOT hardcoded.
+6. Record one clip. Home tab refreshes; the empty-state view is
+   replaced by the single `TranscriptRow` with no blank gap above or
+   below.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift

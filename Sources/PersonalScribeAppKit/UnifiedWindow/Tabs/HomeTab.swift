@@ -16,6 +16,8 @@ import SwiftUI
 struct HomeTab: View {
     @ObservedObject private var viewModel: HomeTabViewModel
 
+    @Environment(\.colorScheme) private var colorScheme
+
     init(viewModel: HomeTabViewModel) {
         self.viewModel = viewModel
     }
@@ -32,12 +34,16 @@ struct HomeTab: View {
                     .font(PersonalScribeTheme.Typography.sectionLabel.font)
                     .textCase(.uppercase)
 
-                ForEach(viewModel.recent.prefix(HomeTabViewModel.recentLimit), id: \.id) { entry in
-                    TranscriptRow(
-                        title: Self.title(for: entry),
-                        timestamp: entry.timestamp,
-                        preview: entry.text
-                    )
+                if viewModel.recent.isEmpty {
+                    emptyStateView
+                } else {
+                    ForEach(viewModel.recent.prefix(HomeTabViewModel.recentLimit), id: \.id) { entry in
+                        TranscriptRow(
+                            title: Self.title(for: entry),
+                            timestamp: entry.timestamp,
+                            preview: entry.text
+                        )
+                    }
                 }
             }
         }
@@ -54,6 +60,39 @@ struct HomeTab: View {
                 await viewModel.refresh()
             }
         }
+    }
+
+    // MARK: - Empty state (mockup-gaps B.1)
+
+    /// Vertically-stacked empty-state view shown when
+    /// `viewModel.recent.isEmpty`. Matches `plans/App UI design/screen_home.png`:
+    /// a champagne feather + "No transcriptions yet" primary line and a
+    /// secondary "Press <hotkey> to start recording" hint. The hotkey
+    /// string comes from `viewModel.emptyStateHotkeyHint` — it MUST NOT
+    /// be hardcoded so it reflects the user's actual binding.
+    private var emptyStateView: some View {
+        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+        // Logo size is inline (no dedicated theme constant yet) —
+        // 64pt reads at the same visual weight as the mockup feather
+        // without over-dominating the column.
+        let logoSize: CGFloat = 64
+
+        return VStack(spacing: PersonalScribeTheme.Spacing.lg) {
+            PersonalScribeLogoView(color: palette.brandChampagne)
+                .frame(width: logoSize, height: logoSize)
+
+            VStack(spacing: PersonalScribeTheme.Spacing.sm) {
+                Text("No transcriptions yet")
+                    .font(PersonalScribeTheme.Typography.body.font)
+                    .foregroundStyle(palette.primaryText)
+
+                Text("Press \(viewModel.emptyStateHotkeyHint) to start recording")
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(palette.secondaryText)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, PersonalScribeTheme.Spacing.xl)
     }
 
     // MARK: - Stat cards
