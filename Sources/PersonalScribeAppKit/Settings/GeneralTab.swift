@@ -32,6 +32,7 @@ public struct GeneralTab: View {
                     appearanceCard
                     visibilityCard
                     applicationCard
+                    textInputCard
                     behaviorCard
                 }
             }
@@ -145,6 +146,47 @@ public struct GeneralTab: View {
         }
     }
 
+    /// TEXT INPUT section — mockup-gaps D.3. Master "Paste result
+    /// text" toggle + the existing Paste mode picker (moved here from
+    /// the former `behaviorCard`).
+    ///
+    /// D.3 DEFERRAL: the master toggle's `pasteEnabled` value is
+    /// persisted and published by the VM but NOT yet consulted by the
+    /// downstream paste / clipboard service. Selecting "off" here only
+    /// updates the preference; the next recording still pastes +
+    /// writes the clipboard. Wiring is tracked in the backlog append.
+    private var textInputCard: some View {
+        SettingsCard {
+            Text("Text Input")
+                .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+
+            Toggle(
+                "Paste result text",
+                isOn: Binding(
+                    get: { viewModel.pasteEnabled },
+                    set: { viewModel.setPasteEnabled($0) }
+                )
+            )
+
+            Divider()
+
+            Picker(
+                "Paste mode",
+                selection: Binding(
+                    get: { viewModel.pasteMode },
+                    set: { viewModel.setPasteMode($0) }
+                )
+            ) {
+                Text("Paste-at-cursor").tag(PasteMode.pasteAtCursor)
+                Text("Clipboard-only").tag(PasteMode.clipboardOnly)
+            }
+        }
+    }
+
+    /// Residual Behavior card — Waveform decay + Clipboard restore
+    /// delay. The mockup is silent on these; D.3 deliberately keeps
+    /// them in place rather than deleting functionality the reference
+    /// doesn't call out. The Paste mode picker moved to `textInputCard`.
     private var behaviorCard: some View {
         SettingsCard {
             Text("Behavior")
@@ -159,19 +201,6 @@ public struct GeneralTab: View {
             ) {
                 Text("Immediate").tag(WaveformDecayMode.immediate)
                 Text("Animated").tag(WaveformDecayMode.animated)
-            }
-
-            Divider()
-
-            Picker(
-                "Paste mode",
-                selection: Binding(
-                    get: { viewModel.pasteMode },
-                    set: { viewModel.setPasteMode($0) }
-                )
-            ) {
-                Text("Paste-at-cursor").tag(PasteMode.pasteAtCursor)
-                Text("Clipboard-only").tag(PasteMode.clipboardOnly)
             }
 
             Divider()
@@ -254,6 +283,7 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var visibilityError: VisibilityConfigError?
     @Published private(set) var launchAtLogin: Bool
     @Published private(set) var showInDock: Bool
+    @Published private(set) var pasteEnabled: Bool
 
     private let defaults: UserDefaults
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
@@ -283,6 +313,7 @@ final class GeneralTabViewModel: ObservableObject {
         // state. .enabled means the app is registered to launch at login.
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
         self.showInDock = ShowInDockPreference.resolve(from: defaults)
+        self.pasteEnabled = PasteEnabledPreference.resolve(from: defaults)
     }
 
     var visibilityErrorMessage: String? {
@@ -313,6 +344,15 @@ final class GeneralTabViewModel: ObservableObject {
     func setPasteMode(_ mode: PasteMode) {
         pasteMode = mode
         mode.persist(to: defaults)
+    }
+
+    /// Persists the master "paste result text" toggle. D.3 only wires
+    /// the preference + Settings UI; the downstream `OutputService`
+    /// still delivers paste unconditionally until the follow-up
+    /// (tracked in the D.3 backlog append) lands.
+    func setPasteEnabled(_ enabled: Bool) {
+        pasteEnabled = enabled
+        PasteEnabledPreference.persist(enabled, to: defaults)
     }
 
     func setWindowTint(_ tint: WindowTint) {

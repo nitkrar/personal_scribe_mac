@@ -412,6 +412,84 @@ mockup:
     binding, confirm, return to Permissions. The Input Monitoring subtitle
     reflects the new hotkey.
 
+## Settings → General — mockup-gaps D.1–D.3
+
+Reference: `plans/App UI design/final_settings_general_v2.png`.
+
+Open the unified window → Settings → General. Verify top to bottom
+against the mockup.
+
+### D.1 — RECORDING WINDOW section (Style picker + live previews)
+1. Above the APPEARANCE card, a new card with header **"Style"**
+   (semibold body font, same weight/size as other card headers) is
+   rendered.
+2. Three side-by-side selector cards labelled **Classic**, **Mini**,
+   **None** (in that order), each ~72pt tall plus label.
+3. The currently-selected card has a solid **champagne border**
+   (palette `brandChampagne`) at ~2pt width and a subtle shadow. The
+   other two cards have a 12%-opacity champagne border at 1pt.
+4. **Classic preview** renders a dark-navy rounded-rect pill with a
+   5-bar mini waveform sketch inside. Bars are champagne on the dark
+   pill, dark ink on the light pill.
+5. **Mini preview** renders a small flat rounded-rect pill (40×14pt)
+   in the same pill-surface colour. No inline content.
+6. **None preview** renders a translucent pill surface with an
+   `eye.slash` glyph centered on top. Explicitly reads as "hidden".
+7. Click each card → the champagne border migrates to the clicked
+   card. Selection persists across Settings tab switches AND across
+   app relaunch (value written to `UserDefaults` key `PillStyle`).
+8. Toggle **Pill theme** in the APPEARANCE section between Dark /
+   Light / System. The three Style previews' pill surfaces flip
+   between `#1A1B2E` (dark-resolved) and `#F0EDE8` (light-resolved)
+   in step with the selected theme.
+9. **Known deferral:** the selected Style does NOT yet change the
+   runtime pill overlay. Mini and None behave the same as Classic at
+   the `PillOverlayView` level until the downstream wiring lands.
+
+### D.2 — APPLICATION section (Launch at login + Show in Dock)
+10. Below the VISIBILITY card, a card with header **"Application"**
+    (replaces the pre-D "Startup" header) contains two toggles
+    separated by a `Divider`:
+    - **Launch at login** (existing behaviour; SMAppService-backed).
+    - **Show in Dock** (new in D.2; default on).
+11. Toggle **Show in Dock** off → the Dock icon disappears within
+    one runloop tick (via `NSApp.setActivationPolicy(.accessory)`).
+    The unified window stays open and functional; menu-bar item
+    and floating pill remain reachable.
+12. Toggle **Show in Dock** back on → the Dock icon reappears
+    immediately (`NSApp.setActivationPolicy(.regular)`).
+13. Quit and relaunch: the toggle state persists. With "Show in
+    Dock" off, the Dock icon does NOT appear at launch.
+14. Independence check: turning off Show in Dock while both Pill
+    visibility is `.hidden` AND the menu bar item is hidden is
+    permitted — no conflict banner fires (deliberate D.2 design;
+    hotkey `⌥/` remains the escape hatch).
+
+### D.3 — TEXT INPUT section + Paste mode relocation
+15. Below the APPLICATION card, a card with header **"Text Input"**
+    contains:
+    - **Paste result text** toggle (master switch, default on).
+    - **Paste mode** picker — "Paste-at-cursor" / "Clipboard-only"
+      (moved verbatim from the former Behavior card).
+16. Toggle **Paste result text** off → the toggle state persists
+    across Settings tab switches AND app relaunch (`UserDefaults`
+    key `PasteEnabled` = `false`).
+17. **Known deferral:** with Paste result text toggled off, the
+    next recording STILL pastes + writes the clipboard. The master
+    toggle is not yet consulted by `OutputService`; wiring tracked
+    in the backlog. Once wired, disabling the toggle must suppress
+    both paste and clipboard writes (not just paste).
+18. Below Text Input, the residual **Behavior** card retains
+    Waveform decay + Clipboard restore delay. No other rows moved
+    or deleted; the mockup is silent on these and D.3 preserved
+    functionality.
+
+### D order of cards
+19. Top → bottom card order under the SettingsSection must read:
+    RECORDING WINDOW → APPEARANCE → VISIBILITY → APPLICATION →
+    TEXT INPUT → Behavior. (Visibility card is not in the mockup
+    but remains functional and is retained.)
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift
