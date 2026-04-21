@@ -11,6 +11,7 @@ public final class PillOverlayController: ObservableObject {
     private let legacyVisibilityModeBridge: LegacyVisibilityModeBridge?
     private let presenter: PillOverlayPresenter
     private var cancellables: Set<AnyCancellable> = []
+    private var recordingStatusCardText: String?
 
     // Stage 2 compatibility bridge. Delete these public publisher-backed
     // initializers in the Stage 3 duplicate-observation cleanup pass.
@@ -144,6 +145,35 @@ public final class PillOverlayController: ObservableObject {
             visibility: snapshot.pillVisibility,
             visibilityMode: currentVisibilityMode()
         )
+
+        applyRecordingStatusCardState(
+            sessionState: snapshot.sessionState,
+            progress: snapshot.modelDownloadProgress
+        )
+    }
+
+    private func applyRecordingStatusCardState(
+        sessionState: SessionState,
+        progress: ModelDownloadProgress?
+    ) {
+        let nextText = RecordingStatusCardDriver.statusText(
+            sessionState: sessionState,
+            progress: progress
+        )
+
+        switch (recordingStatusCardText, nextText) {
+        case (nil, let next?):
+            presenter.showRecordingStatusCard(text: next)
+            recordingStatusCardText = next
+        case (let current?, let next?) where current != next:
+            presenter.updateRecordingStatusCard(text: next)
+            recordingStatusCardText = next
+        case (_?, nil):
+            presenter.hideRecordingStatusCard()
+            recordingStatusCardText = nil
+        default:
+            break
+        }
     }
 
     private func currentVisibilityMode() -> PillVisibilityMode {
