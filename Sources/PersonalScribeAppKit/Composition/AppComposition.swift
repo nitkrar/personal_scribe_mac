@@ -102,9 +102,6 @@ public enum AppComposition {
                     await coordinator.toggle()
                 }
             },
-            emergencyQuitRequested: {
-                NSApplication.shared.terminate(nil)
-            },
             permissionService: makePermissionServiceAdapter(wrapping: permissionService)
         )
     }

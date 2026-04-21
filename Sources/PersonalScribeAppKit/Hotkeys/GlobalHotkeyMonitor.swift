@@ -10,12 +10,6 @@ import PersonalScribeSession
 
 @MainActor
 public final class GlobalHotkeyMonitor {
-    public typealias DeferredActionCanceller = @MainActor () -> Void
-    public typealias DeferredActionScheduler = @MainActor (
-        _ delay: TimeInterval,
-        _ action: @escaping @MainActor () -> Void
-    ) -> DeferredActionCanceller
-
     private static let leftOptionKeyCode: UInt16 = 58
     private static let rightOptionKeyCode: UInt16 = 61
     public static let doubleTapWindow: TimeInterval = 0.4
@@ -27,49 +21,28 @@ public final class GlobalHotkeyMonitor {
     ]
 
     private let onTrigger: @MainActor () -> Void
-    private let emergencyQuitRequested: @MainActor () -> Void
     private let recordingHotkey: HotkeyPreference
     private let tapWindow: TimeInterval
-    private let scheduleDeferredTrigger: DeferredActionScheduler
     private let permissionService: any PermissionService
     private let logger: PersonalScribeLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
 
     private var monitor: Any?
     private var pressedOptionKeyCodes: Set<UInt16> = []
-    private var pendingToggleDeadline: TimeInterval?
-    private var pendingToggleToken: UUID?
-    private var pendingToggleCancellation: DeferredActionCanceller?
-    private var optionTapCount = 0
-    private var lastOptionTapTimestamp: TimeInterval?
     private var recordingTapCount = 0
     private var lastRecordingTapTimestamp: TimeInterval?
 
     public init(
         onTrigger: @escaping @MainActor () -> Void,
-        emergencyQuitRequested: @escaping @MainActor () -> Void = {},
         recordingHotkey: HotkeyPreference = HotkeyPreference.resolve(),
         tapWindow: TimeInterval = GlobalHotkeyMonitor.doubleTapWindow,
-        scheduleDeferredTrigger: @escaping DeferredActionScheduler = { delay, action in
-            let workItem = DispatchWorkItem {
-                Task { @MainActor in
-                    action()
-                }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
-            return {
-                workItem.cancel()
-            }
-        },
         permissionService: (any PermissionService)? = nil,
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
     ) {
         self.onTrigger = onTrigger
-        self.emergencyQuitRequested = emergencyQuitRequested
         self.recordingHotkey = recordingHotkey
         self.tapWindow = tapWindow
-        self.scheduleDeferredTrigger = scheduleDeferredTrigger
         self.permissionService = permissionService ?? AppKitPermissionService()
         self.logger = logger
         self.logSink = logSink
@@ -137,8 +110,6 @@ public final class GlobalHotkeyMonitor {
     }
 
     internal func handle(event: NSEvent) {
-        flushPendingToggleIfExpired(at: event.timestamp)
-
         switch event.type {
         case .flagsChanged:
             handleFlagsChangedEvent(event)
@@ -158,10 +129,6 @@ public final class GlobalHotkeyMonitor {
             Self.isOptionKeyCode(event.keyCode),
             handleOptionKeyEdge(for: event)
         else {
-            return
-        }
-
-        if handleOptionTap(at: event.timestamp) {
             return
         }
 
@@ -193,28 +160,6 @@ public final class GlobalHotkeyMonitor {
         return isPressed
     }
 
-    private func handleOptionTap(at timestamp: TimeInterval) -> Bool {
-        if
-            let lastOptionTapTimestamp,
-            timestamp - lastOptionTapTimestamp <= tapWindow
-        {
-            optionTapCount += 1
-        } else {
-            optionTapCount = 1
-        }
-
-        lastOptionTapTimestamp = timestamp
-
-        switch optionTapCount {
-        case 3:
-            resetTapSequences()
-            emergencyQuitRequested()
-            return true
-        default:
-            return false
-        }
-    }
-
     private func handleRecordingHotkeyPress(
         keyCode: UInt16,
         modifierFlags: NSEvent.ModifierFlags,
@@ -224,10 +169,6 @@ public final class GlobalHotkeyMonitor {
             keyCode == recordingHotkey.keyCode,
             modifierFlags == recordingHotkey.modifierFlags
         else {
-            return
-        }
-
-        if pendingToggleToken != nil {
             return
         }
 
@@ -251,64 +192,13 @@ public final class GlobalHotkeyMonitor {
             return
         }
 
-        schedulePendingToggle(after: tapWindow, deadline: timestamp + tapWindow)
-        resetRecordingTapSequence()
-    }
-
-    private func schedulePendingToggle(after delay: TimeInterval, deadline: TimeInterval) {
-        cancelPendingToggle()
-
-        let token = UUID()
-        pendingToggleToken = token
-        pendingToggleDeadline = deadline
-        pendingToggleCancellation = scheduleDeferredTrigger(delay) { [weak self] in
-            self?.firePendingToggle(token: token)
-        }
-    }
-
-    private func flushPendingToggleIfExpired(at timestamp: TimeInterval) {
-        guard
-            let deadline = pendingToggleDeadline,
-            timestamp > deadline,
-            let token = pendingToggleToken
-        else {
-            return
-        }
-
-        firePendingToggle(token: token)
-    }
-
-    private func firePendingToggle(token: UUID) {
-        guard pendingToggleToken == token else {
-            return
-        }
-
-        cancelPendingToggle()
         resetRecordingTapSequence()
         onTrigger()
     }
 
-    private func resetTapSequences() {
-        cancelPendingToggle()
-        resetOptionTapSequence()
-        resetRecordingTapSequence()
-    }
-
     private func resetState() {
-        resetTapSequences()
+        resetRecordingTapSequence()
         pressedOptionKeyCodes.removeAll()
-    }
-
-    private func cancelPendingToggle() {
-        pendingToggleCancellation?()
-        pendingToggleCancellation = nil
-        pendingToggleDeadline = nil
-        pendingToggleToken = nil
-    }
-
-    private func resetOptionTapSequence() {
-        optionTapCount = 0
-        lastOptionTapTimestamp = nil
     }
 
     private func resetRecordingTapSequence() {

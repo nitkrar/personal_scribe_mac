@@ -18,31 +18,19 @@ public struct ShortcutsTab: View {
                 title: "Shortcuts",
                 description: "Customize the recording toggle. Emergency quit remains fixed."
             ) {
-                VStack(alignment: .leading, spacing: SettingsLayout.itemSpacing) {
-                    shortcutCard(
-                        title: "Record / stop dictation",
-                        shortcut: HotkeyShortcutFormatter.displayString(for: viewModel.recordingHotkey),
-                        notes: "Starts a session from idle and stops the active session.",
-                        changeAction: {
-                            isRecordingHotkeyRecorderPresented = true
-                        },
-                        changeEnabled: true,
-                        footnoteIcon: "arrow.clockwise",
-                        footnote: viewModel.requiresRestartNotice
-                            ? "Restart required: relaunch \(AppBrand.displayName) before the new recording hotkey takes effect."
-                            : nil
-                    )
-
-                    shortcutCard(
-                        title: "Emergency quit",
-                        shortcut: "Triple-tap ⌥",
-                        notes: "Immediately exits \(AppBrand.displayName) when the monitor is active.",
-                        changeAction: {},
-                        changeEnabled: false,
-                        footnoteIcon: "info.circle",
-                        footnote: "Triple-tap option remains fixed in Phase 3.G."
-                    )
-                }
+                shortcutCard(
+                    title: "Record / stop dictation",
+                    shortcut: HotkeyShortcutFormatter.displayString(for: viewModel.recordingHotkey),
+                    notes: "Starts a session from idle and stops the active session.",
+                    changeAction: {
+                        isRecordingHotkeyRecorderPresented = true
+                    },
+                    changeEnabled: true,
+                    footnoteIcon: "arrow.clockwise",
+                    footnote: viewModel.requiresRestartNotice
+                        ? "Restart required: relaunch \(AppBrand.displayName) before the new recording hotkey takes effect."
+                        : nil
+                )
             }
         }
         .sheet(isPresented: $isRecordingHotkeyRecorderPresented) {

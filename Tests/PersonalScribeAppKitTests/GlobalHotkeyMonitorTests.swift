@@ -41,140 +41,74 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertEqual(triggerCount, 0)
     }
 
-    func testDoubleTapWithinWindowTriggersOnce() throws {
-        let scheduler = DeferredActionSchedulerSpy()
+    /// Double-tap MUST fire immediately on the second matching tap. The
+    /// previous implementation deferred by `tapWindow` (~400ms) to
+    /// disambiguate a third tap for emergency-quit; that path was
+    /// removed and the monitor must now respond with no synthetic delay.
+    func testDoubleTapWithinWindowFiresImmediately() throws {
         var triggerCount = 0
         let monitor = GlobalHotkeyMonitor(
             onTrigger: {
                 triggerCount += 1
-            },
-            scheduleDeferredTrigger: scheduler.schedule
+            }
         )
 
         try sendTap(to: monitor, at: 1.0)
+        XCTAssertEqual(triggerCount, 0, "first tap must not fire")
+
         try sendTap(to: monitor, at: 1.2)
-
-        XCTAssertEqual(triggerCount, 0)
-
-        scheduler.fireScheduledActions()
-
-        XCTAssertEqual(triggerCount, 1)
+        XCTAssertEqual(triggerCount, 1, "second tap within window must fire with no deferral")
     }
 
     func testDoubleTapOutsideWindowDoesNotTrigger() throws {
-        let scheduler = DeferredActionSchedulerSpy()
         var triggerCount = 0
         let monitor = GlobalHotkeyMonitor(
             onTrigger: {
                 triggerCount += 1
-            },
-            scheduleDeferredTrigger: scheduler.schedule
+            }
         )
 
         try sendTap(to: monitor, at: 1.0)
         try sendTap(to: monitor, at: 1.6)
 
-        scheduler.fireScheduledActions()
-
         XCTAssertEqual(triggerCount, 0)
     }
 
-    func testTripleTapCancelsPendingToggleAndRequestsEmergencyQuit() throws {
-        let scheduler = DeferredActionSchedulerSpy()
+    func testTwoRightOptionTapsInsideWindowFiresToggleImmediately() throws {
         var toggleCount = 0
-        var emergencyQuitCount = 0
         let monitor = GlobalHotkeyMonitor(
             onTrigger: {
                 toggleCount += 1
-            },
-            emergencyQuitRequested: {
-                emergencyQuitCount += 1
-            },
-            scheduleDeferredTrigger: scheduler.schedule
-        )
-
-        try sendTap(to: monitor, at: 1.0)
-        try sendTap(to: monitor, at: 1.2)
-        try sendTap(to: monitor, at: 1.35)
-
-        scheduler.fireScheduledActions()
-
-        XCTAssertEqual(toggleCount, 0)
-        XCTAssertEqual(emergencyQuitCount, 1)
-    }
-
-    func testThreeRightOptionTapsInsideWindowRequestsEmergencyQuitWithoutToggle() throws {
-        let scheduler = DeferredActionSchedulerSpy()
-        var toggleCount = 0
-        var emergencyQuitCount = 0
-        let monitor = GlobalHotkeyMonitor(
-            onTrigger: {
-                toggleCount += 1
-            },
-            emergencyQuitRequested: {
-                emergencyQuitCount += 1
-            },
-            scheduleDeferredTrigger: scheduler.schedule
+            }
         )
 
         try sendTap(to: monitor, at: 1.0, keyCode: Self.rightOptionKeyCode)
-        try sendTap(to: monitor, at: 1.2, keyCode: Self.rightOptionKeyCode)
-        try sendTap(to: monitor, at: 1.35, keyCode: Self.rightOptionKeyCode)
-
-        scheduler.fireScheduledActions()
-
         XCTAssertEqual(toggleCount, 0)
-        XCTAssertEqual(emergencyQuitCount, 1)
-    }
 
-    func testTwoRightOptionTapsInsideWindowRequestsToggleWithoutEmergencyQuit() throws {
-        let scheduler = DeferredActionSchedulerSpy()
-        var toggleCount = 0
-        var emergencyQuitCount = 0
-        let monitor = GlobalHotkeyMonitor(
-            onTrigger: {
-                toggleCount += 1
-            },
-            emergencyQuitRequested: {
-                emergencyQuitCount += 1
-            },
-            scheduleDeferredTrigger: scheduler.schedule
-        )
-
-        try sendTap(to: monitor, at: 1.0, keyCode: Self.rightOptionKeyCode)
         try sendTap(to: monitor, at: 1.2, keyCode: Self.rightOptionKeyCode)
-
-        XCTAssertEqual(toggleCount, 0)
-        XCTAssertEqual(emergencyQuitCount, 0)
-
-        scheduler.fireScheduledActions()
-
         XCTAssertEqual(toggleCount, 1)
-        XCTAssertEqual(emergencyQuitCount, 0)
     }
 
-    func testThirdRightOptionTapOutsideWindowKeepsDoubleTapToggleAndStartsNewSequence() throws {
-        let scheduler = DeferredActionSchedulerSpy()
+    /// After a completed double-tap toggle, a later tap outside the
+    /// window starts a fresh sequence (no emergency-quit on the third
+    /// tap — that behaviour was removed).
+    func testThirdRightOptionTapOutsideWindowStartsFreshSequence() throws {
         var toggleCount = 0
-        var emergencyQuitCount = 0
         let monitor = GlobalHotkeyMonitor(
             onTrigger: {
                 toggleCount += 1
-            },
-            emergencyQuitRequested: {
-                emergencyQuitCount += 1
-            },
-            scheduleDeferredTrigger: scheduler.schedule
+            }
         )
 
         try sendTap(to: monitor, at: 1.0, keyCode: Self.rightOptionKeyCode)
         try sendTap(to: monitor, at: 1.2, keyCode: Self.rightOptionKeyCode)
+        XCTAssertEqual(toggleCount, 1)
+
+        // 1.7 is > 0.4s after the 1.2 tap — outside the window, so the
+        // sequence resets and this tap alone does nothing.
         try sendTap(to: monitor, at: 1.7, keyCode: Self.rightOptionKeyCode)
 
-        scheduler.fireScheduledActions()
-
         XCTAssertEqual(toggleCount, 1)
-        XCTAssertEqual(emergencyQuitCount, 0)
     }
 
     func testMonitorReadsPreferenceForKeyCodeAndTapCount() throws {
@@ -205,7 +139,6 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
 
         XCTAssertEqual(singleTapTriggerCount, 1)
 
-        let scheduler = DeferredActionSchedulerSpy()
         var doubleTapTriggerCount = 0
         let doubleTapMonitor = GlobalHotkeyMonitor(
             onTrigger: {
@@ -215,71 +148,13 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
                 keyCode: Self.leftOptionKeyCode,
                 tapCount: 2,
                 modifiers: 0
-            ),
-            scheduleDeferredTrigger: scheduler.schedule
+            )
         )
 
         try sendTap(to: doubleTapMonitor, at: 2.0, keyCode: Self.leftOptionKeyCode)
         try sendTap(to: doubleTapMonitor, at: 2.2, keyCode: Self.leftOptionKeyCode)
 
-        XCTAssertEqual(doubleTapTriggerCount, 0)
-
-        scheduler.fireScheduledActions()
-
         XCTAssertEqual(doubleTapTriggerCount, 1)
-    }
-
-    func testThreeLeftOptionTapsInsideWindowRequestsEmergencyQuitWithoutToggle() throws {
-        let scheduler = DeferredActionSchedulerSpy()
-        var toggleCount = 0
-        var emergencyQuitCount = 0
-        let monitor = GlobalHotkeyMonitor(
-            onTrigger: {
-                toggleCount += 1
-            },
-            emergencyQuitRequested: {
-                emergencyQuitCount += 1
-            },
-            scheduleDeferredTrigger: scheduler.schedule
-        )
-
-        try sendTap(to: monitor, at: 1.0, keyCode: Self.leftOptionKeyCode)
-        try sendTap(to: monitor, at: 1.2, keyCode: Self.leftOptionKeyCode)
-        try sendTap(to: monitor, at: 1.35, keyCode: Self.leftOptionKeyCode)
-
-        scheduler.fireScheduledActions()
-
-        XCTAssertEqual(toggleCount, 0)
-        XCTAssertEqual(emergencyQuitCount, 1)
-    }
-
-    func testTripleTapEmergencyQuitStillFiresRegardlessOfRecordingHotkeyPreference() throws {
-        let scheduler = DeferredActionSchedulerSpy()
-        var toggleCount = 0
-        var emergencyQuitCount = 0
-        let monitor = GlobalHotkeyMonitor(
-            onTrigger: {
-                toggleCount += 1
-            },
-            emergencyQuitRequested: {
-                emergencyQuitCount += 1
-            },
-            recordingHotkey: HotkeyPreference(
-                keyCode: 15,
-                tapCount: 1,
-                modifiers: NSEvent.ModifierFlags.command.rawValue
-            ),
-            scheduleDeferredTrigger: scheduler.schedule
-        )
-
-        try sendTap(to: monitor, at: 1.0, keyCode: Self.leftOptionKeyCode)
-        try sendTap(to: monitor, at: 1.2, keyCode: Self.leftOptionKeyCode)
-        try sendTap(to: monitor, at: 1.35, keyCode: Self.leftOptionKeyCode)
-
-        scheduler.fireScheduledActions()
-
-        XCTAssertEqual(toggleCount, 0)
-        XCTAssertEqual(emergencyQuitCount, 1)
     }
 
     // MARK: - Phase 1 Step 1.9 — Input Monitoring permission warning
@@ -439,40 +314,5 @@ private final class CapturingLogSink: @unchecked Sendable {
 
     func snapshot() -> [Entry] {
         lock.withLock { entries }
-    }
-}
-
-@MainActor
-private final class DeferredActionSchedulerSpy {
-    private final class ScheduledAction {
-        let delay: TimeInterval
-        let action: @MainActor () -> Void
-        var isCancelled = false
-
-        init(delay: TimeInterval, action: @escaping @MainActor () -> Void) {
-            self.delay = delay
-            self.action = action
-        }
-    }
-
-    private var scheduledActions: [ScheduledAction] = []
-
-    var schedule: GlobalHotkeyMonitor.DeferredActionScheduler {
-        { [weak self] delay, action in
-            let scheduledAction = ScheduledAction(delay: delay, action: action)
-            self?.scheduledActions.append(scheduledAction)
-            return {
-                scheduledAction.isCancelled = true
-            }
-        }
-    }
-
-    func fireScheduledActions() {
-        let pending = scheduledActions
-        scheduledActions.removeAll()
-
-        for scheduledAction in pending where scheduledAction.isCancelled == false {
-            scheduledAction.action()
-        }
     }
 }
