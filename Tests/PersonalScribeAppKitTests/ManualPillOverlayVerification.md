@@ -171,7 +171,7 @@ The pill panel must not promote Ninimma to frontmost on click. Verified
 in unit tests by asserting `canBecomeKey == false` + `canBecomeMain == false`
 on `DraggablePanel`, but the real-world effect is only observable at runtime.
 
-- [ ] **MV-NAP-1 (pill click preserves prior frontmost)** Bring Slack (or
+- [x] **MV-NAP-1 (pill click preserves prior frontmost)** Bring Slack (or
   any text-input app) to the front and place the cursor in a compose
   field. Start a recording via the hotkey so the pill appears without
   changing focus. Speak a sentence. Stop by clicking the pill itself.
@@ -180,6 +180,9 @@ on `DraggablePanel`, but the real-world effect is only observable at runtime.
   compose field — **no `Copied to clipboard · ⌘V to paste` card**.
   Regression: if the card appears, `DraggablePanel.canBecomeKey` has
   been flipped back to `true`.
+  *Verified 2026-04-21 on TextEdit + iTerm (paste lands, no card). Sublime
+  Text triggers the card due to a separate AX-probe regression — tracked
+  as BACKLOG #042, not a #003 concern.*
 - [ ] **MV-NAP-2 (pill click does not change menu-bar focus)** Open
   another app's menu (File menu in Finder is easy). Click the pill.
   Confirm the open menu does NOT close — clicking a non-activating

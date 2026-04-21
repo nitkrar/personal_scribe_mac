@@ -370,7 +370,7 @@ These belong to whichever sprint's owning agent can pick them up:
 | 3.A | `SettingsWindow` with General / AI Models / Modes / Shortcuts / Advanced tabs (Modes tab first — introduces `ModeDescriptor`). **Must enforce the visibility invariant** — when General tab builds any visibility toggle (pill mode or menu bar visibility), reject the combination that leaves both hidden; unit test `test_applyVisibilityConfig_rejectsBothHidden` asserts the setter returns a `.conflict` error when both surfaces would go away. | Phase 2 gate |
 | 3.B | `NotesWindow` (sidebar + editor + context panel) — auto-ingest transcripts, manual edit, tagging, FTS5 search | 2.C + 3.A (Modes) |
 | 3.C | `OnboardingWindow` — first-run permission flow with optional Accessibility step | 2.B |
-| 3.D | SQLite `TranscriptStore` migration: GRDB.swift, FTS5 virtual table, Atomic migration from in-memory on first launch | 1.11 |
+| 3.D | *Absorbed by `plans/storage-database-layer.md` (backlog #026).* The original SQLite `TranscriptStore` migration goal (GRDB + FTS5, atomic migration from in-memory) is now scoped under the storage-layer refactor — same destination schema, tighter ownership contract. | 1.11 |
 | 3.E | `BaseDirectoryMigrator`: moves models/modes/recordings when user changes base in Settings | 1.6, 3.A |
 | 3.F | Second model descriptor populated: `parakeet-tdt-110m` for lower-RAM devices | 1.5, 3.A (model selection UI) |
 | 3.G | Hotkey customization in Settings (Shortcuts tab). Detect collision with system shortcuts. | 3.A |
