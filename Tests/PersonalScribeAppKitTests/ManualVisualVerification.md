@@ -150,7 +150,7 @@ in M3.2–M3.5; this milestone proves the shell + routing + menu-bar entry
 4. Window uses `NavigationSplitView` with a 200pt sidebar.
 5. Sidebar top shows the quill logo + display name.
 6. Sidebar body shows 4 nav rows with SF Symbols: Home (`house.fill`),
-   Transcriptions (`text.alignleft`), Modes (`square.grid.2x2`),
+   Transcriptions (`waveform`), Modes (`square.grid.2x2`),
    Settings (`gearshape`).
 7. Sidebar bottom shows a placeholder "Microphone" row with the `mic`
    icon (real mic indicator lands later).

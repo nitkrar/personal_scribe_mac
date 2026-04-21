@@ -24,7 +24,7 @@ public enum AppTab: String, CaseIterable, Identifiable, Sendable {
     public var systemImageName: String {
         switch self {
         case .home:           return "house.fill"
-        case .transcriptions: return "text.alignleft"
+        case .transcriptions: return "waveform"
         case .modes:          return "square.grid.2x2"
         case .settings:       return "gearshape"
         case .about:          return "info.circle"

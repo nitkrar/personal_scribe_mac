@@ -48,7 +48,7 @@ final class UnifiedWindowModelTests: XCTestCase {
 
     func testAppTabSystemImageNames() {
         XCTAssertEqual(AppTab.home.systemImageName, "house.fill")
-        XCTAssertEqual(AppTab.transcriptions.systemImageName, "text.alignleft")
+        XCTAssertEqual(AppTab.transcriptions.systemImageName, "waveform")
         XCTAssertEqual(AppTab.modes.systemImageName, "square.grid.2x2")
         XCTAssertEqual(AppTab.settings.systemImageName, "gearshape")
         XCTAssertEqual(AppTab.about.systemImageName, "info.circle")

@@ -56,7 +56,7 @@ Logic is solid (order, dot colours, live refresh, correct deep-links). Visual ch
 ## Unified window shell
 
 - [ ] Sidebar mic footer hard-codes `Text("Microphone")` (inline comment admits it's an M3.1 placeholder). Should consume `AudioInputDeviceProviding` to show the current device.
-- [ ] `AppTab.transcriptions.systemImageName` = `text.alignleft`; mockup glyph is a waveform.
+- [x] `AppTab.transcriptions.systemImageName` = `text.alignleft`; mockup glyph is a waveform. → SF Symbol now `waveform`.
 
 ## Theme tokens — semantic duplicates
 
