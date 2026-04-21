@@ -1,26 +1,29 @@
 import Foundation
 import SwiftUI
 
-/// User-selectable main-window background tint.
+/// User-selectable main-window background tint (light-mode brand flavor).
 ///
-/// Three variants:
+/// Two variants:
 /// * `.warm`    — paper/editorial cream (`#F5F5F0` / `#EBEBE6`). Default.
 /// * `.neutral` — native macOS grey (`#F2F2F7` / `#E8E8ED`).
-/// * `.dark`    — forces dark palette (`#0E0E14` / `#111318`) regardless
-///                of the user's system light/dark setting.
+///
+/// `WindowTint` is a light-mode-only brand flavor. The app's master
+/// light/dark switch lives on `AppTheme` (Light / Dark / System). The
+/// previous `.dark` case — which did double duty as a tint flavor AND
+/// a dark-aqua `NSAppearance` override — was removed as part of
+/// mockup-gaps G (2026-04-21). For dark rendering use `AppTheme.dark`.
 ///
 /// Persisted under `UserDefaults` key `"WindowTint"`. Per the project
 /// convention, UserDefaults keys are bundle-scoped (the
 /// `com.nitkrar.personal_scribe` domain already namespaces them) so
 /// the raw key has no `PersonalScribe*` prefix.
 ///
-/// Reference: `plans/App UI design/Claude_Final_Bundle_Prompt.md` §1
-/// and the `SeshatTheme.swift` drop-in (`WindowTint` adopted verbatim;
-/// type is namespace-free per the project naming rule).
+/// No migration shim for the retired `.dark` raw value: a persisted
+/// `"WindowTint" == "Dark"` silently falls back to `.warm` via the
+/// `resolve` unrecognised-raw-value path.
 public enum WindowTint: String, CaseIterable, Identifiable, Sendable {
     case warm    = "Warm"
     case neutral = "Neutral"
-    case dark    = "Dark"
 
     public var id: String { rawValue }
 
@@ -28,7 +31,9 @@ public enum WindowTint: String, CaseIterable, Identifiable, Sendable {
     public static let userDefaultsKey = "WindowTint"
 
     /// Reads the persisted tint, falling back to `.warm` when absent
-    /// or the stored value is not a recognised case.
+    /// or the stored value is not a recognised case. A legacy
+    /// `"Dark"` raw value also falls through to `.warm` — intentional;
+    /// see type doc for the no-shim policy.
     public static func resolve(from defaults: UserDefaults = .standard) -> WindowTint {
         guard let raw = defaults.string(forKey: userDefaultsKey),
               let value = WindowTint(rawValue: raw) else {
@@ -42,10 +47,6 @@ public enum WindowTint: String, CaseIterable, Identifiable, Sendable {
         defaults.set(rawValue, forKey: Self.userDefaultsKey)
     }
 
-    /// `true` only for `.dark` — consumer windows should apply
-    /// `NSAppearance(named: .darkAqua)` regardless of the system theme.
-    public var forcesDarkMode: Bool { self == .dark }
-
     // MARK: - Semantic backgrounds
 
     /// Primary content-area background.
@@ -53,7 +54,6 @@ public enum WindowTint: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .warm:    return PersonalScribeTheme.color(hex: "F5F5F0")
         case .neutral: return PersonalScribeTheme.color(hex: "F2F2F7")
-        case .dark:    return PersonalScribeTheme.color(hex: "0E0E14")
         }
     }
 
@@ -62,7 +62,6 @@ public enum WindowTint: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .warm:    return PersonalScribeTheme.color(hex: "EBEBE6")
         case .neutral: return PersonalScribeTheme.color(hex: "E8E8ED")
-        case .dark:    return PersonalScribeTheme.color(hex: "111318")
         }
     }
 
@@ -70,7 +69,6 @@ public enum WindowTint: String, CaseIterable, Identifiable, Sendable {
     public var cardBackground: Color {
         switch self {
         case .warm, .neutral: return PersonalScribeTheme.color(hex: "FFFFFF")
-        case .dark:           return PersonalScribeTheme.color(hex: "1C1C1E")
         }
     }
 
@@ -79,7 +77,6 @@ public enum WindowTint: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .warm:    return PersonalScribeTheme.color(hex: "DCDCD7")
         case .neutral: return PersonalScribeTheme.color(hex: "DCDCE0")
-        case .dark:    return PersonalScribeTheme.color(hex: "2A2A30")
         }
     }
 
@@ -87,7 +84,6 @@ public enum WindowTint: String, CaseIterable, Identifiable, Sendable {
     public var primaryText: Color {
         switch self {
         case .warm, .neutral: return PersonalScribeTheme.color(hex: "1C1C1E")
-        case .dark:           return PersonalScribeTheme.color(hex: "F2F2F7")
         }
     }
 }
@@ -96,7 +92,7 @@ public enum WindowTint: String, CaseIterable, Identifiable, Sendable {
 //
 // The tint is installed at the unified-window root (see
 // `UnifiedWindowView.swift`) and read by any descendant surface that
-// needs warm/neutral/dark-aware card backgrounds or accent swaps. Views
+// needs warm/neutral-aware card backgrounds or accent swaps. Views
 // that don't care (previews, unit-test harnesses without a tint) see
 // `nil` and fall back to `PersonalScribeTheme.Palette.for(scheme:)`.
 

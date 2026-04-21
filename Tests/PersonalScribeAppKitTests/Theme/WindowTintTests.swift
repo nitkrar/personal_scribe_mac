@@ -4,27 +4,27 @@ import XCTest
 @testable import PersonalScribeAppKit
 
 /// Tests for `WindowTint` — the user-selectable main-window background
-/// tint (Warm / Neutral / Dark). Reference:
+/// tint (Warm / Neutral). Reference:
 /// `plans/App UI design/Claude_Final_Bundle_Prompt.md` §1 and the
 /// `SeshatTheme.swift` drop-in (adopted verbatim, type/key names
 /// adjusted per project naming rule — no "Seshat" prefix, no
 /// "Ninimma" in code).
+///
+/// As of mockup-gaps G (2026-04-21) `WindowTint` no longer carries a
+/// `.dark` case — app-level light/dark is owned by `AppTheme`. Legacy
+/// persisted `"Dark"` raw values silently fall back to `.warm` via
+/// the `resolve` unrecognised-raw-value path; that's the expected
+/// zero-back-compat behaviour.
 final class WindowTintTests: XCTestCase {
     // MARK: - Cases + UserDefaults round-trip
 
-    func testCasesInclude_Warm_Neutral_Dark() {
-        XCTAssertEqual(WindowTint.allCases, [.warm, .neutral, .dark])
+    func testCasesInclude_Warm_Neutral() {
+        XCTAssertEqual(WindowTint.allCases, [.warm, .neutral])
     }
 
     func testDefaultResolvesToWarm() {
         let defaults = Self.isolatedDefaults()
         XCTAssertEqual(WindowTint.resolve(from: defaults), .warm)
-    }
-
-    func testResolveReadsPersistedDark() {
-        let defaults = Self.isolatedDefaults()
-        WindowTint.dark.persist(to: defaults)
-        XCTAssertEqual(WindowTint.resolve(from: defaults), .dark)
     }
 
     func testResolveReadsPersistedNeutral() {
@@ -36,6 +36,16 @@ final class WindowTintTests: XCTestCase {
     func testResolveFallsBackToWarmOnInvalidValue() {
         let defaults = Self.isolatedDefaults()
         defaults.set("NotATint", forKey: WindowTint.userDefaultsKey)
+        XCTAssertEqual(WindowTint.resolve(from: defaults), .warm)
+    }
+
+    /// Legacy `"Dark"` raw value from pre-G persisted state must fall
+    /// back to `.warm`, same as any other unrecognised value. There is
+    /// no migration shim — this is the explicit zero-back-compat
+    /// policy per mockup-gaps G.
+    func testResolveFallsBackToWarmOnLegacyDarkRawValue() {
+        let defaults = Self.isolatedDefaults()
+        defaults.set("Dark", forKey: WindowTint.userDefaultsKey)
         XCTAssertEqual(WindowTint.resolve(from: defaults), .warm)
     }
 
@@ -53,14 +63,6 @@ final class WindowTintTests: XCTestCase {
         // scoped (`com.nitkrar.personal_scribe` domain already namespaces
         // them) so the key should be plain "WindowTint".
         XCTAssertEqual(WindowTint.userDefaultsKey, "WindowTint")
-    }
-
-    // MARK: - forcesDarkMode
-
-    func testForcesDarkModeOnlyForDarkCase() {
-        XCTAssertFalse(WindowTint.warm.forcesDarkMode)
-        XCTAssertFalse(WindowTint.neutral.forcesDarkMode)
-        XCTAssertTrue(WindowTint.dark.forcesDarkMode)
     }
 
     // MARK: - Semantic background hex specs (warm)
@@ -105,28 +107,6 @@ final class WindowTintTests: XCTestCase {
 
     func testNeutralPrimaryTextHex() {
         assertColor(WindowTint.neutral.primaryText, equalsHex: "1C1C1E")
-    }
-
-    // MARK: - Semantic background hex specs (dark)
-
-    func testDarkPrimaryBackgroundHex() {
-        assertColor(WindowTint.dark.primaryBackground, equalsHex: "0E0E14")
-    }
-
-    func testDarkSecondaryBackgroundHex() {
-        assertColor(WindowTint.dark.secondaryBackground, equalsHex: "111318")
-    }
-
-    func testDarkCardBackgroundHex() {
-        assertColor(WindowTint.dark.cardBackground, equalsHex: "1C1C1E")
-    }
-
-    func testDarkHoverBackgroundHex() {
-        assertColor(WindowTint.dark.hoverBackground, equalsHex: "2A2A30")
-    }
-
-    func testDarkPrimaryTextHex() {
-        assertColor(WindowTint.dark.primaryText, equalsHex: "F2F2F7")
     }
 
     // MARK: - Helpers
