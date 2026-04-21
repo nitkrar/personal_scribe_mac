@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import PersonalScribeCore
 import ServiceManagement
@@ -30,7 +31,7 @@ public struct GeneralTab: View {
                     recordingWindowCard
                     appearanceCard
                     visibilityCard
-                    launchCard
+                    applicationCard
                     behaviorCard
                 }
             }
@@ -62,9 +63,15 @@ public struct GeneralTab: View {
         }
     }
 
-    private var launchCard: some View {
+    /// APPLICATION section — mockup-gaps D.2. Absorbs the old
+    /// `launchCard` (Launch at login toggle) and adds the new Show in
+    /// Dock toggle. No cross-toggle invariant (unlike visibility's
+    /// pill+menu-bar conflict) — Show in Dock stays independent by
+    /// design; if a cross-check with menu-bar/pill visibility is needed
+    /// later, it's a follow-up.
+    private var applicationCard: some View {
         SettingsCard {
-            Text("Startup")
+            Text("Application")
                 .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
 
             Toggle(
@@ -72,6 +79,16 @@ public struct GeneralTab: View {
                 isOn: Binding(
                     get: { viewModel.launchAtLogin },
                     set: { viewModel.setLaunchAtLogin($0) }
+                )
+            )
+
+            Divider()
+
+            Toggle(
+                "Show in Dock",
+                isOn: Binding(
+                    get: { viewModel.showInDock },
+                    set: { viewModel.setShowInDock($0) }
                 )
             )
         }
@@ -236,6 +253,7 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var pasteRestoreDelay: PasteRestoreDelay
     @Published private(set) var visibilityError: VisibilityConfigError?
     @Published private(set) var launchAtLogin: Bool
+    @Published private(set) var showInDock: Bool
 
     private let defaults: UserDefaults
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
@@ -264,6 +282,7 @@ final class GeneralTabViewModel: ObservableObject {
         // SMAppService.mainApp.status reflects the current registration
         // state. .enabled means the app is registered to launch at login.
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
+        self.showInDock = ShowInDockPreference.resolve(from: defaults)
     }
 
     var visibilityErrorMessage: String? {
@@ -309,6 +328,26 @@ final class GeneralTabViewModel: ObservableObject {
     func setPillStyle(_ style: PillStyle) {
         pillStyle = style
         style.persist(to: defaults)
+    }
+
+    /// Persists the "Show in Dock" preference AND applies the new
+    /// activation policy so the Dock icon is added / removed at
+    /// runtime. `.regular` shows the app in the Dock; `.accessory`
+    /// runs it as a menu-bar / pill-only process (LSUIElement-style).
+    ///
+    /// No cross-check against menu-bar / pill visibility: the brief
+    /// keeps Show in Dock independent. If a user hides the menu bar
+    /// AND pill AND Dock, they can still reach the app via hotkey
+    /// (⌥/) — no conflict error is surfaced here.
+    func setShowInDock(_ enabled: Bool) {
+        showInDock = enabled
+        ShowInDockPreference.persist(enabled, to: defaults)
+        // `GeneralTabViewModel` is already `@MainActor`-isolated;
+        // `NSApp.setActivationPolicy` therefore runs on the main
+        // thread without additional dispatch. `NSApp` resolves to the
+        // same shared application the unified window was created
+        // under — safe to touch directly.
+        NSApp.setActivationPolicy(enabled ? .regular : .accessory)
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
