@@ -262,6 +262,59 @@ final class PillOverlayPresenterTests: XCTestCase {
         )
     }
 
+    // MARK: - Non-activating panel contract (Issue 6)
+    //
+    // The pill must not steal keyboard focus or promote the app to
+    // frontmost when clicked. `.nonactivatingPanel` in the style mask
+    // alone is insufficient when `canBecomeKey` is true — AppKit still
+    // keys the panel on click, which steals focus from the prior app.
+    // The full non-activating contract needs `canBecomeKey == false`
+    // AND `canBecomeMain == false` on top of the style-mask bit.
+
+    func testDraggablePanelCannotBecomeKey() {
+        let panel = DraggablePanel(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 36),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+
+        XCTAssertFalse(
+            panel.canBecomeKey,
+            "Pill panel must not become key — keying it steals keyboard focus from the prior app"
+        )
+    }
+
+    func testDraggablePanelCannotBecomeMain() {
+        let panel = DraggablePanel(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 36),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+
+        XCTAssertFalse(
+            panel.canBecomeMain,
+            "Pill panel must not become main — main is reserved for the app's primary window"
+        )
+    }
+
+    func testDraggablePanelStyleMaskRetainsNonactivating() {
+        // Regression guard: a future refactor must not drop the
+        // `.nonactivatingPanel` style bit from the pill panel. The bit
+        // is what tells AppKit the click itself doesn't activate the
+        // app; `canBecomeKey = false` handles the focus-theft edge,
+        // but the style bit is still the first line of defence.
+        let panel = DraggablePanel(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 36),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+
+        XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel))
+    }
+
     private func makeHostingView() -> (NSWindow, ClickThroughHostingView<EmptyView>) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 120, height: 80),

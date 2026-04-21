@@ -56,8 +56,31 @@ final class DraggablePanel: NSPanel {
     private let notificationCenter: NotificationCenter
     private var defaultsDidChangeObserver: NSObjectProtocol?
 
+    // `.nonactivatingPanel` in the style mask tells AppKit not to
+    // activate the app when the panel is clicked, but by itself it does
+    // not prevent the panel from being keyed — a non-activating panel
+    // that returns `canBecomeKey = true` can still steal keyboard focus
+    // from the previously-frontmost app without a visible activation
+    // flash. That is exactly the Issue 6 symptom: click the pill to
+    // stop a recording, the user's real focus target (Slack, VS Code)
+    // silently loses focus, and `NSWorkspace.frontmostApplication`
+    // briefly returns Ninimma — breaking the auto-paste target-resolution
+    // path until the AX probe in ClipboardBatchOutput catches it.
+    //
+    // The fix is the full non-activating contract: style-mask bit +
+    // `canBecomeKey = false` + `canBecomeMain = false`. Matches the
+    // Wispr Flow pattern (Electron: `focusable: false` on a panel-type
+    // BrowserWindow). There is no keyboard input inside the pill and
+    // no @FocusState consumers, so dropping key status does not
+    // regress any existing interaction — clicks still land in
+    // `ClickThroughHostingView.mouseUp` via the `acceptsFirstMouse`
+    // override.
     override var canBecomeKey: Bool {
-        true
+        false
+    }
+
+    override var canBecomeMain: Bool {
+        false
     }
 
     override init(

@@ -165,6 +165,32 @@ via `PillOverlayPresenter.showRecordingStatusCard(text:)` +
 
 ---
 
+## Non-activating panel (Issue 6 — 2026-04-21)
+
+The pill panel must not promote Ninimma to frontmost on click. Verified
+in unit tests by asserting `canBecomeKey == false` + `canBecomeMain == false`
+on `DraggablePanel`, but the real-world effect is only observable at runtime.
+
+- [ ] **MV-NAP-1 (pill click preserves prior frontmost)** Bring Slack (or
+  any text-input app) to the front and place the cursor in a compose
+  field. Start a recording via the hotkey so the pill appears without
+  changing focus. Speak a sentence. Stop by clicking the pill itself.
+  Immediately observe: Slack's window chrome remains active (title bar
+  not dimmed), and the transcript pastes directly into the Slack
+  compose field — **no `Copied to clipboard · ⌘V to paste` card**.
+  Regression: if the card appears, `DraggablePanel.canBecomeKey` has
+  been flipped back to `true`.
+- [ ] **MV-NAP-2 (pill click does not change menu-bar focus)** Open
+  another app's menu (File menu in Finder is easy). Click the pill.
+  Confirm the open menu does NOT close — clicking a non-activating
+  panel should not deliver a system click that dismisses other menus.
+- [ ] **MV-NAP-3 (menu-bar stop path preserves prior frontmost)** Same
+  as MV-NAP-1 but stop via the status-item menu's `Stop Recording`
+  row. Status-item menus are tracked separately by AppKit and should
+  also preserve Slack as frontmost; transcript pastes into Slack.
+
+---
+
 ## Notes
 
 - Manual checklist entries above are the only verification path for the
