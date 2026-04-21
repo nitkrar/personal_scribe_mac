@@ -65,7 +65,7 @@ struct SettingsSection<Content: View>: View {
         VStack(alignment: .leading, spacing: SettingsLayout.itemSpacing) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(PersonalScribeTheme.Typography.display.font)
+                    .font(PersonalScribeTheme.Typography.title.font)
 
                 if let description, !description.isEmpty {
                     Text(description)

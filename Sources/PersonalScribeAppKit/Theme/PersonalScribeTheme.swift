@@ -226,13 +226,6 @@ public enum PersonalScribeTheme {
     }
 
     public enum Typography {
-        /// SF Pro Display Bold 20pt — window titles.
-        public static let display = FontToken(
-            pointSize: 20,
-            weight: .bold,
-            design: .default
-        )
-
         /// SF Pro Text Regular 13pt — body content.
         public static let body = FontToken(
             pointSize: 13,
@@ -259,9 +252,9 @@ public enum PersonalScribeTheme {
             design: .default
         )
 
-        /// 20pt bold — section titles (Home, Transcriptions, Modes, Settings).
-        /// Same point-size as `display`; kept as a distinct token so
-        /// callsites match the Manus reference vocabulary.
+        /// 20pt bold — window / section titles (Home, Transcriptions,
+        /// Modes, Settings) and Settings-layout headings. Matches the
+        /// Manus reference vocabulary.
         public static let title = FontToken(
             pointSize: 20,
             weight: .bold,

@@ -121,10 +121,6 @@ final class PersonalScribeThemeTests: XCTestCase {
 
     // MARK: - Typography tokens
 
-    func testDisplayFontSizeIs20() {
-        XCTAssertEqual(PersonalScribeTheme.Typography.display.pointSize, 20, accuracy: 0.01)
-    }
-
     func testBodyFontSizeIs13() {
         XCTAssertEqual(PersonalScribeTheme.Typography.body.pointSize, 13, accuracy: 0.01)
     }

@@ -26,7 +26,7 @@ public struct HotkeyRecorder: View {
         VStack(alignment: .leading, spacing: SettingsLayout.sectionSpacing) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Change Recording Shortcut")
-                    .font(PersonalScribeTheme.Typography.display.font)
+                    .font(PersonalScribeTheme.Typography.title.font)
 
                 Text("Press the new shortcut. Escape cancels; Set confirms the latest valid capture.")
                     .font(PersonalScribeTheme.Typography.body.font)
