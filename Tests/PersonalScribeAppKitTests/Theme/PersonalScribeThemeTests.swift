@@ -135,10 +135,6 @@ final class PersonalScribeThemeTests: XCTestCase {
 
     // MARK: - Spacing & radius tokens
 
-    func testPillCornerRadiusIs12() {
-        XCTAssertEqual(PersonalScribeTheme.Radius.pill, 12, accuracy: 0.001)
-    }
-
     func testWindowCornerRadiusIs14() {
         XCTAssertEqual(PersonalScribeTheme.Radius.window, 14, accuracy: 0.001)
     }

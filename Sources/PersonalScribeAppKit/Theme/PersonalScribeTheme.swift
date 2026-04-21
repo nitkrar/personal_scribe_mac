@@ -292,10 +292,6 @@ public enum PersonalScribeTheme {
     // MARK: - Radius & spacing
 
     public enum Radius {
-        /// Pill-overlay (pre-capsule) radius — 12pt. Retained for any
-        /// rounded-rect pill variants; the new 180×34 floating pill uses
-        /// `capsule` instead.
-        public static let pill: CGFloat = 12
         /// Main window corner radius — 14pt.
         public static let window: CGFloat = 14
         /// List-row / card radius — 8pt.
