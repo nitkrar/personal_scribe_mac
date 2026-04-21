@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import PersonalScribeAudio
 import PersonalScribeCore
 import XCTest
 @testable import PersonalScribeAppKit
@@ -120,7 +121,8 @@ final class UnifiedWindowControllerTests: XCTestCase {
             defaults: ephemeralDefaults(),
             transcriptReader: StubTranscriptReader(),
             metricsReader: StubMetricsReader(),
-            permissionService: StubPermissionService()
+            permissionService: StubPermissionService(),
+            inputDeviceProvider: NoOpAudioInputDeviceProvider()
         )
     }
 
