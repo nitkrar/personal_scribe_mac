@@ -191,8 +191,11 @@ struct PersonalScribeAppMain: App {
                 )
             }
         )
-        let showUnifiedWindow: @MainActor () -> Void = {
-            unifiedWindowControllerHost.showWindow(nil)
+        // Menu-bar "Home" must route to the Home tab, not just raise
+        // whatever tab was last active. Using the selecting variant
+        // matches the `.settings` paths below (⌘, and onboarding).
+        let openHomeTab: @MainActor () -> Void = {
+            unifiedWindowControllerHost.showWindow(selecting: .home)
         }
         let pasteLastTranscriptAction = PasteLastTranscriptAction(
             transcriptReader: unifiedTranscriptReader,
@@ -201,7 +204,7 @@ struct PersonalScribeAppMain: App {
         let statusItemControllerHost = StatusItemControllerHost(
             sceneModel: sceneModel,
             appStore: appStore,
-            openHome: showUnifiedWindow,
+            openHome: openHomeTab,
             openPasteLastTranscript: {
                 Task { await pasteLastTranscriptAction.perform() }
             },

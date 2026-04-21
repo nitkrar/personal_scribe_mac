@@ -34,3 +34,12 @@ or `StatusItemIconLoader`.
   current app name in all three states: `<AppBrand.displayName>` at idle,
   `<AppBrand.displayName> — recording` while recording, and
   `<AppBrand.displayName> — transcribing` while transcribing.
+
+## Menu-bar navigation routing
+
+- [ ] **MV-SI-8** Open the unified window, click into **Settings → About**
+  (or any non-Home tab), then close or background the window. Click the
+  status-item menu → **Home**. The window raises showing the **Home**
+  tab — not whatever tab was last active. Regression guard for the
+  `openHome: showUnifiedWindow` bug where the menu item only raised the
+  window without switching tabs.
