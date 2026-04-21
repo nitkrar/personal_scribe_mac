@@ -192,8 +192,21 @@ struct PersonalScribeAppMain: App {
         // the menu bar is zero-SwiftUI; we keep a Settings scene here
         // only to satisfy SwiftUI.App's non-empty-body requirement on
         // an LSUIElement app. It never appears.
+        //
+        // `.commands { CommandGroup(replacing: .appSettings) }` overrides
+        // SwiftUI's default `⌘,` handler so the shortcut opens our real
+        // settings surface (the unified window's Settings tab) instead of
+        // the empty `Settings { EmptyView() }` window above.
         Settings {
             EmptyView()
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { [unifiedWindowController] in
+                    unifiedWindowController.showWindow(selecting: .settings)
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }
