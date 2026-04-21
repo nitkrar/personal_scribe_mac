@@ -400,6 +400,47 @@ public enum PersonalScribeTheme {
             /// #808082 — cancel / secondary glyph on light pill.
             public static let cancel = color(hex: "808082")
         }
+
+        /// State-dependent border styling (pill UX spec §2 + §4). Each
+        /// visibility state paints a specific rounded-rect stroke over
+        /// the pill's rounded-rect surface. Widths in points, colours
+        /// from the shared theme palette.
+        public enum Border {
+            /// 1px white 8% opacity — idle specular rim, matches
+            /// the pre-spec chrome so the rest state looks unchanged.
+            public static let idleColor = Color.white.opacity(0.08)
+            public static let idleWidth: CGFloat = 1.0
+
+            /// 1.5px Clay #C9A96E — used for `.holdToRecord` and
+            /// `.recording`. Warm, distinct from the red stop glyph.
+            public static let clayColor = color(hex: "C9A96E")
+            public static let activeWidth: CGFloat = 1.5
+
+            /// 1px Champagne at 40% opacity — transcribing.
+            public static let transcribingColor = color(hex: "D4D0C8").opacity(0.4)
+            public static let transcribingWidth: CGFloat = 1.0
+
+            /// 1px Green #50C878 — done (brief checkmark state).
+            public static let doneColor = color(hex: "50C878")
+            public static let doneWidth: CGFloat = 1.0
+
+            /// 1.5px Red #F75138 — cancel card only (not a pill).
+            public static let cancelColor = color(hex: "F75138")
+            public static let cancelWidth: CGFloat = 1.5
+        }
+
+        /// Cancel-card-specific tokens (pill UX spec §2f). The card is
+        /// rendered by a separate view, not by `PillChrome`.
+        public enum CancelCard {
+            /// #1E2032 — cancel card background (slightly cooler than
+            /// the pill's #1A1B2E — lets the card read as a sibling,
+            /// not a continuation of the same surface).
+            public static let background = color(hex: "1E2032")
+            /// #C9A96E on #281E0F — Undo button, matches the clay
+            /// border family.
+            public static let undoText = color(hex: "C9A96E")
+            public static let undoFill = color(hex: "281E0F")
+        }
     }
 
     // MARK: - Row heights (v2)
