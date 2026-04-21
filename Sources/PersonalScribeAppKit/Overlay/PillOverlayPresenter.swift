@@ -324,9 +324,13 @@ public final class PillOverlayPresenter {
             diagnosticLogger.info("PillOverlayPresenter visibility-sink — visibility=\(visibility) isVisible=\(isVisible)")
 
             switch visibility {
-            case .hidden:
+            case .hidden, .cancelled:
+                // `.cancelled` hides the pill surface; Phase 3 will show
+                // a Cancel Card at the same anchor. Until then, the
+                // presenter just hides the pill so the stale recording
+                // UI doesn't linger.
                 hide()
-            case .idle, .downloading, .loading, .recording, .transcribing, .done, .error:
+            case .idle, .downloading, .loading, .holdToRecord, .recording, .transcribing, .done, .error:
                 if !isVisible {
                     show()
                 }
@@ -439,9 +443,13 @@ public final class PillOverlayPresenter {
 
     private var supportsTap: Bool {
         switch model.visibility {
+        // `.holdToRecord` is driven by the modifier key rather than the
+        // pill click target, so taps are NOT enabled during hold —
+        // otherwise a click mid-hold would fight the release-to-
+        // transcribe semantic.
         case .idle, .recording:
             return true
-        case .hidden, .downloading, .loading, .transcribing, .done, .error:
+        case .hidden, .downloading, .loading, .holdToRecord, .transcribing, .done, .cancelled, .error:
             return false
         }
     }

@@ -74,10 +74,18 @@ public struct PillOverlayView: View {
     public var body: some View {
         Group {
             switch model.visibility {
-            case .hidden:
+            case .hidden, .cancelled:
+                // Phase 1 placeholder for `.cancelled`: just hide the
+                // pill. Phase 3 replaces this with the Cancel Card at
+                // the same screen anchor.
                 EmptyView()
             case .idle:
                 idlePill
+            case .holdToRecord:
+                // Phase 1 placeholder: reuse the committed-recording
+                // pill visuals while we hold. Phase 2 introduces the
+                // 160×36 7-bar equaliser + clay border per the spec.
+                recordingPill
             case .recording:
                 recordingPill
             case .transcribing:

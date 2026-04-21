@@ -302,4 +302,60 @@ final class PillOverlayViewModelTests: XCTestCase {
         viewModel.apply(sessionState: .recording, preparationProgress: nil)
         XCTAssertEqual(viewModel.visibility, .recording)
     }
+
+    // MARK: - Phase 1: holdToRecord + cancelled state machine
+
+    func testApplyHoldToRecordVisibilitySetsVisibility() {
+        let viewModel = PillOverlayViewModel()
+
+        viewModel.apply(visibility: .holdToRecord)
+
+        XCTAssertEqual(viewModel.visibility, .holdToRecord)
+    }
+
+    func testApplyCancelledVisibilitySetsVisibility() {
+        let viewModel = PillOverlayViewModel()
+
+        viewModel.apply(visibility: .cancelled)
+
+        XCTAssertEqual(viewModel.visibility, .cancelled)
+    }
+
+    func testIsAudioActiveTrueForHoldToRecord() {
+        // Per pill UX spec §3: opt+/ key-down while idle enters
+        // holdToRecord AND begins microphone capture. The view model's
+        // `isAudioActive` flag must reflect that so the waveform
+        // renders during hold.
+        let viewModel = PillOverlayViewModel()
+
+        viewModel.apply(visibility: .holdToRecord)
+
+        XCTAssertTrue(viewModel.isAudioActive)
+    }
+
+    func testIsAudioActiveTrueForRecording() {
+        // Regression: existing contract for committed recording.
+        let viewModel = PillOverlayViewModel()
+
+        viewModel.apply(visibility: .recording)
+
+        XCTAssertTrue(viewModel.isAudioActive)
+    }
+
+    func testIsAudioActiveFalseForCancelled() {
+        let viewModel = PillOverlayViewModel()
+
+        viewModel.apply(visibility: .cancelled)
+
+        XCTAssertFalse(viewModel.isAudioActive)
+    }
+
+    func testIsAudioActiveFalseForIdleHiddenTranscribingDone() {
+        let viewModel = PillOverlayViewModel()
+
+        for state: PillOverlayViewModel.Visibility in [.idle, .hidden, .transcribing, .done] {
+            viewModel.apply(visibility: state)
+            XCTAssertFalse(viewModel.isAudioActive, "isAudioActive must be false for \(state)")
+        }
+    }
 }

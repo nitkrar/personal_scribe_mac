@@ -11,7 +11,7 @@ public final class PillOverlayViewModel: ObservableObject {
     @Published public var audioLevel: Double = 0
 
     public var isAudioActive: Bool {
-        visibility == .recording
+        visibility == .recording || visibility == .holdToRecord
     }
 
     public init(
