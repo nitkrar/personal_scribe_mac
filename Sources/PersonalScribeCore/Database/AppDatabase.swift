@@ -20,9 +20,9 @@ import GRDB
 ///      tokenizer with `remove_diacritics` set to `2`.
 ///   6. Set 0600 permissions on the SQLite file if it's present.
 ///
-/// Any failure at steps 1–6 surfaces as `TranscriptStorageError`. The old
-/// `SQLiteTranscriptStore.OpenError` cases are re-homed as `RuntimeGateFailure`
-/// and wrapped inside `TranscriptStorageError.runtimeUnsupported(...)`.
+/// Any failure at steps 1–6 surfaces as `TranscriptStorageError`. Runtime-gate
+/// failures (unsupported SQLite version, missing FTS5, bad tokenizer config)
+/// are wrapped inside `TranscriptStorageError.runtimeUnsupported(...)`.
 ///
 /// **No `storageHealth` stream here.** That observable surface is scope-split
 /// to backlog #043 per plan §3; the init-time gates remain throwing.
@@ -212,10 +212,6 @@ public struct AppDatabase: Sendable {
     }
 }
 
-// Fileprivate version of the `SQLiteVersion` comparator that lives inside
-// `SQLiteTranscriptStore.swift`. Kept local so the two owners don't share a
-// symbol during Pass 1 (Stage B deletes the `SQLiteTranscriptStore` copy
-// along with the legacy store).
 private struct AppDatabaseSQLiteVersion: Comparable {
     let major: Int
     let minor: Int

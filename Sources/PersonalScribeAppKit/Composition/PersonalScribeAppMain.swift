@@ -161,11 +161,13 @@ struct PersonalScribeAppMain: App {
             )
         self.startupCoordinator = startupCoordinator
         let metricsReader: any MetricsReading = {
-            do {
-                return try AppComposition.makeMetricsReader()
-            } catch {
+            guard let appDatabase = AppComposition.appDatabase else {
                 return EmptyMetricsReader()
             }
+            return SQLiteMetricsService(
+                appDatabase: appDatabase,
+                referenceDateProvider: Date.init
+            )
         }()
         let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader()
         let appKitActiveModeProvider = AppComposition.activeModeProvider

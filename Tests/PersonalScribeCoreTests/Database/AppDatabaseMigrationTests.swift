@@ -3,19 +3,25 @@ import GRDB
 import XCTest
 @testable import PersonalScribeCore
 
-/// Characterization tests for the SQLite schema delivered by the current `SQLiteTranscriptStore`
-/// migrator (Phase 3.D). Pins `sqlite_master.sql` byte-for-byte so the storage-layer refactor
-/// (plan `plans/storage-database-layer.md`, backlog #026) can swap in an `AppDatabase`-owned
-/// migrator without drifting the wire-level DDL. A failure here is deliberate: any DDL change
-/// belongs in a locked migration plan, not accidental whitespace/formatting drift.
+/// Characterization tests for the SQLite schema delivered by `AppDatabase`'s migrator.
+/// Pins `sqlite_master.sql` byte-for-byte so future migrations can't accidentally drift the
+/// wire-level DDL (storage-database-layer.md, backlog #026). A failure here is deliberate:
+/// any DDL change belongs in a locked migration plan, not accidental whitespace/formatting
+/// drift.
 final class AppDatabaseMigrationTests: XCTestCase {
     private let fileManager = FileManager.default
 
-    func test_currentMigrator_pinsSQLiteMasterDDL() async throws {
-        let recordings = try makeTempRecordingsDir()
-        defer { cleanup(recordings) }
+    func test_appDatabaseMigrator_pinsSQLiteMasterDDL() async throws {
+        let baseDirectory = try makeTempBaseDir()
+        defer { cleanup(baseDirectory) }
 
-        _ = try SQLiteTranscriptStore(recordingsDirectory: recordings)
+        let recordings = baseDirectory.appendingPathComponent("recordings", isDirectory: true)
+        try fileManager.createDirectory(at: recordings, withIntermediateDirectories: true)
+        let locator = FixedBaseDirectoryStorageLocator(
+            baseDirectory: baseDirectory,
+            managedDirectoryOverrides: [.recordings: recordings]
+        )
+        _ = try AppDatabase(locator: locator)
 
         let databaseURL = recordings.appendingPathComponent("transcripts.sqlite", isDirectory: false)
         let dumped = try dumpSchema(at: databaseURL)
@@ -26,8 +32,8 @@ final class AppDatabaseMigrationTests: XCTestCase {
     // MARK: - Expected DDL (byte-identical pin)
 
     /// Format: `<type> <name>\n<sql>\n---\n` per entry, excluding SQLite-internal and GRDB-internal
-    /// bookkeeping objects. Entries ordered by (type, name). Pinned against the DDL emitted by the
-    /// current `SQLiteTranscriptStore.makeMigrator()` as of plan freeze (storage-database-layer.md).
+    /// bookkeeping objects. Entries ordered by (type, name). Pinned against the DDL emitted by
+    /// `TranscriptsMigrator.makeMigrator()` (and, equivalently, by `AppDatabase.init`).
     private static let expectedSchemaDump = """
     table transcripts
     CREATE TABLE transcripts (
@@ -111,15 +117,14 @@ final class AppDatabaseMigrationTests: XCTestCase {
         """
     }
 
-    private func makeTempRecordingsDir() throws -> URL {
+    private func makeTempBaseDir() throws -> URL {
         let root = fileManager.temporaryDirectory
             .appendingPathComponent("AppDatabaseMigrationTests-\(UUID().uuidString)", isDirectory: true)
-        let recordings = root.appendingPathComponent("recordings", isDirectory: true)
-        try fileManager.createDirectory(at: recordings, withIntermediateDirectories: true)
-        return recordings
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
     }
 
-    private func cleanup(_ recordings: URL) {
-        try? fileManager.removeItem(at: recordings.deletingLastPathComponent())
+    private func cleanup(_ baseDirectory: URL) {
+        try? fileManager.removeItem(at: baseDirectory)
     }
 }

@@ -5,10 +5,6 @@ import PersonalScribeCore
 import PersonalScribeSession
 import PersonalScribeTranscription
 
-public enum AppCompositionError: Error {
-    case databaseUnavailable
-}
-
 @MainActor
 public enum AppComposition {
     /// Single shared `AppDatabase` instance per plan §3: "exactly one instance
@@ -62,30 +58,6 @@ public enum AppComposition {
 
     public static func makeSessionCoordinator() -> SessionCoordinator {
         sessionCoordinator
-    }
-
-    public static func makeMetricsService() throws -> SQLiteMetricsService {
-        guard let appDatabase else {
-            throw AppCompositionError.databaseUnavailable
-        }
-        return SQLiteMetricsService(
-            appDatabase: appDatabase,
-            calendar: .current,
-            referenceDateProvider: Date.init
-        )
-    }
-
-    /// Read-only snapshot accessor used by the unified window's Home tab.
-    /// Returns a `MetricsReading` backed by the shared `AppDatabase`, so
-    /// rollups + recents stay consistent with `makeMetricsService()`.
-    public static func makeMetricsReader() throws -> any MetricsReading {
-        guard let appDatabase else {
-            throw AppCompositionError.databaseUnavailable
-        }
-        return SQLiteMetricsReader(
-            appDatabase: appDatabase,
-            referenceDateProvider: Date.init
-        )
     }
 
     public static func makeGlobalHotkeyMonitor() -> GlobalHotkeyMonitor {
