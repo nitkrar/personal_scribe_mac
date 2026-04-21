@@ -16,6 +16,7 @@ struct PersonalScribeAppMain: App {
     @StateObject private var pillController: PillOverlayController
     @StateObject private var statusItemController: StatusItemControllerHost
     @StateObject private var unifiedWindowController: UnifiedWindowControllerHost
+    @StateObject private var pasteboardSnapshotHost: PasteboardSnapshotHost
 
     init() {
         self.init(
@@ -104,6 +105,18 @@ struct PersonalScribeAppMain: App {
             pillController.showClipboardOnlyNotice()
         }
 
+        // Pill UX Phase 5: snapshot the user's pre-recording clipboard
+        // contents when recording starts so the Cancel Card's Undo
+        // button can restore them if the user discards the recording.
+        // Hook into session state transitions via the app store. The
+        // `PasteboardSnapshotHost` @StateObject owns the subscription
+        // lifetime — attaching cancellables to the struct itself
+        // wouldn't survive SwiftUI init re-runs.
+        let pasteboardSnapshotHost = PasteboardSnapshotHost(
+            appStore: appStore,
+            viewModel: pillController.viewModel
+        )
+
         // Hotkey monitor construction is deferred until AFTER the pill
         // controller exists so `onHoldStartVisibilityPush` can capture
         // the view model reference directly and push `.holdToRecord`
@@ -178,6 +191,9 @@ struct PersonalScribeAppMain: App {
         )
         _unifiedWindowController = StateObject(
             wrappedValue: unifiedWindowControllerHost
+        )
+        _pasteboardSnapshotHost = StateObject(
+            wrappedValue: pasteboardSnapshotHost
         )
 
         sceneModel.startObserving()
@@ -307,6 +323,53 @@ final class StatusItemControllerHost: ObservableObject {
 
     func setMenuBarVisible(_ isVisible: Bool) {
         controller.setStatusItemVisible(isVisible)
+    }
+}
+
+/// @StateObject host for the `PasteboardSnapshotService` + the Combine
+/// subscription that wires `AppStore` session-state transitions to
+/// snapshot / clear calls. Pill UX spec §4 requires saving the pre-
+/// recording clipboard so the Cancel Card's Undo can restore it.
+@MainActor
+final class PasteboardSnapshotHost: ObservableObject {
+    let service: PasteboardSnapshotService
+    private var cancellables: Set<AnyCancellable> = []
+    private var previousSessionState: SessionState
+
+    init(
+        appStore: AppStore,
+        viewModel: PillOverlayViewModel,
+        service: PasteboardSnapshotService = PasteboardSnapshotService()
+    ) {
+        self.service = service
+        self.previousSessionState = appStore.snapshot.sessionState
+
+        viewModel.onUndoCancelledRecording = { [weak service] in
+            service?.restoreLastSnapshot()
+        }
+
+        appStore.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak appStore, weak service] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let appStore, let service else { return }
+                    let next = appStore.snapshot.sessionState
+                    defer { self.previousSessionState = next }
+
+                    // Snapshot on idle → recording. Pre-recording user
+                    // clipboard contents are what Undo must restore.
+                    if case .idle = self.previousSessionState, case .recording = next {
+                        service.snapshotCurrentContents()
+                    }
+
+                    // Clear on transcribing → idle (successful complete).
+                    // A fresh snapshot will be taken on the next recording.
+                    if case .transcribing = self.previousSessionState, case .idle = next {
+                        service.clearSnapshot()
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
 }
 
