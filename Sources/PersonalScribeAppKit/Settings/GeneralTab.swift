@@ -2,24 +2,26 @@ import AppKit
 import AppKit
 import SwiftUI
 import PersonalScribeCore
-import ServiceManagement
 
 @MainActor
 public struct GeneralTab: View {
     @StateObject private var viewModel: GeneralTabViewModel
     @StateObject private var shortcutsViewModel: ShortcutsTabViewModel
     @State private var isRecordingHotkeyRecorderPresented = false
+    @Environment(\.colorScheme) private var colorScheme
 
     public init(
         defaults: UserDefaults = .standard,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
-        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
+        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
+        launchAtLoginService: any LaunchAtLoginServicing = SystemLaunchAtLoginService()
     ) {
         _viewModel = StateObject(
             wrappedValue: GeneralTabViewModel(
                 defaults: defaults,
                 menuBarVisibilityProvider: menuBarVisibilityProvider,
-                menuBarVisibilitySetter: menuBarVisibilitySetter
+                menuBarVisibilitySetter: menuBarVisibilitySetter,
+                launchAtLoginService: launchAtLoginService
             )
         )
         _shortcutsViewModel = StateObject(
@@ -82,6 +84,9 @@ public struct GeneralTab: View {
                 }
             }
         }
+        .onAppear {
+            viewModel.refreshLaunchAtLoginStatus()
+        }
     }
 
     /// APPLICATION section — mockup-gaps D.2. Absorbs the old
@@ -95,13 +100,31 @@ public struct GeneralTab: View {
             Text("Application")
                 .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
 
-            Toggle(
-                "Launch at login",
-                isOn: Binding(
-                    get: { viewModel.launchAtLogin },
-                    set: { viewModel.setLaunchAtLogin($0) }
+            HStack(spacing: SettingsLayout.inlineSpacing) {
+                Toggle(
+                    "Launch at login",
+                    isOn: Binding(
+                        get: { viewModel.launchAtLogin },
+                        set: { viewModel.setLaunchAtLogin($0) }
+                    )
                 )
-            )
+
+                // Status dot reflects the real registration state as last
+                // re-read from the login-items service. Green when the
+                // system reports `.enabled`, red otherwise — register()
+                // failures surface here because setLaunchAtLogin re-reads
+                // the service after the call (#005).
+                launchStatusDot
+
+                // Tooltip-only affordance — macOS does not natively prompt
+                // for Login Items registration, so point the user at the
+                // system-settings pane that does.
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                    .help("Verify or change this in System Settings → General → Login Items")
+
+                Spacer()
+            }
 
             Divider()
 
@@ -113,6 +136,15 @@ public struct GeneralTab: View {
                 )
             )
         }
+    }
+
+    private var launchStatusDot: some View {
+        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+        let color = viewModel.launchAtLogin ? palette.statusReady : palette.statusRecording
+        return Circle()
+            .fill(color)
+            .frame(width: 8, height: 8)
+            .accessibilityHidden(true)
     }
 
     private var visibilityCard: some View {
@@ -405,6 +437,7 @@ final class GeneralTabViewModel: ObservableObject {
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
     private let systemIsDarkProvider: @MainActor () -> Bool
     private var effectiveAppearanceObservation: NSKeyValueObservation?
+    private let launchAtLoginService: any LaunchAtLoginServicing
 
     init(
         defaults: UserDefaults = .standard,
@@ -414,11 +447,13 @@ final class GeneralTabViewModel: ObservableObject {
             NSApplication.shared.effectiveAppearance.bestMatch(
                 from: [.aqua, .darkAqua]
             ) == .darkAqua
-        }
+        },
+        launchAtLoginService: any LaunchAtLoginServicing = SystemLaunchAtLoginService()
     ) {
         self.defaults = defaults
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.systemIsDarkProvider = systemIsDarkProvider
+        self.launchAtLoginService = launchAtLoginService
         self.pillVisibilityMode = PillVisibilityMode.resolve(from: defaults)
         // Snapshot-at-init: isMenuBarVisible is NOT re-read while the
         // Settings window is open. The General tab is the sole mutator
@@ -433,9 +468,10 @@ final class GeneralTabViewModel: ObservableObject {
         self.pillAppearance = PillAppearance.resolve(from: defaults)
         self.pillStyle = PillStyle.resolve(from: defaults)
         self.pasteRestoreDelay = PasteRestoreDelay.resolve(from: defaults)
-        // SMAppService.mainApp.status reflects the current registration
-        // state. .enabled means the app is registered to launch at login.
-        self.launchAtLogin = SMAppService.mainApp.status == .enabled
+        // launchAtLogin seeds from the injected service. The real impl
+        // (`SystemLaunchAtLoginService`) reads SMAppService.mainApp.status
+        // — .enabled means the app is registered to launch at login.
+        self.launchAtLogin = launchAtLoginService.isEnabled
         self.showInDock = ShowInDockPreference.resolve(from: defaults)
         self.pasteEnabled = PasteEnabledPreference.resolve(from: defaults)
         self.appTheme = AppTheme.resolve(from: defaults)
@@ -566,17 +602,27 @@ final class GeneralTabViewModel: ObservableObject {
     func setLaunchAtLogin(_ enabled: Bool) {
         do {
             if enabled {
-                try SMAppService.mainApp.register()
+                try launchAtLoginService.register()
             } else {
-                try SMAppService.mainApp.unregister()
+                try launchAtLoginService.unregister()
             }
-            launchAtLogin = SMAppService.mainApp.status == .enabled
+            launchAtLogin = launchAtLoginService.isEnabled
         } catch {
             // Registration can fail if the user denies the system prompt
-            // or if the bundle is not signed. Silently refresh the toggle
-            // to reflect the actual state rather than the requested state.
-            launchAtLogin = SMAppService.mainApp.status == .enabled
+            // or if the bundle is not signed. Snap the toggle to the real
+            // service status — `launchAtLogin` driving the dot color in
+            // GeneralTab means a failed register visibly turns the dot
+            // red without needing an alert (#005).
+            launchAtLogin = launchAtLoginService.isEnabled
         }
+    }
+
+    // Re-reads the injected service and publishes the current state.
+    // Invoked from GeneralTab.onAppear so the dot reflects out-of-band
+    // changes (e.g. the user toggled Login Items in System Settings
+    // while the window was closed).
+    func refreshLaunchAtLoginStatus() {
+        launchAtLogin = launchAtLoginService.isEnabled
     }
 
     func setPasteRestoreDelaySeconds(_ seconds: TimeInterval) {

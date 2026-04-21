@@ -47,6 +47,17 @@ Stage A replaces the inert AIModelsTab with one `SettingsCard` row per registere
   4. Confirm the row immediately shows a red **Failed** badge with text like `"Not enough disk space to download Parakeet TDT 0.6B. Needs 650 MB, 280 MB available."` and a **Retry** button.
   5. Free up space on the volume; click Retry; confirm download proceeds normally.
 
+## Launch-at-Login status feedback (#005)
+
+Small status dot + tooltip icon next to the `Launch at login` toggle.
+Green (`Palette.statusReady`) when `SMAppService.mainApp.status == .enabled`, red (`Palette.statusRecording`) otherwise. View model re-reads the injected service on `.onAppear` and immediately after every `register()` / `unregister()` — no optimistic UI, no alert.
+
+- **MV-LAL-1 — toggle ON reflects success:** from a fresh state where the app is NOT registered (dot red), click `Launch at login`. Expected: toggle flips on, the dot flips to green within one frame. Relaunch the app, reopen `Settings → General`, confirm the dot is still green on appear.
+- **MV-LAL-2 — toggle OFF reflects success:** with the dot green, click `Launch at login` off. Expected: toggle off, dot red. Relaunch, confirm dot is still red on appear.
+- **MV-LAL-3 — register failure surfaces via red dot (no alert):** run the unsigned `swift run` binary (or any build where `SMAppService.mainApp.register()` throws) and click the toggle on. Expected: no alert is shown; the toggle visually snaps back to off and the dot stays red. (This is the intended feedback path for #005 — the swallowed error is now visible.)
+- **MV-LAL-4 — out-of-band change picked up on reopen:** with the app running and Settings closed, open `System Settings → General → Login Items` and flip the Ninimma row's toggle. Open `Settings → General` in Ninimma and confirm the `Launch at login` toggle + dot reflect the System-Settings state (not the pre-change state).
+- **MV-LAL-5 — info-icon tooltip:** hover the ⓘ icon next to the checkbox and confirm a help tooltip appears reading `Verify or change this in System Settings → General → Login Items`.
+
 ## ⌘, keyboard shortcut opens Settings tab
 
 Wired in `PersonalScribeAppMain.body` via `CommandGroup(replacing: .appSettings)` — replaces the default SwiftUI `Settings { EmptyView() }` handler so the shortcut opens the unified window's Settings tab instead of the empty placeholder scene.
