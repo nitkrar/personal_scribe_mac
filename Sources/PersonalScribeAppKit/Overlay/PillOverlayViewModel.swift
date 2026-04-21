@@ -10,6 +10,30 @@ public final class PillOverlayViewModel: ObservableObject {
     @Published public private(set) var visibilityMode: PillVisibilityMode
     @Published public var audioLevel: Double = 0
 
+    /// Window during which the Cancel Card is visible after a cancel.
+    /// Spec §3: "4 seconds elapsed | Cancel Card is visible | Dismiss
+    /// Cancel Card; return to .idle".
+    public static let cancelCardDismissDelay: Duration = .seconds(4)
+
+    /// Invoked when the user clicks Undo on the Cancel Card. Phase 3
+    /// sets up the hook; Phase 5 wires it to restore the pasteboard
+    /// snapshot captured at recording start. Called on the main actor
+    /// before the card dismisses back to `.idle`.
+    public var onUndoCancelledRecording: (@MainActor () -> Void)?
+
+    private var cancelDismissTask: Task<Void, Never>?
+    /// Override that suppresses incoming `apply(visibility:)` calls from
+    /// the AppStore session-state mapping while `.cancelled` is
+    /// "sticky". Without this, the session's normal
+    /// `.recording → .idle` transition on cancel would immediately
+    /// clobber `.cancelled` before the user sees the Cancel Card.
+    /// Phase 3 uses `isShowingCancelCard` to gate those updates; Phase 5
+    /// inspects the same flag when deciding whether to restore
+    /// clipboard on Undo.
+    public var isShowingCancelCard: Bool {
+        visibility == .cancelled
+    }
+
     public var isAudioActive: Bool {
         visibility == .recording || visibility == .holdToRecord
     }
@@ -22,6 +46,10 @@ public final class PillOverlayViewModel: ObservableObject {
         self.visibilityMode = visibilityMode
     }
 
+    deinit {
+        cancelDismissTask?.cancel()
+    }
+
     public func apply(
         visibility: Visibility,
         visibilityMode: PillVisibilityMode? = nil
@@ -30,7 +58,56 @@ public final class PillOverlayViewModel: ObservableObject {
             self.visibilityMode = visibilityMode
         }
 
+        // Sticky Cancel Card: once `.cancelled` has been entered,
+        // external session-driven visibility updates are held off until
+        // the 4s auto-dismiss fires or the user clicks Undo. Prevents
+        // the session's own `.recording → .idle` cancel transition
+        // from wiping the Cancel Card before the user can see it.
+        if isShowingCancelCard && visibility != .cancelled && visibility != .idle {
+            return
+        }
+
         self.visibility = visibility
+    }
+
+    // MARK: - Cancel Card state (spec §2f + §3)
+
+    /// Enter the `.cancelled` state and show the Cancel Card. Auto-
+    /// dismisses back to `.idle` after `cancelCardDismissDelay`. Pass a
+    /// custom `sleep` for tests that want to exercise the auto-dismiss
+    /// path without real wall-clock waits.
+    public func cancel(
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
+        cancelDismissTask?.cancel()
+        visibility = .cancelled
+
+        let delay = Self.cancelCardDismissDelay
+        cancelDismissTask = Task { [weak self] in
+            do {
+                try await sleep(delay)
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
+
+            await MainActor.run {
+                guard let self, self.visibility == .cancelled else { return }
+                self.visibility = .idle
+            }
+        }
+    }
+
+    /// Invoked when the user clicks Undo. Cancels the auto-dismiss
+    /// timer, fires `onUndoCancelledRecording`, and returns to `.idle`.
+    public func undoCancel() {
+        cancelDismissTask?.cancel()
+        cancelDismissTask = nil
+        if visibility == .cancelled {
+            onUndoCancelledRecording?()
+            visibility = .idle
+        }
     }
 
     public func setVisibilityMode(_ mode: PillVisibilityMode) {

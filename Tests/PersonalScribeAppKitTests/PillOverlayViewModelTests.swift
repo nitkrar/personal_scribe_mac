@@ -358,4 +358,84 @@ final class PillOverlayViewModelTests: XCTestCase {
             XCTAssertFalse(viewModel.isAudioActive, "isAudioActive must be false for \(state)")
         }
     }
+
+    // MARK: - Phase 3: Cancel Card + Undo (spec §2f + §3)
+
+    func testCancelMovesVisibilityToCancelled() {
+        let viewModel = PillOverlayViewModel()
+        viewModel.apply(visibility: .recording)
+
+        viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })
+
+        XCTAssertEqual(viewModel.visibility, .cancelled)
+        XCTAssertTrue(viewModel.isShowingCancelCard)
+    }
+
+    func testCancelAutoDismissesToIdleAfterSleepCompletes() async {
+        let viewModel = PillOverlayViewModel()
+        viewModel.apply(visibility: .recording)
+
+        // Immediate sleep so the dismiss fires on the next runloop tick.
+        viewModel.cancel(sleep: { _ in })
+
+        await Task.yield()
+        await Task.yield()
+
+        XCTAssertEqual(viewModel.visibility, .idle)
+        XCTAssertFalse(viewModel.isShowingCancelCard)
+    }
+
+    func testUndoCancelFiresCallbackAndReturnsToIdle() {
+        let viewModel = PillOverlayViewModel()
+        var undoCount = 0
+        viewModel.onUndoCancelledRecording = {
+            undoCount += 1
+        }
+        viewModel.apply(visibility: .recording)
+        viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })
+
+        viewModel.undoCancel()
+
+        XCTAssertEqual(undoCount, 1)
+        XCTAssertEqual(viewModel.visibility, .idle)
+        XCTAssertFalse(viewModel.isShowingCancelCard)
+    }
+
+    func testUndoCancelIsNoopWhenNotCancelled() {
+        let viewModel = PillOverlayViewModel()
+        var undoCount = 0
+        viewModel.onUndoCancelledRecording = {
+            undoCount += 1
+        }
+
+        viewModel.undoCancel()
+
+        XCTAssertEqual(undoCount, 0)
+        XCTAssertEqual(viewModel.visibility, .idle)
+    }
+
+    func testCancelledStateIsStickyAgainstIncomingSessionVisibilityUpdates() {
+        // Once the view model enters `.cancelled`, an incoming
+        // `apply(visibility: .recording)` from the session-state
+        // mapping must not clobber the Cancel Card before the user
+        // sees it. `.idle` is allowed (that's the dismiss path).
+        let viewModel = PillOverlayViewModel()
+        viewModel.apply(visibility: .recording)
+        viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })
+        XCTAssertEqual(viewModel.visibility, .cancelled)
+
+        viewModel.apply(visibility: .recording)
+        XCTAssertEqual(viewModel.visibility, .cancelled)
+
+        viewModel.apply(visibility: .transcribing)
+        XCTAssertEqual(viewModel.visibility, .cancelled)
+
+        viewModel.apply(visibility: .hidden)
+        XCTAssertEqual(viewModel.visibility, .cancelled)
+
+        // `.idle` is allowed through — the auto-dismiss timer relies
+        // on it, and undoCancel() calls it directly.
+        viewModel.apply(visibility: .idle)
+        XCTAssertEqual(viewModel.visibility, .idle)
+    }
 }

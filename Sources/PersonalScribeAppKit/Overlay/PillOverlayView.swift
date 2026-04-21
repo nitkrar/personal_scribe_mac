@@ -48,6 +48,10 @@ public struct PillOverlayView: View {
     static let downloadingSize = CGSize(width: 240, height: 36)
     static let loadingSize = CGSize(width: 140, height: 36)
     static let errorSize = CGSize(width: 220, height: 36)
+    /// 280×44 — Cancel Card (spec §2f). Not a pill — the panel resizes
+    /// to this footprint at the same anchor origin when visibility
+    /// transitions to `.cancelled`.
+    static let cancelCardSize = CGSize(width: 280, height: 44)
 
     /// Corner radius for idle (spec §2a — 14pt) and a few non-spec
     /// states. `PillChrome(state:)` picks this per state; the
@@ -90,11 +94,12 @@ public struct PillOverlayView: View {
     public var body: some View {
         Group {
             switch model.visibility {
-            case .hidden, .cancelled:
-                // Phase 1 placeholder for `.cancelled`: just hide the
-                // pill. Phase 3 replaces this with the Cancel Card at
-                // the same screen anchor.
+            case .hidden:
                 EmptyView()
+            case .cancelled:
+                CancelCardView(onUndo: { [weak model] in
+                    model?.undoCancel()
+                })
             case .idle:
                 idlePill
             case .holdToRecord:
@@ -408,4 +413,77 @@ private struct PillChrome: ViewModifier {
             )
             .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
     }
+}
+
+/// Cancel Card — shown when `PillOverlayViewModel.visibility == .cancelled`
+/// (pill UX spec §2f). Replaces the pill surface at the same screen
+/// anchor. Not a pill — its own cooler-navy background, red border, and
+/// right-aligned Undo button.
+///
+/// Auto-dismiss + clipboard restore are managed on the view model side
+/// (`PillOverlayViewModel.cancel(...)` + `.undoCancel()`); this view is
+/// purely presentational.
+@MainActor
+struct CancelCardView: View {
+    let onUndo: @MainActor () -> Void
+
+    var body: some View {
+        let textColor = PersonalScribeTheme.Pill.Dark.waveform
+        let background = PersonalScribeTheme.Pill.CancelCard.background
+        let borderColor = PersonalScribeTheme.Pill.Border.cancelColor
+        let borderWidth = PersonalScribeTheme.Pill.Border.cancelWidth
+        let undoText = PersonalScribeTheme.Pill.CancelCard.undoText
+        let undoFill = PersonalScribeTheme.Pill.CancelCard.undoFill
+
+        HStack(spacing: 12) {
+            Text("Recording cancelled")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(textColor)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: 8)
+
+            Button(action: onUndo) {
+                Text("Undo")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(undoText)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(undoFill)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(borderColor, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Undo — restore clipboard contents from before the recording")
+        }
+        .padding(.horizontal, 14)
+        .frame(
+            width: PillOverlayView.cancelCardSize.width,
+            height: PillOverlayView.cancelCardSize.height,
+            alignment: .leading
+        )
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(background)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(borderColor, lineWidth: borderWidth)
+        )
+        .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+#Preview("Cancel Card — default") {
+    CancelCardView(onUndo: {})
+        .padding(40)
+        .background(Color.black.opacity(0.3))
+        .preferredColorScheme(.dark)
 }

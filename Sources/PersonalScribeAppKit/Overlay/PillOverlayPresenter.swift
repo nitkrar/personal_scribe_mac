@@ -324,13 +324,17 @@ public final class PillOverlayPresenter {
             diagnosticLogger.info("PillOverlayPresenter visibility-sink — visibility=\(visibility) isVisible=\(isVisible)")
 
             switch visibility {
-            case .hidden, .cancelled:
-                // `.cancelled` hides the pill surface; Phase 3 will show
-                // a Cancel Card at the same anchor. Until then, the
-                // presenter just hides the pill so the stale recording
-                // UI doesn't linger.
+            case .hidden:
                 hide()
-            case .idle, .downloading, .loading, .holdToRecord, .recording, .transcribing, .done, .error:
+            case .cancelled,
+                 .idle, .downloading, .loading,
+                 .holdToRecord, .recording, .transcribing, .done, .error:
+                // `.cancelled` keeps the panel visible: the Cancel Card
+                // (spec §2f) replaces the pill surface at the same
+                // screen anchor for 4s. `CancelCardView` (280×44) fits
+                // within the existing 280×60 panel canvas, so no panel
+                // resize is needed — the view model's body switch
+                // renders the card directly.
                 if !isVisible {
                     show()
                 }
