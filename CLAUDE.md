@@ -22,6 +22,11 @@ Santa on this machine runs in **Lockdown** with **Transitive Allowlisting** enab
   Candidates to confirm: PillOverlayPresenter routing, menu bar lifecycle,
   hotkey monitor setup, paste injection permission flow. -->
 
+## Design references
+
+- `plans/App UI design/SeshatTheme.swift` is **informational / brainstorm-seed only**. It is NOT a drop-in to adopt verbatim. The project has deliberately diverged (e.g. `Palette.brandChampagne = #D4D0C8` wins over the reference's `Accent.champagne = #CCB990`; UserDefaults keys strip the `Seshat*` prefix). Tests codify the current policy — when in doubt, grep the test suite before "fixing" a divergence from the reference. See `plans/backlog/ui-mockup-gaps.md` "Not acting on" section for the canonical list of deliberate divergences.
+- Theme / appearance types (`Palette`, `Typography`, `Radius`, `Status`, `WindowTint`, `PillAppearance`, `PillStyle`, `AppTheme`) live in `Sources/PersonalScribeAppKit/Theme/` — NOT in `PersonalScribeCore`. The central-layers refactor only consolidated app identity into `PersonalScribeCore/AppBrand/` (display name, bundle ID, version).
+
 ## Commit Conventions
 - Use `phase-N step N.M:` tags. Never `week-N` or `sprint-N`.
 - Test + fix go in the same commit when TDD applies.
