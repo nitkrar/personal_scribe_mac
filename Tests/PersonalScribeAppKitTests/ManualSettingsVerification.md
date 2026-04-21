@@ -41,3 +41,11 @@ Stage A replaces the inert AIModelsTab with one `SettingsCard` row per registere
   3. Confirm no HuggingFace network activity starts (Activity Monitor → Network → search for huggingface).
   4. Confirm the row immediately shows a red **Failed** badge with text like `"Not enough disk space to download Parakeet TDT 0.6B. Needs 650 MB, 280 MB available."` and a **Retry** button.
   5. Free up space on the volume; click Retry; confirm download proceeds normally.
+
+## ⌘, keyboard shortcut opens Settings tab
+
+Wired in `PersonalScribeAppMain.body` via `CommandGroup(replacing: .appSettings)` — replaces the default SwiftUI `Settings { EmptyView() }` handler so the shortcut opens the unified window's Settings tab instead of the empty placeholder scene.
+
+- **MV-CMD-1 — `⌘,` with unified window already open:** click the menu bar status item → `Home` (or any tab), then press `⌘,`. The tab selector jumps to `Settings`. Pressing `⌘,` a second time is a no-op (already there).
+- **MV-CMD-2 — `⌘,` with unified window closed but app frontmost:** close the unified window (red traffic light), then immediately press `⌘,` while Ninimma is still frontmost. The unified window reappears with the Settings tab selected.
+- **MV-CMD-3 — `⌘,` from another app:** while a non-Ninimma app is frontmost (e.g. Finder), press `⌘,`. Expected: Finder's own Preferences opens; Ninimma's shortcut must NOT steal the keystroke (LSUIElement apps only receive menu shortcuts when their own window is key).
