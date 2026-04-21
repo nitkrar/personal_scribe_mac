@@ -17,6 +17,7 @@ struct PersonalScribeAppMain: App {
     @StateObject private var statusItemController: StatusItemControllerHost
     @StateObject private var unifiedWindowController: UnifiedWindowControllerHost
     @StateObject private var pasteboardSnapshotHost: PasteboardSnapshotHost
+    @StateObject private var escapeKeyMonitorHost: EscapeKeyMonitorHost
 
     init() {
         self.init(
@@ -117,6 +118,31 @@ struct PersonalScribeAppMain: App {
             viewModel: pillController.viewModel
         )
 
+        // Pill UX Phase 6: global Esc cancels an active recording and
+        // surfaces the Cancel Card. Guarded against firing outside the
+        // recording / hold-to-record states so Esc elsewhere (dialogs,
+        // text fields, other apps) stays intercept-free.
+        //
+        // Caveat: `coordinator.toggle()` below stops capture via the
+        // normal transcribe path — the audio will still be transcribed
+        // and auto-pasted. A follow-up phase will add a true
+        // `SessionCoordinator.cancelRecording()` that discards audio
+        // without transcribing. Until then, the Cancel Card's Undo
+        // restores the user's pre-recording clipboard (Phase 5), so
+        // the worst-case UX is "pasted the transcript + user clicked
+        // Undo to undo the paste".
+        let escapeKeyMonitor = EscapeKeyMonitor { [weak pillController, weak coordinator] in
+            guard let pillController else { return }
+            let visibility = pillController.viewModel.visibility
+            guard visibility == .holdToRecord || visibility == .recording else {
+                return
+            }
+            pillController.viewModel.cancel()
+            Task { [weak coordinator] in
+                await coordinator?.toggle()
+            }
+        }
+
         // Hotkey monitor construction is deferred until AFTER the pill
         // controller exists so `onHoldStartVisibilityPush` can capture
         // the view model reference directly and push `.holdToRecord`
@@ -194,6 +220,9 @@ struct PersonalScribeAppMain: App {
         )
         _pasteboardSnapshotHost = StateObject(
             wrappedValue: pasteboardSnapshotHost
+        )
+        _escapeKeyMonitorHost = StateObject(
+            wrappedValue: EscapeKeyMonitorHost(monitor: escapeKeyMonitor)
         )
 
         sceneModel.startObserving()
@@ -323,6 +352,25 @@ final class StatusItemControllerHost: ObservableObject {
 
     func setMenuBarVisible(_ isVisible: Bool) {
         controller.setStatusItemVisible(isVisible)
+    }
+}
+
+/// @StateObject host for the Esc-key global monitor. Starts the monitor
+/// immediately on init so Esc is wired before the user can trigger a
+/// recording.
+@MainActor
+final class EscapeKeyMonitorHost: ObservableObject {
+    let monitor: EscapeKeyMonitor
+
+    init(monitor: EscapeKeyMonitor) {
+        self.monitor = monitor
+        monitor.start()
+    }
+
+    deinit {
+        Task { @MainActor [monitor] in
+            monitor.stop()
+        }
     }
 }
 
