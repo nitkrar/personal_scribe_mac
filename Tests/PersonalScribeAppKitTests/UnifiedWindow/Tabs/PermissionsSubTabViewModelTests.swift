@@ -173,6 +173,25 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         )
     }
 
+    /// Granted permissions render a green dot + the word **Granted**
+    /// with no "Grant Access" button in the trailing cluster
+    /// (`plans/App UI design/final_settings_permissions_v2.png`).
+    func testStatusLabelIsGrantedForGrantedPermission() {
+        let service = FakePermissionService(statuses: [
+            .microphone: .granted,
+            .inputMonitoring: .granted,
+            .accessibility: .granted,
+        ])
+        let viewModel = PermissionsSubTabViewModel(
+            permissionService: service,
+            openURL: { _ in }
+        )
+
+        XCTAssertEqual(viewModel.statusLabel(for: .microphone), "Granted")
+        XCTAssertEqual(viewModel.statusLabel(for: .inputMonitoring), "Granted")
+        XCTAssertEqual(viewModel.statusLabel(for: .accessibility), "Granted")
+    }
+
     // MARK: - grantAccess URL routing
 
     func testGrantAccessOpensMicrophoneSystemSettingsURL() {

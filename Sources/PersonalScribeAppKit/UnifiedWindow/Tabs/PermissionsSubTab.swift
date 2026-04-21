@@ -101,11 +101,9 @@ private struct PermissionRow: View {
             HStack(spacing: PersonalScribeTheme.Spacing.xs) {
                 statusDot
 
-                if status != .granted {
-                    Text(statusLabel)
-                        .font(PersonalScribeTheme.Typography.caption.font)
-                        .foregroundStyle(PersonalScribeTheme.Status.warning)
-                }
+                Text(statusLabel)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(statusLabelColor)
             }
 
             if status != .granted {
@@ -145,6 +143,17 @@ private struct PermissionRow: View {
     }
 
     private var dotColor: Color {
+        switch status {
+        case .granted:
+            return PersonalScribeTheme.Status.success
+        case .pending, .denied:
+            return PersonalScribeTheme.Status.warning
+        }
+    }
+
+    /// Label colour matches the dot so "Granted" reads green and
+    /// "Required" reads orange, per the mockup's status cluster.
+    private var statusLabelColor: Color {
         switch status {
         case .granted:
             return PersonalScribeTheme.Status.success
