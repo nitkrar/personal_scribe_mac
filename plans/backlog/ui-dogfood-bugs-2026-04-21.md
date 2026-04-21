@@ -6,7 +6,10 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` fixed (reference commit)
 
 ## Critical (blocks usable flow)
 
-- [ ] **1. About tab traps navigation.** Opening the About tab disables tab switching — no way to return to Home/other tabs. After About is opened once, subsequent "Open Home" actions still land on About. Likely a tab-state / default-selection bug that latches onto About.
+- [~] **1. About tab traps navigation.** Opening the About tab disables tab switching — no way to return to Home/other tabs. After About is opened once, subsequent "Open Home" actions still land on About. Likely a tab-state / default-selection bug that latches onto About.
+  - **1a FIXED** (`726e538`) — menu-bar "Home" now routes to the Home tab via `showWindow(selecting: .home)`.
+  - **1b** Left sidebar pane must always be visible — `NavigationSplitView` should pin `columnVisibility = .all`.
+  - **1c** Move "About" out of Settings sub-tabs and render it as a clickable footer row at the bottom of the sidebar (styled like the Microphone footer — compact, muted — NOT like Home/Transcriptions/Modes/Settings tab rows).
 - [ ] **4. Global hotkey dies when app window is frontmost.** Switching between full-screen apps and the main desktop (where Ninimma's window is focused) kills the hotkey on the focused space. Hotkey only works when app is NOT in the foreground. Event-tap scope / key-down capture regression.
 - [ ] **5. Hold-to-record writes `÷÷÷÷÷÷÷` then drops the transcript.** Holding `opt + /` types the `÷` character repeatedly for the duration of the hold and then does NOT paste the transcription. Two bugs: (a) key-swallow failing on hold, (b) paste-on-release broken. Revisit the opt+/ tap/hold/double-tap model (phase 7 pill UX work).
 - [ ] **9. Menu bar "Copy last transcript" is a no-op.** Click does nothing — no clipboard write, no toast, no error. Check action wiring and last-transcript accessor.
@@ -16,6 +19,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` fixed (reference commit)
 
 - [ ] **2. Hide "Check for Updates" from menu bar.** No auto-update pipeline yet; the current item is a stub. Remove it (or gate behind a debug flag) until updater ships.
 - [ ] **6. "Ninimma — dictation" wraps to 2 lines in the menu bar.** Expected: single compact line. Likely label width / separator issue.
+- [ ] **16. Add "Settings" and "History" entries to the menu bar.** Today the menu bar only opens Home via "Open Home". Add two more actions that route to their respective tabs: Settings → `showWindow(selecting: .settings)`, History (aka Transcriptions) → `showWindow(selecting: .transcriptions)`. Same pattern as the #1a fix.
 
 ## Settings — General
 
@@ -30,6 +34,10 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` fixed (reference commit)
 ## Settings — AI Models
 
 - [ ] **13. Model labels ("Parakeet TDT", "Parakeet CTC") are opaque.** Size is helpful but users can't tell what's different. Add a one-line description or an info popover per row, and tighten row density so multiple models fit without scrolling.
+
+## Transcriptions / History tab
+
+- [ ] **17. No per-row delete button on transcription history.** Each history row needs an inline delete affordance (trash icon on hover, or swipe action) so users can prune transcripts one at a time. Verify the delete propagates through the transcript store, not just the view-model cache.
 
 ## Theming
 
