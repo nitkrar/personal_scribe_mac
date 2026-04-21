@@ -60,8 +60,12 @@ struct TranscriptionsTab: View {
                     ForEach(viewModel.groupedByDate, id: \.bucket) { group in
                         Section {
                             ForEach(group.entries, id: \.id) { entry in
+                                // Detail style — wall-clock time + 2-line
+                                // preview; no separate title surface.
+                                // TODO: mockup-gap — trailing mode pill
+                                // deferred (TranscriptEntry has no mode
+                                // field; requires schema + migration).
                                 TranscriptRow(
-                                    title: HomeTab.title(for: entry),
                                     timestamp: entry.timestamp,
                                     preview: entry.text,
                                     referenceDate: now

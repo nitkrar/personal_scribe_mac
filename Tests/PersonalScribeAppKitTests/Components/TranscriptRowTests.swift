@@ -194,4 +194,44 @@ final class TranscriptRowTests: XCTestCase {
     func testTitleMaxLengthIsSixty() {
         XCTAssertEqual(TranscriptRow.Layout.titleMaxLength, 60)
     }
+
+    // MARK: - DisplayStyle (mockup-gap A.1)
+
+    func testDefaultDisplayStyleIsSummary() {
+        let row = TranscriptRow(
+            title: "Sync",
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
+            preview: "Body"
+        )
+        XCTAssertEqual(row.displayStyle, .summary)
+    }
+
+    func testDetailInitializerUsesDetailDisplayStyle() {
+        let row = TranscriptRow(
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
+            preview: "Body"
+        )
+        XCTAssertEqual(row.displayStyle, .detail)
+    }
+
+    func testDetailStyleHasEmptyDisplayTitle() {
+        // The Transcriptions tab row drops the separate title surface —
+        // the preview is the content. displayTitle must be empty so the
+        // body does not render a duplicated title slot.
+        let row = TranscriptRow(
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
+            preview: "Once upon a time"
+        )
+        XCTAssertEqual(row.displayTitle, "")
+    }
+
+    func testSummaryStyleKeepsTitleForHomeTabCallers() {
+        let row = TranscriptRow(
+            title: "Sync notes",
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
+            preview: "Body"
+        )
+        XCTAssertEqual(row.displayStyle, .summary)
+        XCTAssertEqual(row.displayTitle, "Sync notes")
+    }
 }

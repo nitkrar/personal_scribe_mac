@@ -1,23 +1,38 @@
 import SwiftUI
 
-/// A reusable list-row surface showing a title, timestamp, and a
-/// truncated preview of the transcript body text.
+/// A reusable list-row surface showing a timestamp and a truncated
+/// preview of the transcript body text, optionally with a derived title.
 ///
 /// ## Scope
-/// Consumed by `HistoryPanel` and `NotesSidebar` (both Phase 3). Depends
-/// only on `PersonalScribeTheme` — no other component imports. This is the
-/// Sprint 2 Lane B2 composite per `Component_Inventory.md` row 17 /
-/// PLAN_PHASES.md Sprint 2.
+/// Consumed by the Home tab (summary style — title + relative timestamp)
+/// and the Transcriptions tab (detail style — wall-clock time, no title).
+/// Depends only on `PersonalScribeTheme` — no other component imports.
+/// This is the Sprint 2 Lane B2 composite per `Component_Inventory.md`
+/// row 17 / PLAN_PHASES.md Sprint 2.
 ///
 /// ## Typography
 /// * Title → `Typography.body` (13pt regular) with semibold weight.
 /// * Preview → `Typography.caption` (11pt regular).
 /// * Timestamp → `Typography.caption` (11pt regular), secondary text.
 public struct TranscriptRow: View {
+    /// Presentation variant for the row.
+    ///
+    /// * `.summary` — Home-tab rendering. Shows a derived title + relative
+    ///   timestamp ("5m ago") on line 1, then the preview below.
+    /// * `.detail`  — Transcriptions-tab rendering. Drops the title slot
+    ///   entirely (the preview IS the content) and shows a wall-clock
+    ///   timestamp ("2:34 PM") on line 1, then the preview below. Pinned
+    ///   to `PersonalScribeTheme.RowHeight.tall` (56pt minimum).
+    public enum DisplayStyle: Equatable, Sendable {
+        case summary
+        case detail
+    }
+
     public let title: String
     public let timestamp: Date
     public let preview: String
     public let isSelected: Bool
+    public let displayStyle: DisplayStyle
 
     /// Reference `now` used for relative-timestamp formatting. Injected
     /// so tests can reason about the output deterministically.
@@ -25,6 +40,7 @@ public struct TranscriptRow: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
+    /// Home-tab (summary) initializer — title + relative timestamp.
     public init(
         title: String,
         timestamp: Date,
@@ -37,11 +53,33 @@ public struct TranscriptRow: View {
         self.preview = preview
         self.isSelected = isSelected
         self.referenceDate = referenceDate
+        self.displayStyle = .summary
+    }
+
+    /// Transcriptions-tab (detail) initializer — wall-clock timestamp,
+    /// no title surface.
+    public init(
+        timestamp: Date,
+        preview: String,
+        isSelected: Bool = false,
+        referenceDate: Date = Date()
+    ) {
+        self.title = ""
+        self.timestamp = timestamp
+        self.preview = preview
+        self.isSelected = isSelected
+        self.referenceDate = referenceDate
+        self.displayStyle = .detail
     }
 
     // Exposed for tests.
     internal var displayTitle: String {
-        Formatters.truncate(title, maxLength: Layout.titleMaxLength)
+        switch displayStyle {
+        case .summary:
+            return Formatters.truncate(title, maxLength: Layout.titleMaxLength)
+        case .detail:
+            return ""
+        }
     }
 
     internal var displayPreview: String {
@@ -55,23 +93,47 @@ public struct TranscriptRow: View {
         )
     }
 
+    /// Accessibility label. In detail mode the displayTitle is empty by
+    /// design (no duplicate-content title slot), so we elide the leading
+    /// comma and announce only the timestamp.
+    internal var accessibilityLabel: String {
+        if displayTitle.isEmpty {
+            return displayTimestamp
+        }
+        return "\(displayTitle), \(displayTimestamp)"
+    }
+
     public var body: some View {
         let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
 
         VStack(alignment: .leading, spacing: Layout.innerSpacing) {
             HStack(alignment: .firstTextBaseline, spacing: Layout.titleTimestampSpacing) {
-                Text(displayTitle)
-                    .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
-                    .foregroundStyle(palette.primaryText)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                switch displayStyle {
+                case .summary:
+                    Text(displayTitle)
+                        .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+                        .foregroundStyle(palette.primaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                Text(displayTimestamp)
-                    .font(PersonalScribeTheme.Typography.caption.font)
-                    .foregroundStyle(palette.secondaryText)
-                    .lineLimit(1)
+                    Text(displayTimestamp)
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(palette.secondaryText)
+                        .lineLimit(1)
+                case .detail:
+                    // Detail rows drop the title slot: line 1 is the
+                    // wall-clock time on the leading edge. (A trailing
+                    // mode pill is deferred — see mockup-gap TODO in
+                    // TranscriptionsTab.)
+                    Text(displayTimestamp)
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(palette.secondaryText)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+                }
             }
 
             if !displayPreview.isEmpty {
@@ -99,7 +161,7 @@ public struct TranscriptRow: View {
                 )
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(displayTitle), \(displayTimestamp)")
+        .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(displayPreview)
     }
 
