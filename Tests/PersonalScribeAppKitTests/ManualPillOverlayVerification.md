@@ -191,6 +191,97 @@ on `DraggablePanel`, but the real-world effect is only observable at runtime.
 
 ---
 
+## Pill UX redesign — 5-state interaction model (spec Claude_Pill_UX_Prompt.md, 2026-04-21)
+
+End-to-end runbook for Phases 1-6 (state machine + visuals + hotkey +
+Cancel Card + clipboard Undo + Esc monitor). Run in order after any
+rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
+`Sources/PersonalScribeAppKit/Hotkeys/`.
+
+### Visual states (spec §2)
+
+- [ ] **MV-PUX-1 (idle)** At rest, pill is 80×28 with an 8pt champagne
+  quill dot centered and a 1px white-8%-opacity border. Radius 14pt.
+- [ ] **MV-PUX-2 (hold-to-record)** Press and HOLD `opt + /`. Within
+  ~300ms the pill expands to 160×36 showing a 7-bar vertical equaliser
+  with a 1.5px Clay (#C9A96E) border and 18pt radius. Bars respond to
+  your voice (silence → minimum-height baseline, speaking → taller
+  bars). Release the key — pill transitions to transcribing.
+- [ ] **MV-PUX-3 (recording — committed via tap)** Tap `opt + /` once
+  (press + release under 300ms). Pill becomes 220×36 with ✕ on the
+  left, sine waveform centre, red stop ⏹ on the right. Clay border.
+  Tap `opt + /` again or click ⏹ to stop.
+- [ ] **MV-PUX-4 (transcribing)** After stop, pill becomes 160×36 with
+  a spinner + "Transcribing…" text. 1px Champagne @ 40% opacity
+  border, 18pt radius.
+- [ ] **MV-PUX-5 (done)** After transcription, pill briefly shows a
+  green checkmark in a 100×32 rect with a 1px Green (#50C878) border
+  and 16pt radius. Auto-returns to idle within ~1.2s.
+
+### Hotkey gestures (spec §3)
+
+- [ ] **MV-PUX-6 (single tap toggles recording)** Tap `opt + /` once —
+  pill transitions idle → recording. Tap again — pill transitions
+  recording → transcribing → done → idle, transcript pasted into
+  frontmost app's cursor if AX focused element has a cursor (Issue 1
+  AX probe).
+- [ ] **MV-PUX-7 (double-tap alias)** Tap `opt + /` twice in rapid
+  succession (< 400ms between taps). Pill should start recording
+  ONCE, not start-and-immediately-stop. The second tap is debounced
+  silently.
+- [ ] **MV-PUX-8 (hold → release transcribes)** Hold `opt + /` for
+  more than 300ms. Pill enters hold-to-record state. Speak. Release
+  — pill transitions immediately to transcribing without needing a
+  stop click. For short dictations this is the fastest path.
+- [ ] **MV-PUX-9 (default on fresh install)** `defaults delete
+  com.nitkrar.personal_scribe RecordingHotkey` and relaunch. Confirm
+  the default persists as `opt + /` (no right-Option double-tap
+  legacy). Persisted custom hotkeys from prior versions may need to
+  be reset manually.
+
+### Cancel Card + Undo (spec §2f + §3 + §4)
+
+- [ ] **MV-PUX-10 (Esc while recording → Cancel Card)** Start a
+  recording. Press Esc. Pill surface is replaced by a 280×44 rounded
+  rect with a 1.5px Red (#F75138) border, cooler-navy (#1E2032)
+  background, "Recording cancelled" on the left, and an Undo button
+  on the right (clay text on dark fill, rounded 8pt corners).
+- [ ] **MV-PUX-11 (Esc while hold-to-record → Cancel Card)** Hold
+  `opt + /` for >300ms to enter hold-to-record. Press Esc while still
+  holding. Cancel Card appears; releasing the hold key afterward does
+  nothing (no transcribing).
+- [ ] **MV-PUX-12 (Esc outside recording is a no-op)** With the pill
+  idle, press Esc. Nothing visible happens — Esc should not intercept
+  when the pill isn't active. You can still use Esc in other apps /
+  dialogs.
+- [ ] **MV-PUX-13 (Cancel Card auto-dismiss)** Trigger a Cancel Card.
+  Wait 4 seconds. Card fades out and the pill returns to idle.
+- [ ] **MV-PUX-14 (Undo restores pre-recording clipboard)** Copy some
+  unique string (e.g., "pre-recording clipboard") into your clipboard
+  BEFORE starting a recording. Start a recording, transcribe it (so
+  the transcript auto-pastes into a text field and overwrites the
+  clipboard), then trigger a Cancel Card via Esc, then click Undo
+  on the Cancel Card within 4 seconds. Confirm your clipboard now
+  contains "pre-recording clipboard" again, not the transcript.
+
+### Esc global monitor — regression guards
+
+- [ ] **MV-PUX-15 (Cmd+Esc passes through)** With the pill idle, press
+  Cmd+Esc. The normal system / frontmost-app handler should receive
+  the event unaffected (typically nothing visible, but specific apps
+  may bind Cmd+Esc — confirm no regression there).
+- [ ] **MV-PUX-16 (Esc in a text field is unaffected while pill idle)**
+  Focus a text field in any other app. Press Esc. Normal Esc
+  behaviour for that field (e.g., dismissing a dropdown) should fire
+  — we should not intercept.
+
+## Known spec deviations (flagged in commits)
+
+- Esc currently lets the recording transcribe + auto-paste, and the
+  user clicks Undo to revert the paste. True "discard audio without
+  transcribing" requires a new `SessionCoordinator.cancelRecording()`
+  method — deferred to a Phase 8 follow-up.
+
 ## Notes
 
 - Manual checklist entries above are the only verification path for the
