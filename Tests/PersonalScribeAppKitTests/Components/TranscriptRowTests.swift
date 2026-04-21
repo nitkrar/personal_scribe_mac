@@ -254,4 +254,62 @@ final class TranscriptRowTests: XCTestCase {
         // PersonalScribeThemeTests.testRowHeightTallIs56.
         XCTAssertEqual(TranscriptRow.Layout.detailMinHeight, 56)
     }
+
+    // MARK: - Wall-clock timestamp (mockup-gap A.4)
+
+    func testWallClockFormatterReturnsShortTimeString() {
+        // 2026-04-20 14:34:00 UTC — formatted with en_US_POSIX gives a
+        // stable "2:34 PM" glyph independent of host locale.
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let locale = Locale(identifier: "en_US_POSIX")
+        let ts = cal.date(
+            from: DateComponents(
+                year: 2026, month: 4, day: 20,
+                hour: 14, minute: 34, second: 0
+            )
+        )!
+
+        let out = TranscriptRow.Formatters.wallClockTimestamp(
+            from: ts,
+            calendar: cal,
+            locale: locale,
+            timeZone: TimeZone(identifier: "UTC")!
+        )
+
+        XCTAssertEqual(out, "2:34 PM")
+    }
+
+    func testDetailStyleUsesWallClockTimestamp() {
+        // Detail-style rows show wall-clock times ("2:34 PM"), not the
+        // relative-bucket string used by Home ("5m ago"). The underlying
+        // formatter is locale-dependent on the device default, so assert
+        // shape rather than exact glyph: must NOT contain "ago" or
+        // "Just now".
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let ts = now.addingTimeInterval(-60 * 10)
+        let row = TranscriptRow(
+            timestamp: ts,
+            preview: "Body",
+            referenceDate: now
+        )
+
+        let out = row.displayTimestamp
+        XCTAssertFalse(out.contains("ago"), "Detail timestamp leaked relative glyph: \(out)")
+        XCTAssertNotEqual(out, "Just now")
+    }
+
+    func testSummaryStyleStillUsesRelativeTimestamp() {
+        // Home-tab callers (summary init) keep the relative-bucket
+        // behaviour — "10m ago" for a 10-minute-old entry.
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let ts = now.addingTimeInterval(-60 * 10)
+        let row = TranscriptRow(
+            title: "T",
+            timestamp: ts,
+            preview: "Body",
+            referenceDate: now
+        )
+        XCTAssertEqual(row.displayTimestamp, "10m ago")
+    }
 }

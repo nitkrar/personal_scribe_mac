@@ -87,10 +87,15 @@ public struct TranscriptRow: View {
     }
 
     internal var displayTimestamp: String {
-        Formatters.relativeTimestamp(
-            from: timestamp,
-            to: referenceDate
-        )
+        switch displayStyle {
+        case .summary:
+            return Formatters.relativeTimestamp(
+                from: timestamp,
+                to: referenceDate
+            )
+        case .detail:
+            return Formatters.wallClockTimestamp(from: timestamp)
+        }
     }
 
     /// Accessibility label. In detail mode the displayTitle is empty by
@@ -249,6 +254,25 @@ public struct TranscriptRow: View {
             formatter.setLocalizedDateFormatFromTemplate(
                 sameYear ? "MMMd" : "MMMdyyyy"
             )
+            return formatter.string(from: timestamp)
+        }
+
+        /// Produce a short wall-clock timestamp (e.g. `"2:34 PM"`) for
+        /// detail-style rows on the Transcriptions tab. Uses
+        /// `DateFormatter.timeStyle = .short` so the glyph is
+        /// locale-aware (12-hour vs 24-hour follows the host setting).
+        public static func wallClockTimestamp(
+            from timestamp: Date,
+            calendar: Calendar = .autoupdatingCurrent,
+            locale: Locale = .autoupdatingCurrent,
+            timeZone: TimeZone = .autoupdatingCurrent
+        ) -> String {
+            let formatter = DateFormatter()
+            formatter.calendar = calendar
+            formatter.locale = locale
+            formatter.timeZone = timeZone
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
             return formatter.string(from: timestamp)
         }
     }
