@@ -274,6 +274,18 @@ rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
   Focus a text field in any other app. Press Esc. Normal Esc
   behaviour for that field (e.g., dismissing a dropdown) should fire
   — we should not intercept.
+- [ ] **MV-PUX-17 [DEFERRED] (full-screen space triage / bug #5b.C)**
+  `AppKitPillOverlayPanelBuilder.makePanel` in
+  `Sources/PersonalScribeAppKit/Overlay/PillOverlayPresenter.swift`
+  already sets `panel.collectionBehavior = [.canJoinAllSpaces,
+  .stationary, .fullScreenAuxiliary]`, and
+  `PillOverlayPresenter.show()` already uses `orderFrontRegardless()`.
+  If the pill still renders off the active full-screen app space at
+  runtime, investigate placement and visibility flow next:
+  `updatePanelPosition(_:)` anchors to `NSScreen.main?.visibleFrame`,
+  which may not match the active full-screen space, and the
+  presenter/controller visibility pipeline should be checked for any
+  transient `.hidden` bounce before the panel is ordered front.
 
 ## Known spec deviations (flagged in commits)
 
