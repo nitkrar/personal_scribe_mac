@@ -3,7 +3,15 @@ import SwiftUI
 
 @MainActor
 protocol ResponseCardPresenting: AnyObject {
-    func show(text: String, above pillWindow: NSWindow, autoDismissAfter: TimeInterval)
+    /// Show (or re-show) the card anchored above the given pill window.
+    /// Passing `autoDismissAfter: nil` keeps the card visible until an
+    /// explicit `hide()` — used during record-without-transcribe when we
+    /// want the card to stay up for as long as the user is recording.
+    func show(text: String, above pillWindow: NSWindow, autoDismissAfter: TimeInterval?)
+    /// Replace the visible text without rebuilding the card or resetting
+    /// the pending dismiss timer. Caller contract: `show(...)` must have
+    /// been called first.
+    func update(text: String)
     func hide()
 }
 
@@ -95,9 +103,10 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
     func show(
         text: String,
         above pillWindow: NSWindow,
-        autoDismissAfter: TimeInterval
+        autoDismissAfter: TimeInterval?
     ) {
         dismissTimer?.invalidate()
+        dismissTimer = nil
 
         let pillFrame = pillWindow.frame
         let cardWidth = min(
@@ -128,14 +137,38 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
             }
         }
 
-        dismissTimer = Timer.scheduledTimer(
-            withTimeInterval: autoDismissAfter,
-            repeats: false
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.hide()
+        if let autoDismissAfter {
+            dismissTimer = Timer.scheduledTimer(
+                withTimeInterval: autoDismissAfter,
+                repeats: false
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.hide()
+                }
             }
         }
+    }
+
+    /// Replace the visible text while keeping the card shown and the
+    /// current dismiss timer (if any) intact. Used by record-without-
+    /// transcribe to move the "Recording — transcribing when model is
+    /// ready (NN%)" progress without flashing the card.
+    func update(text: String) {
+        hostingView.rootView = ResponseCardView(text: text) { [weak self] in
+            self?.hide()
+        }
+
+        let currentWidth = frame.width
+        let newHeight = Self.estimatedHeight(for: text, width: currentWidth)
+        setFrame(
+            NSRect(
+                x: frame.origin.x,
+                y: frame.maxY - newHeight,
+                width: currentWidth,
+                height: newHeight
+            ),
+            display: true
+        )
     }
 
     /// Dismiss the card with a 150ms fade-out.

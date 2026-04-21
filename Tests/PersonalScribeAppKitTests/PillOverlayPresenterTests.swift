@@ -166,6 +166,30 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(panelBuilder.panel.orderFrontCallCount, 1)
     }
 
+    func testResponseCardPersistentShowAndUpdatePreserveContract() {
+        let card = RecordingResponseCard()
+        let anchor = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 60),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        card.show(text: "Recording — transcribing when model is ready (10%)",
+                  above: anchor,
+                  autoDismissAfter: nil)
+        XCTAssertEqual(card.showCallCount, 1)
+        XCTAssertEqual(card.lastText, "Recording — transcribing when model is ready (10%)")
+        XCTAssertNil(card.lastAutoDismissAfter,
+                     "nil autoDismissAfter must persist; caller only calls hide() to dismiss")
+
+        card.update(text: "Recording — transcribing when model is ready (50%)")
+        XCTAssertEqual(card.updateCallCount, 1)
+        XCTAssertEqual(card.lastText, "Recording — transcribing when model is ready (50%)")
+        XCTAssertEqual(card.showCallCount, 1,
+                       "update(text:) must not re-trigger show")
+    }
+
     func testClipboardOnlyNoticeUsesResponseCardInfrastructure() {
         let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
         viewModel.apply(sessionState: .recording, preparationProgress: nil)
@@ -184,7 +208,7 @@ final class PillOverlayPresenterTests: XCTestCase {
             responseCardBuilder.card.lastText,
             "Copied to clipboard · ⌘V to paste"
         )
-        XCTAssertEqual(responseCardBuilder.card.lastAutoDismissAfter, 3.0, accuracy: 0.001)
+        XCTAssertEqual(responseCardBuilder.card.lastAutoDismissAfter ?? .nan, 3.0, accuracy: 0.001)
         XCTAssertEqual(
             responseCardBuilder.card.lastAnchorWindow,
             panelBuilder.panel.anchorWindow
@@ -286,16 +310,24 @@ private final class RecordingResponseCardBuilder: ResponseCardBuilding {
 private final class RecordingResponseCard: ResponseCardPresenting {
     private(set) var lastText: String?
     private(set) var lastAnchorWindow: NSWindow?
-    private(set) var lastAutoDismissAfter: TimeInterval = 0
+    private(set) var lastAutoDismissAfter: TimeInterval?
+    private(set) var showCallCount = 0
+    private(set) var updateCallCount = 0
 
     func show(
         text: String,
         above pillWindow: NSWindow,
-        autoDismissAfter: TimeInterval
+        autoDismissAfter: TimeInterval?
     ) {
         lastText = text
         lastAnchorWindow = pillWindow
         lastAutoDismissAfter = autoDismissAfter
+        showCallCount += 1
+    }
+
+    func update(text: String) {
+        lastText = text
+        updateCallCount += 1
     }
 
     func hide() {}
