@@ -22,11 +22,20 @@ public enum AppComposition {
         }
     }()
 
+    /// Shared per-operation observer for database reads/writes (backlog
+    /// #043). Injected into `transcriptRepository` below so every repo
+    /// call updates `current` on the main actor. Subscribers (future
+    /// banner / Advanced row / Settings diagnostics) read this directly.
+    public static let databaseOperationObserver: DatabaseOperationObserver = DatabaseOperationObserver()
+
     /// The single shared `TranscriptRepository` wrapping `appDatabase`. Nil
     /// only when `appDatabase` failed to open.
     public static let transcriptRepository: TranscriptRepository? = {
         guard let appDatabase else { return nil }
-        return TranscriptRepository(database: appDatabase)
+        return TranscriptRepository(
+            database: appDatabase,
+            operationObserver: databaseOperationObserver
+        )
     }()
 
     public static let modelService: DefaultModelService = {

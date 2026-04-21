@@ -21,14 +21,23 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
 
     private let database: AppDatabase
     private let logger: PersonalScribeLogger
+    private let operationObserver: any DatabaseOperationObserving
 
-    /// Pass 1 init takes only the shared database — no other seams are
-    /// injectable. Plan §3 Q-F1: "no raw `DatabaseReader`/`DatabaseWriter`
+    /// Pass 1 init takes the shared database plus an optional per-operation
+    /// observer. Plan §3 Q-F1: "no raw `DatabaseReader`/`DatabaseWriter`
     /// injection" — construct via the owner so "repository exists ⇒ database
     /// is open and migrated" is a compile-time contract.
-    public init(database: AppDatabase) {
+    ///
+    /// The `operationObserver` default is a non-optional null sink (backlog
+    /// #043): every callsite either opts into a real observer or gets the
+    /// no-op, never nil — so "forgot to inject" is impossible to hide.
+    public init(
+        database: AppDatabase,
+        operationObserver: any DatabaseOperationObserving = NullDatabaseOperationObserver()
+    ) {
         self.database = database
         self.logger = PersonalScribeLogger(category: PersonalScribeLogCategory.app)
+        self.operationObserver = operationObserver
     }
 
     // MARK: - Write
@@ -45,10 +54,13 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
             try await database.write { db in
                 try entry.insert(db)
             }
+            operationObserver.record(.writeSucceeded)
         } catch let error as TranscriptStorageError {
             // Already the right envelope (e.g. propagated from a future layer).
+            operationObserver.record(.writeFailed)
             throw error
         } catch {
+            operationObserver.record(.writeFailed)
             throw TranscriptStorageError.queryFailed(underlying: error)
         }
     }
@@ -64,7 +76,7 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
         }
 
         do {
-            return try await database.read { db in
+            let entries = try await database.read { db in
                 try TranscriptEntry.fetchAll(
                     db,
                     sql: """
@@ -81,8 +93,11 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
                     arguments: [limit]
                 )
             }
+            operationObserver.record(.readSucceeded)
+            return entries
         } catch {
             logger.error("TranscriptRepository.recent failed", error: error)
+            operationObserver.record(.readFailed)
             return []
         }
     }
@@ -90,11 +105,14 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
     /// Total transcript count. Non-throwing; logs + returns 0 on failure.
     public func count() async -> Int {
         do {
-            return try await database.read { db in
+            let result = try await database.read { db in
                 try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM transcripts") ?? 0
             }
+            operationObserver.record(.readSucceeded)
+            return result
         } catch {
             logger.error("TranscriptRepository.count failed", error: error)
+            operationObserver.record(.readFailed)
             return 0
         }
     }
@@ -110,7 +128,7 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
         }
 
         do {
-            return try await database.read { db in
+            let entries = try await database.read { db in
                 let pattern = try db.makeFTS5Pattern(
                     rawPattern: trimmedQuery,
                     forTable: Self.transcriptsFTSTableName
@@ -134,8 +152,11 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
                     arguments: [pattern]
                 )
             }
+            operationObserver.record(.readSucceeded)
+            return entries
         } catch {
             logger.error("TranscriptRepository.search failed", error: error)
+            operationObserver.record(.readFailed)
             return []
         }
     }
@@ -143,7 +164,7 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
     /// Every stored transcript, newest first. Non-throwing.
     public func all() async -> [TranscriptEntry] {
         do {
-            return try await database.read { db in
+            let entries = try await database.read { db in
                 try TranscriptEntry.fetchAll(
                     db,
                     sql: """
@@ -158,8 +179,11 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
                     """
                 )
             }
+            operationObserver.record(.readSucceeded)
+            return entries
         } catch {
             logger.error("TranscriptRepository.all failed", error: error)
+            operationObserver.record(.readFailed)
             return []
         }
     }
@@ -181,7 +205,7 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
         }()
 
         do {
-            return try await database.read { db in
+            let entries = try await database.read { db in
                 try TranscriptEntry.fetchAll(
                     db,
                     sql: """
@@ -198,8 +222,11 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
                     arguments: [lowerBound, upperBound]
                 )
             }
+            operationObserver.record(.readSucceeded)
+            return entries
         } catch {
             logger.error("TranscriptRepository.entries(in:orderedBy:) failed", error: error)
+            operationObserver.record(.readFailed)
             return []
         }
     }
