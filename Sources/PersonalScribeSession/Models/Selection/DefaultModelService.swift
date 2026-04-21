@@ -8,6 +8,7 @@ public final class DefaultModelService: ModelService {
 
     public let registeredModels: [ModelDescriptor]
     @Published public private(set) var activeDescriptor: ActiveModelDescriptor
+    @Published public private(set) var downloadStates: [String: ModelDownloadState]
 
     private let selectionPreference: Preference<ActiveModelDescriptor>
     private let isDownloadedHandler: @Sendable (ModelDescriptor) -> Bool
@@ -64,6 +65,12 @@ public final class DefaultModelService: ModelService {
                 logger: logger
             )
         )
+        self._downloadStates = Published(
+            initialValue: Self.initialDownloadStates(
+                registeredModels: registeredModels,
+                isDownloaded: isDownloaded
+            )
+        )
     }
 
     public func descriptor(for mode: ModeDescriptor) -> ActiveModelDescriptor {
@@ -77,9 +84,46 @@ public final class DefaultModelService: ModelService {
 
     public func setActive(_ descriptor: ActiveModelDescriptor) async throws {
         let canonical = try canonicalDescriptor(for: descriptor)
+        let voiceModel = canonical.voiceModel
 
-        if !isDownloaded(canonical.voiceModel) {
-            try await download(canonical.voiceModel) { _ in }
+        if !isDownloaded(voiceModel) {
+            do {
+                try await download(voiceModel) { [weak self] progress in
+                    Task { @MainActor [weak self] in
+                        self?.ingest(progress: progress, for: voiceModel)
+                    }
+                }
+            } catch {
+                publishDownloadState(
+                    ModelDownloadState(
+                        descriptorId: voiceModel.id,
+                        phase: .failed(message: String(describing: error)),
+                        fractionCompleted: 0
+                    )
+                )
+                throw error
+            }
+            // Ensure the final state is `.ready` even if the underlying
+            // download handler never emitted `.finished` (the contract of
+            // `download(_:progress:)` does not require a terminal tick).
+            publishDownloadState(
+                ModelDownloadState(
+                    descriptorId: voiceModel.id,
+                    phase: .ready,
+                    fractionCompleted: 1
+                )
+            )
+        } else {
+            // Model already on disk → guarantee the surface reflects that
+            // even if the service was constructed before disk state was
+            // truthy for this descriptor.
+            publishDownloadState(
+                ModelDownloadState(
+                    descriptorId: voiceModel.id,
+                    phase: .ready,
+                    fractionCompleted: 1
+                )
+            )
         }
 
         selectionPreference.persist(canonical)
@@ -113,6 +157,53 @@ public final class DefaultModelService: ModelService {
 }
 
 private extension DefaultModelService {
+    func ingest(progress: ModelDownloadProgress, for descriptor: ModelDescriptor) {
+        let mappedPhase: ModelDownloadState.Phase
+        switch progress.phase {
+        case .idle:
+            // `.idle` is a steady-state, pre-download tick; do not perturb
+            // a `.notDownloaded` / `.ready` cell.
+            return
+        case .downloading:
+            mappedPhase = .downloading
+        case .loading:
+            mappedPhase = .loading
+        case .finished:
+            mappedPhase = .ready
+        }
+
+        publishDownloadState(
+            ModelDownloadState(
+                descriptorId: descriptor.id,
+                phase: mappedPhase,
+                fractionCompleted: progress.fractionCompleted
+            )
+        )
+    }
+
+    func publishDownloadState(_ state: ModelDownloadState) {
+        var mutableStates = downloadStates
+        mutableStates[state.descriptorId] = state
+        downloadStates = mutableStates
+    }
+
+    static func initialDownloadStates(
+        registeredModels: [ModelDescriptor],
+        isDownloaded: (ModelDescriptor) -> Bool
+    ) -> [String: ModelDownloadState] {
+        var states: [String: ModelDownloadState] = [:]
+        for descriptor in registeredModels {
+            let phase: ModelDownloadState.Phase = isDownloaded(descriptor) ? .ready : .notDownloaded
+            let fraction: Double = isDownloaded(descriptor) ? 1 : 0
+            states[descriptor.id] = ModelDownloadState(
+                descriptorId: descriptor.id,
+                phase: phase,
+                fractionCompleted: fraction
+            )
+        }
+        return states
+    }
+
     func canonicalDescriptor(
         for descriptor: ActiveModelDescriptor
     ) throws -> ActiveModelDescriptor {
