@@ -6,6 +6,30 @@ import PersonalScribeCore
 public final class DefaultModelService: ModelService {
     public static let preferenceKey = "ActiveModelDescriptor"
 
+    /// Headroom on top of `ModelDescriptor.approximateSizeBytes` to
+    /// cover the staging directory + CoreML compilation. Keep in sync
+    /// with the documented Stage B contract (200 MB).
+    public static let downloadDiskSpaceBufferBytes: Int64 = 200 * 1024 * 1024
+
+    /// Live `diskSpaceProvider` used by the convenience initializer.
+    /// Reads the volume's "available for important usage" capacity,
+    /// which respects APFS purgeable space.
+    public static let liveDiskSpaceProvider: @Sendable (URL) -> Int64? = { url in
+        // Walk up to the first existing ancestor so that a not-yet-
+        // created models directory still resolves to a valid volume.
+        var candidate = url.standardizedFileURL
+        while !FileManager.default.fileExists(atPath: candidate.path) {
+            let parent = candidate.deletingLastPathComponent().standardizedFileURL
+            if parent == candidate { break }
+            candidate = parent
+        }
+        let values = try? candidate.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        if let bytes = values?.volumeAvailableCapacityForImportantUsage {
+            return Int64(bytes)
+        }
+        return nil
+    }
+
     public let registeredModels: [ModelDescriptor]
     @Published public private(set) var activeDescriptor: ActiveModelDescriptor
     @Published public private(set) var downloadStates: [String: ModelDownloadState]
@@ -16,6 +40,8 @@ public final class DefaultModelService: ModelService {
         ModelDescriptor,
         @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws -> Void
+    private let modelsDirectoryProvider: @Sendable () -> URL?
+    private let diskSpaceProvider: @Sendable (URL) -> Int64?
     private let logger: PersonalScribeLogger
 
     public convenience init(
@@ -39,6 +65,8 @@ public final class DefaultModelService: ModelService {
             download: { descriptor, progress in
                 try await provider.download(descriptor, progress: progress)
             },
+            modelsDirectoryProvider: { storageLocator.url(for: .models) },
+            diskSpaceProvider: Self.liveDiskSpaceProvider,
             logger: logger
         )
     }
@@ -51,12 +79,16 @@ public final class DefaultModelService: ModelService {
             ModelDescriptor,
             @escaping @Sendable (ModelDownloadProgress) -> Void
         ) async throws -> Void,
+        modelsDirectoryProvider: @escaping @Sendable () -> URL? = { nil },
+        diskSpaceProvider: @escaping @Sendable (URL) -> Int64? = { _ in nil },
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
     ) {
         self.selectionPreference = selectionPreference
         self.registeredModels = registeredModels
         self.isDownloadedHandler = isDownloaded
         self.downloadHandler = download
+        self.modelsDirectoryProvider = modelsDirectoryProvider
+        self.diskSpaceProvider = diskSpaceProvider
         self.logger = logger
         self._activeDescriptor = Published(
             initialValue: Self.resolveInitialDescriptor(
@@ -87,6 +119,7 @@ public final class DefaultModelService: ModelService {
         let voiceModel = canonical.voiceModel
 
         if !isDownloaded(voiceModel) {
+            try ensureSufficientDiskSpace(for: voiceModel)
             do {
                 try await download(voiceModel) { [weak self] progress in
                     Task { @MainActor [weak self] in
@@ -152,11 +185,64 @@ public final class DefaultModelService: ModelService {
         progress: @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws {
         let canonical = try canonicalVoiceModel(for: descriptor.id)
+        try ensureSufficientDiskSpace(for: canonical)
         try await downloadHandler(canonical, progress)
     }
 }
 
 private extension DefaultModelService {
+    /// Stage B — disk-space precheck.
+    ///
+    /// Compares `descriptor.approximateSizeBytes + downloadDiskSpaceBufferBytes`
+    /// against the volume's available capacity for the models directory.
+    /// If the provider cannot resolve a directory URL or returns `nil`,
+    /// the precheck is skipped (fail-open): we do not want to block a
+    /// download on a probing failure. When the probe succeeds and the
+    /// volume is short of required bytes, publish a `.failed(message:)`
+    /// download state and throw `ModelSelectionError.insufficientDiskSpace`.
+    func ensureSufficientDiskSpace(for descriptor: ModelDescriptor) throws {
+        guard let modelsDirectory = modelsDirectoryProvider() else {
+            return
+        }
+        guard let availableBytes = diskSpaceProvider(modelsDirectory) else {
+            return
+        }
+        let requiredBytes = descriptor.approximateSizeBytes + Self.downloadDiskSpaceBufferBytes
+        guard availableBytes < requiredBytes else {
+            return
+        }
+
+        let error = ModelSelectionError.insufficientDiskSpace(
+            required: requiredBytes,
+            available: availableBytes
+        )
+        publishDownloadState(
+            ModelDownloadState(
+                descriptorId: descriptor.id,
+                phase: .failed(message: diskSpaceFailureMessage(
+                    for: descriptor,
+                    required: requiredBytes,
+                    available: availableBytes
+                )),
+                fractionCompleted: 0
+            )
+        )
+        throw error
+    }
+
+    func diskSpaceFailureMessage(
+        for descriptor: ModelDescriptor,
+        required: Int64,
+        available: Int64
+    ) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB, .useGB]
+        formatter.countStyle = .file
+        let requiredStr = formatter.string(fromByteCount: required)
+        let availableStr = formatter.string(fromByteCount: available)
+        return "Not enough disk space to download \(descriptor.displayName). Needs \(requiredStr), \(availableStr) available."
+    }
+
     func ingest(progress: ModelDownloadProgress, for descriptor: ModelDescriptor) {
         let mappedPhase: ModelDownloadState.Phase
         switch progress.phase {
