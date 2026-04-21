@@ -40,6 +40,7 @@ public final class GlobalHotkeyMonitor {
         _ action: @escaping @MainActor () -> Void
     ) -> HoldCanceller
     public typealias HoldCanceller = @MainActor () -> Void
+    internal typealias GlobalMonitorInstaller = @MainActor (_ handler: @escaping (NSEvent) -> Void) -> Any?
 
     /// Threshold (seconds) separating tap vs hold. Matches spec §3
     /// ("press + release < 300 ms" = tap).
@@ -66,10 +67,12 @@ public final class GlobalHotkeyMonitor {
     private let permissionService: any PermissionService
     private let logger: PersonalScribeLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
+    private var installGlobalMonitor: GlobalMonitorInstaller
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var keyDownTimestamp: TimeInterval?
+    private var hotkeyKeyDownSwallowed = false
     private var isHolding = false
     private var lastToggleTimestamp: TimeInterval?
     private var holdCanceller: HoldCanceller?
@@ -106,6 +109,50 @@ public final class GlobalHotkeyMonitor {
         self.permissionService = permissionService ?? AppKitPermissionService()
         self.logger = logger
         self.logSink = logSink
+        self.installGlobalMonitor = { handler in
+            NSEvent.addGlobalMonitorForEvents(
+                matching: [.flagsChanged, .keyDown, .keyUp],
+                handler: handler
+            )
+        }
+    }
+
+    internal convenience init(
+        onToggle: @escaping @MainActor () -> Void,
+        onHoldStart: @escaping @MainActor () -> Void = {},
+        onHoldRelease: @escaping @MainActor () -> Void = {},
+        recordingHotkey: HotkeyPreference = HotkeyPreference.resolve(),
+        holdThreshold: TimeInterval = GlobalHotkeyMonitor.holdThreshold,
+        doubleTapWindow: TimeInterval = GlobalHotkeyMonitor.doubleTapWindow,
+        scheduleHoldDetection: @escaping HoldScheduler = { delay, action in
+            let workItem = DispatchWorkItem {
+                Task { @MainActor in
+                    action()
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+            return {
+                workItem.cancel()
+            }
+        },
+        permissionService: (any PermissionService)? = nil,
+        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+        logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil,
+        installGlobalMonitor: @escaping GlobalMonitorInstaller
+    ) {
+        self.init(
+            onToggle: onToggle,
+            onHoldStart: onHoldStart,
+            onHoldRelease: onHoldRelease,
+            recordingHotkey: recordingHotkey,
+            holdThreshold: holdThreshold,
+            doubleTapWindow: doubleTapWindow,
+            scheduleHoldDetection: scheduleHoldDetection,
+            permissionService: permissionService,
+            logger: logger,
+            logSink: logSink
+        )
+        self.installGlobalMonitor = installGlobalMonitor
     }
 
     public var isActive: Bool {
@@ -125,13 +172,16 @@ public final class GlobalHotkeyMonitor {
         }
 
         resetState()
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.flagsChanged, .keyDown, .keyUp]
-        ) { [weak self] event in
+        // Keep `isActive` as an OR by refusing partial local-only setup.
+        guard let globalMonitor = installGlobalMonitor({ [weak self] event in
             Task { @MainActor [weak self] in
                 self?.handle(event: event)
             }
+        }) else {
+            handleMonitorInstallFailure()
+            return
         }
+        self.globalMonitor = globalMonitor
 
         // Local monitor fires for events headed to our own app — needed
         // so the hotkey works when Ninimma's window is frontmost (bug #4
@@ -151,10 +201,6 @@ public final class GlobalHotkeyMonitor {
                 return self.shouldSwallowLocal(box.event)
             }
             return shouldSwallow ? nil : event
-        }
-
-        if globalMonitor == nil {
-            handleMonitorInstallFailure()
         }
     }
 
@@ -202,7 +248,8 @@ public final class GlobalHotkeyMonitor {
     /// Rules:
     /// * `.keyDown` matching the hotkey (keyCode + modifiers, including
     ///   auto-repeat) → swallow.
-    /// * `.keyUp` with the hotkey's keyCode → swallow. Modifiers may
+    /// * `.keyUp` with the hotkey's keyCode → swallow only if the
+    ///   matching keyDown was previously swallowed. Modifiers may
     ///   already have been released by the time keyUp lands, which is
     ///   why this ignores them (mirrors `handleKeyUp`).
     /// * `.flagsChanged` → pass through so unrelated keybindings that
@@ -211,9 +258,15 @@ public final class GlobalHotkeyMonitor {
     internal func shouldSwallowLocal(_ event: NSEvent) -> Bool {
         switch event.type {
         case .keyDown:
-            return matchesHotkey(event)
+            let shouldSwallow = matchesHotkey(event)
+            if shouldSwallow {
+                hotkeyKeyDownSwallowed = true
+            }
+            return shouldSwallow
         case .keyUp:
-            return event.keyCode == recordingHotkey.keyCode
+            let shouldSwallow = hotkeyKeyDownSwallowed && event.keyCode == recordingHotkey.keyCode
+            hotkeyKeyDownSwallowed = false
+            return shouldSwallow
         default:
             return false
         }
@@ -317,6 +370,7 @@ public final class GlobalHotkeyMonitor {
 
     private func resetState() {
         keyDownTimestamp = nil
+        hotkeyKeyDownSwallowed = false
         isHolding = false
         lastToggleTimestamp = nil
         holdCanceller?()

@@ -382,22 +382,87 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         )
     }
 
-    func testShouldSwallowLocalSwallowsHotkeyKeyUpEvenWithoutModifiers() throws {
+    func testShouldSwallowLocalPassesThroughPlainSlashKeyUpAfterPlainSlashKeyDown() throws {
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            recordingHotkey: Self.optSlash
+        )
+        let keyDown = try makeKeyDownEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [],
+            characters: "/",
+            timestamp: 1.0
+        )
+        let keyUp = try makeKeyUpEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [],
+            characters: "/",
+            timestamp: 1.1
+        )
+
+        XCTAssertFalse(monitor.shouldSwallowLocal(keyDown))
+        XCTAssertFalse(
+            monitor.shouldSwallowLocal(keyUp),
+            "Plain slash typing must keep a balanced keyDown/keyUp pair"
+        )
+    }
+
+    func testShouldSwallowLocalPassesThroughHotkeyKeyUpWithoutPriorSwallowedKeyDown() throws {
         let monitor = GlobalHotkeyMonitor(
             onToggle: {},
             recordingHotkey: Self.optSlash
         )
         // User may release option before /, so keyUp arrives with no
-        // modifiers — matches what `handleKeyUp` checks (keyCode only).
+        // modifiers. Without a swallowed matching keyDown, though, this
+        // keyUp must pass through to keep local delivery balanced.
         let event = try makeKeyUpEvent(
             keyCode: Self.slashKeyCode,
             modifierFlags: [],
             characters: "/",
             timestamp: 1.1
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             monitor.shouldSwallowLocal(event),
-            "Matching-keyCode keyUp must be swallowed even if user released option first"
+            "A bare keyUp must not be swallowed unless its matching keyDown was swallowed first"
+        )
+    }
+
+    func testShouldSwallowLocalSwallowsKeyUpOnlyAfterSwallowingMatchingKeyDown() throws {
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            recordingHotkey: Self.optSlash
+        )
+        let hotkeyKeyDown = try makeKeyDownEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: 1.0
+        )
+        let hotkeyKeyUp = try makeKeyUpEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [],
+            characters: "/",
+            timestamp: 1.1
+        )
+        let plainKeyDown = try makeKeyDownEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [],
+            characters: "/",
+            timestamp: 2.0
+        )
+        let plainKeyUp = try makeKeyUpEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [],
+            characters: "/",
+            timestamp: 2.1
+        )
+
+        XCTAssertTrue(monitor.shouldSwallowLocal(hotkeyKeyDown))
+        XCTAssertTrue(monitor.shouldSwallowLocal(hotkeyKeyUp))
+        XCTAssertFalse(monitor.shouldSwallowLocal(plainKeyDown))
+        XCTAssertFalse(
+            monitor.shouldSwallowLocal(plainKeyUp),
+            "The swallowed-hotkey state must clear after the matching keyUp"
         )
     }
 
@@ -414,6 +479,29 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
             timestamp: 1.0
         )
         XCTAssertFalse(monitor.shouldSwallowLocal(event))
+    }
+
+    func testStartDoesNotInstallLocalMonitorWhenGlobalInstallFails() {
+        var globalInstallAttempts = 0
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            installGlobalMonitor: { _ in
+                globalInstallAttempts += 1
+                return nil
+            }
+        )
+
+        monitor.start()
+
+        XCTAssertEqual(globalInstallAttempts, 1)
+        XCTAssertFalse(monitor.isGlobalMonitorActive)
+        XCTAssertFalse(monitor.isLocalMonitorActive)
+
+        monitor.start()
+
+        XCTAssertEqual(globalInstallAttempts, 2)
+        XCTAssertFalse(monitor.isGlobalMonitorActive)
+        XCTAssertFalse(monitor.isLocalMonitorActive)
     }
 
     // MARK: - Helpers
