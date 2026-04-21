@@ -56,7 +56,17 @@ public enum PersonalScribeTheme {
         public let secondaryTextBase: Color
         public let secondaryTextOpacity: Double
 
-        // Status
+        // Status — scheme-aware variants. These parallel the scheme-
+        // agnostic `PersonalScribeTheme.Status.*` tokens by design:
+        // `Palette.status*` is for surfaces that must adapt to light
+        // vs. dark scheme (the `StatusPill` component is the canonical
+        // consumer — see `StatusPillTests.testStatusColorForReadyUsesThemeStatusReady`
+        // and `testStatusColorForFailedReusesStatusRecordingRed`),
+        // while `PersonalScribeTheme.Status.*` is for scheme-agnostic
+        // contexts (e.g. the filled-blue "Grant Access" CTA in the
+        // Permissions sub-tab) where a single brand hex reads across
+        // both appearances. The duplication is intentional project
+        // policy; do NOT collapse into a single token.
         public let statusReady: Color
         public let statusRecording: Color
         public let statusLink: Color
@@ -326,6 +336,16 @@ public enum PersonalScribeTheme {
 
     // MARK: - Status semantic colours (v2)
 
+    /// Scheme-agnostic status hexes — the same value reads across
+    /// both light and dark appearances. Use these for chrome that is
+    /// intentionally not palette-adaptive (e.g. the filled-blue
+    /// "Grant Access" CTA in the Permissions sub-tab, or the inline
+    /// blue links in `AboutSubTab`). For surfaces that MUST adapt to
+    /// scheme, use `Palette.statusReady / statusRecording / statusLink`
+    /// instead — the palette-adapted set is codified by
+    /// `StatusPillTests.testStatusColorForReadyUsesThemeStatusReady`.
+    /// The two sets coexisting is intentional project policy; see the
+    /// doc comment on `Palette.statusReady` for the full rationale.
     public enum Status {
         /// #32C756 — success / connected / ready.
         public static let success = color(hex: "32C756")
