@@ -16,29 +16,29 @@ Scope excludes the floating pill overlay (separate workstream).
 
 ## Home tab
 
-- [ ] **Empty state missing** — mockup shows centered feather + "No transcriptions yet" + "Press ⌥⌥ to start recording" when `recent` is empty. Current view renders nothing under the section header.
-- [ ] Section label "Recent" should read "RECENT TRANSCRIPTIONS" (mockup text).
-- [ ] Card 3 label reads "Minutes saved" — mockup uses "Mins saved" verbatim.
-- [ ] WPM avg forces `.0` formatting; mockup shows integer at zero.
+- [x] **Empty state missing** — mockup shows centered feather + "No transcriptions yet" + "Press ⌥⌥ to start recording" when `recent` is empty. Current view renders nothing under the section header. → `1d4fcef` (mockup-gaps B.1). NB: hotkey hint sourced from `HotkeyPreference` via `HotkeyShortcutFormatter.displayString`, not hardcoded.
+- [x] Section label "Recent" should read "RECENT TRANSCRIPTIONS" (mockup text). → `b05609e` (mockup-gaps B.2).
+- [x] Card 3 label reads "Minutes saved" — mockup uses "Mins saved" verbatim. → `d3639b4` (mockup-gaps B.3).
+- [x] WPM avg forces `.0` formatting; mockup shows integer at zero. → `776aa7c` (mockup-gaps B.4).
 
 ## Transcriptions tab
 
-- [ ] **Row renders `entry.text` as both title AND preview** — same text drawn twice in one row. Tab passes `title: entry.text, preview: entry.text` to `TranscriptRow`. Pick one surface and drop the other.
-- [ ] Date grouping emits `APRIL 17, 2026` (`MMMM d, yyyy` uppercased); mockup uses compact `APR 18`.
-- [ ] Row height not constrained to `PersonalScribeTheme.RowHeight.tall` (56).
-- [ ] Mockup shows a mode pill ("Dictation Mode" / "Command Mode") on each row's trailing edge. Not present.
-- [ ] Mockup timestamps are wall-clock (`2:34 PM`); code uses relative (`5m ago`).
-- [ ] No `WindowTint.primaryBackground` on the tab root — inherits from ancestor.
+- [x] **Row renders `entry.text` as both title AND preview** — same text drawn twice in one row. Tab passes `title: entry.text, preview: entry.text` to `TranscriptRow`. Pick one surface and drop the other. → `050d46b` (mockup-gaps A.1). `TranscriptRow` gained a `DisplayStyle` enum with a `.detail` variant that drops the title slot; Home-tab callers stay on `.summary` default.
+- [x] Date grouping emits `APRIL 17, 2026` (`MMMM d, yyyy` uppercased); mockup uses compact `APR 18`. → `7f42970` (mockup-gaps A.2).
+- [x] Row height not constrained to `PersonalScribeTheme.RowHeight.tall` (56). → `5d75d40` (mockup-gaps A.3).
+- [ ] Mockup shows a mode pill ("Dictation Mode" / "Command Mode") on each row's trailing edge. Not present. **Deferred** — requires schema change to `TranscriptEntry`; scope captured in `plans/backlog/transcript-trigger-context.md` (park until Command Mode lands).
+- [x] Mockup timestamps are wall-clock (`2:34 PM`); code uses relative (`5m ago`). → `0bb8084` (mockup-gaps A.4) + `e9c9481` (NBSP test fix).
+- [x] No `WindowTint.primaryBackground` on the tab root — inherits from ancestor. → `7d460cf` (mockup-gaps A.5).
 
 ## Permissions sub-tab
 
 Logic is solid (order, dot colours, live refresh, correct deep-links). Visual chrome still off:
 
-- [ ] **Rows rendered as flat HStacks** — mockup shows rounded white card per row with subtle elevation.
-- [ ] **"Grant Access" is a plain text button** tinted `Status.link`. Mockup shows a filled blue pill button with white text.
-- [ ] **"Required" text label missing** beside the orange dot. Mockup shows the literal word "Required".
-- [ ] **"REQUIRED PERMISSIONS" section header missing** above the row stack.
-- [ ] Row subtitle copy diverges from mockup ("Capture audio for transcription." vs "Required for voice recording").
+- [x] **Rows rendered as flat HStacks** — mockup shows rounded white card per row with subtle elevation. → `529d399` (mockup-gaps C.2).
+- [x] **"Grant Access" is a plain text button** tinted `Status.link`. Mockup shows a filled blue pill button with white text. → `6ddd612` (mockup-gaps C.3). Hand-rolled `Capsule()` button since `ActionButton.primary` fills with champagne, not blue.
+- [x] **"Required" text label missing** beside the orange dot. Mockup shows the literal word "Required". → `e6fc482` (mockup-gaps C.4) + `69566d1` (C.5 "Granted" label counterpart).
+- [x] **"REQUIRED PERMISSIONS" section header missing** above the row stack. → `2bbf57b` (mockup-gaps C.1).
+- [x] Row subtitle copy diverges from mockup ("Capture audio for transcription." vs "Required for voice recording"). → `24cc9f8` (mockup-gaps C.6) + `d5b6379` (C.7 Input Monitoring subtitle sourced from `HotkeyPreference`).
 
 ## Settings → General
 
