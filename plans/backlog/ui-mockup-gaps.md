@@ -62,11 +62,11 @@ Logic is solid (order, dot colours, live refresh, correct deep-links). Visual ch
 
 Not blocking; worth consolidating during a cleanup pass:
 
-- [ ] `Radius.pill = 12` coexists with `Radius.capsule = 100`. Reference `SeshatTheme.swift` used a single `Radius.pill = 100`. Risk: a caller writing `Radius.pill` expecting a capsule gets 12pt rounded-rect. Rename `Radius.pill` → `Radius.pillLegacy` or drop if unused.
-- [ ] `Palette.pillStopRed = #EF5350` duplicates `Pill.Dark.stop / Pill.Light.stop = #F75138`. Pick one.
-- [ ] `Palette.brandChampagne` (`#D4D0C8 / #6B6760`) and `Accent.champagne` (`#CCB990`) are two different "champagne" values.
-- [ ] `Palette.statusReady/statusRecording/statusLink` parallel `Status.success/error/link`. The palette-adapted set is **intentional** (project policy, codified in `StatusPillTests`) — the duplication is the gap, not the color choice.
-- [ ] `Typography.display` (20/bold) duplicates `Typography.title` (20/bold).
+- [x] `Radius.pill = 12` coexists with `Radius.capsule = 100`. Reference `SeshatTheme.swift` used a single `Radius.pill = 100`. Risk: a caller writing `Radius.pill` expecting a capsule gets 12pt rounded-rect. Rename `Radius.pill` → `Radius.pillLegacy` or drop if unused. → `ddb384f` (mockup-gaps F.1). Dropped — zero Sources callers; only a test round-trip asserted the 12pt constant, removed in the same commit.
+- [x] `Palette.pillStopRed = #EF5350` duplicates `Pill.Dark.stop / Pill.Light.stop = #F75138`. Pick one. → `8d9c00a` (mockup-gaps F.2). Dropped `Palette.pillStopRed` — zero Sources callers (stored-property initialised by every palette but never read); `Pill.*.stop` #F75138 kept as the authoritative pill stop-red.
+- [x] `Palette.brandChampagne` (`#D4D0C8 / #6B6760`) and `Accent.champagne` (`#CCB990`) are two different "champagne" values. → `d0c403b` (mockup-gaps F.3). Dropped the whole `Accent` enum (`champagne` + `gold`) — both had zero Sources callers. `brandChampagne` (23 Sources callers) remains the single champagne token.
+- [x] `Palette.statusReady/statusRecording/statusLink` parallel `Status.success/error/link`. The palette-adapted set is **intentional** (project policy, codified in `StatusPillTests`) — the duplication is the gap, not the color choice. → `23cbcb9` (mockup-gaps F.4). Doc-comment only — added clarifying comments to both sets explaining the scheme-aware (palette) vs. scheme-agnostic (`Status.*`) split; caller audit confirmed no mis-routed consumers.
+- [x] `Typography.display` (20/bold) duplicates `Typography.title` (20/bold). → `508d0ca` (mockup-gaps F.5). Merged into `Typography.title` — renamed 2 callers (`HotkeyRecorder.swift:29`, `SettingsLayout.swift:68`); removed the dead-duplicate test; `testTitleFontSizeIs20Bold` still guards the 20/bold contract for the surviving token.
 
 ## Palette bundle — product decisions still open
 
