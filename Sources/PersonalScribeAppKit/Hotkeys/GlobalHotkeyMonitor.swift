@@ -258,7 +258,7 @@ public final class GlobalHotkeyMonitor {
     internal func shouldSwallowLocal(_ event: NSEvent) -> Bool {
         switch event.type {
         case .keyDown:
-            let shouldSwallow = matchesHotkey(event)
+            let shouldSwallow = matchesHotkey(HotkeyEvent(nsEvent: event))
             if shouldSwallow {
                 hotkeyKeyDownSwallowed = true
             }
@@ -273,6 +273,11 @@ public final class GlobalHotkeyMonitor {
     }
 
     internal func handle(event: NSEvent) {
+        let hotkeyEvent = HotkeyEvent(nsEvent: event)
+        handle(event: hotkeyEvent)
+    }
+
+    internal func handle(event: HotkeyEvent) {
         switch event.type {
         case .keyDown:
             handleKeyDown(event)
@@ -285,12 +290,10 @@ public final class GlobalHotkeyMonitor {
             // observed so `effectiveModifierFlags` stays accurate if we
             // re-introduce modifier-only hotkeys later.
             return
-        default:
-            return
         }
     }
 
-    private func handleKeyDown(_ event: NSEvent) {
+    private func handleKeyDown(_ event: HotkeyEvent) {
         guard matchesHotkey(event) else {
             return
         }
@@ -311,7 +314,7 @@ public final class GlobalHotkeyMonitor {
         }
     }
 
-    private func handleKeyUp(_ event: NSEvent) {
+    private func handleKeyUp(_ event: HotkeyEvent) {
         guard event.keyCode == recordingHotkey.keyCode else {
             return
         }
@@ -363,7 +366,7 @@ public final class GlobalHotkeyMonitor {
         onHoldStart()
     }
 
-    private func matchesHotkey(_ event: NSEvent) -> Bool {
+    private func matchesHotkey(_ event: HotkeyEvent) -> Bool {
         event.keyCode == recordingHotkey.keyCode &&
         effectiveModifierFlags(for: event) == recordingHotkey.modifierFlags
     }
@@ -377,7 +380,7 @@ public final class GlobalHotkeyMonitor {
         holdCanceller = nil
     }
 
-    private func effectiveModifierFlags(for event: NSEvent) -> NSEvent.ModifierFlags {
+    private func effectiveModifierFlags(for event: HotkeyEvent) -> NSEvent.ModifierFlags {
         event.modifierFlags.intersection(Self.recordingModifierMask)
     }
 }

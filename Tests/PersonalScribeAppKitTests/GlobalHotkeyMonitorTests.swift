@@ -47,6 +47,38 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertTrue(monitor.isActive)
     }
 
+    // MARK: - HotkeyEvent adapter (5a-v1 c1)
+
+    func testHotkeyEventAdapterPreservesRepeatFlag() throws {
+        let repeatEvent = try makeKeyDownEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: 1.2,
+            isARepeat: true
+        )
+        let hotkeyEvent = HotkeyEvent(nsEvent: repeatEvent)
+        XCTAssertTrue(hotkeyEvent.isARepeat)
+        XCTAssertEqual(hotkeyEvent.type, .keyDown)
+        XCTAssertEqual(hotkeyEvent.keyCode, Self.slashKeyCode)
+        XCTAssertTrue(hotkeyEvent.modifierFlags.contains(.option))
+    }
+
+    func testHotkeyEventAdapterMapsKeyUpWithoutModifiers() throws {
+        // User often releases option before /, so keyUp may have no modifiers.
+        let keyUpEvent = try makeKeyUpEvent(
+            keyCode: Self.slashKeyCode,
+            modifierFlags: [],
+            characters: "/",
+            timestamp: 1.4
+        )
+        let hotkeyEvent = HotkeyEvent(nsEvent: keyUpEvent)
+        XCTAssertEqual(hotkeyEvent.type, .keyUp)
+        XCTAssertEqual(hotkeyEvent.keyCode, Self.slashKeyCode)
+        XCTAssertTrue(hotkeyEvent.modifierFlags.isEmpty)
+        XCTAssertFalse(hotkeyEvent.isARepeat, "isARepeat must be false for keyUp")
+    }
+
     // MARK: - Tap (single short press+release)
 
     func testQuickTapFiresToggleOnRelease() throws {
