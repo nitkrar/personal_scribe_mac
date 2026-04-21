@@ -357,6 +357,61 @@ formatter, which isn't worth the blast radius for a 2-line change.
    emits `.0`. Low-hit path; leave until we see it surface in
    practice.
 
+## Permissions sub-tab — mockup-gaps C.1–C.7
+
+Reference: `plans/App UI design/final_settings_permissions_v2.png`.
+
+Open the unified window → Settings → Permissions. Verify each row against the
+mockup:
+
+### C.1 — Section header "REQUIRED PERMISSIONS"
+1. Above the row stack, an 11pt semibold uppercase label reads
+   **"REQUIRED PERMISSIONS"** in the palette's secondary-text colour.
+2. Header matches the Home tab's "RECENT TRANSCRIPTIONS" label in weight,
+   point size, and case.
+
+### C.2 — Rows as rounded cards
+3. Each row is wrapped in a rounded rectangle (`Radius.md` = 10pt, continuous
+   corners). Card background adopts `WindowTint.cardBackground` when a tint
+   is installed (white on Warm/Neutral, `#1C1C1E` on Dark); without a tint it
+   falls back to `palette.elevatedSurface`.
+4. A 0.5pt champagne stroke at 12% opacity is overlayed on the card edge —
+   same treatment as the Home-tab stat cards.
+5. Card interior padding reads as balanced — icon on the leading edge, title
+   + subtitle stacked, status cluster on the trailing edge.
+
+### C.3 — "Grant Access" filled blue pill button
+6. When a permission is NOT granted, the trailing edge shows a filled
+   capsule "Grant Access" button. Background is the theme's link blue
+   (`Status.link` = `#007AFF`), text is white, `Typography.body` semibold.
+7. Button has no macOS native bezel (`.buttonStyle(.plain)` retained).
+8. Clicking the button opens the corresponding System Settings Privacy pane
+   (regression — unchanged behaviour).
+
+### C.4 — "Required" label beside the orange dot
+9. For a non-granted permission, the status cluster reads:
+   **orange dot · "Required"** (11pt regular, `Status.warning` orange) ·
+   **"Grant Access" pill**. The word "Required" sits between the dot and
+   the button.
+
+### C.5 — "Granted" label beside the green dot
+10. For a granted permission, the status cluster reads:
+    **green dot · "Granted"** (11pt regular, `Status.success` green).
+    There is NO "Grant Access" button in this state.
+
+### C.6 — Subtitle copy
+11. Microphone subtitle reads **"Required for voice recording"**.
+12. Accessibility subtitle reads **"Required for paste injection"**.
+
+### C.7 — Input Monitoring subtitle includes the hotkey hint
+13. Input Monitoring subtitle reads **"Required for global hotkey ⌥/"**
+    (or whatever the current `HotkeyPreference` formats to via
+    `HotkeyShortcutFormatter.displayString`). With the default preference
+    (option + `/`), the displayed hint is `⌥/`.
+14. Change the hotkey via Settings → Shortcuts → Change…, pick a new
+    binding, confirm, return to Permissions. The Input Monitoring subtitle
+    reflects the new hotkey.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift

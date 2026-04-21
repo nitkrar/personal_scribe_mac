@@ -13,12 +13,21 @@ import SwiftUI
 struct PermissionsSubTab: View {
     @ObservedObject var viewModel: PermissionsSubTabViewModel
 
+    @Environment(\.colorScheme) private var colorScheme
+
     init(viewModel: PermissionsSubTabViewModel) {
         self.viewModel = viewModel
     }
 
     var body: some View {
+        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+
         VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
+            Text("Required permissions")
+                .font(PersonalScribeTheme.Typography.sectionLabel.font)
+                .textCase(.uppercase)
+                .foregroundStyle(palette.secondaryText)
+
             PermissionRow(
                 permission: .microphone,
                 systemImageName: "mic.fill",
