@@ -17,7 +17,7 @@ final class StatusItemMenuModelTests: XCTestCase {
     /// [2] Home                       house.fill
     /// [3] ---
     /// [4] Start Recording   ⌥⌥      waveform
-    /// [5] Paste Last Transcript     doc.on.clipboard
+    /// [5] Copy Last Transcript      doc.on.clipboard
     /// [6] ---
     /// [7] Check for Updates…        arrow.clockwise
     /// [8] Quit <displayName>        xmark.circle
@@ -43,8 +43,8 @@ final class StatusItemMenuModelTests: XCTestCase {
         )
         assertAction(
             model.items[5],
-            id: .pasteLastTranscript,
-            title: "Paste Last Transcript",
+            id: .copyLastTranscript,
+            title: "Copy Last Transcript",
             iconName: "doc.on.clipboard"
         )
         XCTAssertEqual(model.items[6], .separator)
@@ -270,8 +270,8 @@ final class StatusItemMenuModelTests: XCTestCase {
         assertIcon(actionID: .startStopRecording, expectedIcon: "waveform")
     }
 
-    func testPasteLastTranscriptItemHasDocOnClipboardIcon() {
-        assertIcon(actionID: .pasteLastTranscript, expectedIcon: "doc.on.clipboard")
+    func testCopyLastTranscriptItemHasDocOnClipboardIcon() {
+        assertIcon(actionID: .copyLastTranscript, expectedIcon: "doc.on.clipboard")
     }
 
     func testCheckForUpdatesItemHasClockwiseIcon() {

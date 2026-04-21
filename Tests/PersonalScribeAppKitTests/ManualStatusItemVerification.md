@@ -50,3 +50,9 @@ or `StatusItemIconLoader`.
   detail pane compresses, sidebar does not collapse. Regression guard
   for bug #1b (2026-04-21 dogfood) where About forced the sidebar to
   auto-collapse leaving the user stranded on the About view.
+
+## Copy Last Transcript (bug #9)
+
+- [ ] **MV-SI-10** With at least one transcript in history, open the status-item menu → **Copy Last Transcript**. Open any app (TextEdit / Notes) and press ⌘V — the most recent transcript pastes. Also check the pasteboard programmatically: `pbpaste` in Terminal prints the same text.
+- [ ] **MV-SI-11** With an empty transcript history (fresh install), click **Copy Last Transcript**. The clipboard content is unchanged (verify `pbpaste` before and after). Regression guard: the action must not clear the clipboard when there's nothing to copy.
+- [ ] **MV-SI-12** Title of the menu item reads **Copy Last Transcript**, not 'Paste Last Transcript'. Icon remains `doc.on.clipboard`.

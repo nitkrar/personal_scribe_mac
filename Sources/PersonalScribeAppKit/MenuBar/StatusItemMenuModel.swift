@@ -82,7 +82,7 @@ struct StatusItemMenuModel: Equatable {
     enum ActionID: String, Equatable {
         case startStopRecording
         case openHome
-        case pasteLastTranscript
+        case copyLastTranscript
         case checkForUpdates
         case openMicrophoneSystemSettings
         case openInputMonitoringSystemSettings
@@ -109,14 +109,14 @@ struct StatusItemMenuModel: Equatable {
     /// Home                                    (opens unified window)
     /// ---
     /// Start Recording ⌥⌥                     (or "Stop Recording")
-    /// Paste Last Transcript                   (stub — handler lands in M5.2)
+    /// Copy Last Transcript                    (writes most-recent transcript to clipboard)
     /// ---
     /// Check for Updates…                      (stub — permanent no-op)
     /// Quit <AppBrand.displayName>
     /// ```
     ///
     /// When `inputDevices` is non-empty (M5.3), a Microphone submenu is
-    /// inserted between `Paste Last Transcript` and the separator
+    /// inserted between `Copy Last Transcript` and the separator
     /// before `Check for Updates…`, with the submenu's parent title
     /// showing the currently-selected device name (or "Microphone" if
     /// no user selection exists yet) and a checkmark on the child row
@@ -194,8 +194,8 @@ struct StatusItemMenuModel: Equatable {
         )))
 
         items.append(.action(ActionItem(
-            id: .pasteLastTranscript,
-            title: "Paste Last Transcript",
+            id: .copyLastTranscript,
+            title: "Copy Last Transcript",
             keyEquivalent: "",
             isEnabled: true,
             iconName: "doc.on.clipboard"

@@ -197,16 +197,31 @@ struct PersonalScribeAppMain: App {
         let openHomeTab: @MainActor () -> Void = {
             unifiedWindowControllerHost.showWindow(selecting: .home)
         }
-        let pasteLastTranscriptAction = PasteLastTranscriptAction(
+        // Menu-bar "Copy Last Transcript" is strict copy-to-clipboard —
+        // no auto-paste, no AX probe. The paste-at-cursor flow is
+        // served by the hotkey / pill path where cursor context is
+        // preserved. See bug #9 (2026-04-21 dogfood).
+        let copyLastTranscriptLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+        let copyLastTranscriptAction = CopyLastTranscriptAction(
             transcriptReader: unifiedTranscriptReader,
-            outputService: resolvedOutputService
+            clipboardWriter: CopyLastTranscriptAction.defaultClipboardWriter,
+            onCompleted: { outcome in
+                // TODO: wire a user-visible toast once a notice surface
+                // exists — tracked with the general feedback polish pass.
+                switch outcome {
+                case .copied(let text):
+                    copyLastTranscriptLogger.info("Copy Last Transcript: copied \(text.count) char(s) to clipboard")
+                case .emptyHistory:
+                    copyLastTranscriptLogger.info("Copy Last Transcript: history is empty — no-op (clipboard unchanged)")
+                }
+            }
         )
         let statusItemControllerHost = StatusItemControllerHost(
             sceneModel: sceneModel,
             appStore: appStore,
             openHome: openHomeTab,
-            openPasteLastTranscript: {
-                Task { await pasteLastTranscriptAction.perform() }
+            openCopyLastTranscript: {
+                Task { await copyLastTranscriptAction.perform() }
             },
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: AVFoundationInputDeviceProvider(defaults: defaults)
@@ -331,7 +346,7 @@ final class StatusItemControllerHost: ObservableObject {
         sceneModel: MenuBarSceneModel,
         appStore: AppStore,
         openHome: @escaping @MainActor () -> Void = {},
-        openPasteLastTranscript: @escaping @MainActor () -> Void = {},
+        openCopyLastTranscript: @escaping @MainActor () -> Void = {},
         openCheckForUpdates: @escaping @MainActor () -> Void = {},
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
@@ -342,7 +357,7 @@ final class StatusItemControllerHost: ObservableObject {
             sceneModel: sceneModel,
             appStore: appStore,
             openHome: openHome,
-            openPasteLastTranscript: openPasteLastTranscript,
+            openCopyLastTranscript: openCopyLastTranscript,
             openCheckForUpdates: openCheckForUpdates,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider

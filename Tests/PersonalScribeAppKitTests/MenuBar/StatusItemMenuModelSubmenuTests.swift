@@ -5,7 +5,7 @@ import PersonalScribeCore
 /// Tests for the Microphone submenu contract added in M5.3
 /// (`plans/App UI design/Manus_Final_Bundle_Prompt.md` §2).
 ///
-/// The submenu is inserted between the `Paste Last Transcript` action
+/// The submenu is inserted between the `Copy Last Transcript` action
 /// and the separator before `Check for Updates…`; it is omitted
 /// entirely when no devices are discoverable so the rest of the menu
 /// stays identical to the M5.2 baseline asserted in
@@ -177,13 +177,13 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
 
     // MARK: - Position inside the menu
 
-    /// The submenu must land between the `Paste Last Transcript`
+    /// The submenu must land between the `Copy Last Transcript`
     /// action and the separator preceding `Check for Updates…`. The
     /// M5.2 baseline has 9 items: [brand, mode, Home, ---, Start,
-    /// Paste, ---, Check, Quit]. M5.3 adds `[---, submenu]` between
-    /// index 5 (Paste) and the existing separator at index 6, so the
+    /// Copy, ---, Check, Quit]. M5.3 adds `[---, submenu]` between
+    /// index 5 (Copy) and the existing separator at index 6, so the
     /// new layout is 11 items with the submenu at index 7.
-    func testSubmenuIsInsertedBetweenPasteLastTranscriptAndCheckForUpdates() {
+    func testSubmenuIsInsertedBetweenCopyLastTranscriptAndCheckForUpdates() {
         let devices = [
             AudioInputDevice(id: "uid-1", name: "MacBook Pro Microphone"),
         ]
@@ -198,11 +198,11 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
 
         XCTAssertEqual(model.items.count, 11)
 
-        // Paste Last Transcript sits at index 5 (same as M5.2).
-        guard case let .action(paste) = model.items[5] else {
-            return XCTFail("Expected Paste Last Transcript action at index 5")
+        // Copy Last Transcript sits at index 5 (same as M5.2).
+        guard case let .action(copy) = model.items[5] else {
+            return XCTFail("Expected Copy Last Transcript action at index 5")
         }
-        XCTAssertEqual(paste.id, .pasteLastTranscript)
+        XCTAssertEqual(copy.id, .copyLastTranscript)
 
         // New separator + submenu at 6 / 7.
         XCTAssertEqual(model.items[6], .separator)
