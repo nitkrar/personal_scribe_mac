@@ -1,5 +1,5 @@
 import XCTest
-import PersonalScribeCore
+@testable import PersonalScribeCore
 import PersonalScribeTestSupport
 @testable import PersonalScribeSession
 
@@ -8,18 +8,18 @@ final class SessionCoordinatorTranscriptStoreTests: XCTestCase {
         let tempDirectory = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: tempDirectory) }
 
-        let store = try SQLiteTranscriptStore(recordingsDirectory: tempDirectory)
+        let repository = try makeRepository(in: tempDirectory)
         let coordinator = try makeCoordinator(
             resultText: "hello",
             audioSeconds: 1.0,
             processingSeconds: 0.2,
-            store: store
+            repository: repository
         )
 
         try await driveToggleCycle(on: coordinator)
-        try await waitUntilStoreHasEntries(store, minimum: 1)
+        try await waitUntilRepositoryHasEntries(repository, minimum: 1)
 
-        let entries = await store.recent(limit: 10)
+        let entries = await repository.recent(limit: 10)
         XCTAssertEqual(entries.count, 1)
         XCTAssertEqual(entries.first?.text, "Hello.")
         XCTAssertEqual(entries.first?.audioDuration ?? 0, 1.0, accuracy: 0.01)
@@ -31,7 +31,7 @@ final class SessionCoordinatorTranscriptStoreTests: XCTestCase {
             resultText: "hello",
             audioSeconds: 1.0,
             processingSeconds: 0.2,
-            store: nil
+            repository: nil
         )
 
         try await driveToggleCycle(on: coordinator)
@@ -42,11 +42,22 @@ final class SessionCoordinatorTranscriptStoreTests: XCTestCase {
 
     // MARK: - Helpers
 
+    private func makeRepository(in tempDirectory: URL) throws -> TranscriptRepository {
+        let recordings = tempDirectory.appendingPathComponent("recordings", isDirectory: true)
+        try FileManager.default.createDirectory(at: recordings, withIntermediateDirectories: true)
+        let locator = FixedBaseDirectoryStorageLocator(
+            baseDirectory: tempDirectory,
+            managedDirectoryOverrides: [.recordings: recordings]
+        )
+        let database = try AppDatabase(locator: locator)
+        return TranscriptRepository(database: database)
+    }
+
     private func makeCoordinator(
         resultText: String,
         audioSeconds: Double,
         processingSeconds: Double,
-        store: SQLiteTranscriptStore?
+        repository: TranscriptRepository?
     ) throws -> SessionCoordinator {
         let buffer = try PCMBuffer(
             samples: Array(repeating: 0, count: 16_000),
@@ -65,7 +76,7 @@ final class SessionCoordinatorTranscriptStoreTests: XCTestCase {
             capture: capture,
             transcriber: transcriber,
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
-            transcriptStore: store
+            transcriptRepository: repository
         )
     }
 
@@ -84,19 +95,19 @@ final class SessionCoordinatorTranscriptStoreTests: XCTestCase {
         _ = try await withTimeout(.seconds(1)) { await observed.value }
     }
 
-    private func waitUntilStoreHasEntries(
-        _ store: SQLiteTranscriptStore,
+    private func waitUntilRepositoryHasEntries(
+        _ repository: TranscriptRepository,
         minimum: Int
     ) async throws {
         for _ in 0..<100 {
-            let count = await store.count()
+            let count = await repository.count()
             if count >= minimum {
                 return
             }
             try await Task.sleep(for: .milliseconds(10))
         }
 
-        XCTFail("SQLiteTranscriptStore never reached \(minimum) entries")
+        XCTFail("TranscriptRepository never reached \(minimum) entries")
     }
 
     private func makeTempDirectory() throws -> URL {

@@ -7,7 +7,7 @@ public actor SessionCoordinator {
     private let fixedTranscriber: (any Transcribing)?
     private let modelService: (any ModelService)?
     private let transcriberProvider: (any ModelBoundTranscriberProviding)?
-    private let transcriptStore: SQLiteTranscriptStore?
+    private let transcriptRepository: TranscriptRepository?
     private let logger: PersonalScribeLogger
     private let signposter = OSSignposter(subsystem: PersonalScribeLogger.subsystem, category: "prepare")
     private let downloadProgressBroadcaster = SessionDownloadProgressBroadcaster()
@@ -35,7 +35,7 @@ public actor SessionCoordinator {
         capture: any AudioCapturing,
         transcriber: any Transcribing,
         logger: PersonalScribeLogger,
-        transcriptStore: SQLiteTranscriptStore? = nil
+        transcriptRepository: TranscriptRepository? = nil
     ) {
         let pipelineTranscriber = CoordinatorPipelineTranscriber(
             fixedTranscriber: transcriber,
@@ -45,13 +45,13 @@ public actor SessionCoordinator {
         self.fixedTranscriber = transcriber
         self.modelService = nil
         self.transcriberProvider = nil
-        self.transcriptStore = transcriptStore
+        self.transcriptRepository = transcriptRepository
         self.logger = logger
         self.pipelineTranscriber = pipelineTranscriber
         self.pipeline = Self.makePipeline(
             capture: capture,
             pipelineTranscriber: pipelineTranscriber,
-            transcriptStore: transcriptStore,
+            transcriptRepository: transcriptRepository,
             logger: logger
         )
         Self.startPipelineObservers(
@@ -67,7 +67,7 @@ public actor SessionCoordinator {
         modelService: any ModelService,
         transcriberProvider: any ModelBoundTranscriberProviding,
         logger: PersonalScribeLogger,
-        transcriptStore: SQLiteTranscriptStore? = nil
+        transcriptRepository: TranscriptRepository? = nil
     ) {
         let pipelineTranscriber = CoordinatorPipelineTranscriber(
             modelService: modelService,
@@ -78,13 +78,13 @@ public actor SessionCoordinator {
         self.fixedTranscriber = nil
         self.modelService = modelService
         self.transcriberProvider = transcriberProvider
-        self.transcriptStore = transcriptStore
+        self.transcriptRepository = transcriptRepository
         self.logger = logger
         self.pipelineTranscriber = pipelineTranscriber
         self.pipeline = Self.makePipeline(
             capture: capture,
             pipelineTranscriber: pipelineTranscriber,
-            transcriptStore: transcriptStore,
+            transcriptRepository: transcriptRepository,
             logger: logger
         )
         Self.startPipelineObservers(
@@ -243,7 +243,7 @@ public actor SessionCoordinator {
     private static func makePipeline(
         capture: any AudioCapturing,
         pipelineTranscriber: CoordinatorPipelineTranscriber,
-        transcriptStore: SQLiteTranscriptStore?,
+        transcriptRepository: TranscriptRepository?,
         logger: PersonalScribeLogger
     ) -> SessionPipelineOrchestrator {
         SessionPipelineOrchestrator(
@@ -257,25 +257,25 @@ public actor SessionCoordinator {
             outputSink: CoordinatorPipelineOutputSink(),
             contextProvider: CoordinatorPipelineContextProvider(),
             persistenceHandler: makePersistenceHandler(
-                transcriptStore: transcriptStore,
+                transcriptRepository: transcriptRepository,
                 logger: logger
             )
         )
     }
 
     private static func makePersistenceHandler(
-        transcriptStore: SQLiteTranscriptStore?,
+        transcriptRepository: TranscriptRepository?,
         logger: PersonalScribeLogger
     ) -> (@Sendable (TranscriptEntry) async throws -> Void)? {
-        guard let transcriptStore else {
+        guard let transcriptRepository else {
             return nil
         }
 
         return { entry in
             do {
-                try await transcriptStore.append(entry)
+                try await transcriptRepository.append(entry)
             } catch {
-                logger.error("Failed to persist transcript to SQLiteTranscriptStore", error: error)
+                logger.error("Failed to persist transcript to TranscriptRepository", error: error)
             }
         }
     }

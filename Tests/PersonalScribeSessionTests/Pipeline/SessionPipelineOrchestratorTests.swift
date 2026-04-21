@@ -1,5 +1,5 @@
 import XCTest
-import PersonalScribeCore
+@testable import PersonalScribeCore
 import PersonalScribeTestSupport
 @testable import PersonalScribeSession
 
@@ -483,7 +483,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             try? FileManager.default.removeItem(at: temporaryDirectory)
         }
 
-        let store = try SQLiteTranscriptStore(recordingsDirectory: temporaryDirectory)
+        let repository = try makeRepository(in: temporaryDirectory)
         let buffer = try makeBuffer(sampleCount: 16_000)
         let orchestrator = makeOrchestrator(
             capture: FakeAudioCapturing(buffers: [buffer]),
@@ -494,15 +494,15 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                     processingDuration: .milliseconds(200)
                 )
             ),
-            transcriptStore: store
+            transcriptRepository: repository
         )
 
         await orchestrator.toggleCapture()
         await orchestrator.toggleCapture()
-        try await waitUntilStoreHasEntries(store, minimum: 1)
+        try await waitUntilRepositoryHasEntries(repository, minimum: 1)
 
-        let count = await store.count()
-        let entries = await store.recent(limit: 10)
+        let count = await repository.count()
+        let entries = await repository.recent(limit: 10)
 
         XCTAssertEqual(count, 1)
         XCTAssertEqual(entries.count, 1)
@@ -612,7 +612,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                 processingDuration: .zero
             )
         ),
-        transcriptStore: SQLiteTranscriptStore? = nil,
+        transcriptRepository: TranscriptRepository? = nil,
         postProcessingPipeline: any PostProcessingPipeline = DefaultPostProcessingPipeline(),
         outputSink: any PipelineOutputSink = TestPipelineOutputSink(),
         context: PipelineContextSnapshot = PipelineContextSnapshot(streamingOutputEnabled: false),
@@ -634,7 +634,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         return SessionPipelineOrchestrator(
             capture: capture,
             transcriber: transcriber,
-            transcriptStore: transcriptStore,
+            transcriptRepository: transcriptRepository,
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
@@ -694,18 +694,29 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         return revisions
     }
 
-    private func waitUntilStoreHasEntries(
-        _ store: SQLiteTranscriptStore,
+    private func makeRepository(in tempDirectory: URL) throws -> TranscriptRepository {
+        let recordings = tempDirectory.appendingPathComponent("recordings", isDirectory: true)
+        try FileManager.default.createDirectory(at: recordings, withIntermediateDirectories: true)
+        let locator = FixedBaseDirectoryStorageLocator(
+            baseDirectory: tempDirectory,
+            managedDirectoryOverrides: [.recordings: recordings]
+        )
+        let database = try AppDatabase(locator: locator)
+        return TranscriptRepository(database: database)
+    }
+
+    private func waitUntilRepositoryHasEntries(
+        _ repository: TranscriptRepository,
         minimum: Int
     ) async throws {
         for _ in 0..<100 {
-            if await store.count() >= minimum {
+            if await repository.count() >= minimum {
                 return
             }
             try await Task.sleep(for: .milliseconds(10))
         }
 
-        XCTFail("SQLiteTranscriptStore never reached \(minimum) entries")
+        XCTFail("TranscriptRepository never reached \(minimum) entries")
     }
 
     private func makeTemporaryDirectory() throws -> URL {
