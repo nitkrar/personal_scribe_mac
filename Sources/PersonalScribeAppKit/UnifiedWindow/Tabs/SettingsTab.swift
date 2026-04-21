@@ -18,9 +18,6 @@ public struct SettingsTab: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.lg) {
-            Text("Settings")
-                .font(PersonalScribeTheme.Typography.largeTitle.font)
-
             Picker("Settings Section", selection: $selectedSubTab) {
                 ForEach(SettingsSubTab.allCases) { subTab in
                     Text(subTab.rawValue)

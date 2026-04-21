@@ -4,6 +4,7 @@
 - All 5 tabs visible: confirm `General`, `AI Models`, `Modes`, `Shortcuts`, and `Advanced` render and can each be selected from the tab strip.
 - General-tab toggles persist across relaunch: change pill visibility, waveform decay, and paste mode, relaunch Ninimma, and confirm the three selections remain at their last chosen values.
 - Both-hidden combination blocked with visible error state: hide the menu bar item, then try to set pill visibility to `Hidden`, and confirm the UI rejects the change with an inline explanation that one surface must remain visible.
+- [ ] **MV-SETT-1** Open Settings. The segmented sub-tab picker (General / AI Models / Shortcuts / Advanced / Permissions) renders on a single line at the default window width (760pt). The redundant "Settings" largeTitle above the picker must NOT be present — window title bar + sidebar row already identify the tab.
 
 ## Clipboard restore delay
 
