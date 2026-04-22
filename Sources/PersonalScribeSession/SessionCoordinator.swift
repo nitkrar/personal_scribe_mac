@@ -350,7 +350,7 @@ public actor SessionCoordinator {
         }
 
         Task {
-            let stream = await pipelineTranscriber.modelDownloadProgress()
+            let stream = pipelineTranscriber.modelDownloadProgress()
             for await progress in stream {
                 broadcaster.update(progress)
             }

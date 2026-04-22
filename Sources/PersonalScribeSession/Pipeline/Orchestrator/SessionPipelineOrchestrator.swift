@@ -538,9 +538,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         if let seshatError = error as? PersonalScribeError {
             return String(describing: seshatError)
         }
-        if let describable = error as? any CustomStringConvertible {
-            return describable.description
-        }
         return String(describing: error)
     }
 

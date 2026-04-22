@@ -18,7 +18,6 @@ public final class AppKitVisibilityModeProvider: @unchecked Sendable, AppStoreVi
     }
 
     public func visibilityModeStream() -> AsyncStream<AppStoreVisibilityMode> {
-        let defaults = self.defaults
         let notificationCenter = self.notificationCenter
 
         return AsyncStream { continuation in
@@ -27,8 +26,9 @@ public final class AppKitVisibilityModeProvider: @unchecked Sendable, AppStoreVi
                 forName: UserDefaults.didChangeNotification,
                 object: defaults,
                 queue: nil
-            ) { _ in
-                continuation.yield(Self.map(PillVisibilityMode.resolve(from: defaults)))
+            ) { [weak self] _ in
+                guard let self else { return }
+                continuation.yield(self.currentVisibilityMode())
             })
 
             continuation.onTermination = { _ in

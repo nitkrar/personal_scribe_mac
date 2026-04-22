@@ -137,7 +137,9 @@ final class DraggablePanel: NSPanel {
             object: defaults,
             queue: .main
         ) { [weak self] _ in
-            self?.applyResolvedAppearance()
+            MainActor.assumeIsolated {
+                self?.applyResolvedAppearance()
+            }
         }
     }
 

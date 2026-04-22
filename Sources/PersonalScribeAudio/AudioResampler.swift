@@ -1,6 +1,10 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 import PersonalScribeCore
+
+private final class FeedFlag: @unchecked Sendable {
+    var didFeed = false
+}
 
 /// Internal actor that converts captured mono `[Float]` samples into the shared
 /// `PCMBuffer` wire format (16 kHz mono Float32). Keeps AVFoundation-only types
@@ -90,13 +94,13 @@ internal actor AudioResampler {
         }
 
         var error: NSError?
-        var didFeed = false
+        let flag = FeedFlag()
         let status = converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-            if didFeed {
+            if flag.didFeed {
                 outStatus.pointee = .endOfStream
                 return nil
             }
-            didFeed = true
+            flag.didFeed = true
             outStatus.pointee = .haveData
             return inputBuffer
         }

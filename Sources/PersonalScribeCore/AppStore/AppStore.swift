@@ -83,20 +83,20 @@ public final class AppStore: ObservableObject {
         sessionObservationTask = Task { [weak self] in
             for await state in session.stateStream() {
                 guard let self else { return }
-                await self.handleSessionStateChange(state)
+                self.handleSessionStateChange(state)
             }
         }
         modelDownloadProgressObservationTask = Task { [weak self] in
             for await progress in session.modelDownloadProgress() {
                 guard let self else { return }
-                await self.handleModelDownloadProgressChange(progress)
+                self.handleModelDownloadProgressChange(progress)
             }
         }
         permissionsObservationTask = Task { [weak self] in
             guard let self else { return }
-            let stream = await self.makePermissionStatusStream()
+            let stream = self.makePermissionStatusStream()
             for await statuses in stream {
-                await self.updateSnapshot { snapshot in
+                self.updateSnapshot { snapshot in
                     snapshot.permissions = statuses
                 }
             }
@@ -208,7 +208,7 @@ public final class AppStore: ObservableObject {
                     return
                 }
 
-                await self.updateRecordingDuration(clock.now() - recordingStart)
+                self.updateRecordingDuration(clock.now() - recordingStart)
             }
         }
     }
@@ -241,7 +241,7 @@ public final class AppStore: ObservableObject {
                 return
             }
 
-            await self.completePillTransition()
+            self.completePillTransition()
         }
     }
 
