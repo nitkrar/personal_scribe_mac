@@ -21,6 +21,8 @@ struct TranscriptionsTab: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.windowTint) private var windowTint
 
+    @State private var editingItem: TranscriptEditSheetItem?
+
     init(viewModel: TranscriptionsTabViewModel) {
         self.viewModel = viewModel
     }
@@ -43,6 +45,7 @@ struct TranscriptionsTab: View {
 
     var body: some View {
         let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+        let background = Self.resolvedBackground(windowTint: windowTint, palette: palette)
 
         VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.lg) {
             Text("Transcriptions")
@@ -77,21 +80,7 @@ struct TranscriptionsTab: View {
                     ForEach(viewModel.groupedByDate, id: \.bucket) { group in
                         Section {
                             ForEach(group.entries, id: \.id) { entry in
-                                // Detail style — wall-clock time + 2-line
-                                // preview; no separate title surface.
-                                // TODO: mockup-gap — trailing mode pill
-                                // deferred (TranscriptEntry has no mode
-                                // field; requires schema + migration).
-                                TranscriptRow(
-                                    timestamp: entry.timestamp,
-                                    preview: entry.text,
-                                    onDelete: viewModel.canDelete ? {
-                                        Task {
-                                            try? await viewModel.delete(id: entry.id)
-                                        }
-                                    } : nil,
-                                    referenceDate: now
-                                )
+                                transcriptRow(entry: entry, referenceDate: now)
                             }
                         } header: {
                             Text(group.bucket)
@@ -105,9 +94,142 @@ struct TranscriptionsTab: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Self.resolvedBackground(windowTint: windowTint, palette: palette))
+        .background(background)
         .task {
             await viewModel.load()
         }
+        .sheet(item: $editingItem, content: editSheet)
+    }
+
+    @ViewBuilder
+    private func transcriptRow(entry: TranscriptEntry, referenceDate: Date) -> some View {
+        // Detail style — wall-clock time + 2-line preview; no separate title
+        // surface. Trailing mode pill remains deferred until schema support
+        // exists.
+        TranscriptRow(
+            timestamp: entry.timestamp,
+            preview: entry.text,
+            isSelected: editingItem?.entry.id == entry.id,
+            onDelete: deleteAction(for: entry.id),
+            referenceDate: referenceDate
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard viewModel.canEdit else { return }
+            editingItem = TranscriptEditSheetItem(entry: entry)
+        }
+    }
+
+    private func deleteAction(for id: UUID) -> (() -> Void)? {
+        guard viewModel.canDelete else {
+            return nil
+        }
+
+        return {
+            Task {
+                try? await viewModel.delete(id: id)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func editSheet(item: TranscriptEditSheetItem) -> some View {
+        TranscriptEditSheet(
+            entry: item.entry,
+            onSave: { newText in
+                try await viewModel.update(id: item.id, text: newText)
+            }
+        )
+    }
+}
+
+/// Identifiable wrapper for `TranscriptEntry` so SwiftUI's `sheet(item:)` can
+/// drive presentation without touching the Core module's struct conformance.
+private struct TranscriptEditSheetItem: Identifiable {
+    let entry: TranscriptEntry
+    var id: UUID { entry.id }
+}
+
+/// Minimal edit sheet for a transcript body. No title field, no format
+/// toolbar, no debounce — per #013 scope cut. Save on explicit button tap;
+/// Cancel discards. Sheet dismissal via either button.
+@MainActor
+private struct TranscriptEditSheet: View {
+    let entry: TranscriptEntry
+    let onSave: @MainActor (String) async throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var draftText: String
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    init(entry: TranscriptEntry, onSave: @escaping @MainActor (String) async throws -> Void) {
+        self.entry = entry
+        self.onSave = onSave
+        self._draftText = State(initialValue: entry.text)
+    }
+
+    var body: some View {
+        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+
+        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
+            Text("Edit transcript")
+                .font(PersonalScribeTheme.Typography.title.font)
+                .foregroundStyle(palette.primaryText)
+
+            Text(entry.timestamp.formatted(.dateTime.month().day().hour().minute()))
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(palette.secondaryText)
+
+            TextEditor(text: $draftText)
+                .font(PersonalScribeTheme.Typography.body.font)
+                .foregroundStyle(palette.primaryText)
+                .padding(8)
+                .frame(minWidth: 420, minHeight: 240)
+                .background {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(palette.surface)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(palette.primaryText.opacity(0.1), lineWidth: 1)
+                }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                .disabled(isSaving)
+
+                Button("Save") {
+                    Task { @MainActor in
+                        isSaving = true
+                        errorMessage = nil
+                        defer { isSaving = false }
+
+                        do {
+                            try await onSave(draftText)
+                            dismiss()
+                        } catch {
+                            errorMessage = "Couldn’t save transcript edits."
+                        }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(isSaving || draftText == entry.text)
+            }
+        }
+        .padding(PersonalScribeTheme.Spacing.lg)
+        .frame(minWidth: 480, minHeight: 320)
+        .background(palette.appBackground)
+        .interactiveDismissDisabled(isSaving)
     }
 }
