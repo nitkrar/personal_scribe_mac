@@ -13,6 +13,31 @@
 - `0.1s` fast restore: set the delay to `0.1s`, dictate into Slack, confirm the transcript pastes into the compose field, then press `Cmd+V` manually and confirm Slack pastes the clipboard content that existed before dictation.
 - `5.0s` slow restore: set the delay to `5.0s`, dictate into Slack, wait after the initial paste, and confirm the clipboard remains the transcribed text for the full five-second window before the pre-paste clipboard is restored.
 
+## RAM-aware default model (#016)
+
+`DefaultModelSelectionPolicy` picks the fresh-install default voice
+model based on `ProcessInfo.physicalMemory`. Machines below 10 GiB
+(i.e. 8 GB Macs) get `parakeet-tdt-ctc-110m` (110M params, 407 MB);
+everyone else gets `parakeet-tdt-0.6b-v2` (baseline). The probe is
+only consulted when no `ActiveModelDescriptor` is persisted — once
+the user has a saved selection, the probe is ignored forever.
+
+Hard to verify on a single dev machine without swapping hardware —
+these entries are guidance, not a literal checklist item.
+
+- **MV-RAM-1 — 8 GB Mac fresh install:** on an 8 GB M-series Mac
+  (or equivalent) with clean UserDefaults (`defaults delete
+  com.nitkrar.personal_scribe ActiveModelDescriptor`), launch Ninimma.
+  Open `Settings → AI Models`. `Parakeet TDT-CTC 110M` should show
+  the `Active` chip; `Parakeet TDT 0.6B` should show `Not downloaded`
+  or `Ready` but NOT `Active`.
+- **MV-RAM-2 — 16+ GB Mac fresh install:** same flow on a 16 GB+
+  Mac. `Parakeet TDT 0.6B` is the Active row; CTC-110M is inactive.
+- **MV-RAM-3 — user choice wins after first launch:** from MV-RAM-1
+  state, click `Set Active` on `Parakeet TDT 0.6B`. Confirm it flips
+  to Active. Quit and relaunch. `Parakeet TDT 0.6B` stays Active —
+  the RAM probe does NOT reassert CTC-110M on the 8 GB machine.
+
 ## First-run onboarding completion (#015)
 
 `OnboardingCompletionObserver` watches the PermissionService and

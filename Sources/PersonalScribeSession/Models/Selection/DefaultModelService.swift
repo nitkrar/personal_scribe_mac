@@ -47,12 +47,28 @@ public final class DefaultModelService: ModelService {
     public convenience init(
         storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
         defaults: UserDefaults = .standard,
+        physicalMemoryBytes: Int64 = Int64(ProcessInfo.processInfo.physicalMemory),
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
     ) {
         let provider = ModelBoundTranscriberProvider(storageLocator: storageLocator)
+
+        // #016: RAM-aware first-launch default. The Preference layer's
+        // `default:` is only consulted when no value is persisted, so
+        // consulting the RAM probe here affects the fresh-install case
+        // only. Any subsequent launch reads the persisted user choice
+        // and ignores this default.
+        let recommendedVoiceModel = DefaultModelSelectionPolicy.recommendedDefault(
+            physicalMemoryBytes: physicalMemoryBytes,
+            registeredModels: BuiltInModelCatalog.registeredModels,
+            baselineDefault: BuiltInModelCatalog.defaultActiveDescriptor.voiceModel
+        )
+        let recommendedDefault = ActiveModelDescriptor(
+            voiceModel: recommendedVoiceModel,
+            aiModelID: BuiltInModelCatalog.defaultActiveDescriptor.aiModelID
+        )
         let selectionPreference = Preference<ActiveModelDescriptor>(
             key: Self.preferenceKey,
-            default: BuiltInModelCatalog.defaultActiveDescriptor,
+            default: recommendedDefault,
             defaults: defaults
         )
 

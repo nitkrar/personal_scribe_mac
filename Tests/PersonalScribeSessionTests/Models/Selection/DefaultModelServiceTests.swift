@@ -234,6 +234,72 @@ final class DefaultModelServiceTests: XCTestCase {
         }
     }
 
+    // MARK: - #016 — RAM-aware first-launch default
+
+    /// Fresh UserDefaults (no persisted selection) on an 8 GB Mac:
+    /// the convenience init's RAM probe picks the lightweight
+    /// CTC-110M descriptor as the Preference's `default:`. The
+    /// resolver then returns that descriptor since nothing is
+    /// persisted.
+    func testEightGiBMachineOnFreshInstallUsesLightweightDefault() {
+        let defaults = isolatedDefaults()
+        let service = DefaultModelService(
+            defaults: defaults,
+            physicalMemoryBytes: 8 * 1024 * 1024 * 1024
+        )
+
+        XCTAssertEqual(
+            service.activeDescriptor.voiceModel.id,
+            BuiltInModelCatalog.parakeetTDTCTC110M.id
+        )
+    }
+
+    /// Fresh UserDefaults on a 16 GB Mac: baseline default
+    /// (parakeet-tdt-0.6b-v2). Guards the "don't regress high-RAM
+    /// machines" invariant.
+    func testSixteenGiBMachineOnFreshInstallUsesBaselineDefault() {
+        let defaults = isolatedDefaults()
+        let service = DefaultModelService(
+            defaults: defaults,
+            physicalMemoryBytes: 16 * 1024 * 1024 * 1024
+        )
+
+        XCTAssertEqual(
+            service.activeDescriptor.voiceModel.id,
+            BuiltInModelCatalog.parakeetTDT06Bv2.id
+        )
+    }
+
+    /// User chose v2 explicitly on a prior launch — the persisted
+    /// selection wins over the RAM probe even on an 8 GB machine.
+    /// Guards "user choice always wins after first launch."
+    func testPersistedSelectionWinsOverRAMProbe() {
+        let defaults = isolatedDefaults()
+        // Persist v2 as the user's selection.
+        let preference = Preference<ActiveModelDescriptor>(
+            key: DefaultModelService.preferenceKey,
+            default: BuiltInModelCatalog.defaultActiveDescriptor,
+            defaults: defaults
+        )
+        preference.persist(
+            ActiveModelDescriptor(
+                voiceModel: BuiltInModelCatalog.parakeetTDT06Bv2,
+                aiModelID: nil
+            )
+        )
+
+        // 8 GB — RAM probe would otherwise route to CTC-110M.
+        let service = DefaultModelService(
+            defaults: defaults,
+            physicalMemoryBytes: 8 * 1024 * 1024 * 1024
+        )
+
+        XCTAssertEqual(
+            service.activeDescriptor.voiceModel.id,
+            BuiltInModelCatalog.parakeetTDT06Bv2.id
+        )
+    }
+
     func testDescriptorForModeFallsBackToDefaultVoiceModelAndPreservesAISelection() {
         let service = DefaultModelService(
             selectionPreference: Preference<ActiveModelDescriptor>(
