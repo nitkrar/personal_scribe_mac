@@ -236,6 +236,156 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
         XCTAssertEqual(service.downloadStates[target.id]?.phase, .ready)
     }
 
+    // MARK: - #039 — refresh() resyncs terminal states against disk
+
+    /// A model downloaded out-of-band (e.g. by a prior session, or by
+    /// the user manually placing files) must flip from `.notDownloaded`
+    /// to `.ready` after `refresh()` re-reads disk. This is the core
+    /// #039 invariant: AIModelsTab's `.onAppear { service.refresh() }`
+    /// must pick up external disk mutations that happened while the tab
+    /// was off-screen.
+    func testRefreshPromotesNotDownloadedToReadyWhenModelAppearsOnDisk() {
+        let disk = DiskStateHolder()
+        let service = makeService(
+            isDownloaded: { descriptor in disk.isDownloaded(descriptor) },
+            download: { _, _ in }
+        )
+        let target = BuiltInModelCatalog.parakeetTDTCTC110M
+        XCTAssertEqual(service.downloadStates[target.id]?.phase, .notDownloaded)
+
+        disk.setDownloaded(true, for: target)
+        service.refresh()
+
+        XCTAssertEqual(service.downloadStates[target.id]?.phase, .ready)
+        XCTAssertEqual(service.downloadStates[target.id]?.fractionCompleted, 1)
+    }
+
+    /// Symmetric to the promote case: a model deleted out-of-band must
+    /// flip from `.ready` to `.notDownloaded` after `refresh()`. Guards
+    /// against Settings showing "Ready" when the file has been removed
+    /// from disk since service init.
+    func testRefreshDemotesReadyToNotDownloadedWhenModelDisappearsFromDisk() {
+        let disk = DiskStateHolder()
+        let target = BuiltInModelCatalog.parakeetTDT06Bv2
+        disk.setDownloaded(true, for: target)
+        let service = makeService(
+            isDownloaded: { descriptor in disk.isDownloaded(descriptor) },
+            download: { _, _ in }
+        )
+        XCTAssertEqual(service.downloadStates[target.id]?.phase, .ready)
+
+        disk.setDownloaded(false, for: target)
+        service.refresh()
+
+        XCTAssertEqual(service.downloadStates[target.id]?.phase, .notDownloaded)
+        XCTAssertEqual(service.downloadStates[target.id]?.fractionCompleted, 0)
+    }
+
+    /// Regression guard: `refresh()` must NOT overwrite a `.downloading`
+    /// state with `.notDownloaded`. During an in-flight download the
+    /// files aren't on disk yet (staging dir), so `isDownloaded` returns
+    /// false — reading that naively would stomp the progress chip.
+    func testRefreshPreservesInFlightDownloadingStates() async throws {
+        let disk = DiskStateHolder()
+        let service = makeService(
+            isDownloaded: { descriptor in disk.isDownloaded(descriptor) },
+            download: { _, progress in
+                progress(
+                    .init(
+                        phase: .downloading,
+                        fractionCompleted: 0.42,
+                        receivedBytes: 42,
+                        expectedBytes: 100
+                    )
+                )
+                // Park the handler so the test sees the .downloading
+                // state before completion.
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        )
+        let target = BuiltInModelCatalog.parakeetTDTCTC110M
+
+        let downloadTask = Task {
+            try await service.setActive(
+                ActiveModelDescriptor(voiceModel: target, aiModelID: nil)
+            )
+        }
+        // Wait for the progress tick to be ingested.
+        try await Task.sleep(nanoseconds: 20_000_000)
+        XCTAssertEqual(service.downloadStates[target.id]?.phase, .downloading)
+
+        service.refresh()
+
+        // Mid-flight refresh must not overwrite .downloading.
+        XCTAssertEqual(service.downloadStates[target.id]?.phase, .downloading)
+        XCTAssertEqual(service.downloadStates[target.id]?.fractionCompleted, 0.42)
+
+        _ = try await downloadTask.value
+    }
+
+    /// `refresh()` must NOT clear a `.failed` state. Failure can coexist
+    /// with a model that is on disk (rare) or off disk (common) — either
+    /// way, the user explicitly hit Retry to clear; refresh should be
+    /// passive.
+    func testRefreshPreservesFailedState() async {
+        let disk = DiskStateHolder()
+        let service = makeService(
+            isDownloaded: { descriptor in disk.isDownloaded(descriptor) },
+            download: { _, _ in
+                throw DownloadStateTestError.handlerFailure
+            }
+        )
+        let target = BuiltInModelCatalog.parakeetTDTCTC110M
+
+        do {
+            try await service.setActive(
+                ActiveModelDescriptor(voiceModel: target, aiModelID: nil)
+            )
+            XCTFail("Expected setActive to rethrow")
+        } catch {
+            // expected
+        }
+        guard case .failed = service.downloadStates[target.id]?.phase else {
+            XCTFail("Test precondition: expected .failed")
+            return
+        }
+
+        service.refresh()
+
+        guard case .failed = service.downloadStates[target.id]?.phase else {
+            XCTFail("refresh() must not clear .failed state")
+            return
+        }
+    }
+
+    /// `refresh()` must be idempotent when the on-disk state matches
+    /// the published state — i.e. no-op in the common case where the
+    /// user switches to AI Models and nothing has changed. Asserts via
+    /// a publisher-subscriber that captures every published snapshot.
+    func testRefreshIsNoOpWhenStateMatchesDisk() {
+        let disk = DiskStateHolder()
+        disk.setDownloaded(true, for: BuiltInModelCatalog.parakeetTDT06Bv2)
+        let service = makeService(
+            isDownloaded: { descriptor in disk.isDownloaded(descriptor) },
+            download: { _, _ in }
+        )
+
+        let collector = SnapshotCollector()
+        let cancellable = service.$downloadStates
+            .dropFirst() // skip the initial-sink value
+            .sink { snapshot in
+                if let state = snapshot[BuiltInModelCatalog.parakeetTDT06Bv2.id] {
+                    collector.append(state)
+                }
+            }
+
+        service.refresh()
+        cancellable.cancel()
+
+        // Disk matches published state → refresh() should not republish.
+        XCTAssertEqual(collector.phases(), [])
+    }
+
     // MARK: - Helpers
 
     private func makeService(
@@ -302,4 +452,29 @@ private final class SnapshotCollector {
 
 private enum DownloadStateTestError: Error, Equatable {
     case handlerFailure
+}
+
+/// Mutable disk-presence stub backing `refresh()` tests. The service
+/// captures `isDownloaded` as a closure at init, so tests need a
+/// reference holder to flip disk truth at runtime without reinitializing
+/// the service.
+private final class DiskStateHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var downloaded: Set<String> = []
+
+    func setDownloaded(_ isDownloaded: Bool, for descriptor: ModelDescriptor) {
+        lock.lock()
+        defer { lock.unlock() }
+        if isDownloaded {
+            downloaded.insert(descriptor.id)
+        } else {
+            downloaded.remove(descriptor.id)
+        }
+    }
+
+    func isDownloaded(_ descriptor: ModelDescriptor) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return downloaded.contains(descriptor.id)
+    }
 }

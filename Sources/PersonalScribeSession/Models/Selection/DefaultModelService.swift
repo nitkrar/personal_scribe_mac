@@ -188,6 +188,41 @@ public final class DefaultModelService: ModelService {
         try ensureSufficientDiskSpace(for: canonical)
         try await downloadHandler(canonical, progress)
     }
+
+    /// Re-sync `downloadStates` against the injected disk-presence
+    /// probe for every registered model. Flips `.ready` ↔ `.notDownloaded`
+    /// to match disk truth; preserves in-flight `.downloading` / `.loading`
+    /// and explicit `.failed` states so UI refreshes can't stomp a live
+    /// download or quietly clear an error the user hasn't retried.
+    ///
+    /// Idempotent when disk matches published state — no publish is
+    /// emitted, so `@ObservedObject` subscribers don't re-render.
+    ///
+    /// Ticket #039: AIModelsTab's `.onAppear` calls this so a model
+    /// that appeared (or disappeared) from disk while the tab was
+    /// off-screen flips its chip on re-entry without a window restart.
+    public func refresh() {
+        for descriptor in registeredModels {
+            let currentPhase = downloadStates[descriptor.id]?.phase ?? .notDownloaded
+            switch currentPhase {
+            case .downloading, .loading, .failed:
+                // Preserve: an in-flight or errored state reflects
+                // intent that a disk probe cannot reason about.
+                continue
+            case .ready, .notDownloaded:
+                let isOnDisk = isDownloadedHandler(descriptor)
+                let desiredPhase: ModelDownloadState.Phase = isOnDisk ? .ready : .notDownloaded
+                guard desiredPhase != currentPhase else { continue }
+                publishDownloadState(
+                    ModelDownloadState(
+                        descriptorId: descriptor.id,
+                        phase: desiredPhase,
+                        fractionCompleted: isOnDisk ? 1 : 0
+                    )
+                )
+            }
+        }
+    }
 }
 
 private extension DefaultModelService {
