@@ -16,17 +16,21 @@ final class TranscriptionsTabViewModel: ObservableObject {
     @Published var searchText: String = ""
 
     private let reader: any TranscriptReading
+    private let deleter: (any TranscriptDeleting)?
     private let clock: @MainActor () -> Date
     private let calendar: Calendar
     private let explicitDateFormatter: DateFormatter
+    private var activeLimit: Int = 100
 
     init(
         reader: any TranscriptReading,
+        deleter: (any TranscriptDeleting)? = nil,
         clock: @escaping @MainActor () -> Date = { Date() },
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = Locale(identifier: "en_US_POSIX")
     ) {
         self.reader = reader
+        self.deleter = deleter ?? (reader as? any TranscriptDeleting)
         self.clock = clock
         self.calendar = calendar
 
@@ -43,7 +47,20 @@ final class TranscriptionsTabViewModel: ObservableObject {
     /// Load the most-recent `limit` entries from the reader. Default 100
     /// matches §3B guidance for the Transcriptions tab surface.
     func load(limit: Int = 100) async {
+        activeLimit = limit
         entries = await reader.recent(limit: limit)
+    }
+
+    /// Delete the persisted transcript for `id`, then reload the current
+    /// storage-backed window so the published list reflects SQLite rather
+    /// than only trimming the in-memory cache.
+    func delete(id: UUID) async throws {
+        guard let deleter else {
+            return
+        }
+
+        try await deleter.delete(id: id)
+        entries = await reader.recent(limit: activeLimit)
     }
 
     /// Case-insensitive contains-match against `entry.text`. An empty or

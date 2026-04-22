@@ -47,12 +47,28 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
         now: Date? = nil
     ) -> TranscriptionsTabViewModel {
         let fixedNow = now ?? makeNow()
+        let store = InlineFakeTranscriptStore(entries: entries)
         return TranscriptionsTabViewModel(
-            reader: InlineFakeTranscriptReader(entries: entries),
+            reader: store,
             clock: { fixedNow },
             calendar: testCalendar,
             locale: Locale(identifier: "en_US_POSIX")
         )
+    }
+
+    private func makeHarness(
+        entries: [TranscriptEntry] = [],
+        now: Date? = nil
+    ) -> (viewModel: TranscriptionsTabViewModel, store: InlineFakeTranscriptStore) {
+        let fixedNow = now ?? makeNow()
+        let store = InlineFakeTranscriptStore(entries: entries)
+        let viewModel = TranscriptionsTabViewModel(
+            reader: store,
+            clock: { fixedNow },
+            calendar: testCalendar,
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+        return (viewModel, store)
     }
 
     // MARK: - Init
@@ -76,6 +92,40 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.entries.count, 1)
         XCTAssertEqual(viewModel.entries.first?.text, "hello world")
+    }
+
+    func testDeleteRemovesDeletedEntryFromPublishedEntriesAndDropsCount() async throws {
+        let now = makeNow()
+        let retained = makeEntry(text: "keep", timestamp: now)
+        let deleted = makeEntry(text: "delete", timestamp: now.addingTimeInterval(-60))
+        let harness = makeHarness(entries: [retained, deleted], now: now)
+
+        await harness.viewModel.load(limit: 2)
+        try await harness.viewModel.delete(id: deleted.id)
+
+        XCTAssertEqual(harness.viewModel.entries.map(\.id), [retained.id])
+        XCTAssertEqual(harness.viewModel.entries.count, 1)
+        let deletedIDs = await harness.store.deletedIDs()
+        XCTAssertEqual(deletedIDs, [deleted.id])
+    }
+
+    func testDeleteReloadsFromStoreUsingCurrentLimit() async throws {
+        let now = makeNow()
+        let newest = makeEntry(text: "newest", timestamp: now)
+        let next = makeEntry(text: "next", timestamp: now.addingTimeInterval(-60))
+        let older = makeEntry(text: "older", timestamp: now.addingTimeInterval(-120))
+        let harness = makeHarness(entries: [newest, next, older], now: now)
+
+        await harness.viewModel.load(limit: 2)
+        XCTAssertEqual(harness.viewModel.entries.map(\.id), [newest.id, next.id])
+
+        try await harness.viewModel.delete(id: newest.id)
+
+        XCTAssertEqual(
+            harness.viewModel.entries.map(\.id),
+            [next.id, older.id],
+            "Delete should reload from the store using the active list limit"
+        )
     }
 
     // MARK: - filteredEntries
@@ -198,12 +248,13 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
 
 // MARK: - Inline fake
 
-/// Minimal `TranscriptReading` double for M3.2 tests. `recent(limit:)`
-/// returns up to `limit` of the injected entries. Search/all are
-/// unused by `TranscriptionsTabViewModel` — but stubbed for protocol
-/// conformance.
-private actor InlineFakeTranscriptReader: TranscriptReading {
-    private let entries: [TranscriptEntry]
+/// Minimal transcript store double for M3.2 tests. `recent(limit:)`
+/// returns up to `limit` of the current entries and `delete(id:)`
+/// mutates the actor-backed store so the view model can prove it
+/// reloaded from storage rather than only trimming local cache.
+private actor InlineFakeTranscriptStore: TranscriptReading, TranscriptDeleting {
+    private var entries: [TranscriptEntry]
+    private var deletedIDsStorage: [UUID] = []
 
     init(entries: [TranscriptEntry]) {
         self.entries = entries
@@ -219,5 +270,14 @@ private actor InlineFakeTranscriptReader: TranscriptReading {
 
     func all() async -> [TranscriptEntry] {
         entries
+    }
+
+    func delete(id: UUID) async throws {
+        deletedIDsStorage.append(id)
+        entries.removeAll { $0.id == id }
+    }
+
+    func deletedIDs() async -> [UUID] {
+        deletedIDsStorage
     }
 }
