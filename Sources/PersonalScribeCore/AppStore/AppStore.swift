@@ -312,6 +312,10 @@ public final class AppStore: ObservableObject {
         sessionState: SessionState,
         progress: ModelDownloadProgress?
     ) -> PillVisibilityState {
+        if sessionState.isHoldRecording {
+            return .holdToRecord
+        }
+
         if sessionState.isRecording {
             return .recording
         }
@@ -333,6 +337,8 @@ public final class AppStore: ObservableObject {
             return idleVisibility(for: mode, progress: progress)
         case .recording:
             return .recording
+        case .holdRecording:
+            return .holdToRecord
         case .transcribing:
             return transcribingVisibility(progress: progress)
         case .error:
@@ -411,6 +417,14 @@ private extension SessionState {
 
     var isRecording: Bool {
         if case .recording = self {
+            return true
+        }
+
+        return false
+    }
+
+    var isHoldRecording: Bool {
+        if case .holdRecording = self {
             return true
         }
 

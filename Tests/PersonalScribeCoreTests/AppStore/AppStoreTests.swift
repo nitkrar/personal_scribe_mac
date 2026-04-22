@@ -55,6 +55,30 @@ final class AppStoreTests: XCTestCase {
         XCTAssertNil(store.snapshot.modelDownloadProgress)
     }
 
+    /// #071 — `.holdRecording` session state must drive `.holdToRecord`
+    /// pill visibility through the store, so the hotkey layer does not
+    /// need to push visibility via a side-channel.
+    func testHoldRecordingSessionStateDerivesHoldToRecordPillVisibility() async {
+        let session = FakeAppStoreSessionProvider()
+        let store = makeStore(
+            session: session,
+            permissions: FakePermissionService(),
+            activeModeProvider: FakeActiveModeProvider(),
+            visibilityModeProvider: FakeVisibilityModeProvider(),
+            clock: ManualAppStoreClock()
+        )
+
+        store.start()
+
+        session.emitState(.holdRecording)
+        await waitUntil {
+            store.snapshot.sessionState == .holdRecording
+        }
+
+        XCTAssertEqual(store.snapshot.sessionState, .holdRecording)
+        XCTAssertEqual(store.snapshot.pillVisibility, .holdToRecord)
+    }
+
     func testPermissionRefreshRepublishesSnapshot() async {
         let session = FakeAppStoreSessionProvider()
         let permissions = FakePermissionService(statuses: [

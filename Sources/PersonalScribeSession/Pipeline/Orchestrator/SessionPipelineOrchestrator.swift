@@ -74,7 +74,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         switch currentSnapshot.sessionState {
         case .idle:
             await startRecording()
-        case .recording:
+        case .recording, .holdRecording:
             await stopRecordingAndRunPipeline()
         case .transcribing:
             logger.info("Ignored toggle while transcribing")

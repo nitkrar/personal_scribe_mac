@@ -99,7 +99,7 @@ public actor SessionCoordinator {
         switch currentState {
         case .idle:
             await performStart()
-        case .recording:
+        case .recording, .holdRecording:
             await performStop()
         case .transcribing, .error:
             await performToggle()

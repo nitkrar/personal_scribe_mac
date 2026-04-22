@@ -151,6 +151,11 @@ public final class PillOverlayViewModel: ObservableObject {
             return
         }
 
+        if case .holdRecording = sessionState {
+            visibility = .holdToRecord
+            return
+        }
+
         if case .transcribing = sessionState {
             visibility = compatibilityTranscribingVisibility(progress: preparationProgress)
             return
