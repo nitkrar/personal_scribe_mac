@@ -53,23 +53,69 @@ hold (bug #5 — requires a CGEventTap).
 callback, and swallows matching ⌥+/ events system-wide — so `÷`
 keystrokes no longer leak into focused apps.
 
-- [ ] **MV-HK-8** Open any other app (Notes, TextEdit, Safari address
+- [x] **MV-HK-8** Open any other app (Notes, TextEdit, Safari address
   bar) and click into a text field so it owns focus. **Tap ⌥+/ once**
   — recording starts, and the text field stays empty (no stray `÷`
   character). Tap again — recording stops, still no `÷`. Regression
   guard for 5a's CGEventTap swallow on tap/double-tap.
-- [ ] **MV-HK-9** Same setup. **Hold ⌥+/ for ~1.5s, then release.**
+  Verified 2026-04-21 on DMG.
+- [x] **MV-HK-9** Same setup. **Hold ⌥+/ for ~1.5s, then release.**
   The text field stays empty throughout — no `÷÷÷÷` stream from auto-
   repeat keyDowns. Pre-5a this leaked; post-5a the tap consumes each
   repeat before it reaches the target app. Regression guard for the
   auto-repeat swallow.
-- [ ] **MV-HK-10** Grant Input Monitoring permission freshly (e.g.
+  Verified 2026-04-21 on DMG.
+- [x] **MV-HK-10** ~~Grant Input Monitoring permission freshly (e.g.
   remove Ninimma from the list in System Settings → Privacy & Security
   → Input Monitoring, relaunch). The hotkey should fail silently until
   re-granted, then start working on re-grant without a second relaunch.
   Confirms `CGEvent.tapCreate` nil handling routes through the existing
-  permission-failure path.
-- [ ] **MV-HK-11** Press a plain `/` (no option) in another app's text
+  permission-failure path.~~
+  **Premise stale post-5a.** `.cgSessionEventTap` + `.headInsertEventTap`
+  can be satisfied by *either* Input Monitoring or Accessibility on
+  modern macOS; our app grants Accessibility for paste synthesis
+  (`ClipboardBatchOutput.swift:54`), so removing Input Monitoring alone
+  doesn't disable the hotkey. To actually exercise the fail-open path,
+  revoke BOTH Input Monitoring AND Accessibility for Ninimma before
+  relaunch. Verified 2026-04-21: accessibility-grant path carries the
+  tap cleanly; permission-probe plumbing covered by
+  `InputMonitoringPermissionProbeTests`.
+- [x] **MV-HK-11** Press a plain `/` (no option) in another app's text
   field. The `/` character types normally — tap swallow is scoped to
   the matching hotkey, not all keyDowns. Regression guard for the
   swallow-decision logic.
+  Verified 2026-04-21 on DMG.
+
+## Hold-to-record no longer wedges after release (bug #71)
+
+Pre-#71 behaviour was a flaky wedge: release occasionally failed to
+stop the session; the hold pill stuck; hitting Esc spawned a *second*
+recording pill underneath. Root cause was a race between the start
+and stop tasks through `coordinator.toggle()` — stop could observe
+`.idle` before `.recording` was published, silently no-op, and leave
+capture alive. Post-fix: hold has a first-class `.holdRecording` state
+published **eagerly** by the pipeline before awaiting capture, and the
+coordinator uses mode-specific `startHoldIfIdle()` / `stopIfActive()`
+methods instead of the toggle path.
+
+- [ ] **MV-HOLD-1** Hold the hotkey for ~1s, speak a short phrase,
+  release. Transcript pastes. Repeat 10× in a row (different apps,
+  different durations). No release should leave the pill stuck. This
+  is the primary repro the user reported (2026-04-22). If any release
+  wedges, note it and re-open #71.
+- [ ] **MV-HOLD-2** Hold the hotkey for ~1s, release. Before the
+  transcribe settles, hold again. The pill must cleanly re-enter
+  `.holdToRecord` (the 7-bar equaliser, not the waveform pill) — no
+  stale pill carried over from the prior session.
+- [ ] **MV-HOLD-3** Hold the hotkey very briefly (below the 300ms
+  threshold) and release. No hold-pill appears; if a toggle fires it
+  goes through the normal `.recording` path. Regression guard that
+  the tap vs hold discrimination still works.
+- [ ] **MV-HOLD-4** Hold the hotkey and press Esc mid-gesture. The pill
+  transitions to the Cancel Card (current behaviour — true-cancel
+  lands under #002). No second pill appears underneath.
+- [ ] **MV-HOLD-5** Hold the hotkey during a model download. Pill
+  shows the `.holdToRecord` pane with "Recording — transcribing when
+  model is ready" status card (from `RecordingStatusCardDriver`).
+  Release transitions to `.transcribing`; transcript appears once
+  download + prepare complete.
