@@ -40,6 +40,14 @@ public struct AIModelsTab: View {
                 }
             }
         }
+        // Ticket #039: belt + suspenders on top of `@ObservedObject`.
+        // Re-sync against disk on every navigate-in so a model that
+        // appeared (or disappeared) from disk while the tab was
+        // off-screen flips its chip on re-entry. Idempotent when state
+        // matches — no spurious renders.
+        .onAppear {
+            service.refresh()
+        }
     }
 
     private func activate(_ descriptor: ModelDescriptor) {

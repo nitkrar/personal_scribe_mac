@@ -72,6 +72,43 @@ Stage A replaces the inert AIModelsTab with one `SettingsCard` row per registere
   4. Confirm the row immediately shows a red **Failed** badge with text like `"Not enough disk space to download Parakeet TDT 0.6B. Needs 650 MB, 280 MB available."` and a **Retry** button.
   5. Free up space on the volume; click Retry; confirm download proceeds normally.
 
+## Stale-state on tab return (#039)
+
+Regression guards for ticket #039. AIModelsTab now calls
+`service.refresh()` on `.onAppear`; this re-reads `isDownloaded` from
+disk for every registered voice model and flips `.ready` ↔ `.notDownloaded`
+if the on-disk truth has changed. In-flight `.downloading` / `.loading`
+and explicit `.failed` states are preserved — `refresh()` only
+transitions between the two terminal phases.
+
+- [ ] **MV-SETT-STALE-1 — model appears on disk while AI Models is off-screen:**
+  open `Settings → General` (or any non-AI-Models sub-tab). Start a
+  voice model download by navigating to `Settings → AI Models` briefly,
+  clicking `Download` on a not-yet-downloaded model, then immediately
+  switching to another sub-tab. Wait for the download to finish (check
+  the model folder in Finder, or watch `du -sh ~/Library/.../models/<id>/`).
+  Switch back to `Settings → AI Models`. The row MUST show the green
+  `Ready` (or `Active`) chip on first render — no window close/reopen
+  required.
+- [ ] **MV-SETT-STALE-2 — model deleted from disk while AI Models is off-screen:**
+  with at least one model showing `Ready` in `Settings → AI Models`,
+  switch to another sub-tab. From a terminal: `rm -rf
+  ~/Library/Application\ Support/com.nitkrar.personal_scribe/models/<model-id>/`.
+  Switch back to AI Models. The row MUST flip to a grey `Not downloaded`
+  badge with a `Download` button — no window close/reopen required.
+- [ ] **MV-SETT-STALE-3 — in-flight download is NOT stomped by tab re-entry:**
+  start a voice-model download on `Settings → AI Models`. While the
+  amber `Downloading NN%` chip is still ticking, switch to another
+  sub-tab and immediately back. The chip MUST continue to tick
+  `Downloading NN%` from the current progress — it must NOT reset to
+  `Not downloaded`. This guards `refresh()`'s preservation of in-flight
+  states.
+- [ ] **MV-SETT-STALE-4 — a `.failed` state survives tab re-entry:**
+  force a download failure (Airplane Mode mid-download, as in MV-AIM-4).
+  Confirm the red `Failed: …` chip renders. Switch to another sub-tab
+  and back. The chip MUST still read `Failed: …` with a `Retry` button —
+  refresh must not quietly clear an error the user hasn't acknowledged.
+
 ## Launch-at-Login status feedback (#005)
 
 Small status dot + tooltip icon next to the `Launch at login` toggle.
