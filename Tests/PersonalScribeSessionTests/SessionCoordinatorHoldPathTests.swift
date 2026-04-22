@@ -115,6 +115,88 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
         XCTAssertNil(lastResult)
     }
 
+    // MARK: - #071 — hold-path coordinator API
+
+    func testStartHoldIfIdleFromIdleEntersHoldRecording() async throws {
+        let coordinator = try makeCoordinator()
+
+        await coordinator.startHoldIfIdle()
+
+        let state = await coordinator.state()
+        XCTAssertEqual(state, .holdRecording)
+
+        try await Task.sleep(for: .milliseconds(50))
+        await coordinator.stopIfActive()
+    }
+
+    func testStartHoldIfIdleFromRecordingIsNoOp() async throws {
+        let coordinator = try makeCoordinator()
+
+        await coordinator.startIfIdle()
+        try await Task.sleep(for: .milliseconds(50))
+
+        await coordinator.startHoldIfIdle()
+
+        let state = await coordinator.state()
+        XCTAssertEqual(state, .recording, "startHoldIfIdle must not replace a running .recording session")
+
+        await coordinator.stopIfActive()
+    }
+
+    func testStartHoldIfIdleFromHoldRecordingIsNoOp() async throws {
+        let coordinator = try makeCoordinator()
+
+        await coordinator.startHoldIfIdle()
+        try await Task.sleep(for: .milliseconds(50))
+
+        await coordinator.startHoldIfIdle()
+
+        let state = await coordinator.state()
+        XCTAssertEqual(state, .holdRecording)
+
+        await coordinator.stopIfActive()
+    }
+
+    func testStopIfActiveFromHoldRecordingTranscribesAndReturnsToIdle() async throws {
+        let coordinator = try makeCoordinator()
+
+        await coordinator.startHoldIfIdle()
+        try await Task.sleep(for: .milliseconds(50))
+        await coordinator.stopIfActive()
+
+        let state = await coordinator.state()
+        let lastResult = await coordinator.lastResult()
+
+        XCTAssertEqual(state, .idle)
+        XCTAssertEqual(lastResult?.text, "Hello.")
+    }
+
+    func testStopIfActiveFromRecordingTranscribesAndReturnsToIdle() async throws {
+        let coordinator = try makeCoordinator()
+
+        await coordinator.startIfIdle()
+        try await Task.sleep(for: .milliseconds(50))
+        await coordinator.stopIfActive()
+
+        let state = await coordinator.state()
+        let lastResult = await coordinator.lastResult()
+
+        XCTAssertEqual(state, .idle)
+        XCTAssertEqual(lastResult?.text, "Hello.")
+    }
+
+    func testStopIfActiveFromIdleIsNoOp() async throws {
+        let coordinator = try makeCoordinator()
+
+        await coordinator.stopIfActive()
+
+        let state = await coordinator.state()
+        let lastResult = await coordinator.lastResult()
+
+        XCTAssertEqual(state, .idle)
+        XCTAssertNil(lastResult)
+    }
+
     private func makeCoordinator(transcriberDelay: Duration? = nil) throws -> SessionCoordinator {
         let buffer = try PCMBuffer(
             samples: Array(repeating: 0, count: 16_000),

@@ -114,12 +114,40 @@ public actor SessionCoordinator {
         await performStart()
     }
 
+    /// Enter `.holdRecording` from `.idle`. Routes through the pipeline's
+    /// eager-publish `startHoldCapture()` so a concurrent release seen by
+    /// `stopIfActive()` observes `.holdRecording` and stops correctly
+    /// instead of silently no-opping on `.idle`. No-op from any other
+    /// state. See `#071`.
+    public func startHoldIfIdle() async {
+        guard currentState == .idle else {
+            return
+        }
+
+        await performHoldStart()
+    }
+
     public func stopIfRecording() async {
         guard currentState == .recording else {
             return
         }
 
         await performStop()
+    }
+
+    /// Mode-agnostic stop. Transitions either `.recording` or
+    /// `.holdRecording` into `.transcribing` via the normal pipeline
+    /// stop path. Preferred entry point for hold-release, Esc true-
+    /// cancel (#002), VAD auto-stop (#046), and app-quit cleanup — those
+    /// callers don't know or care how the session started. No-op from
+    /// `.idle`, `.transcribing`, or `.error`.
+    public func stopIfActive() async {
+        switch currentState {
+        case .recording, .holdRecording:
+            await performStop()
+        case .idle, .transcribing, .error:
+            return
+        }
     }
 
     public func state() -> SessionState {
@@ -200,6 +228,12 @@ public actor SessionCoordinator {
     private func performToggle() async {
         await startAudioLevelRelayIfNeeded()
         await pipeline.toggleCapture()
+        await refreshFromPipelineSnapshot()
+    }
+
+    private func performHoldStart() async {
+        await startAudioLevelRelayIfNeeded()
+        await pipeline.startHoldCapture()
         await refreshFromPipelineSnapshot()
     }
 
