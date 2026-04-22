@@ -12,6 +12,9 @@ DerivedData/
 # DMG output of scripts/package.sh -d
 /Ninimma-*.dmg
 
+# Python bytecode from scripts/package.py
+scripts/__pycache__/
+
 # Claude Code agent-tool worktrees (isolation: "worktree")
 .claude/worktrees/
 .codex-heartbeat/
