@@ -26,6 +26,7 @@ final class DefaultModelServiceTests: XCTestCase {
         let retiredModel = ModelDescriptor(
             id: "retired-model",
             displayName: "Retired",
+            shortDescription: "Test fixture.",
             repository: "FluidInference/retired-model-coreml",
             revision: "deadbeef",
             requiredRelativePaths: ["parakeet_vocab.json"],
@@ -124,6 +125,7 @@ final class DefaultModelServiceTests: XCTestCase {
         let shadowDescriptor = ModelDescriptor(
             id: target.id,
             displayName: "Shadow",
+            shortDescription: "Test fixture.",
             repository: "FluidInference/shadow",
             revision: "shadow",
             requiredRelativePaths: [],
@@ -133,6 +135,7 @@ final class DefaultModelServiceTests: XCTestCase {
         let missingDescriptor = ModelDescriptor(
             id: "missing-model",
             displayName: "Missing",
+            shortDescription: "Test fixture.",
             repository: "FluidInference/missing",
             revision: "missing",
             requiredRelativePaths: [],
@@ -160,6 +163,7 @@ final class DefaultModelServiceTests: XCTestCase {
         let shadowDescriptor = ModelDescriptor(
             id: target.id,
             displayName: "Shadow",
+            shortDescription: "Test fixture.",
             repository: "FluidInference/shadow",
             revision: "shadow",
             requiredRelativePaths: [],

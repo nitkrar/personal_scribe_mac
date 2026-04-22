@@ -91,6 +91,7 @@ final class AIModelsTabRowTests: XCTestCase {
         let descriptor = ModelDescriptor(
             id: "test",
             displayName: "Test",
+            shortDescription: "Test fixture.",
             repository: "test/test",
             revision: "deadbeef",
             requiredRelativePaths: [],

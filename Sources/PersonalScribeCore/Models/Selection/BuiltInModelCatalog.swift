@@ -19,11 +19,14 @@ public enum BuiltInModelCatalog {
     public static let parakeetTDT06Bv2 = ModelDescriptor(
         id: "parakeet-tdt-0.6b-v2",
         displayName: "Parakeet TDT 0.6B",
+        shortDescription: "High-accuracy default — balanced RAM and speed.",
         repository: "FluidInference/parakeet-tdt-0.6b-v2-coreml",
         revision: "ee09c569f73759e6d44c9bd16766f477b2b36d39",
         requiredRelativePaths: splitFrontendRequiredPaths,
         approximateSizeBytes: 450_000_000,
-        engine: .parakeetTDT
+        engine: .parakeetTDT,
+        speedRating: .medium,
+        accuracyRating: .high
     )
 
     /// The catalog's default model id — used by legacy code paths that still read a
@@ -33,11 +36,14 @@ public enum BuiltInModelCatalog {
     public static let parakeetTDTCTC110M = ModelDescriptor(
         id: "parakeet-tdt-ctc-110m",
         displayName: "Parakeet TDT-CTC 110M",
+        shortDescription: "Lightweight — faster, lower accuracy, minimal RAM.",
         repository: "FluidInference/parakeet-tdt-ctc-110m-coreml",
         revision: "9bc92ead6e8f17eca92a869fd578ae76842b82ba",
         requiredRelativePaths: fusedFrontendRequiredPaths,
         approximateSizeBytes: 407_000_000,
-        engine: .parakeetTDT
+        engine: .parakeetTDT,
+        speedRating: .high,
+        accuracyRating: .medium
     )
 
     // The authoritative Layer 6 plan still leaves the v3 revision pin open.
@@ -46,11 +52,14 @@ public enum BuiltInModelCatalog {
     public static let parakeetTDT06Bv3 = ModelDescriptor(
         id: "parakeet-tdt-0.6b-v3",
         displayName: "Parakeet TDT 0.6B v3",
+        shortDescription: "Newer 0.6B release — updated weights, larger disk footprint.",
         repository: "FluidInference/parakeet-tdt-0.6b-v3-coreml",
         revision: "main",
         requiredRelativePaths: splitFrontendRequiredPaths,
         approximateSizeBytes: 700_000_000,
-        engine: .parakeetTDT
+        engine: .parakeetTDT,
+        speedRating: .medium,
+        accuracyRating: .high
     )
 
     public static let registeredModels: [ModelDescriptor] = [

@@ -39,4 +39,55 @@ final class BuiltInModelCatalogTests: XCTestCase {
         )
         XCTAssertNil(BuiltInModelCatalog.defaultActiveDescriptor.aiModelID)
     }
+
+    // MARK: - #007 — descriptive metadata for Settings AI Models tab
+
+    /// Every registered model must carry a non-empty one-line
+    /// description for the inline row copy. Guards against `ModelRow`
+    /// rendering a blank second line if a new catalog entry forgets to
+    /// fill the field in.
+    func testAllRegisteredModelsHaveNonEmptyDescription() {
+        for descriptor in BuiltInModelCatalog.registeredModels {
+            XCTAssertFalse(
+                descriptor.shortDescription.isEmpty,
+                "\(descriptor.id) is missing an inline description"
+            )
+        }
+    }
+
+    /// Every registered model must carry speed + accuracy ratings so
+    /// the info popover can render its visual bars without nil-fallback
+    /// branches.
+    func testAllRegisteredModelsCarrySpeedAndAccuracyRatings() {
+        for descriptor in BuiltInModelCatalog.registeredModels {
+            XCTAssertNotNil(
+                descriptor.speedRating,
+                "\(descriptor.id) missing speedRating"
+            )
+            XCTAssertNotNil(
+                descriptor.accuracyRating,
+                "\(descriptor.id) missing accuracyRating"
+            )
+        }
+    }
+
+    /// CTC-110M is meaningfully faster than the 0.6B variants and has
+    /// noticeably lower accuracy. Pin this so a future careless rating
+    /// edit can't flatten the axis that justifies the model's
+    /// existence.
+    func test110MIsRatedFasterAndLessAccurateThan06BV2() {
+        let light = BuiltInModelCatalog.parakeetTDTCTC110M
+        let standard = BuiltInModelCatalog.parakeetTDT06Bv2
+
+        XCTAssertGreaterThan(
+            light.speedRating!.rank,
+            standard.speedRating!.rank,
+            "CTC-110M should outrank 0.6B v2 on speed"
+        )
+        XCTAssertLessThan(
+            light.accuracyRating!.rank,
+            standard.accuracyRating!.rank,
+            "CTC-110M should rank lower than 0.6B v2 on accuracy"
+        )
+    }
 }

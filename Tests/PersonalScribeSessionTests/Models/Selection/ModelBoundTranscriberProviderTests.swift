@@ -62,6 +62,7 @@ final class ModelBoundTranscriberProviderTests: XCTestCase {
         let unknownDescriptor = ModelDescriptor(
             id: "custom-model",
             displayName: "Custom",
+            shortDescription: "Test fixture.",
             repository: "FluidInference/custom-model",
             revision: "custom",
             requiredRelativePaths: ["parakeet_vocab.json"],
