@@ -89,6 +89,23 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
+    public func startHoldCapture() async {
+        switch currentSnapshot.sessionState {
+        case .idle:
+            await startHoldRecording()
+        case .error:
+            publish { snapshot in
+                snapshot.sessionState = .idle
+                snapshot.activeStage = nil
+                snapshot.transcriptProgress = nil
+                snapshot.recordingDuration = nil
+            }
+            await startHoldRecording()
+        case .recording, .holdRecording, .transcribing:
+            logger.info("Ignored hold-start while session is not .idle")
+        }
+    }
+
     public func prepareTranscriber() async throws {
         try await transcriber.prepare()
     }
@@ -193,6 +210,51 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.recordingDuration = .zero
                 snapshot.context = activeContext
             }
+
+            captureTask = Task { [weak self] in
+                await self?.consumeCaptureStream(stream)
+            }
+        } catch {
+            handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
+        }
+    }
+
+    /// Hold-path start. Mirrors `startRecording()` except the target
+    /// state (`.holdRecording`) is **published before** awaiting
+    /// `capture.start()`. A concurrent hold-release routed through
+    /// `toggleCapture()` therefore observes `.holdRecording` and correctly
+    /// stops, instead of silently no-opping on `.idle` as it did before
+    /// `#071`. Capture failure still flows through `handleStageFailure`,
+    /// transitioning state to `.error` — the eager publish is reverted
+    /// implicitly by the error publication.
+    private func startHoldRecording() async {
+        bufferedAudio.removeAll(keepingCapacity: true)
+        nextRevision = 0
+        latestStageFailure = nil
+        activeContext = contextProvider.currentContext()
+
+        publish { snapshot in
+            snapshot.sessionState = .holdRecording
+            snapshot.activeStage = .capture
+            snapshot.transcriptProgress = nil
+            snapshot.recordingDuration = .zero
+            snapshot.context = activeContext
+        }
+
+        do {
+            let stream = try await capture.start()
+            let levelStream = await capture.audioLevelStream()
+            await outputSink.resetForNewSession()
+
+            audioLevelTask?.cancel()
+            audioLevelTask = Task { [weak self] in
+                for await level in levelStream {
+                    await self?.publishAudioLevel(level)
+                }
+                await self?.publishAudioLevel(0.0)
+            }
+
+            prepareTranscriberInBackground()
 
             captureTask = Task { [weak self] in
                 await self?.consumeCaptureStream(stream)

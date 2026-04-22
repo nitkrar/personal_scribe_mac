@@ -603,6 +603,86 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(failure?.mappedError, .transcriptionFailure)
     }
 
+    // MARK: - #071 — hold-path transitions
+
+    /// Happy path: `startHoldCapture()` publishes `.holdRecording`, and a
+    /// subsequent `toggleCapture()` (the stop route used by hold-release)
+    /// drives the normal transcribe pipeline.
+    func testStartHoldCaptureFromIdlePublishesHoldRecordingThenTranscribesOnStop() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturing(buffers: [buffer]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(
+                    text: "hello from hold",
+                    audioDuration: .seconds(1),
+                    processingDuration: .milliseconds(10)
+                )
+            )
+        )
+
+        let stream = await orchestrator.snapshotStream()
+        let observedTask = Task { () -> [PipelineSnapshot] in
+            var snapshots: [PipelineSnapshot] = []
+            for await snapshot in stream {
+                snapshots.append(snapshot)
+                if snapshot.sessionState == .idle && snapshot.lastCompletedResult != nil {
+                    break
+                }
+            }
+            return snapshots
+        }
+
+        await orchestrator.startHoldCapture()
+        await orchestrator.toggleCapture()
+
+        let observed = try await withTimeout(.seconds(1)) {
+            await observedTask.value
+        }
+
+        let states = deduplicatedSessionStates(from: observed)
+        XCTAssertTrue(states.contains(.holdRecording),
+                      "Pipeline must transition through .holdRecording")
+        XCTAssertTrue(states.contains(.transcribing),
+                      "Pipeline must transition through .transcribing after stop")
+        XCTAssertEqual(observed.last?.sessionState, .idle)
+        XCTAssertEqual(observed.last?.lastCompletedResult?.text, "Hello from hold.")
+    }
+
+    /// Race-fix invariant: `.holdRecording` must be published **before**
+    /// `capture.start()` resolves, so a concurrent release routed through
+    /// `toggleCapture()` observes `.holdRecording` instead of `.idle`.
+    /// Without this ordering, hold-release silently no-ops and the
+    /// session wedges (#071 root cause).
+    func testStartHoldCapturePublishesHoldRecordingBeforeAwaitingCaptureStart() async throws {
+        let capture = HangingStartCapture()
+        let orchestrator = makeOrchestrator(capture: capture)
+
+        let stream = await orchestrator.snapshotStream()
+        let observerTask = Task { () -> [SessionState] in
+            var observed: [SessionState] = []
+            for await snapshot in stream {
+                observed.append(snapshot.sessionState)
+                if snapshot.sessionState == .holdRecording {
+                    break
+                }
+            }
+            return observed
+        }
+
+        let holdTask = Task { await orchestrator.startHoldCapture() }
+
+        let observed = try await withTimeout(.seconds(1)) {
+            await observerTask.value
+        }
+
+        XCTAssertTrue(observed.contains(.holdRecording),
+                      "startHoldCapture must publish .holdRecording before capture.start() resolves — otherwise a concurrent stop observes .idle and no-ops (see #071)")
+
+        holdTask.cancel()
+        await capture.release()
+    }
+
     private func makeOrchestrator(
         capture: any AudioCapturing = FakeAudioCapturing(),
         transcriber: any Transcribing = FakeTranscriber(
@@ -988,5 +1068,37 @@ private actor TranscriberTracker {
 
     func transcribeCallCount() -> Int {
         transcribeCalls
+    }
+}
+
+/// Used by the `#071` race-fix test: `start()` blocks until `release()`
+/// is called, letting the test inspect orchestrator state while capture
+/// is still being awaited.
+private actor HangingStartCapture: AudioCapturing {
+    private var waiters: [CheckedContinuation<AsyncThrowingStream<PCMBuffer, Error>, Error>] = []
+    private var released = false
+
+    func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
+        if released {
+            return AsyncThrowingStream { $0.finish() }
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func stop() async {}
+
+    func audioLevelStream() async -> AsyncStream<Float> {
+        AsyncStream { $0.finish() }
+    }
+
+    func release() {
+        released = true
+        let pending = waiters
+        waiters.removeAll()
+        for continuation in pending {
+            continuation.resume(returning: AsyncThrowingStream<PCMBuffer, Error> { $0.finish() })
+        }
     }
 }

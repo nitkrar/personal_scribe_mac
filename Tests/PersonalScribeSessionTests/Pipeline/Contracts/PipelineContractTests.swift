@@ -99,6 +99,8 @@ private actor StubPipeline: SessionPipelining {
 
     func toggleCapture() async {}
 
+    func startHoldCapture() async {}
+
     func prepareTranscriber() async throws {}
 
     func snapshot() -> PipelineSnapshot {
