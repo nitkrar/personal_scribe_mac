@@ -63,6 +63,7 @@ final class ModelBoundTranscriberProviderTests: XCTestCase {
             id: "custom-model",
             displayName: "Custom",
             shortDescription: "Test fixture.",
+            architecture: "Test",
             repository: "FluidInference/custom-model",
             revision: "custom",
             requiredRelativePaths: ["parakeet_vocab.json"],

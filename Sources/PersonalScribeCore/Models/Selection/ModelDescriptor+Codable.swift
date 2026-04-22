@@ -5,13 +5,13 @@ extension ModelDescriptor: Codable {
         case id
         case displayName
         case shortDescription
+        case architecture
         case repository
         case revision
         case requiredRelativePaths
         case approximateSizeBytes
         case engine
-        case speedRating
-        case accuracyRating
+        case performance
     }
 
     public init(from decoder: Decoder) throws {
@@ -19,20 +19,20 @@ extension ModelDescriptor: Codable {
         self.init(
             id: try container.decode(String.self, forKey: .id),
             displayName: try container.decode(String.self, forKey: .displayName),
-            // `shortDescription`, `speedRating`, `accuracyRating` are all
+            // `shortDescription`, `architecture`, and `performance` are
             // decoded defensively. `ActiveModelDescriptor` persists a
             // `ModelDescriptor` blob in `UserDefaults`, but
             // `DefaultModelService.resolveInitialDescriptor` immediately
             // substitutes the catalog's canonical entry by id — so any
             // fallback here is discarded before reaching the UI.
             shortDescription: try container.decodeIfPresent(String.self, forKey: .shortDescription) ?? "",
+            architecture: try container.decodeIfPresent(String.self, forKey: .architecture) ?? "",
             repository: try container.decode(String.self, forKey: .repository),
             revision: try container.decode(String.self, forKey: .revision),
             requiredRelativePaths: try container.decode([String].self, forKey: .requiredRelativePaths),
             approximateSizeBytes: try container.decode(Int64.self, forKey: .approximateSizeBytes),
             engine: try container.decode(TranscriptionEngine.self, forKey: .engine),
-            speedRating: try container.decodeIfPresent(RelativeRating.self, forKey: .speedRating),
-            accuracyRating: try container.decodeIfPresent(RelativeRating.self, forKey: .accuracyRating)
+            performance: try container.decodeIfPresent(ModelPerformance.self, forKey: .performance) ?? ModelPerformance()
         )
     }
 
@@ -41,13 +41,12 @@ extension ModelDescriptor: Codable {
         try container.encode(id, forKey: .id)
         try container.encode(displayName, forKey: .displayName)
         try container.encode(shortDescription, forKey: .shortDescription)
+        try container.encode(architecture, forKey: .architecture)
         try container.encode(repository, forKey: .repository)
         try container.encode(revision, forKey: .revision)
         try container.encode(requiredRelativePaths, forKey: .requiredRelativePaths)
         try container.encode(approximateSizeBytes, forKey: .approximateSizeBytes)
         try container.encode(engine, forKey: .engine)
-        try container.encodeIfPresent(speedRating, forKey: .speedRating)
-        try container.encodeIfPresent(accuracyRating, forKey: .accuracyRating)
+        try container.encode(performance, forKey: .performance)
     }
 }
-

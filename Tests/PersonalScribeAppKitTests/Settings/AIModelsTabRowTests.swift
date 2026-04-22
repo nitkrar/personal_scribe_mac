@@ -92,6 +92,7 @@ final class AIModelsTabRowTests: XCTestCase {
             id: "test",
             displayName: "Test",
             shortDescription: "Test fixture.",
+            architecture: "Test",
             repository: "test/test",
             revision: "deadbeef",
             requiredRelativePaths: [],

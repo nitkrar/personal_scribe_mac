@@ -26,6 +26,7 @@ final class FluidAudioTranscriberCompileTests: XCTestCase {
             id: "test-model",
             displayName: "Test Model",
             shortDescription: "Test fixture.",
+            architecture: "Test",
             repository: "example/test-model",
             revision: "1234567890123456789012345678901234567890",
             requiredRelativePaths: ["parakeet_vocab.json"],

@@ -55,39 +55,52 @@ final class BuiltInModelCatalogTests: XCTestCase {
         }
     }
 
-    /// Every registered model must carry speed + accuracy ratings so
-    /// the info popover can render its visual bars without nil-fallback
-    /// branches.
-    func testAllRegisteredModelsCarrySpeedAndAccuracyRatings() {
+    /// Every registered model must declare an architecture label so
+    /// the info popover's "Architecture" row has copy to render.
+    func testAllRegisteredModelsDeclareArchitecture() {
         for descriptor in BuiltInModelCatalog.registeredModels {
-            XCTAssertNotNil(
-                descriptor.speedRating,
-                "\(descriptor.id) missing speedRating"
-            )
-            XCTAssertNotNil(
-                descriptor.accuracyRating,
-                "\(descriptor.id) missing accuracyRating"
+            XCTAssertFalse(
+                descriptor.architecture.isEmpty,
+                "\(descriptor.id) missing architecture label"
             )
         }
     }
 
-    /// CTC-110M is meaningfully faster than the 0.6B variants and has
-    /// noticeably lower accuracy. Pin this so a future careless rating
+    /// Every registered model must carry averageWER + rtfx so the
+    /// computed-relative presenter can rank models without nil-fallback
+    /// branches. Sourced from the HF Open ASR leaderboard — see the
+    /// per-descriptor citation in `BuiltInModelCatalog.swift`.
+    func testAllRegisteredModelsCarryPublishedBenchmarks() {
+        for descriptor in BuiltInModelCatalog.registeredModels {
+            XCTAssertNotNil(
+                descriptor.performance.averageWER,
+                "\(descriptor.id) missing averageWER"
+            )
+            XCTAssertNotNil(
+                descriptor.performance.rtfx,
+                "\(descriptor.id) missing rtfx"
+            )
+        }
+    }
+
+    /// CTC-110M is meaningfully faster than the 0.6B variants
+    /// (RTFx ~5345 vs ~3386/3333) and has noticeably worse accuracy
+    /// (avg WER 7.49% vs 6.05%/6.34%). Pin this so a future careless
     /// edit can't flatten the axis that justifies the model's
     /// existence.
-    func test110MIsRatedFasterAndLessAccurateThan06BV2() {
+    func test110MHasHigherRTFxAndHigherWERThan06BV2() {
         let light = BuiltInModelCatalog.parakeetTDTCTC110M
         let standard = BuiltInModelCatalog.parakeetTDT06Bv2
 
         XCTAssertGreaterThan(
-            light.speedRating!.rank,
-            standard.speedRating!.rank,
-            "CTC-110M should outrank 0.6B v2 on speed"
+            light.performance.rtfx!,
+            standard.performance.rtfx!,
+            "CTC-110M should have higher RTFx than 0.6B v2"
         )
-        XCTAssertLessThan(
-            light.accuracyRating!.rank,
-            standard.accuracyRating!.rank,
-            "CTC-110M should rank lower than 0.6B v2 on accuracy"
+        XCTAssertGreaterThan(
+            light.performance.averageWER!,
+            standard.performance.averageWER!,
+            "CTC-110M should have a worse (higher) WER than 0.6B v2"
         )
     }
 }
