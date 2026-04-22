@@ -1,0 +1,201 @@
+# SDKROOT
+/Applications/Xcode_26.2.0_17C52_fb.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
+
+# AXUIElement.h:368-386
+   368	 
+   369	 @result The AXUIElementRef representing the system-wide accessibility object.
+   370	 */
+   371	extern AXUIElementRef  AXUIElementCreateSystemWide (void);
+   372	
+   373	/*!
+   374	 @function AXUIElementGetPid
+   375	 @abstract Returns the process ID associated with the specified accessibility object.
+   376	 
+   377	 @param element The AXUIElementRef representing an accessibility object.
+   378	 @param pid On return, the process ID associated with the specified accessibility object.
+   379	 
+   380	 @result If unsuccessful, <code>AXUIElementGetPid</code> may return one of the following error codes, among others:
+   381	 <dl><dt><code>kAXErrorIllegalArgument</code></dt><dd>One or more of the arguments is an illegal value.</dd>
+   382	 <dt><code>kAXErrorInvalidUIElement</code></dt><dd>The AXUIElementRef is invalid.</dd></dl>
+   383	 */
+   384	extern AXError  AXUIElementGetPid (AXUIElementRef element, pid_t *pid);
+   385	
+   386	/*!
+
+# AXAttributeConstants.h:497-511
+   497		@define kAXParentAttribute
+   498		
+   499		Indicates the element's container element in the visual element hierarchy. A push
+   500		button's kAXParentElement might be a window element or a group. A sheet's
+   501		kAXParentElement will be a window element. A window's kAXParentElement will be the
+   502		application element. A menu item's kAXParentElement will be a menu element.
+   503		
+   504		Value: An AXUIElementRef.
+   505		
+   506		Writable? No.
+   507		
+   508		Required for every element except the application. Everything else in the visual
+   509		element hierarchy must have a parent.
+   510	*/
+   511	#define kAXParentAttribute				CFSTR("AXParent")
+
+# AXAttributeConstants.h:684-806
+   684		@define kAXSelectedTextAttribute
+   685		
+   686		The selected text of an editable text element.
+   687		
+   688		Value: A CFStringRef with the currently selected text of the element.
+   689		
+   690		Writable? No.
+   691		
+   692		Required for all editable text elements.
+   693	*/
+   694	#define kAXSelectedTextAttribute			CFSTR("AXSelectedText")
+   695	
+   696	
+   697	/*!
+   698		@define kAXSelectedTextRangeAttribute
+   699		
+   700		The range of characters (not bytes) that defines the current selection of an
+   701		editable text element.
+   702		
+   703		Value: An AXValueRef of type kAXValueCFRange.
+   704		
+   705		Writable? Yes.
+   706		
+   707		Required for all editable text elements.
+   708	*/
+   709	#define kAXSelectedTextRangeAttribute			CFSTR("AXSelectedTextRange")
+   710	
+   711	/*!
+   712		@define kAXSelectedTextRangesAttribute
+   713		
+   714		An array of noncontiguous ranges of characters (not bytes) that defines the current selections of an
+   715		editable text element.  
+   716		
+   717		Value: A CFArrayRef of kAXValueCFRanges.
+   718		
+   719		Writable? Yes.
+   720		
+   721		Recommended for text elements that support noncontiguous selections.
+   722	*/
+   723	#define kAXSelectedTextRangesAttribute			CFSTR("AXSelectedTextRanges")
+   724	
+   725	
+   726	/*!
+   727		@define kAXVisibleCharacterRangeAttribute
+   728		
+   729		The range of characters (not bytes) that are scrolled into view in the editable
+   730		text element.
+   731		
+   732		Value: An AXValueRef of type kAXValueCFRange.
+   733		
+   734		Writable? No.
+   735		
+   736		Required for elements of role kAXTextAreaRole. Not required for any other
+   737		elements, including those of role kAXTextFieldRole.
+   738	*/
+   739	
+   740	#define kAXVisibleCharacterRangeAttribute		CFSTR("AXVisibleCharacterRange")
+   741	
+   742	
+   743	/*!
+   744		@define kAXNumberOfCharactersAttribute
+   745		
+   746		The total number of characters (not bytes) in an editable text element.
+   747		
+   748		Value: CFNumberRef
+   749		
+   750		Writable? No.
+   751		
+   752		Required for editable text elements.
+   753	*/
+   754	#define kAXNumberOfCharactersAttribute			CFSTR("AXNumberOfCharacters")
+   755	
+   756	
+   757	/*!
+   758		@define kAXSharedTextUIElementsAttribute
+   759		
+   760		Value: CFArrayRef of AXUIElementRefs
+   761		
+   762		Writable? No.
+   763		
+   764		Optional?
+   765	*/
+   766	#define kAXSharedTextUIElementsAttribute		CFSTR("AXSharedTextUIElements")
+   767	
+   768	
+   769	/*!
+   770		@define kAXSharedCharacterRangeAttribute
+   771		
+   772		Value: AXValueRef of type kAXValueCFRangeType
+   773		
+   774		Writable? No.
+   775		
+   776		Optional?
+   777	*/
+   778	#define kAXSharedCharacterRangeAttribute		CFSTR("AXSharedCharacterRange")
+   779	
+   780	
+   781	/*!
+   782	    @define kAXSharedFocusElementsAttribute
+   783	 
+   784	    Returns an array of elements that also have keyboard focus when a given element has
+   785	    keyboard focus. A common usage of this attribute is to report that both a search
+   786	    text field and a list of resulting suggestions share keyboard focus because keyboard
+   787	    events can be handled by either UI element. In this example, the text field would be
+   788	    the first responder and it would report the list of suggestions as an element in the
+   789	    array returned for kAXSharedFocusElementsAttribute.
+   790	 
+   791	    Value: A CFArrayRef of AXUIElementsRefs.
+   792	 
+   793	    Writable? No.
+   794	 */
+   795	#define kAXSharedFocusElementsAttribute         CFSTR("AXSharedFocusElements")
+   796	
+   797	
+   798	/*!
+   799		@define kAXInsertionPointLineNumberAttribute
+   800	 */
+   801	#define kAXInsertionPointLineNumberAttribute		CFSTR("AXInsertionPointLineNumber")
+   802	
+   803	
+   804	/*!
+   805		@define kAXMainAttribute
+   806		
+
+# AXRoleConstants.h:128-140
+   128	/* Need discussion for following */
+   129	
+   130	/*!
+   131		@defined kAXUnknownRole
+   132	        
+   133	        @discussion
+   134				
+   135	*/
+   136	#define kAXUnknownRole					CFSTR("AXUnknown")
+   137	
+   138	/* Need discussion for following */
+   139	
+   140	/*!
+
+# AXRoleConstants.h:344-362
+   344	#define kAXScrollAreaRole 				CFSTR("AXScrollArea")
+   345	#define kAXScrollBarRole				CFSTR("AXScrollBar")
+   346	#define kAXRadioGroupRole	 			CFSTR("AXRadioGroup")
+   347	#define kAXListRole						CFSTR("AXList")
+   348	#define kAXGroupRole			    	CFSTR("AXGroup")
+   349	#define kAXValueIndicatorRole			CFSTR("AXValueIndicator")
+   350	#define kAXComboBoxRole					CFSTR("AXComboBox")
+   351	#define kAXSliderRole 					CFSTR("AXSlider")
+   352	#define kAXIncrementorRole				CFSTR("AXIncrementor")
+   353	#define kAXBusyIndicatorRole			CFSTR("AXBusyIndicator")
+   354	#define kAXProgressIndicatorRole		CFSTR("AXProgressIndicator")
+   355	#define kAXRelevanceIndicatorRole		CFSTR("AXRelevanceIndicator")
+   356	#define kAXToolbarRole					CFSTR("AXToolbar")
+   357	#define kAXDisclosureTriangleRole 		CFSTR("AXDisclosureTriangle")
+   358	
+   359	
+   360	#define kAXTextFieldRole 				CFSTR("AXTextField")
+   361	#define	kAXTextAreaRole					CFSTR("AXTextArea")
+   362	#define kAXStaticTextRole               CFSTR("AXStaticText")

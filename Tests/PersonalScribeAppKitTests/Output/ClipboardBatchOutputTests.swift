@@ -36,7 +36,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementHasCursor: { true }
+            focusedElementIsInAnotherApp: { true }
         )
 
         let result = await service.deliverBatch(text: "hello world")
@@ -66,7 +66,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementHasCursor: { true }
+            focusedElementIsInAnotherApp: { true }
         )
 
         let result = await service.deliverBatch(text: "already trusted")
@@ -95,7 +95,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementHasCursor: { true }
+            focusedElementIsInAnotherApp: { true }
         )
 
         let result = await service.deliverBatch(text: "clipboard only")
@@ -105,14 +105,12 @@ final class ClipboardBatchOutputTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "clipboard only")
     }
 
-    // Re-targeted from `testDeliverBatchReturnsClipboardOnlyWhenFrontmostAppIsPersonalScribe`:
-    // Under the new design (2026-04-20), the frontmost bundle-ID check is dropped because
-    // clicking Ninimma's pill/menu momentarily flipped NSWorkspace's frontmost app to self
-    // and caused spurious `.selfFrontmost` outcomes. We now consult the focused-element
-    // cursor probe instead — even when the reported frontmost app is Ninimma, if the AX
-    // focused element (which lives in whatever the user's text cursor is actually in) has a
-    // cursor, we paste.
-    func testDeliverBatchPastesWhenFrontmostIsSelfButFocusedElementHasCursor() async {
+    // Under the #042 fix (2026-04-22), the probe asks whether the AX focused element is
+    // owned by another process. Even when `NSWorkspace.frontmostApplication` momentarily
+    // reports Ninimma (e.g., a status-item menu tracking window), if the real AX focus
+    // stayed in the user's target app, paste fires. The frontmost bundle-ID is not on the
+    // paste-gating path anymore.
+    func testDeliverBatchPastesWhenFrontmostIsSelfButFocusIsInAnotherApp() async {
         let defaults = isolatedDefaults()
         PasteMode.preference(defaults: defaults).persist(.pasteAtCursor)
         let pasteboard = makePasteboard()
@@ -131,7 +129,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementHasCursor: { true }
+            focusedElementIsInAnotherApp: { true }
         )
 
         let result = await service.deliverBatch(text: "self frontmost but cursor present")
@@ -162,7 +160,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementHasCursor: { true }
+            focusedElementIsInAnotherApp: { true }
         )
 
         let result = await service.deliverBatch(text: "")
@@ -190,7 +188,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementHasCursor: { true }
+            focusedElementIsInAnotherApp: { true }
         )
 
         pasteboard.clearContents()
@@ -238,7 +236,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return false
             },
-            focusedElementHasCursor: { true }
+            focusedElementIsInAnotherApp: { true }
         )
 
         let result = await service.deliverBatch(text: "shortcut fallback")
@@ -270,7 +268,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 return true
             },
             writeString: { _, _ in false },
-            focusedElementHasCursor: { true }
+            focusedElementIsInAnotherApp: { true }
         )
 
         let result = await service.deliverBatch(text: "new value")
@@ -280,13 +278,13 @@ final class ClipboardBatchOutputTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "existing value")
     }
 
-    // MARK: - Focused-element cursor probe (2026-04-20 redesign)
+    // MARK: - Focused-element externality probe (#042, 2026-04-22)
 
-    func testDeliverBatchPastesWhenFocusedElementHasCursor() async {
+    func testDeliverBatchPastesWhenFocusedElementIsInAnotherApp() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
         var shortcutPostCount = 0
-        var cursorProbeCount = 0
+        var probeCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
             pasteboard: pasteboard,
@@ -301,8 +299,8 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementHasCursor: {
-                cursorProbeCount += 1
+            focusedElementIsInAnotherApp: {
+                probeCount += 1
                 return true
             }
         )
@@ -311,15 +309,15 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertEqual(shortcutPostCount, 1)
-        XCTAssertEqual(cursorProbeCount, 1)
+        XCTAssertEqual(probeCount, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "cursor present")
     }
 
-    func testDeliverBatchSkipsPasteWhenFocusedElementHasNoCursor_ReturnsClipboardOnly() async {
+    func testDeliverBatchSkipsPasteWhenFocusedElementIsInSelf_ReturnsClipboardOnly() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
         var shortcutPostCount = 0
-        var cursorProbeCount = 0
+        var probeCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
             pasteboard: pasteboard,
@@ -334,8 +332,8 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementHasCursor: {
-                cursorProbeCount += 1
+            focusedElementIsInAnotherApp: {
+                probeCount += 1
                 return false
             }
         )
@@ -343,8 +341,8 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let result = await service.deliverBatch(text: "no cursor")
 
         XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
-        XCTAssertEqual(shortcutPostCount, 0, "paste shortcut must not be posted when focused element has no cursor")
-        XCTAssertEqual(cursorProbeCount, 1)
+        XCTAssertEqual(shortcutPostCount, 0, "paste shortcut must not be posted when focused element is owned by self")
+        XCTAssertEqual(probeCount, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "no cursor")
     }
 
@@ -362,7 +360,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementHasCursor: { false }
+            focusedElementIsInAnotherApp: { false }
         )
 
         let result = await service.deliverBatch(text: "written regardless")
@@ -379,7 +377,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let defaults = isolatedDefaults()
         PasteMode.preference(defaults: defaults).persist(.clipboardOnly)
         let pasteboard = makePasteboard()
-        var cursorProbeCount = 0
+        var probeCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
             pasteboard: pasteboard,
@@ -391,8 +389,8 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementHasCursor: {
-                cursorProbeCount += 1
+            focusedElementIsInAnotherApp: {
+                probeCount += 1
                 return true
             }
         )
@@ -400,14 +398,14 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let result = await service.deliverBatch(text: "clipboard-only mode")
 
         XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
-        XCTAssertEqual(cursorProbeCount, 0, "focused-element probe must be skipped when user picked clipboard-only mode")
+        XCTAssertEqual(probeCount, 0, "focused-element probe must be skipped when user picked clipboard-only mode")
         XCTAssertEqual(pasteboard.string(forType: .string), "clipboard-only mode")
     }
 
     func testFocusedElementCheckIsNotConsultedWhenAccessibilityDenied() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
-        var cursorProbeCount = 0
+        var probeCount = 0
         var promptCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
@@ -420,8 +418,8 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { false },
             requestAccessibilityPrompt: { promptCount += 1 },
             pasteShortcutPoster: { _ in true },
-            focusedElementHasCursor: {
-                cursorProbeCount += 1
+            focusedElementIsInAnotherApp: {
+                probeCount += 1
                 return true
             }
         )
@@ -429,9 +427,35 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let result = await service.deliverBatch(text: "ax denied")
 
         XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
-        XCTAssertEqual(cursorProbeCount, 0, "focused-element probe must be skipped when Accessibility is not trusted")
+        XCTAssertEqual(probeCount, 0, "focused-element probe must be skipped when Accessibility is not trusted")
         XCTAssertEqual(promptCount, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "ax denied")
+    }
+
+    // MARK: - Pure PID-comparison helper (#042)
+
+    func testFocusedElementIsInAnotherApp_returnsTrueWhenForeignPID() {
+        let result = ClipboardBatchOutput.focusedElementIsInAnotherApp(
+            systemWideFocusedPID: { pid_t(12345) },
+            currentProcessPID: { pid_t(99999) }
+        )
+        XCTAssertTrue(result)
+    }
+
+    func testFocusedElementIsInAnotherApp_returnsFalseWhenSelfPID() {
+        let result = ClipboardBatchOutput.focusedElementIsInAnotherApp(
+            systemWideFocusedPID: { pid_t(12345) },
+            currentProcessPID: { pid_t(12345) }
+        )
+        XCTAssertFalse(result)
+    }
+
+    func testFocusedElementIsInAnotherApp_returnsFalseWhenNoFocusedElement() {
+        let result = ClipboardBatchOutput.focusedElementIsInAnotherApp(
+            systemWideFocusedPID: { nil },
+            currentProcessPID: { pid_t(99999) }
+        )
+        XCTAssertFalse(result)
     }
 }
 

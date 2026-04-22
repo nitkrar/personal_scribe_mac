@@ -337,6 +337,40 @@ recording). #044 makes the panel resize per visibility so panel frame
   recording (220) back to done (100). If user drags the pill, the
   card follows.
 
+## AX externality probe (#042 — 2026-04-22)
+
+Repro baseline: before the fix, dictation into Sublime Text landed on the
+clipboard with the `Copied to clipboard · ⌘V to paste` card instead of
+auto-pasting. Root cause: the 2026-04-20 probe checked for text-role /
+cursor AX attributes; Sublime's custom-drawn editor reports role
+`AXGroup` / `AXUnknown` with no `AXInsertionPoint` / `AXSelectedText`
+attributes, so the probe under-included. The #042 fix swaps the probe
+to a pure PID-inequality check on the system-wide AX focused element:
+paste whenever the focus owner is not Ninimma's pid.
+
+- [ ] **MV-AX-042-1 (Sublime Text auto-pastes)** Open Sublime Text,
+  place the text cursor in a buffer. Trigger hotkey dictation, speak a
+  short sentence, release. Confirm the transcript auto-pastes at the
+  cursor position. The `Copied to clipboard · ⌘V to paste` card must
+  NOT appear.
+- [ ] **MV-AX-042-2 (VS Code auto-pastes)** Same as MV-AX-042-1 but in
+  VS Code (or Cursor / Windsurf — any Electron editor). Confirm auto-
+  paste lands at the cursor. The clipboard-only card must NOT appear.
+- [ ] **MV-AX-042-3 (Chrome form field auto-pastes)** Open Chrome, focus
+  a web form's textarea (e.g., Gmail compose body, a docs.google.com
+  doc, or any `<textarea>`). Trigger dictation; confirm auto-paste
+  lands in the form. The clipboard-only card must NOT appear.
+- [ ] **MV-AX-042-4 (TextEdit / iTerm regression guard)** Confirm auto-
+  paste still works in TextEdit and iTerm — native AX apps that worked
+  correctly before the #042 fix must continue to work.
+- [ ] **MV-AX-042-5 (self-focus skip)** Open Ninimma's Settings window
+  and focus any text field inside Settings (e.g., the hotkey recorder
+  placeholder, base-directory path). Trigger dictation from the hotkey
+  while Settings is frontmost. Confirm the transcript is NOT pasted
+  into Ninimma's own field — the clipboard-only card appears instead,
+  and ⌘V pastes manually. (This is the `Ninimma-frontmost AND AX
+  focus-in-self` path the PID check defends against.)
+
 ## Known spec deviations (flagged in commits)
 
 - **#002 landed 2026-04-22** (spec-literal Esc true-discard). Esc now
