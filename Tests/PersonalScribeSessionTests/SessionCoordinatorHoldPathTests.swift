@@ -197,6 +197,50 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
         XCTAssertNil(lastResult)
     }
 
+    // MARK: - #002 — cancelIfActive (true-discard)
+
+    func testCancelIfActiveFromRecordingReturnsToIdleWithNoLastResult() async throws {
+        let coordinator = try makeCoordinator()
+
+        await coordinator.startIfIdle()
+        try await waitUntilState(.recording, coordinator: coordinator)
+
+        await coordinator.cancelIfActive()
+
+        let state = await coordinator.state()
+        let lastResult = await coordinator.lastResult()
+
+        XCTAssertEqual(state, .idle)
+        XCTAssertNil(lastResult, "cancel must NOT produce a transcript")
+    }
+
+    func testCancelIfActiveFromHoldRecordingReturnsToIdleWithNoLastResult() async throws {
+        let coordinator = try makeCoordinator()
+
+        await coordinator.startHoldIfIdle()
+        try await waitUntilState(.holdRecording, coordinator: coordinator)
+
+        await coordinator.cancelIfActive()
+
+        let state = await coordinator.state()
+        let lastResult = await coordinator.lastResult()
+
+        XCTAssertEqual(state, .idle)
+        XCTAssertNil(lastResult)
+    }
+
+    func testCancelIfActiveFromIdleIsNoOp() async throws {
+        let coordinator = try makeCoordinator()
+
+        await coordinator.cancelIfActive()
+
+        let state = await coordinator.state()
+        let lastResult = await coordinator.lastResult()
+
+        XCTAssertEqual(state, .idle)
+        XCTAssertNil(lastResult)
+    }
+
     private func makeCoordinator(transcriberDelay: Duration? = nil) throws -> SessionCoordinator {
         let buffer = try PCMBuffer(
             samples: Array(repeating: 0, count: 16_000),

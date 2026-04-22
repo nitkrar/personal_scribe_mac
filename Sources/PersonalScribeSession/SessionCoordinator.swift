@@ -137,14 +137,28 @@ public actor SessionCoordinator {
 
     /// Mode-agnostic stop. Transitions either `.recording` or
     /// `.holdRecording` into `.transcribing` via the normal pipeline
-    /// stop path. Preferred entry point for hold-release, Esc true-
-    /// cancel (#002), VAD auto-stop (#046), and app-quit cleanup — those
-    /// callers don't know or care how the session started. No-op from
-    /// `.idle`, `.transcribing`, or `.error`.
+    /// stop path. Preferred entry point for hold-release, VAD auto-stop
+    /// (#046), and app-quit cleanup — those callers don't know or care
+    /// how the session started. No-op from `.idle`, `.transcribing`,
+    /// or `.error`.
     public func stopIfActive() async {
         switch currentState {
         case .recording, .holdRecording:
             await performStop()
+        case .idle, .transcribing, .error:
+            return
+        }
+    }
+
+    /// Mode-agnostic true-cancel. Transitions either `.recording` or
+    /// `.holdRecording` directly to `.idle` via `pipeline.cancelCapture()`
+    /// — buffered audio is discarded, transcribe + output stages are
+    /// skipped entirely. Preferred entry point for Esc and the pill ✕
+    /// button (#002). No-op from `.idle`, `.transcribing`, or `.error`.
+    public func cancelIfActive() async {
+        switch currentState {
+        case .recording, .holdRecording:
+            await performCancel()
         case .idle, .transcribing, .error:
             return
         }
@@ -234,6 +248,11 @@ public actor SessionCoordinator {
     private func performHoldStart() async {
         await startAudioLevelRelayIfNeeded()
         await pipeline.startHoldCapture()
+        await refreshFromPipelineSnapshot()
+    }
+
+    private func performCancel() async {
+        await pipeline.cancelCapture()
         await refreshFromPipelineSnapshot()
     }
 
