@@ -683,6 +683,148 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         await capture.release()
     }
 
+    // MARK: - #002 — true-discard cancel path
+
+    /// `cancelCapture()` from `.recording` must drop the buffered audio,
+    /// skip transcribing, and return to `.idle` — never calling the
+    /// transcriber or output sink.
+    func testCancelCaptureFromRecordingSkipsTranscribeAndReturnsToIdle() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let tracker = TranscriberTracker()
+        let transcriber = TrackedTranscriber(
+            result: TranscriptionResult(
+                text: "should not be returned",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(10)
+            ),
+            progressEvents: [],
+            tracker: tracker
+        )
+        let sink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturing(buffers: [buffer]),
+            transcriber: transcriber,
+            outputSink: sink
+        )
+
+        await orchestrator.toggleCapture()
+
+        // Wait for .recording before cancelling. Without this the cancel
+        // could slip in before startRecording's publish lands.
+        try await withTimeout(.seconds(1)) {
+            while await orchestrator.snapshot().sessionState != .recording {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+
+        await orchestrator.cancelCapture()
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .idle)
+        XCTAssertNil(snapshot.activeStage)
+        XCTAssertNil(snapshot.lastCompletedResult,
+                     "cancel must NOT produce a completed transcript")
+        XCTAssertNil(snapshot.recordingDuration)
+
+        let transcribeCalls = await tracker.transcribeCallCount()
+        XCTAssertEqual(transcribeCalls, 0, "transcriber must not be invoked on cancel")
+
+        let partials = await sink.partialDeliveries()
+        let finals = await sink.finalDeliveries()
+        XCTAssertEqual(partials, [], "no partial output on cancel")
+        XCTAssertEqual(finals, [], "no final output on cancel")
+    }
+
+    /// Same invariant for the hold path: `cancelCapture()` from
+    /// `.holdRecording` drops the buffer and transitions to `.idle`
+    /// without transcribing.
+    func testCancelCaptureFromHoldRecordingSkipsTranscribeAndReturnsToIdle() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let tracker = TranscriberTracker()
+        let transcriber = TrackedTranscriber(
+            result: TranscriptionResult(
+                text: "should not be returned",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(10)
+            ),
+            progressEvents: [],
+            tracker: tracker
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturing(buffers: [buffer]),
+            transcriber: transcriber
+        )
+
+        await orchestrator.startHoldCapture()
+
+        try await withTimeout(.seconds(1)) {
+            while await orchestrator.snapshot().sessionState != .holdRecording {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+
+        await orchestrator.cancelCapture()
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .idle)
+        XCTAssertNil(snapshot.lastCompletedResult)
+
+        let transcribeCalls = await tracker.transcribeCallCount()
+        XCTAssertEqual(transcribeCalls, 0)
+    }
+
+    /// Cancel from `.idle` must be a no-op — no state change, no side
+    /// effects. Safety-net for Esc keys arriving when nothing is live.
+    func testCancelCaptureFromIdleIsNoOp() async throws {
+        let orchestrator = makeOrchestrator()
+
+        await orchestrator.cancelCapture()
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .idle)
+    }
+
+    /// Snapshot stream must NEVER observe `.transcribing` on the cancel
+    /// path. This pins the "true discard" invariant at the stream level
+    /// so downstream observers (`AppStore`, pill, metrics) can rely on
+    /// it.
+    func testCancelCapturePathNeverPublishesTranscribing() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let orchestrator = makeOrchestrator(capture: FakeAudioCapturing(buffers: [buffer]))
+
+        let stream = await orchestrator.snapshotStream()
+        let observed = Task { () -> [SessionState] in
+            var states: [SessionState] = []
+            for await snapshot in stream {
+                states.append(snapshot.sessionState)
+                if snapshot.sessionState == .idle && !states.contains(.recording) {
+                    continue
+                }
+                if snapshot.sessionState == .idle && states.contains(.recording) {
+                    break
+                }
+            }
+            return states
+        }
+
+        await orchestrator.toggleCapture()
+        try await withTimeout(.seconds(1)) {
+            while await orchestrator.snapshot().sessionState != .recording {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+        await orchestrator.cancelCapture()
+
+        let states = try await withTimeout(.seconds(1)) {
+            await observed.value
+        }
+
+        XCTAssertFalse(
+            states.contains(.transcribing),
+            "cancel path must never emit .transcribing — saw states: \(states)"
+        )
+    }
+
     private func makeOrchestrator(
         capture: any AudioCapturing = FakeAudioCapturing(),
         transcriber: any Transcribing = FakeTranscriber(

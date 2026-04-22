@@ -106,6 +106,15 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
+    public func cancelCapture() async {
+        switch currentSnapshot.sessionState {
+        case .recording, .holdRecording:
+            await discardActiveCapture()
+        case .idle, .transcribing, .error:
+            logger.info("Ignored cancel from non-active session state")
+        }
+    }
+
     public func prepareTranscriber() async throws {
         try await transcriber.prepare()
     }
@@ -216,6 +225,31 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             }
         } catch {
             handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
+        }
+    }
+
+    /// True-discard helper shared by `cancelCapture()`. Stops the audio
+    /// engine, awaits the capture/level tasks to settle, drops the
+    /// in-memory buffer, and publishes `.idle` directly — no
+    /// `.transcribing` stage, no output delivery. See `#002`.
+    private func discardActiveCapture() async {
+        await capture.stop()
+        await captureTask?.value
+        captureTask = nil
+
+        await audioLevelTask?.value
+        audioLevelTask = nil
+
+        bufferedAudio.removeAll(keepingCapacity: true)
+        nextRevision = 0
+        latestStageFailure = nil
+
+        publish { snapshot in
+            snapshot.sessionState = .idle
+            snapshot.activeStage = nil
+            snapshot.transcriptProgress = nil
+            snapshot.recordingDuration = nil
+            snapshot.context = activeContext
         }
     }
 
