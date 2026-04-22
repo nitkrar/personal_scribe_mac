@@ -244,28 +244,33 @@ rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
 
 ### Cancel Card + Undo (spec §2f + §3 + §4)
 
-- [ ] **MV-PUX-10 (Esc while recording → Cancel Card)** Start a
-  recording. Press Esc. Pill surface is replaced by a 280×44 rounded
-  rect with a 1.5px Red (#F75138) border, cooler-navy (#1E2032)
-  background, "Recording cancelled" on the left, and an Undo button
-  on the right (clay text on dark fill, rounded 8pt corners).
-- [ ] **MV-PUX-11 (Esc while hold-to-record → Cancel Card)** Hold
-  `opt + /` for >300ms to enter hold-to-record. Press Esc while still
-  holding. Cancel Card appears; releasing the hold key afterward does
-  nothing (no transcribing).
+- [ ] **MV-PUX-10 (Esc while recording → Cancel Card, NO transcript)**
+  Start a recording and speak a phrase. Press Esc. Pill surface is
+  replaced by the 280×44 Cancel Card. **#002 invariant:** no
+  transcript is produced, nothing is pasted into the target app,
+  nothing is written to the transcripts DB. Confirm by checking the
+  Transcriptions tab — no new row appears.
+- [ ] **MV-PUX-11 (Esc while hold-to-record → Cancel Card, NO transcript)**
+  Hold `opt + /` for >300ms to enter hold-to-record. Press Esc while
+  still holding. Cancel Card appears; releasing the hold key afterward
+  does nothing (no transcribing). Same #002 no-transcript invariant
+  as MV-PUX-10.
 - [ ] **MV-PUX-12 (Esc outside recording is a no-op)** With the pill
   idle, press Esc. Nothing visible happens — Esc should not intercept
   when the pill isn't active. You can still use Esc in other apps /
   dialogs.
 - [ ] **MV-PUX-13 (Cancel Card auto-dismiss)** Trigger a Cancel Card.
   Wait 4 seconds. Card fades out and the pill returns to idle.
-- [ ] **MV-PUX-14 (Undo restores pre-recording clipboard)** Copy some
-  unique string (e.g., "pre-recording clipboard") into your clipboard
-  BEFORE starting a recording. Start a recording, transcribe it (so
-  the transcript auto-pastes into a text field and overwrites the
-  clipboard), then trigger a Cancel Card via Esc, then click Undo
-  on the Cancel Card within 4 seconds. Confirm your clipboard now
-  contains "pre-recording clipboard" again, not the transcript.
+- [ ] **MV-PUX-14 (Esc-cancel leaves clipboard untouched)** Copy a
+  unique string (e.g., "pre-recording clipboard") into your clipboard.
+  Start a recording, speak, press Esc mid-recording. Cancel Card
+  appears. Confirm the clipboard **still contains your original
+  string** — no transcript paste occurred, so there's nothing to
+  undo. Clicking Undo on the Cancel Card is a visible no-op (kept
+  wired for compatibility until #070 reshapes the pill affordances).
+  Post-#002 the Undo button is semantically weakened; this runbook
+  entry will fully retire when #070 or a follow-up removes the Undo
+  UI.
 
 ### Esc global monitor — regression guards
 
@@ -334,10 +339,12 @@ recording). #044 makes the panel resize per visibility so panel frame
 
 ## Known spec deviations (flagged in commits)
 
-- Esc currently lets the recording transcribe + auto-paste, and the
-  user clicks Undo to revert the paste. True "discard audio without
-  transcribing" requires a new `SessionCoordinator.cancelRecording()`
-  method — deferred to a Phase 8 follow-up.
+- **#002 landed 2026-04-22** (spec-literal Esc true-discard). Esc now
+  calls `SessionCoordinator.cancelIfActive()` — buffered audio is
+  dropped, no transcribe, no paste. The ✕ glyph on the recording pill
+  is still visual-only: making it a distinct tap target would be
+  thrown away under #070 (pause/play replacement), so it's deferred.
+  Only interactive discard path today is Esc.
 
 ## Notes
 
