@@ -59,8 +59,8 @@ public final class DefaultModelService: ModelService {
         // and ignores this default.
         let recommendedVoiceModel = DefaultModelSelectionPolicy.recommendedDefault(
             physicalMemoryBytes: physicalMemoryBytes,
-            registeredModels: BuiltInModelCatalog.registeredModels,
-            baselineDefault: BuiltInModelCatalog.defaultActiveDescriptor.voiceModel
+            lightweight: BuiltInModelCatalog.parakeetTDTCTC110M,
+            baseline: BuiltInModelCatalog.parakeetTDT06Bv2
         )
         let recommendedDefault = ActiveModelDescriptor(
             voiceModel: recommendedVoiceModel,
