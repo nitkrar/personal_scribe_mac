@@ -417,30 +417,26 @@ final class PillOverlayViewModelTests: XCTestCase {
     }
 
     func testHoldToRecordIsStickyAgainstIncomingRecordingVisibility() {
-        // Phase 4 wiring: when the user holds the hotkey, the monitor
-        // pushes `.holdToRecord` AND starts recording via the
-        // SessionCoordinator. The session's normal state mapping would
-        // then try to push `.recording` — that would clobber the
-        // distinct hold-to-record visuals mid-gesture. Stickiness must
-        // block `.recording` while `.holdToRecord` is active; other
-        // transitions (transcribing / idle / cancelled / error) flow
-        // through.
+        // #071: sticky-hold-to-record was removed. The store now derives
+        // `.holdToRecord` from `SessionState.holdRecording` directly
+        // (not from a side-channel push), and hold-release drives the
+        // session through `.transcribing`/`.idle` via the normal
+        // state-mapping — no need to block incoming `.recording` at
+        // the view-model layer. Transitions are transparent.
         let viewModel = PillOverlayViewModel()
         viewModel.apply(visibility: .holdToRecord)
-        XCTAssertTrue(viewModel.isShowingHoldToRecord)
+        XCTAssertEqual(viewModel.visibility, .holdToRecord)
 
         viewModel.apply(visibility: .recording)
         XCTAssertEqual(
             viewModel.visibility,
-            .holdToRecord,
-            "`.recording` must be blocked while hold-to-record is active"
+            .recording,
+            "post-#071: no sticky-hold block — transitions are transparent"
         )
 
-        // Transcribing is the legitimate release transition — must
-        // flow through.
+        viewModel.apply(visibility: .holdToRecord)
         viewModel.apply(visibility: .transcribing)
         XCTAssertEqual(viewModel.visibility, .transcribing)
-        XCTAssertFalse(viewModel.isShowingHoldToRecord)
     }
 
     func testCancelledStateIsStickyAgainstIncomingSessionVisibilityUpdates() {

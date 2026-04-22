@@ -18,8 +18,7 @@ final class AppCompositionTests: XCTestCase {
     func testMakeGlobalHotkeyMonitorAcceptsUnifiedPermissionService() {
         let monitor = AppComposition.makeGlobalHotkeyMonitor(
             permissionService: FakePermissionService(),
-            coordinator: DevelopmentComposition.makeTestingSessionCoordinator(),
-            onHoldStartVisibilityPush: {}
+            coordinator: DevelopmentComposition.makeTestingSessionCoordinator()
         )
 
         XCTAssertFalse(monitor.isActive)

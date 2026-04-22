@@ -72,8 +72,7 @@ public enum AppComposition {
     public static func makeGlobalHotkeyMonitor() -> GlobalHotkeyMonitor {
         makeGlobalHotkeyMonitor(
             permissionService: makePermissionService(),
-            coordinator: AppComposition.sessionCoordinator,
-            onHoldStartVisibilityPush: {}
+            coordinator: AppComposition.sessionCoordinator
         )
     }
 
@@ -82,23 +81,16 @@ public enum AppComposition {
     /// The hotkey gestures map to explicit session actions:
     /// * **Tap** (onToggle) → single-tap release starts or stops recording
     ///   via `coordinator.toggle()`.
-    /// * **Hold start** (onHoldStart) → 300 ms hold starts recording via
-    ///   `coordinator.startIfIdle()` AND
-    ///   pushes `.holdToRecord` visibility via `onHoldStartVisibilityPush`.
-    ///   The visibility push is stickied in `PillOverlayViewModel` so the
-    ///   session-state mapping doesn't immediately clobber it with
-    ///   `.recording`.
+    /// * **Hold start** (onHoldStart) → 300 ms hold enters
+    ///   `.holdRecording` via `coordinator.startHoldIfIdle()`; the
+    ///   `AppStore` derives `.holdToRecord` pill visibility through
+    ///   `derivePillVisibility`, so no side-channel push is needed.
     /// * **Hold release** (onHoldRelease) → release stops recording via
-    ///   `coordinator.stopIfRecording()`; the session-state mapping takes
+    ///   `coordinator.stopIfActive()`; the session-state mapping takes
     ///   over and shows `.transcribing`.
-    ///
-    /// `onHoldStartVisibilityPush` is a `@MainActor` closure passed in by
-    /// the caller — it has the `PillOverlayViewModel` reference which
-    /// this factory doesn't.
     public static func makeGlobalHotkeyMonitor(
         permissionService: any PermissionService,
-        coordinator: SessionCoordinator,
-        onHoldStartVisibilityPush: @escaping @MainActor () -> Void
+        coordinator: SessionCoordinator
     ) -> GlobalHotkeyMonitor {
         return GlobalHotkeyMonitor(
             onToggle: {
@@ -107,14 +99,13 @@ public enum AppComposition {
                 }
             },
             onHoldStart: {
-                onHoldStartVisibilityPush()
                 Task {
-                    await coordinator.startIfIdle()
+                    await coordinator.startHoldIfIdle()
                 }
             },
             onHoldRelease: {
                 Task {
-                    await coordinator.stopIfRecording()
+                    await coordinator.stopIfActive()
                 }
             },
             permissionService: makePermissionServiceAdapter(wrapping: permissionService)

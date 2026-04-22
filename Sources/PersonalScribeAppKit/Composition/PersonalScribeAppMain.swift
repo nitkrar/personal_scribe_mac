@@ -143,20 +143,16 @@ struct PersonalScribeAppMain: App {
             }
         }
 
-        // Hotkey monitor construction is deferred until AFTER the pill
-        // controller exists so `onHoldStartVisibilityPush` can capture
-        // the view model reference directly and push `.holdToRecord`
-        // on hold-start. Order-dependent: pillController must be ready
-        // before the startup coordinator schedules the monitor start.
+        // #071: hold-start now routes through `coordinator.startHoldIfIdle()`
+        // which publishes `.holdRecording` eagerly to the pipeline.
+        // `AppStore.derivePillVisibility` maps that to `.holdToRecord`
+        // for the pill overlay — no side-channel push needed.
         let startupCoordinator = startupCoordinator
             ?? AppComposition.makeStartupCoordinator(
                 coordinator: coordinator,
                 hotkeyMonitor: AppComposition.makeGlobalHotkeyMonitor(
                     permissionService: appPermissionService,
-                    coordinator: coordinator,
-                    onHoldStartVisibilityPush: { [weak pillController] in
-                        pillController?.viewModel.apply(visibility: .holdToRecord)
-                    }
+                    coordinator: coordinator
                 )
             )
         self.startupCoordinator = startupCoordinator
