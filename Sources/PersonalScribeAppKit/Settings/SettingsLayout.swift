@@ -15,6 +15,10 @@ enum SettingsLayout {
     static let sectionSpacing: CGFloat = 24
     static let itemSpacing: CGFloat = 12
     static let cardPadding: CGFloat = 16
+    /// Tighter padding for denser rows (e.g. AI Models descriptor
+    /// rows — see #007). Two extra rows fit under `windowHeight` at
+    /// this padding without scrolling.
+    static let compactCardPadding: CGFloat = 12
     static let cardCornerRadius: CGFloat = 10
     static let cardBorderWidth: CGFloat = 0.5
     static let cardBorderOpacity: Double = 0.18
@@ -82,9 +86,17 @@ struct SettingsSection<Content: View>: View {
 struct SettingsCard<Content: View>: View {
     @Environment(\.colorScheme) private var colorScheme
 
+    private let padding: CGFloat
     private let content: Content
 
-    init(@ViewBuilder content: () -> Content) {
+    /// `padding` overrides the default card padding for callers that
+    /// want a tighter row (e.g. AI Models descriptor rows, #007).
+    /// Defaults to `SettingsLayout.cardPadding` (16pt).
+    init(
+        padding: CGFloat = SettingsLayout.cardPadding,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.padding = padding
         self.content = content()
     }
 
@@ -94,7 +106,7 @@ struct SettingsCard<Content: View>: View {
         VStack(alignment: .leading, spacing: SettingsLayout.itemSpacing) {
             content
         }
-        .padding(SettingsLayout.cardPadding)
+        .padding(padding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(

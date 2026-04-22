@@ -87,22 +87,4 @@ final class AIModelsTabRowTests: XCTestCase {
         XCTAssertTrue(r.chip.label.hasSuffix("…"), "Expected long failure messages to be truncated; got \(r.chip.label)")
     }
 
-    func testSizeDescriptionFormatsBytesWithMBGBUnits() {
-        let descriptor = ModelDescriptor(
-            id: "test",
-            displayName: "Test",
-            shortDescription: "Test fixture.",
-            architecture: "Test",
-            repository: "test/test",
-            revision: "deadbeef",
-            requiredRelativePaths: [],
-            approximateSizeBytes: 450_000_000,
-            engine: .parakeetTDT
-        )
-        let r = row(state: nil, descriptor: descriptor)
-        let size = r.sizeDescription
-        // ByteCountFormatter with .useMB + .useGB picks GB at 450e6 on some
-        // locales and MB on others; just assert the digits + unit hint.
-        XCTAssertTrue(size.contains("MB") || size.contains("GB"), "Unexpected formatted size: \(size)")
-    }
 }

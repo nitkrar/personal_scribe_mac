@@ -67,22 +67,56 @@ public struct AIModelsTab: View {
 /// `ModelDownloadState?`. Rendering is pure — all side effects go
 /// through the `onActivate` closure owned by the tab, so this view is
 /// trivially reusable for Stage B's AI-models section.
+///
+/// Ticket #007: inline `shortDescription` replaces the raw byte size
+/// as the second line; size moves to the ⓘ info popover alongside
+/// computed-relative Speed / Accuracy bars and detail metadata. Row
+/// padding is tightened (`compactCardPadding`) so three models fit
+/// under the default `windowHeight` without scrolling.
 @MainActor
 struct ModelRow: View {
     let descriptor: ModelDescriptor
     let state: ModelDownloadState?
     let isActive: Bool
+    /// Siblings used for the info popover's relative-rank computation.
+    /// Defaults to the catalog-registered list.
+    let siblings: [ModelDescriptor]
     let onActivate: () -> Void
 
+    @State private var isInfoPopoverPresented = false
+
+    init(
+        descriptor: ModelDescriptor,
+        state: ModelDownloadState?,
+        isActive: Bool,
+        siblings: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
+        onActivate: @escaping () -> Void
+    ) {
+        self.descriptor = descriptor
+        self.state = state
+        self.isActive = isActive
+        self.siblings = siblings
+        self.onActivate = onActivate
+    }
+
     var body: some View {
-        SettingsCard {
+        SettingsCard(padding: SettingsLayout.compactCardPadding) {
             HStack(alignment: .center, spacing: SettingsLayout.itemSpacing) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(descriptor.displayName)
-                        .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
-                    Text(sizeDescription)
-                        .font(PersonalScribeTheme.Typography.caption.font)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Text(descriptor.displayName)
+                            .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+
+                        infoButton
+                    }
+
+                    if !descriptor.shortDescription.isEmpty {
+                        Text(descriptor.shortDescription)
+                            .font(PersonalScribeTheme.Typography.caption.font)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
 
                 Spacer(minLength: 0)
@@ -91,6 +125,30 @@ struct ModelRow: View {
 
                 actionButton
             }
+        }
+    }
+
+    // MARK: - Info popover
+
+    private var infoButton: some View {
+        Button(action: { isInfoPopoverPresented.toggle() }) {
+            Image(systemName: "info.circle")
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("About \(descriptor.displayName)")
+        .help("Show model details")
+        .popover(
+            isPresented: $isInfoPopoverPresented,
+            arrowEdge: .top
+        ) {
+            ModelInfoPopover(
+                presenter: ModelInfoPopoverPresenter(
+                    descriptor: descriptor,
+                    siblings: siblings
+                )
+            )
         }
     }
 
@@ -143,14 +201,5 @@ struct ModelRow: View {
             Button("Retry", action: onActivate)
                 .buttonStyle(.borderedProminent)
         }
-    }
-
-    // MARK: - Size formatting (internal for tests)
-
-    var sizeDescription: String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useMB, .useGB]
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: descriptor.approximateSizeBytes)
     }
 }

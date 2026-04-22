@@ -61,10 +61,26 @@ instead of its contents.
 
 Stage A replaces the inert AIModelsTab with one `SettingsCard` row per registered voice model. Chip + button are driven by `DefaultModelService.downloadStates[descriptor.id]`. A single `SettingsSection` header (`Voice models`) is used for now; Stage B will add an `AI models` section below without restructuring.
 
-- **MV-AIM-1 — fresh install, not downloaded:** delete `~/Library/Application Support/com.nitkrar.personal_scribe/models/parakeet-tdt-0.6b-v2/` (and any other model folders), relaunch Ninimma, open `Settings > AI Models`, and confirm each registered voice model row renders with a grey `Not downloaded` badge plus a prominent `Download` button. The default `Parakeet TDT 0.6B` row is visible with its size (`~450 MB`).
+**#007 update (2026-04-22):** each row now shows a one-line inline description (from `ModelDescriptor.shortDescription`) in place of the raw byte size, plus an ⓘ info button next to the display name. Clicking ⓘ opens a popover with the full metadata — Speed / Accuracy bars (computed-relative across registered siblings), Size, Architecture, Repository, Revision, Parameters. Row padding tightened to `compactCardPadding` so three models fit under the default window height without scrolling.
+
+- **MV-AIM-1 — fresh install, not downloaded:** delete `~/Library/Application Support/com.nitkrar.personal_scribe/models/parakeet-tdt-0.6b-v2/` (and any other model folders), relaunch Ninimma, open `Settings > AI Models`, and confirm each registered voice model row renders with a grey `Not downloaded` badge plus a prominent `Download` button. The default `Parakeet TDT 0.6B` row shows its inline description (`High-accuracy default — balanced RAM and speed.`) under the display name and an ⓘ icon next to the name.
 - **MV-AIM-2 — live download updates:** from MV-AIM-1 state, click `Download` on the `Parakeet TDT 0.6B` row and confirm the badge transitions to an amber `Downloading NN%` chip that updates live over the next several minutes (no Download button while in-flight), then switches to an amber `Loading…` chip briefly, then to a green `Active` chip with a disabled `Active` button (no separate `Set Active` button).
 - **MV-AIM-3 — switch active model:** with `Parakeet TDT 0.6B` active and downloaded, also download `Parakeet TDT-CTC 110M` (click its `Download` button and wait for it to flip to green `Ready`). Click `Set Active` on the CTC row, confirm its chip becomes `Active` (green) + button is disabled, and the `Parakeet TDT 0.6B` row's chip flips from `Active` to `Ready` with a `Set Active` button reappearing.
 - **MV-AIM-4 — failure + retry:** enable Airplane Mode (or drop the wi-fi) mid-download, wait for the chip to flip to a red `Failed: …` badge with a `Retry` button, re-enable network, click `Retry`, and confirm the chip resumes the amber `Downloading NN%` → `Loading…` → green `Active` sequence.
+- [ ] **MV-AIM-6 — ⓘ info popover renders computed-relative ratings (#007):**
+  open `Settings → AI Models`. Click the ⓘ icon next to each model's
+  display name and confirm the popover renders:
+  - **Parakeet TDT 0.6B (v2)**: Speed bar 2/3 "Fast"; Accuracy bar 3/3 "High"; Size 450 MB; Architecture `FastConformer-TDT`; Parameters `600M`.
+  - **Parakeet TDT-CTC 110M**: Speed bar 3/3 "Fastest"; Accuracy bar 1/3 "Low"; Size 407 MB; Architecture `Hybrid FastConformer-TDT-CTC`; Parameters `110M`.
+  - **Parakeet TDT 0.6B v3**: Speed bar 1/3 "Slow"; Accuracy bar 2/3 "Medium"; Size 700 MB; Architecture `FastConformer-TDT`; Parameters `600M`.
+  Revision row renders a monospaced 8-char short SHA. Clicking outside
+  the popover dismisses it; clicking the ⓘ again re-opens.
+- [ ] **MV-AIM-7 — three rows fit without scrolling (#007):** at the
+  default unified-window size (760×520), confirm all three voice-model
+  rows are visible under `Settings → AI Models` without needing to
+  scroll. Each row shows name + description (one line) + chip +
+  action button. Adding a 4th model would introduce scrolling by
+  design — three is the registered-model ceiling today.
 - **MV-AIM-5 — Disk-space precheck (Stage B).**
   1. Simulate low disk: either fill the volume to near capacity, or inject a small `diskSpaceProvider` via a Debug-only harness (if present). Real-world simulation is fine — move large files onto the volume until < 300 MB free.
   2. Click **Download** on a model (choose Parakeet TDT 0.6B v2, ~450 MB).
