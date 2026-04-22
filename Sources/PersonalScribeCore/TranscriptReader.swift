@@ -5,3 +5,7 @@ public protocol TranscriptReading: Sendable {
     func search(query: String) async -> [TranscriptEntry]
     func all() async -> [TranscriptEntry]
 }
+
+public protocol TranscriptDeleting: Sendable {
+    func delete(id: UUID) async throws
+}

@@ -56,6 +56,71 @@ final class TranscriptRepositoryTests: XCTestCase {
         }
     }
 
+    // MARK: - delete
+
+    func test_delete_removesEntryAndFreshRepositoryReadDoesNotResurrectIt() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        let retained = makeEntry(timestamp: Date(timeIntervalSince1970: 100), text: "keep")
+        let deleted = makeEntry(timestamp: Date(timeIntervalSince1970: 200), text: "delete")
+
+        try await harness.repository.append(retained)
+        try await harness.repository.append(deleted)
+
+        try await harness.repository.delete(id: deleted.id)
+
+        let remaining = await harness.repository.all()
+        XCTAssertEqual(
+            remaining.map(\.id),
+            [retained.id],
+            "Delete should remove the row from the current repository view"
+        )
+
+        let recordings = harness.base.appendingPathComponent("recordings", isDirectory: true)
+        let locator = FixedBaseDirectoryStorageLocator(
+            baseDirectory: harness.base,
+            managedDirectoryOverrides: [.recordings: recordings]
+        )
+        let reopenedDatabase = try AppDatabase(locator: locator)
+        let reopenedRepository = TranscriptRepository(database: reopenedDatabase)
+
+        let reopenedEntries = await reopenedRepository.all()
+        XCTAssertEqual(
+            reopenedEntries.map(\.id),
+            [retained.id],
+            "Deleted row should stay gone after reopening the repository"
+        )
+    }
+
+    func test_delete_postsTranscriptCommitNotificationOnce() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        let notificationCenter = NotificationCenter()
+        let repository = TranscriptRepository(
+            database: harness.database,
+            notificationCenter: notificationCenter
+        )
+        let entry = makeEntry(timestamp: Date(timeIntervalSince1970: 100), text: "delete me")
+        try await repository.append(entry)
+
+        let expectation = expectation(description: "delete posts metrics refresh notification")
+        expectation.assertForOverFulfill = true
+        let token = notificationCenter.addObserver(
+            forName: MetricsNotification.transcriptCommit,
+            object: nil,
+            queue: nil
+        ) { _ in
+            expectation.fulfill()
+        }
+        defer { notificationCenter.removeObserver(token) }
+
+        try await repository.delete(id: entry.id)
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+    }
+
     // MARK: - recent
 
     func test_recent_limitZero_returnsEmpty() async throws {

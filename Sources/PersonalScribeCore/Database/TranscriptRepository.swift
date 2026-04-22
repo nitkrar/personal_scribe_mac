@@ -16,12 +16,13 @@ import GRDB
 ///
 /// SQL shape parity with `SQLiteTranscriptStore` (lines 78-175) is maintained
 /// so Pass 2 can delete the legacy store without query-plan drift.
-public struct TranscriptRepository: Sendable, TranscriptReading {
+public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDeleting {
     private static let transcriptsFTSTableName = "transcripts_fts"
 
     private let database: AppDatabase
     private let logger: PersonalScribeLogger
     private let operationObserver: any DatabaseOperationObserving
+    private let notificationCenter: NotificationCenter
 
     /// Pass 1 init takes the shared database plus an optional per-operation
     /// observer. Plan §3 Q-F1: "no raw `DatabaseReader`/`DatabaseWriter`
@@ -33,11 +34,13 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
     /// no-op, never nil — so "forgot to inject" is impossible to hide.
     public init(
         database: AppDatabase,
-        operationObserver: any DatabaseOperationObserving = NullDatabaseOperationObserver()
+        operationObserver: any DatabaseOperationObserving = NullDatabaseOperationObserver(),
+        notificationCenter: NotificationCenter = .default
     ) {
         self.database = database
         self.logger = PersonalScribeLogger(category: PersonalScribeLogCategory.app)
         self.operationObserver = operationObserver
+        self.notificationCenter = notificationCenter
     }
 
     // MARK: - Write
@@ -57,6 +60,28 @@ public struct TranscriptRepository: Sendable, TranscriptReading {
             operationObserver.record(.writeSucceeded)
         } catch let error as TranscriptStorageError {
             // Already the right envelope (e.g. propagated from a future layer).
+            operationObserver.record(.writeFailed)
+            throw error
+        } catch {
+            operationObserver.record(.writeFailed)
+            throw TranscriptStorageError.queryFailed(underlying: error)
+        }
+    }
+
+    /// Deletes the transcript row for `id`. This only removes the SQLite row;
+    /// any optional on-disk audio sidecars are intentionally left untouched
+    /// until ticket #069 owns that lifecycle.
+    public func delete(id: UUID) async throws {
+        do {
+            try await database.write { db in
+                try db.execute(
+                    sql: "DELETE FROM transcripts WHERE id = ?",
+                    arguments: [id.uuidString]
+                )
+            }
+            notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
+            operationObserver.record(.writeSucceeded)
+        } catch let error as TranscriptStorageError {
             operationObserver.record(.writeFailed)
             throw error
         } catch {
