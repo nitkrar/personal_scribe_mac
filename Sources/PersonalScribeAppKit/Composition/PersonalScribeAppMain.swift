@@ -11,6 +11,7 @@ import PersonalScribeSession
 struct PersonalScribeAppMain: App {
     let coordinator: SessionCoordinator
     let startupCoordinator: AppStartupCoordinator
+    let onboardingCompletionObserver: OnboardingCompletionObserver
 
     @StateObject private var sceneModel: MenuBarSceneModel
     @StateObject private var pillController: PillOverlayController
@@ -256,10 +257,29 @@ struct PersonalScribeAppMain: App {
         sceneModel.startObserving()
         startupCoordinator.start()
 
+        // #015: watch the permission service and flip
+        // `OnboardingCompleted` the first time Mic + Input Monitoring
+        // both land as `.granted`. Covers the "perms granted before
+        // launch" case (flag flips immediately) AND the "user grants
+        // during first session" case (observer fires on publish). Once
+        // flipped, the observer self-terminates — later revokes in
+        // System Settings don't churn the flag.
+        let observer = OnboardingCompletionObserver(
+            permissionService: resolvedPermissionService,
+            defaults: defaults
+        )
+        observer.start()
+        self.onboardingCompletionObserver = observer
+
         // First-launch onboarding routing: if permissions haven't been
         // granted yet, auto-open the unified window to the Settings tab
         // so the Permissions sub-tab is one click away. Replaces the
         // pre-M4 OnboardingWindowController auto-open.
+        //
+        // Re-read after `observer.start()` — the observer may have
+        // flipped the flag synchronously on init if perms were already
+        // granted (common on re-install), in which case we skip the
+        // auto-open.
         if !isOnboardingCompleteProvider() {
             Task { @MainActor in
                 unifiedWindowControllerHost.showWindow(selecting: .settings)
