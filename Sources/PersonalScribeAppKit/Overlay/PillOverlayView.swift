@@ -32,26 +32,56 @@ public struct PillOverlayView: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
-    // Pill dimension constants — authoritative sizes per Claude's Pill UX
-    // Prompt (spec §2). Kept as static lets so presenter / tests can
-    // reference them. `idleSize` retains the original 80×28 from the
-    // pre-spec pill; new / updated sizes follow the spec tables.
-    static let idleSize = CGSize(width: 80, height: 28)
-    /// 160×36 — Hold-to-Record (spec §2b). 7-bar equaliser + clay border.
-    static let holdToRecordSize = CGSize(width: 160, height: 36)
-    /// 220×36 — committed Recording (spec §2c). Was 200×36 pre-spec.
-    static let recordingSize = CGSize(width: 220, height: 36)
-    /// 160×36 — Transcribing (spec §2d). Was 140×36 pre-spec.
-    static let transcribingSize = CGSize(width: 160, height: 36)
-    /// 100×32 — Done (spec §2e). Was 80×28 pre-spec.
-    static let doneSize = CGSize(width: 100, height: 32)
-    static let downloadingSize = CGSize(width: 240, height: 36)
-    static let loadingSize = CGSize(width: 140, height: 36)
-    static let errorSize = CGSize(width: 220, height: 36)
-    /// 280×44 — Cancel Card (spec §2f). Not a pill — the panel resizes
-    /// to this footprint at the same anchor origin when visibility
-    /// transitions to `.cancelled`.
-    static let cancelCardSize = CGSize(width: 280, height: 44)
+    // Pill dimension constants. Both width and height come from
+    // `PersonalScribeTheme.Pill.Width` and `.Height` banding so future edits
+    // can't silently drift one state out of its band. To change a state's
+    // footprint, either reassign it to a different band or edit the band's
+    // value; never drop a literal in here.
+    static let idleSize = CGSize(
+        width: PersonalScribeTheme.Pill.Width.compact,
+        height: PersonalScribeTheme.Pill.Height.resting
+    )
+    /// Hold-to-Record. 7-bar equaliser + clay border. Matches `.recording`
+    /// dimensions (medium × active) — both are live-session pills.
+    static let holdToRecordSize = CGSize(
+        width: PersonalScribeTheme.Pill.Width.medium,
+        height: PersonalScribeTheme.Pill.Height.active
+    )
+    /// Committed Recording.
+    static let recordingSize = CGSize(
+        width: PersonalScribeTheme.Pill.Width.medium,
+        height: PersonalScribeTheme.Pill.Height.active
+    )
+    /// Transcribing.
+    static let transcribingSize = CGSize(
+        width: PersonalScribeTheme.Pill.Width.medium,
+        height: PersonalScribeTheme.Pill.Height.active
+    )
+    /// Done — brief success confirmation. Shares resting-band width and
+    /// height with `.idle` so both ambient states read as the same "not
+    /// demanding attention" surface.
+    static let doneSize = CGSize(
+        width: PersonalScribeTheme.Pill.Width.compact,
+        height: PersonalScribeTheme.Pill.Height.resting
+    )
+    static let downloadingSize = CGSize(
+        width: PersonalScribeTheme.Pill.Width.medium,
+        height: PersonalScribeTheme.Pill.Height.active
+    )
+    static let loadingSize = CGSize(
+        width: PersonalScribeTheme.Pill.Width.medium,
+        height: PersonalScribeTheme.Pill.Height.active
+    )
+    static let errorSize = CGSize(
+        width: PersonalScribeTheme.Pill.Width.medium,
+        height: PersonalScribeTheme.Pill.Height.active
+    )
+    /// Cancel Card. Not a pill — the panel resizes to this footprint at the
+    /// same anchor origin when visibility transitions to `.cancelled`.
+    static let cancelCardSize = CGSize(
+        width: PersonalScribeTheme.Pill.Width.card,
+        height: PersonalScribeTheme.Pill.Height.card
+    )
 
     /// Pure mapping from a `PillOverlayVisibility` case to the panel
     /// footprint the overlay must render at. Used by

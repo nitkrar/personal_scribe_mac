@@ -206,7 +206,7 @@ rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
 - [ ] **MV-PUX-1 (idle)** At rest, pill is 80×28 with an 8pt champagne
   quill dot centered and a 1px white-8%-opacity border. Radius 14pt.
 - [ ] **MV-PUX-2 (hold-to-record)** Press and HOLD `opt + /`. Within
-  ~300ms the pill expands to 160×36 showing a 7-bar vertical equaliser
+  ~300ms the pill expands to 220×36 showing a 7-bar vertical equaliser
   with a 1.5px Clay (#C9A96E) border and 18pt radius. Bars respond to
   your voice (silence → minimum-height baseline, speaking → taller
   bars). Release the key — pill transitions to transcribing.
@@ -214,12 +214,13 @@ rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
   (press + release under 300ms). Pill becomes 220×36 with ✕ on the
   left, sine waveform centre, red stop ⏹ on the right. Clay border.
   Tap `opt + /` again or click ⏹ to stop.
-- [ ] **MV-PUX-4 (transcribing)** After stop, pill becomes 160×36 with
+- [ ] **MV-PUX-4 (transcribing)** After stop, pill becomes 220×36 with
   a spinner + "Transcribing…" text. 1px Champagne @ 40% opacity
   border, 18pt radius.
 - [ ] **MV-PUX-5 (done)** After transcription, pill briefly shows a
-  green checkmark in a 100×32 rect with a 1px Green (#50C878) border
-  and 16pt radius. Auto-returns to idle within ~1.2s.
+  green checkmark in a 80×28 rect with a 1px Green (#50C878) border
+  and 16pt radius. Shares the resting-band height with idle. Auto-returns
+  to idle within ~1.2s.
 
 ### Hotkey gestures (spec §3)
 
@@ -246,7 +247,7 @@ rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
 
 - [ ] **MV-PUX-10 (Esc while recording → Cancel Card, NO transcript)**
   Start a recording and speak a phrase. Press Esc. Pill surface is
-  replaced by the 280×44 Cancel Card. **#002 invariant:** no
+  replaced by the 240×36 Cancel Card. **#002 invariant:** no
   transcript is produced, nothing is pasted into the target app,
   nothing is written to the transcripts DB. Confirm by checking the
   Transcriptions tab — no new row appears.
@@ -323,7 +324,7 @@ recording). #044 makes the panel resize per visibility so panel frame
   drag from ~100pt left of the visible pill — nothing happens (not a
   drag handle). The pill stays put.
 - [ ] **MV-PILL-RESIZE-4 (Cancel Card crossfade)** Start a recording.
-  Press Esc. The pill transitions to the 280×44 Cancel Card by
+  Press Esc. The pill transitions to the 240×36 Cancel Card by
   CROSSFADING (opacity tween), not by morphing size — the pill fades
   out as the card fades in at the same bottom-center anchor. Pill↔pill
   morphs (MV-PILL-RESIZE-1) are size tweens; pill↔cancel is a pure

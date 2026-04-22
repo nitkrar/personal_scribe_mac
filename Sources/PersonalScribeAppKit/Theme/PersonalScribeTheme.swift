@@ -421,6 +421,45 @@ public enum PersonalScribeTheme {
             public static let cancelWidth: CGFloat = 1.5
         }
 
+        /// Height bands for overlay surfaces. Every pill-size constant in
+        /// `PillOverlayView` references one of these instead of a literal,
+        /// so the banding intent survives future edits.
+        ///
+        /// - `resting` — ambient low-weight states (`.idle`, `.done`).
+        /// - `active`  — user-facing states (`.holdToRecord`, `.recording`,
+        ///   `.transcribing`, `.downloading`, `.loading`, `.error`).
+        /// - `card`    — `.cancelled` — not a pill, a card surface. Kept
+        ///   separate from `active` even though the value matches today,
+        ///   because the card can grow/shrink independently of the pill
+        ///   band when the two diverge again.
+        public enum Height {
+            public static let resting: CGFloat = 28
+            public static let active: CGFloat = 36
+            public static let card: CGFloat = 36
+        }
+
+        /// Width bands for overlay surfaces. Widths are grouped by content
+        /// class so future edits can't silently introduce off-band values.
+        ///
+        /// - `compact` — icon-only ambient states (`.idle`, `.done`).
+        /// - `snug`    — reserved. Previously held `.holdToRecord`; now
+        ///   unused since hold joined the active/medium band. Kept as an
+        ///   enum case for future short-content states.
+        /// - `medium`  — all active + live-session states (`.holdToRecord`,
+        ///   `.recording`, `.transcribing`, `.loading`, `.downloading`,
+        ///   `.error`).
+        /// - `wide`    — reserved for future states that need more room
+        ///   than `medium` (e.g. longer progress + label combinations).
+        ///   Currently unused; matches `card` until a consumer diverges.
+        /// - `card`    — cancel card (`.cancelled`). Not a pill.
+        public enum Width {
+            public static let compact: CGFloat = 80
+            public static let snug: CGFloat = 160
+            public static let medium: CGFloat = 220
+            public static let wide: CGFloat = 240
+            public static let card: CGFloat = 240
+        }
+
         /// Cancel-card-specific tokens (pill UX spec §2f). The card is
         /// rendered by a separate view, not by `PillChrome`.
         public enum CancelCard {
