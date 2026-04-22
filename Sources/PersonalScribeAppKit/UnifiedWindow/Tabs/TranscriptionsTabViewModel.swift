@@ -17,6 +17,7 @@ final class TranscriptionsTabViewModel: ObservableObject {
 
     private let reader: any TranscriptReading
     private let deleter: (any TranscriptDeleting)?
+    private let updater: (any TranscriptUpdating)?
     private let clock: @MainActor () -> Date
     private let calendar: Calendar
     private let explicitDateFormatter: DateFormatter
@@ -25,12 +26,14 @@ final class TranscriptionsTabViewModel: ObservableObject {
     init(
         reader: any TranscriptReading,
         deleter: (any TranscriptDeleting)? = nil,
+        updater: (any TranscriptUpdating)? = nil,
         clock: @escaping @MainActor () -> Date = { Date() },
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = Locale(identifier: "en_US_POSIX")
     ) {
         self.reader = reader
         self.deleter = deleter ?? (reader as? any TranscriptDeleting)
+        self.updater = updater ?? (reader as? any TranscriptUpdating)
         self.clock = clock
         self.calendar = calendar
 
@@ -65,6 +68,21 @@ final class TranscriptionsTabViewModel: ObservableObject {
 
     var canDelete: Bool {
         deleter != nil
+    }
+
+    /// Persist an edited transcript body, then reload the active storage
+    /// window so the published list reflects the repository's canonical state.
+    func update(id: UUID, text: String) async throws {
+        guard let updater else {
+            return
+        }
+
+        try await updater.update(id: id, text: text)
+        entries = await reader.recent(limit: activeLimit)
+    }
+
+    var canEdit: Bool {
+        updater != nil
     }
 
     /// Case-insensitive contains-match against `entry.text`. An empty or

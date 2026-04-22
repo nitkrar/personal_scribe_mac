@@ -128,6 +128,24 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
         )
     }
 
+    func testUpdateTriggersStoreWriteAndReloadsEditedEntryFromCurrentLimit() async throws {
+        let now = makeNow()
+        let edited = makeEntry(text: "before", timestamp: now)
+        let retained = makeEntry(text: "keep", timestamp: now.addingTimeInterval(-60))
+        let harness = makeHarness(entries: [edited, retained], now: now)
+
+        await harness.viewModel.load(limit: 2)
+        try await harness.viewModel.update(id: edited.id, text: "after")
+
+        XCTAssertEqual(
+            harness.viewModel.entries.map(\.text),
+            ["after", "keep"],
+            "Update should reload the active storage-backed window after save"
+        )
+        let updateCalls = await harness.store.updateCalls()
+        XCTAssertEqual(updateCalls, [UpdateCall(id: edited.id, text: "after")])
+    }
+
     // MARK: - filteredEntries
 
     func testFilteredEntriesReturnsAllWhenSearchIsEmpty() async {
@@ -249,12 +267,13 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
 // MARK: - Inline fake
 
 /// Minimal transcript store double for M3.2 tests. `recent(limit:)`
-/// returns up to `limit` of the current entries and `delete(id:)`
-/// mutates the actor-backed store so the view model can prove it
-/// reloaded from storage rather than only trimming local cache.
-private actor InlineFakeTranscriptStore: TranscriptReading, TranscriptDeleting {
+/// returns up to `limit` of the current entries while `delete(id:)`
+/// / `update(id:text:)` mutate the actor-backed store so the view model can
+/// prove it reloaded from storage rather than only editing local cache.
+private actor InlineFakeTranscriptStore: TranscriptReading, TranscriptDeleting, TranscriptUpdating {
     private var entries: [TranscriptEntry]
     private var deletedIDsStorage: [UUID] = []
+    private var updateCallsStorage: [UpdateCall] = []
 
     init(entries: [TranscriptEntry]) {
         self.entries = entries
@@ -277,7 +296,31 @@ private actor InlineFakeTranscriptStore: TranscriptReading, TranscriptDeleting {
         entries.removeAll { $0.id == id }
     }
 
+    func update(id: UUID, text: String) async throws {
+        updateCallsStorage.append(UpdateCall(id: id, text: text))
+        guard let index = entries.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        let current = entries[index]
+        entries[index] = TranscriptEntry(
+            id: current.id,
+            timestamp: current.timestamp,
+            text: text,
+            audioDuration: current.audioDuration,
+            processingDuration: current.processingDuration
+        )
+    }
+
     func deletedIDs() async -> [UUID] {
         deletedIDsStorage
     }
+
+    func updateCalls() async -> [UpdateCall] {
+        updateCallsStorage
+    }
+}
+
+private struct UpdateCall: Equatable {
+    let id: UUID
+    let text: String
 }
