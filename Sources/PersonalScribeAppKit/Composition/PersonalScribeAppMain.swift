@@ -118,19 +118,15 @@ struct PersonalScribeAppMain: App {
             viewModel: pillController.viewModel
         )
 
-        // Pill UX Phase 6: global Esc cancels an active recording and
-        // surfaces the Cancel Card. Guarded against firing outside the
+        // #002: global Esc truly discards an active recording — no
+        // transcribe, no paste. Guarded against firing outside the
         // recording / hold-to-record states so Esc elsewhere (dialogs,
-        // text fields, other apps) stays intercept-free.
-        //
-        // Caveat: `coordinator.toggle()` below stops capture via the
-        // normal transcribe path — the audio will still be transcribed
-        // and auto-pasted. A follow-up phase will add a true
-        // `SessionCoordinator.cancelRecording()` that discards audio
-        // without transcribing. Until then, the Cancel Card's Undo
-        // restores the user's pre-recording clipboard (Phase 5), so
-        // the worst-case UX is "pasted the transcript + user clicked
-        // Undo to undo the paste".
+        // text fields, other apps) stays intercept-free. The pill's
+        // Cancel Card still fires via `viewModel.cancel()` for the
+        // visual feedback; the Phase 5 pasteboard snapshot Undo
+        // restore is a no-op on this path (no paste occurred) but
+        // stays wired for compatibility. #070 will reshape the pill
+        // affordances around pause/resume.
         let escapeKeyMonitor = EscapeKeyMonitor { [weak pillController, weak coordinator] in
             guard let pillController else { return }
             let visibility = pillController.viewModel.visibility
@@ -139,7 +135,7 @@ struct PersonalScribeAppMain: App {
             }
             pillController.viewModel.cancel()
             Task { [weak coordinator] in
-                await coordinator?.toggle()
+                await coordinator?.cancelIfActive()
             }
         }
 
