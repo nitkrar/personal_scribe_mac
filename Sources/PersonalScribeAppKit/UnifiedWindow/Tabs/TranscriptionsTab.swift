@@ -85,6 +85,11 @@ struct TranscriptionsTab: View {
                                 TranscriptRow(
                                     timestamp: entry.timestamp,
                                     preview: entry.text,
+                                    onDelete: viewModel.canDelete ? {
+                                        Task {
+                                            try? await viewModel.delete(id: entry.id)
+                                        }
+                                    } : nil,
                                     referenceDate: now
                                 )
                             }

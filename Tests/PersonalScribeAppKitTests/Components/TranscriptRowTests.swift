@@ -235,6 +235,43 @@ final class TranscriptRowTests: XCTestCase {
         XCTAssertEqual(row.displayTitle, "Sync notes")
     }
 
+    func testDeleteControlAppearsForHoveredDetailRowsWhenDeleteActionAvailable() {
+        XCTAssertTrue(
+            TranscriptRow.showsDeleteControl(
+                displayStyle: .detail,
+                isHovered: true,
+                hasDeleteAction: true
+            )
+        )
+    }
+
+    func testDeleteControlStaysHiddenWithoutHoverOrDeleteAction() {
+        XCTAssertFalse(
+            TranscriptRow.showsDeleteControl(
+                displayStyle: .detail,
+                isHovered: false,
+                hasDeleteAction: true
+            )
+        )
+        XCTAssertFalse(
+            TranscriptRow.showsDeleteControl(
+                displayStyle: .detail,
+                isHovered: true,
+                hasDeleteAction: false
+            )
+        )
+    }
+
+    func testDeleteControlNeverAppearsForSummaryRows() {
+        XCTAssertFalse(
+            TranscriptRow.showsDeleteControl(
+                displayStyle: .summary,
+                isHovered: true,
+                hasDeleteAction: true
+            )
+        )
+    }
+
     // MARK: - Row height (mockup-gap A.3)
 
     func testDetailMinHeightEqualsRowHeightTall() {

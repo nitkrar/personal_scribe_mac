@@ -33,12 +33,14 @@ public struct TranscriptRow: View {
     public let preview: String
     public let isSelected: Bool
     public let displayStyle: DisplayStyle
+    public let onDelete: (() -> Void)?
 
     /// Reference `now` used for relative-timestamp formatting. Injected
     /// so tests can reason about the output deterministically.
     private let referenceDate: Date
 
     @Environment(\.colorScheme) private var colorScheme
+    @State private var isHovered = false
 
     /// Home-tab (summary) initializer — title + relative timestamp.
     public init(
@@ -46,12 +48,14 @@ public struct TranscriptRow: View {
         timestamp: Date,
         preview: String,
         isSelected: Bool = false,
+        onDelete: (() -> Void)? = nil,
         referenceDate: Date = Date()
     ) {
         self.title = title
         self.timestamp = timestamp
         self.preview = preview
         self.isSelected = isSelected
+        self.onDelete = onDelete
         self.referenceDate = referenceDate
         self.displayStyle = .summary
     }
@@ -62,12 +66,14 @@ public struct TranscriptRow: View {
         timestamp: Date,
         preview: String,
         isSelected: Bool = false,
+        onDelete: (() -> Void)? = nil,
         referenceDate: Date = Date()
     ) {
         self.title = ""
         self.timestamp = timestamp
         self.preview = preview
         self.isSelected = isSelected
+        self.onDelete = onDelete
         self.referenceDate = referenceDate
         self.displayStyle = .detail
     }
@@ -110,6 +116,11 @@ public struct TranscriptRow: View {
 
     public var body: some View {
         let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+        let showsDeleteControl = Self.showsDeleteControl(
+            displayStyle: displayStyle,
+            isHovered: isHovered,
+            hasDeleteAction: onDelete != nil
+        )
 
         VStack(alignment: .leading, spacing: Layout.innerSpacing) {
             HStack(alignment: .firstTextBaseline, spacing: Layout.titleTimestampSpacing) {
@@ -138,6 +149,18 @@ public struct TranscriptRow: View {
                         .lineLimit(1)
 
                     Spacer(minLength: 0)
+
+                    if showsDeleteControl {
+                        Button(action: { onDelete?() }) {
+                            Image(systemName: "trash")
+                                .font(.system(size: Layout.deleteIconSize, weight: .medium))
+                                .frame(width: Layout.deleteButtonSize, height: Layout.deleteButtonSize)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(palette.secondaryText)
+                        .help("Delete transcription")
+                        .accessibilityLabel("Delete transcription")
+                    }
                 }
             }
 
@@ -172,6 +195,9 @@ public struct TranscriptRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(displayPreview)
+        .onHover { hovered in
+            isHovered = hovered
+        }
     }
 
     // MARK: - Layout constants
@@ -183,10 +209,20 @@ public struct TranscriptRow: View {
         static let titleTimestampSpacing: CGFloat = 8
         static let borderWidth: CGFloat = 0.5
         static let borderOpacity: Double = 0.12
+        static let deleteButtonSize: CGFloat = 18
+        static let deleteIconSize: CGFloat = 10
         /// Detail-style (Transcriptions-tab) minimum row height — pinned
         /// to `PersonalScribeTheme.RowHeight.tall` (56pt) per the mockup
         /// (`plans/App UI design/screen_transcriptions.png`).
         static let detailMinHeight: CGFloat = PersonalScribeTheme.RowHeight.tall
+    }
+
+    internal static func showsDeleteControl(
+        displayStyle: DisplayStyle,
+        isHovered: Bool,
+        hasDeleteAction: Bool
+    ) -> Bool {
+        displayStyle == .detail && isHovered && hasDeleteAction
     }
 
     // MARK: - Pure formatting helpers (tested)

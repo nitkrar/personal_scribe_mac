@@ -63,6 +63,10 @@ final class TranscriptionsTabViewModel: ObservableObject {
         entries = await reader.recent(limit: activeLimit)
     }
 
+    var canDelete: Bool {
+        deleter != nil
+    }
+
     /// Case-insensitive contains-match against `entry.text`. An empty or
     /// whitespace-only search returns all entries unchanged.
     var filteredEntries: [TranscriptEntry] {
