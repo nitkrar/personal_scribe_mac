@@ -11,4 +11,5 @@ public enum TranscriptStorageError: Error, Sendable {
     case migrationFailed(version: String, underlying: Error)
     case decodingFailed(underlying: Error)
     case queryFailed(underlying: Error)
+    case updateFailed
 }

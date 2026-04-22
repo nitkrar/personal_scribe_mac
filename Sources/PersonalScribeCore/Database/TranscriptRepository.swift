@@ -16,7 +16,7 @@ import GRDB
 ///
 /// SQL shape parity with `SQLiteTranscriptStore` (lines 78-175) is maintained
 /// so Pass 2 can delete the legacy store without query-plan drift.
-public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDeleting {
+public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDeleting, TranscriptUpdating {
     private static let transcriptsFTSTableName = "transcripts_fts"
 
     private let database: AppDatabase
@@ -78,6 +78,32 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                     sql: "DELETE FROM transcripts WHERE id = ?",
                     arguments: [id.uuidString]
                 )
+            }
+            notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
+            operationObserver.record(.writeSucceeded)
+        } catch let error as TranscriptStorageError {
+            operationObserver.record(.writeFailed)
+            throw error
+        } catch {
+            operationObserver.record(.writeFailed)
+            throw TranscriptStorageError.queryFailed(underlying: error)
+        }
+    }
+
+    /// Replaces the transcript text for `id`. Unknown row ids are surfaced as
+    /// `TranscriptStorageError.updateFailed` so callers can keep stale UI state
+    /// from pretending a save succeeded.
+    public func update(id: UUID, text: String) async throws {
+        do {
+            let rowsUpdated = try await database.write { db -> Int in
+                try db.execute(
+                    sql: "UPDATE transcripts SET text = ? WHERE id = ?",
+                    arguments: [text, id.uuidString]
+                )
+                return db.changesCount
+            }
+            guard rowsUpdated > 0 else {
+                throw TranscriptStorageError.updateFailed
             }
             notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
             operationObserver.record(.writeSucceeded)

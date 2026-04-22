@@ -9,3 +9,7 @@ public protocol TranscriptReading: Sendable {
 public protocol TranscriptDeleting: Sendable {
     func delete(id: UUID) async throws
 }
+
+public protocol TranscriptUpdating: Sendable {
+    func update(id: UUID, text: String) async throws
+}

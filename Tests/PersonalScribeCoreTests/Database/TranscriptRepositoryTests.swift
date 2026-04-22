@@ -121,6 +121,39 @@ final class TranscriptRepositoryTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 1.0)
     }
 
+    // MARK: - update
+
+    func test_update_persistsNewTextReadableFromRepository() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        let entry = makeEntry(timestamp: Date(timeIntervalSince1970: 100), text: "before")
+        try await harness.repository.append(entry)
+
+        try await harness.repository.update(id: entry.id, text: "after")
+
+        let entries = await harness.repository.all()
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.text, "after")
+    }
+
+    func test_update_unknownID_throwsUpdateFailed() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        do {
+            try await harness.repository.update(id: UUID(), text: "x")
+            XCTFail("Expected update of unknown row to throw")
+        } catch let error as TranscriptStorageError {
+            guard case .updateFailed = error else {
+                XCTFail("Expected .updateFailed, got \(error)")
+                return
+            }
+        } catch {
+            XCTFail("Expected TranscriptStorageError.updateFailed, got \(error)")
+        }
+    }
+
     // MARK: - recent
 
     func test_recent_limitZero_returnsEmpty() async throws {
