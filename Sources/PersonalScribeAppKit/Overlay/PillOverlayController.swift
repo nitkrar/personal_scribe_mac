@@ -248,13 +248,6 @@ private final class LegacyVisibilityModeBridge: @unchecked Sendable, AppStoreVis
 }
 
 private final class LegacyPillOverlaySessionProvider: @unchecked Sendable, AppStoreSessionProviding {
-    private static let idleProgress = ModelDownloadProgress(
-        phase: .idle,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
     private let statePublisher: AnyPublisher<SessionState, Never>
     private let progressPublisher: AnyPublisher<ModelDownloadProgress?, Never>
 
@@ -266,40 +259,44 @@ private final class LegacyPillOverlaySessionProvider: @unchecked Sendable, AppSt
         self.progressPublisher = progressPublisher
     }
 
-    func stateStream() -> AsyncStream<SessionState> {
+    func snapshotStream() -> AsyncStream<SessionSnapshot> {
         AsyncStream { continuation in
-            let observation = LegacyCancellableBox(
+            let box = LegacySnapshotStreamBox()
+            box.cancellables = [
                 statePublisher
                     .receive(on: DispatchQueue.main)
                     .sink { state in
-                        continuation.yield(state)
-                    }
-            )
-            continuation.onTermination = { _ in
-                observation.cancel()
-            }
-        }
-    }
-
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        AsyncStream { continuation in
-            let observation = LegacyCancellableBox(
+                        box.currentState = state
+                        continuation.yield(
+                            SessionSnapshot(
+                                sessionState: state,
+                                modelDownloadProgress: box.currentProgress
+                            )
+                        )
+                    },
                 progressPublisher
-                    .map { $0 ?? Self.idleProgress }
                     .receive(on: DispatchQueue.main)
                     .sink { progress in
-                        continuation.yield(progress)
+                        box.currentProgress = progress
+                        continuation.yield(
+                            SessionSnapshot(
+                                sessionState: box.currentState,
+                                modelDownloadProgress: progress
+                            )
+                        )
                     }
-            )
+            ]
             continuation.onTermination = { _ in
-                observation.cancel()
+                box.cancellables.forEach { $0.cancel() }
             }
         }
     }
+}
 
-    func lastResult() -> TranscriptionResult? {
-        nil
-    }
+private final class LegacySnapshotStreamBox: @unchecked Sendable {
+    var cancellables: [AnyCancellable] = []
+    var currentState: SessionState = .idle
+    var currentProgress: ModelDownloadProgress?
 }
 
 @MainActor
@@ -340,17 +337,5 @@ private struct LegacyPillOverlayActiveModeProvider: AppStoreActiveModeProviding 
             continuation.yield(nil)
             continuation.finish()
         }
-    }
-}
-
-private final class LegacyCancellableBox: @unchecked Sendable {
-    private let observation: AnyCancellable
-
-    init(_ observation: AnyCancellable) {
-        self.observation = observation
-    }
-
-    func cancel() {
-        observation.cancel()
     }
 }

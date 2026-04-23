@@ -126,6 +126,11 @@ public final class PillOverlayViewModel: ObservableObject {
             return
         }
 
+        if case .completed = sessionState {
+            visibility = .done
+            return
+        }
+
         if case .error(let seshatError) = sessionState {
             visibility = .error(message: Self.pillMessage(for: seshatError))
             return

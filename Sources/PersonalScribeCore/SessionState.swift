@@ -8,5 +8,6 @@ public enum SessionState: Sendable, Equatable {
     /// through the normal state machine. See `#071`.
     case holdRecording
     case transcribing
+    case completed
     case error(PersonalScribeError)
 }

@@ -14,8 +14,7 @@ public protocol SessionPipelining: Actor, Sendable {
     /// state. See `#002`.
     func cancelCapture() async
     func prepareTranscriber() async throws
-    func snapshot() -> PipelineSnapshot
-    func snapshotStream() -> AsyncStream<PipelineSnapshot>
+    func snapshot() -> SessionSnapshot
+    func snapshotStream() -> AsyncStream<SessionSnapshot>
     func audioLevelStream() -> AsyncStream<Float>
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress>
 }

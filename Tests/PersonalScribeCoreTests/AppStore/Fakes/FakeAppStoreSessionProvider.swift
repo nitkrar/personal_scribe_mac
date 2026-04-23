@@ -2,70 +2,67 @@ import Foundation
 import PersonalScribeCore
 
 final class FakeAppStoreSessionProvider: @unchecked Sendable, AppStoreSessionProviding {
-    private var currentState: SessionState
-    private var currentProgress: ModelDownloadProgress
-    private var currentLastResult: TranscriptionResult?
-    private var stateContinuations: [UUID: AsyncStream<SessionState>.Continuation] = [:]
-    private var progressContinuations: [UUID: AsyncStream<ModelDownloadProgress>.Continuation] = [:]
+    private static let idleProgress = ModelDownloadProgress(
+        phase: .idle,
+        fractionCompleted: 0,
+        receivedBytes: 0,
+        expectedBytes: nil
+    )
+
+    private var currentSnapshot: SessionSnapshot
+    private var snapshotContinuations: [UUID: AsyncStream<SessionSnapshot>.Continuation] = [:]
 
     init(
         initialState: SessionState = .idle,
-        initialProgress: ModelDownloadProgress = ModelDownloadProgress(
-            phase: .idle,
-            fractionCompleted: 0,
-            receivedBytes: 0,
-            expectedBytes: nil
-        ),
+        initialProgress: ModelDownloadProgress = FakeAppStoreSessionProvider.idleProgress,
         lastResult: TranscriptionResult? = nil
     ) {
-        currentState = initialState
-        currentProgress = initialProgress
-        currentLastResult = lastResult
+        currentSnapshot = SessionSnapshot(
+            sessionState: initialState,
+            lastCompletedResult: lastResult,
+            modelDownloadProgress: Self.normalize(initialProgress)
+        )
     }
 
-    func stateStream() -> AsyncStream<SessionState> {
+    func snapshotStream() -> AsyncStream<SessionSnapshot> {
         let id = UUID()
 
         return AsyncStream { continuation in
-            continuation.yield(self.currentState)
-            self.stateContinuations[id] = continuation
+            continuation.yield(self.currentSnapshot)
+            self.snapshotContinuations[id] = continuation
             continuation.onTermination = { [weak self] _ in
-                self?.stateContinuations[id] = nil
+                self?.snapshotContinuations[id] = nil
             }
         }
-    }
-
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        let id = UUID()
-
-        return AsyncStream { continuation in
-            continuation.yield(self.currentProgress)
-            self.progressContinuations[id] = continuation
-            continuation.onTermination = { [weak self] _ in
-                self?.progressContinuations[id] = nil
-            }
-        }
-    }
-
-    func lastResult() -> TranscriptionResult? {
-        currentLastResult
     }
 
     func emitState(_ state: SessionState) {
-        currentState = state
-        for continuation in stateContinuations.values {
-            continuation.yield(state)
-        }
+        currentSnapshot.sessionState = state
+        emitSnapshot(currentSnapshot)
     }
 
     func emitProgress(_ progress: ModelDownloadProgress) {
-        currentProgress = progress
-        for continuation in progressContinuations.values {
-            continuation.yield(progress)
-        }
+        currentSnapshot.modelDownloadProgress = Self.normalize(progress)
+        emitSnapshot(currentSnapshot)
     }
 
     func setLastResult(_ result: TranscriptionResult?) {
-        currentLastResult = result
+        currentSnapshot.lastCompletedResult = result
+    }
+
+    func emitSnapshot(_ snapshot: SessionSnapshot) {
+        currentSnapshot = snapshot
+        for continuation in snapshotContinuations.values {
+            continuation.yield(snapshot)
+        }
+    }
+
+    private static func normalize(_ progress: ModelDownloadProgress) -> ModelDownloadProgress? {
+        switch progress.phase {
+        case .idle, .finished:
+            return nil
+        case .downloading, .loading:
+            return progress
+        }
     }
 }

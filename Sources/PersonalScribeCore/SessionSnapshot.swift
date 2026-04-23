@@ -1,12 +1,12 @@
-import PersonalScribeCore
+import Foundation
 
-public struct PipelineSnapshot: Sendable, Equatable {
+public struct SessionSnapshot: Sendable, Equatable {
     public var sessionState: SessionState
     public var activeStage: PipelineStageID?
     public var transcriptProgress: TranscriptProgress?
     public var lastCompletedResult: TranscriptionResult?
     public var recordingDuration: Duration?
-    public var context: PipelineContextSnapshot
+    public var modelDownloadProgress: ModelDownloadProgress?
 
     public init(
         sessionState: SessionState = .idle,
@@ -14,13 +14,13 @@ public struct PipelineSnapshot: Sendable, Equatable {
         transcriptProgress: TranscriptProgress? = nil,
         lastCompletedResult: TranscriptionResult? = nil,
         recordingDuration: Duration? = nil,
-        context: PipelineContextSnapshot
+        modelDownloadProgress: ModelDownloadProgress? = nil
     ) {
         self.sessionState = sessionState
         self.activeStage = activeStage
         self.transcriptProgress = transcriptProgress
         self.lastCompletedResult = lastCompletedResult
         self.recordingDuration = recordingDuration
-        self.context = context
+        self.modelDownloadProgress = modelDownloadProgress
     }
 }

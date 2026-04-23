@@ -3,7 +3,7 @@ import PersonalScribeCore
 @testable import PersonalScribeSession
 
 final class PipelineContractTests: XCTestCase {
-    func testPipelineSnapshotCarriesStageOneStateSurface() {
+    func testSessionSnapshotCarriesStageOneStateSurface() {
         let progress = TranscriptProgress(
             revision: 2,
             text: "Hello world.",
@@ -18,26 +18,12 @@ final class PipelineContractTests: XCTestCase {
             audioDuration: .seconds(1),
             processingDuration: .milliseconds(200)
         )
-        let context = PipelineContextSnapshot(
-            activeMode: ModeDescriptor(
-                id: "dictation-plus",
-                name: "Dictation Plus",
-                voiceModelID: "voice.default",
-                aiModelID: "gpt-5.4",
-                systemPrompt: "Polish the final transcript."
-            ),
-            activeAIModelID: "gpt-5.4",
-            systemPrompt: "Polish the final transcript.",
-            streamingOutputEnabled: true
-        )
-
-        let snapshot = PipelineSnapshot(
+        let snapshot = SessionSnapshot(
             sessionState: .transcribing,
             activeStage: .postProcessing,
             transcriptProgress: progress,
             lastCompletedResult: result,
-            recordingDuration: .seconds(1),
-            context: context
+            recordingDuration: .seconds(1)
         )
 
         XCTAssertEqual(snapshot.sessionState, .transcribing)
@@ -45,17 +31,15 @@ final class PipelineContractTests: XCTestCase {
         XCTAssertEqual(snapshot.transcriptProgress, progress)
         XCTAssertEqual(snapshot.lastCompletedResult, result)
         XCTAssertEqual(snapshot.recordingDuration, .seconds(1))
-        XCTAssertEqual(snapshot.context, context)
     }
 
     func testSessionPipeliningAcceptsTrivialConformer() async throws {
-        let expectedSnapshot = PipelineSnapshot(
+        let expectedSnapshot = SessionSnapshot(
             sessionState: .idle,
             activeStage: nil,
             transcriptProgress: nil,
             lastCompletedResult: nil,
-            recordingDuration: nil,
-            context: PipelineContextSnapshot(streamingOutputEnabled: false)
+            recordingDuration: nil
         )
         let pipeline = StubPipeline(snapshot: expectedSnapshot)
 
@@ -91,9 +75,9 @@ final class PipelineContractTests: XCTestCase {
 }
 
 private actor StubPipeline: SessionPipelining {
-    private let currentSnapshot: PipelineSnapshot
+    private let currentSnapshot: SessionSnapshot
 
-    init(snapshot: PipelineSnapshot) {
+    init(snapshot: SessionSnapshot) {
         self.currentSnapshot = snapshot
     }
 
@@ -105,11 +89,11 @@ private actor StubPipeline: SessionPipelining {
 
     func prepareTranscriber() async throws {}
 
-    func snapshot() -> PipelineSnapshot {
+    func snapshot() -> SessionSnapshot {
         currentSnapshot
     }
 
-    func snapshotStream() -> AsyncStream<PipelineSnapshot> {
+    func snapshotStream() -> AsyncStream<SessionSnapshot> {
         let snapshot = currentSnapshot
         return AsyncStream { continuation in
             continuation.yield(snapshot)

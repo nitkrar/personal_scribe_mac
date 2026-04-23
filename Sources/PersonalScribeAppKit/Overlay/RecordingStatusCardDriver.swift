@@ -23,7 +23,7 @@ enum RecordingStatusCardDriver {
             return recordingMessage(for: progress)
         case .transcribing:
             return transcribingMessage(for: progress)
-        case .idle, .error:
+        case .idle, .completed, .error:
             return nil
         }
     }

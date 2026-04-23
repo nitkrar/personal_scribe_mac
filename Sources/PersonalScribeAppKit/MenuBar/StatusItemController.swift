@@ -201,7 +201,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             switch sessionState {
             case .recording, .holdRecording, .transcribing:
                 return .listening
-            case .idle, .error:
+            case .idle, .completed, .error:
                 return .idle
             }
         }()
@@ -215,7 +215,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             button.contentTintColor = .systemRed
         case .transcribing:
             button.contentTintColor = .systemOrange
-        case .idle, .error:
+        case .idle, .completed, .error:
             button.contentTintColor = nil
         }
 
@@ -342,7 +342,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             return "\(AppBrand.displayName) — recording"
         case .transcribing:
             return "\(AppBrand.displayName) — transcribing"
-        case .idle, .error:
+        case .idle, .completed, .error:
             return AppBrand.displayName
         }
     }

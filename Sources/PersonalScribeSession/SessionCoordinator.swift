@@ -10,17 +10,8 @@ public actor SessionCoordinator {
     private let transcriptRepository: TranscriptRepository?
     private let logger: PersonalScribeLogger
     private let signposter = OSSignposter(subsystem: PersonalScribeLogger.subsystem, category: "prepare")
-    private let downloadProgressBroadcaster = SessionDownloadProgressBroadcaster()
     private let pipeline: SessionPipelineOrchestrator
     private let pipelineTranscriber: CoordinatorPipelineTranscriber
-
-    private var currentState: SessionState = .idle
-    private var mostRecentResult: TranscriptionResult?
-    private var stateContinuations: [UUID: AsyncStream<SessionState>.Continuation] = [:]
-    private var bufferedAudio: [PCMBuffer] = []
-    private var captureTask: Task<Void, Never>?
-    private var downloadProgressObservationTask: Task<Void, Never>?
-    private var recordingSessionTranscriber: (any Transcribing)?
 
     // Step 2.10: additive audio-level multiplexing. Subscribes to the capture
     // service's per-session level stream and fans values out to all
@@ -54,12 +45,6 @@ public actor SessionCoordinator {
             transcriptRepository: transcriptRepository,
             logger: logger
         )
-        Self.startPipelineObservers(
-            owner: self,
-            pipeline: self.pipeline,
-            pipelineTranscriber: self.pipelineTranscriber,
-            broadcaster: self.downloadProgressBroadcaster
-        )
     }
 
     public init(
@@ -87,27 +72,23 @@ public actor SessionCoordinator {
             transcriptRepository: transcriptRepository,
             logger: logger
         )
-        Self.startPipelineObservers(
-            owner: self,
-            pipeline: self.pipeline,
-            pipelineTranscriber: self.pipelineTranscriber,
-            broadcaster: self.downloadProgressBroadcaster
-        )
     }
 
     public func toggle() async {
-        switch currentState {
+        switch await currentDisplayState() {
         case .idle:
             await performStart()
         case .recording, .holdRecording:
             await performStop()
         case .transcribing, .error:
             await performToggle()
+        case .completed:
+            await performStart()
         }
     }
 
     public func startIfIdle() async {
-        guard currentState == .idle else {
+        guard await currentDisplayState() == .idle else {
             return
         }
 
@@ -120,7 +101,7 @@ public actor SessionCoordinator {
     /// instead of silently no-opping on `.idle`. No-op from any other
     /// state. See `#071`.
     public func startHoldIfIdle() async {
-        guard currentState == .idle else {
+        guard await currentDisplayState() == .idle else {
             return
         }
 
@@ -128,7 +109,7 @@ public actor SessionCoordinator {
     }
 
     public func stopIfRecording() async {
-        guard currentState == .recording else {
+        guard await currentDisplayState() == .recording else {
             return
         }
 
@@ -142,10 +123,10 @@ public actor SessionCoordinator {
     /// how the session started. No-op from `.idle`, `.transcribing`,
     /// or `.error`.
     public func stopIfActive() async {
-        switch currentState {
+        switch await currentDisplayState() {
         case .recording, .holdRecording:
             await performStop()
-        case .idle, .transcribing, .error:
+        case .idle, .completed, .transcribing, .error:
             return
         }
     }
@@ -156,30 +137,50 @@ public actor SessionCoordinator {
     /// skipped entirely. Preferred entry point for Esc and the pill ✕
     /// button (#002). No-op from `.idle`, `.transcribing`, or `.error`.
     public func cancelIfActive() async {
-        switch currentState {
+        switch await currentDisplayState() {
         case .recording, .holdRecording:
             await performCancel()
-        case .idle, .transcribing, .error:
+        case .idle, .completed, .transcribing, .error:
             return
         }
     }
 
-    public func state() -> SessionState {
-        currentState
+    public func state() async -> SessionState {
+        await currentDisplayState()
     }
 
-    public func stateStream() -> AsyncStream<SessionState> {
-        let id = UUID()
+    public func stateStream() async -> AsyncStream<SessionState> {
+        let snapshotStream = await pipeline.snapshotStream()
 
         return AsyncStream { continuation in
-            continuation.yield(self.currentState)
-            self.stateContinuations[id] = continuation
-            continuation.onTermination = { [self] _ in
-                Task {
-                    await self.removeContinuation(id: id)
+            let bridgeTask = Task {
+                var lastYielded: SessionState?
+
+                for await snapshot in snapshotStream {
+                    let state = Self.displayState(for: snapshot.sessionState)
+                    guard lastYielded != state else {
+                        continue
+                    }
+
+                    lastYielded = state
+                    continuation.yield(state)
                 }
+
+                continuation.finish()
+            }
+
+            continuation.onTermination = { _ in
+                bridgeTask.cancel()
             }
         }
+    }
+
+    public func snapshot() async -> SessionSnapshot {
+        await pipeline.snapshot()
+    }
+
+    public func snapshotStream() async -> AsyncStream<SessionSnapshot> {
+        await pipeline.snapshotStream()
     }
 
     /// Multiplexed audio-level stream (phase-2 step 2.10). Yields the latest
@@ -207,8 +208,8 @@ public actor SessionCoordinator {
         currentAudioLevel
     }
 
-    public func lastResult() -> TranscriptionResult? {
-        mostRecentResult
+    public func lastResult() async -> TranscriptionResult? {
+        await pipeline.snapshot().lastCompletedResult
     }
 
     /// Idempotent passthrough for eager model preparation; `prepare()` coalesces repeated calls.
@@ -219,12 +220,8 @@ public actor SessionCoordinator {
         try await pipeline.prepareTranscriber()
     }
 
-    public func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        downloadProgressBroadcaster.stream()
-    }
-
-    private func removeContinuation(id: UUID) {
-        stateContinuations[id] = nil
+    public func modelDownloadProgress() async -> AsyncStream<ModelDownloadProgress> {
+        await pipeline.modelDownloadProgress()
     }
 
     private func removeAudioLevelContinuation(id: UUID) {
@@ -242,23 +239,15 @@ public actor SessionCoordinator {
     private func performToggle() async {
         await startAudioLevelRelayIfNeeded()
         await pipeline.toggleCapture()
-        await refreshFromPipelineSnapshot()
     }
 
     private func performHoldStart() async {
         await startAudioLevelRelayIfNeeded()
         await pipeline.startHoldCapture()
-        await refreshFromPipelineSnapshot()
     }
 
     private func performCancel() async {
         await pipeline.cancelCapture()
-        await refreshFromPipelineSnapshot()
-    }
-
-    private func refreshFromPipelineSnapshot() async {
-        let snapshot = await pipeline.snapshot()
-        applyPipelineSnapshot(snapshot)
     }
 
     private func startAudioLevelRelayIfNeeded() async {
@@ -333,37 +322,6 @@ public actor SessionCoordinator {
         }
     }
 
-    private static func startPipelineObservers(
-        owner: SessionCoordinator,
-        pipeline: SessionPipelineOrchestrator,
-        pipelineTranscriber: CoordinatorPipelineTranscriber,
-        broadcaster: SessionDownloadProgressBroadcaster
-    ) {
-        Task { [weak owner, pipeline] in
-            let stream = await pipeline.snapshotStream()
-            for await snapshot in stream {
-                guard let owner else {
-                    return
-                }
-                await owner.applyPipelineSnapshot(snapshot)
-            }
-        }
-
-        Task {
-            let stream = pipelineTranscriber.modelDownloadProgress()
-            for await progress in stream {
-                broadcaster.update(progress)
-            }
-        }
-    }
-
-    private func publish(_ state: SessionState) {
-        currentState = state
-        for continuation in stateContinuations.values {
-            continuation.yield(state)
-        }
-    }
-
     /// Update the cached audio level and fan out to all subscribers.
     private func publishAudioLevel(_ level: Float) {
         currentAudioLevel = level
@@ -372,10 +330,17 @@ public actor SessionCoordinator {
         }
     }
 
-    private func applyPipelineSnapshot(_ snapshot: PipelineSnapshot) {
-        mostRecentResult = snapshot.lastCompletedResult
-        if currentState != snapshot.sessionState {
-            publish(snapshot.sessionState)
+    private func currentDisplayState() async -> SessionState {
+        let snapshot = await pipeline.snapshot()
+        return Self.displayState(for: snapshot.sessionState)
+    }
+
+    private static func displayState(for state: SessionState) -> SessionState {
+        switch state {
+        case .completed:
+            return .idle
+        case .idle, .recording, .holdRecording, .transcribing, .error:
+            return state
         }
     }
 }

@@ -165,7 +165,7 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
     }
 
-    func testLastTranscriptionResultRefreshesOnlyOnTranscribingToIdleTransition() async {
+    func testLastTranscriptionResultRefreshesOnlyOnCompletedSessionSnapshot() async {
         let session = FakeAppStoreSessionProvider()
         let store = makeStore(
             session: session,
@@ -199,7 +199,7 @@ final class AppStoreTests: XCTestCase {
             store.snapshot.sessionState == .transcribing
         }
         session.setLastResult(expected)
-        session.emitState(.idle)
+        session.emitState(.completed)
         await waitUntil {
             store.snapshot.lastTranscriptionResult == expected
         }
@@ -218,7 +218,7 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.lastTranscriptionResult, expected)
     }
 
-    func testDoneVisibilityIsTransientAfterTranscribingToIdle() async {
+    func testDoneVisibilityIsTransientAfterCompletedSessionSnapshot() async {
         let session = FakeAppStoreSessionProvider()
         let clock = ManualAppStoreClock()
         let store = makeStore(
@@ -236,7 +236,7 @@ final class AppStoreTests: XCTestCase {
             store.snapshot.pillVisibility == .transcribing
         }
 
-        session.emitState(.idle)
+        session.emitState(.completed)
         await waitUntil {
             store.snapshot.pillVisibility == .done
         }
@@ -276,7 +276,7 @@ final class AppStoreTests: XCTestCase {
             store.snapshot.pillVisibility == .transcribing
         }
 
-        session.emitState(.idle)
+        session.emitState(.completed)
         await waitUntil {
             store.snapshot.pillVisibility == .done
         }

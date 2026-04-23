@@ -21,7 +21,6 @@ public final class AppStore: ObservableObject {
     private var currentVisibilityMode: AppStoreVisibilityMode
     private var hasStarted = false
     private var sessionObservationTask: Task<Void, Never>?
-    private var modelDownloadProgressObservationTask: Task<Void, Never>?
     private var permissionsObservationTask: Task<Void, Never>?
     private var modeObservationTask: Task<Void, Never>?
     private var pillTransitionTask: Task<Void, Never>?
@@ -52,16 +51,16 @@ public final class AppStore: ObservableObject {
         }
 
         let initialVisibilityMode = visibilityModeSource.currentVisibilityMode()
+        let initialSession = SessionSnapshot()
         currentVisibilityMode = initialVisibilityMode
         snapshot = AppStoreSnapshot(
-            sessionState: .idle,
+            session: initialSession,
             permissions: permissions.statusSnapshot(),
             activeMode: activeModeSource.currentActiveMode(),
-            modelDownloadProgress: nil,
             pillVisibility: Self.derivePillVisibility(
                 mode: initialVisibilityMode,
-                sessionState: .idle,
-                progress: nil
+                sessionState: initialSession.sessionState,
+                progress: initialSession.modelDownloadProgress
             ),
             lastTranscriptionResult: nil,
             currentRecordingDuration: nil
@@ -81,15 +80,9 @@ public final class AppStore: ObservableObject {
         let visibilityModeSource = self.visibilityModeSource
 
         sessionObservationTask = Task { [weak self] in
-            for await state in session.stateStream() {
+            for await sessionSnapshot in session.snapshotStream() {
                 guard let self else { return }
-                self.handleSessionStateChange(state)
-            }
-        }
-        modelDownloadProgressObservationTask = Task { [weak self] in
-            for await progress in session.modelDownloadProgress() {
-                guard let self else { return }
-                self.handleModelDownloadProgressChange(progress)
+                self.handleSessionSnapshotChange(sessionSnapshot)
             }
         }
         permissionsObservationTask = Task { [weak self] in
@@ -122,11 +115,12 @@ public final class AppStore: ObservableObject {
         }
     }
 
-    private func handleSessionStateChange(_ newState: SessionState) {
-        let previousState = snapshot.sessionState
+    private func handleSessionSnapshotChange(_ newSession: SessionSnapshot) {
+        let previousState = snapshot.session.sessionState
+        let newState = newSession.sessionState
 
         updateSnapshot { snapshot in
-            snapshot.sessionState = newState
+            snapshot.session = newSession
         }
 
         if !previousState.isRecording && newState.isRecording {
@@ -135,9 +129,13 @@ public final class AppStore: ObservableObject {
             stopRecordingDurationLoop()
         }
 
-        if previousState.isTranscribing && newState.isIdle {
+        if newState == .completed {
+            guard previousState != .completed else {
+                return
+            }
+
             updateSnapshot { snapshot in
-                snapshot.lastTranscriptionResult = session.lastResult()
+                snapshot.lastTranscriptionResult = newSession.lastCompletedResult
                 snapshot.pillVisibility = .done
             }
             schedulePillTransition(after: Self.doneVisibilityDuration)
@@ -145,6 +143,10 @@ public final class AppStore: ObservableObject {
         }
 
         if case .error(let error) = newState {
+            guard previousState != newState else {
+                return
+            }
+
             updateSnapshot { snapshot in
                 snapshot.pillVisibility = .error(message: Self.pillMessage(for: error))
             }
@@ -152,24 +154,6 @@ public final class AppStore: ObservableObject {
             return
         }
 
-        cancelPillTransition()
-        rederivePillVisibility()
-    }
-
-    private func handleModelDownloadProgressChange(_ progress: ModelDownloadProgress) {
-        let normalized = Self.normalize(progress)
-        let previousProgress = snapshot.modelDownloadProgress
-
-        // Skip no-op yields (initial-stream replays, duplicate events) so they
-        // don't clobber a live `.done`/`.error(message:)` transient that the
-        // session-state handler just scheduled.
-        if normalized == previousProgress {
-            return
-        }
-
-        updateSnapshot { snapshot in
-            snapshot.modelDownloadProgress = normalized
-        }
         cancelPillTransition()
         rederivePillVisibility()
     }
@@ -269,7 +253,7 @@ public final class AppStore: ObservableObject {
     private func rederivePillVisibility() {
         let visibility = Self.derivePillVisibility(
             mode: currentVisibilityMode,
-            sessionState: snapshot.sessionState,
+            sessionState: snapshot.session.sessionState,
             progress: snapshot.modelDownloadProgress
         )
 
@@ -296,15 +280,6 @@ public final class AppStore: ObservableObject {
         var nextSnapshot = snapshot
         mutate(&nextSnapshot)
         snapshot = nextSnapshot
-    }
-
-    private static func normalize(_ progress: ModelDownloadProgress) -> ModelDownloadProgress? {
-        switch progress.phase {
-        case .idle, .finished:
-            return nil
-        case .downloading, .loading:
-            return progress
-        }
     }
 
     private static func derivePillVisibility(
@@ -341,6 +316,8 @@ public final class AppStore: ObservableObject {
             return .holdToRecord
         case .transcribing:
             return transcribingVisibility(progress: progress)
+        case .completed:
+            return idleVisibility(for: mode, progress: progress)
         case .error:
             return .hidden
         }

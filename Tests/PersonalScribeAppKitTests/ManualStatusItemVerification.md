@@ -10,7 +10,7 @@ or `StatusItemIconLoader`.
 
 ## Baseline icon
 
-- [ ] **MV-SI-1** Launch the packaged `.app` (via `scripts/package.sh -ir`
+- [ ] **MV-SI-1** Launch the packaged `.app` (via `scripts/package.py -ir`
   or DMG install). The menu-bar status item shows the **quill glyph**,
   not the text letter "S". Regression guard for the
   `NSImage(named:) -> nil` bug fixed by loading through `Bundle.module`.

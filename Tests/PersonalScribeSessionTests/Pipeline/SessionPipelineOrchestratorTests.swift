@@ -12,9 +12,9 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         var iterator = stream.makeAsyncIterator()
         let initialSnapshot = await iterator.next()
 
-        XCTAssertEqual(initialSnapshot, PipelineSnapshot(context: context))
+        XCTAssertEqual(initialSnapshot, SessionSnapshot())
         let liveSnapshot = await orchestrator.snapshot()
-        XCTAssertEqual(liveSnapshot, PipelineSnapshot(context: context))
+        XCTAssertEqual(liveSnapshot, SessionSnapshot())
     }
 
     func testToggleCapturePublishesStagesProgressAndFinalResult() async throws {
@@ -38,11 +38,11 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
 
         let stream = await orchestrator.snapshotStream()
-        let observedTask = Task { () -> [PipelineSnapshot] in
-            var snapshots: [PipelineSnapshot] = []
+        let observedTask = Task { () -> [SessionSnapshot] in
+            var snapshots: [SessionSnapshot] = []
             for await snapshot in stream {
                 snapshots.append(snapshot)
-                if snapshot.sessionState == .idle && snapshot.lastCompletedResult != nil {
+                if snapshot.sessionState == .completed && snapshot.lastCompletedResult != nil {
                     break
                 }
             }
@@ -83,11 +83,10 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                 sourceStage: .postProcessing
             )
         )
-        XCTAssertEqual(finalSnapshot.sessionState, .idle)
+        XCTAssertEqual(finalSnapshot.sessionState, .completed)
         XCTAssertNil(finalSnapshot.activeStage)
         XCTAssertEqual(finalSnapshot.lastCompletedResult?.text, "Hello world.")
         XCTAssertEqual(finalSnapshot.recordingDuration, .seconds(1))
-        XCTAssertEqual(finalSnapshot.context, context)
         XCTAssertEqual(partials, [rawProgress, cleanedProgress])
         XCTAssertEqual(
             finals,
@@ -123,8 +122,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
 
         let stream = await orchestrator.snapshotStream()
-        let observedTask = Task { () -> [PipelineSnapshot] in
-            var snapshots: [PipelineSnapshot] = []
+        let observedTask = Task { () -> [SessionSnapshot] in
+            var snapshots: [SessionSnapshot] = []
             for await snapshot in stream.prefix(5) {
                 snapshots.append(snapshot)
             }
@@ -169,8 +168,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
 
         let stream = await orchestrator.snapshotStream()
-        let observedTask = Task { () -> [PipelineSnapshot] in
-            var snapshots: [PipelineSnapshot] = []
+        let observedTask = Task { () -> [SessionSnapshot] in
+            var snapshots: [SessionSnapshot] = []
             for await snapshot in stream {
                 snapshots.append(snapshot)
                 if snapshot.sessionState == .error(.recordingTooShort) {
@@ -216,11 +215,11 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
 
         let stream = await orchestrator.snapshotStream()
-        let observedTask = Task { () -> [PipelineSnapshot] in
-            var snapshots: [PipelineSnapshot] = []
+        let observedTask = Task { () -> [SessionSnapshot] in
+            var snapshots: [SessionSnapshot] = []
             for await snapshot in stream {
                 snapshots.append(snapshot)
-                if snapshot.sessionState == .idle && snapshot.lastCompletedResult != nil {
+                if snapshot.sessionState == .completed && snapshot.lastCompletedResult != nil {
                     break
                 }
             }
@@ -240,7 +239,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         }
         let finals = await sink.finalDeliveries()
 
-        XCTAssertEqual(observed.last?.sessionState, .idle)
+        XCTAssertEqual(observed.last?.sessionState, .completed)
         XCTAssertEqual(observed.last?.lastCompletedResult?.text, "Hello.")
         XCTAssertEqual(finals.count, 1)
     }
@@ -259,8 +258,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
 
         let stream = await orchestrator.snapshotStream()
-        let observedTask = Task { () -> [PipelineSnapshot] in
-            var snapshots: [PipelineSnapshot] = []
+        let observedTask = Task { () -> [SessionSnapshot] in
+            var snapshots: [SessionSnapshot] = []
             for await snapshot in stream.prefix(5) {
                 snapshots.append(snapshot)
             }
@@ -364,7 +363,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         let snapshot = await orchestrator.snapshot()
 
-        XCTAssertEqual(snapshot.sessionState, .idle)
+        XCTAssertEqual(snapshot.sessionState, .completed)
         XCTAssertEqual(snapshot.lastCompletedResult?.text, "Hello.")
         let transcribeCount1 = await transcriber.transcribeCallCount()
         XCTAssertEqual(transcribeCount1, 1)
@@ -622,11 +621,11 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
 
         let stream = await orchestrator.snapshotStream()
-        let observedTask = Task { () -> [PipelineSnapshot] in
-            var snapshots: [PipelineSnapshot] = []
+        let observedTask = Task { () -> [SessionSnapshot] in
+            var snapshots: [SessionSnapshot] = []
             for await snapshot in stream {
                 snapshots.append(snapshot)
-                if snapshot.sessionState == .idle && snapshot.lastCompletedResult != nil {
+                if snapshot.sessionState == .completed && snapshot.lastCompletedResult != nil {
                     break
                 }
             }
@@ -645,7 +644,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                       "Pipeline must transition through .holdRecording")
         XCTAssertTrue(states.contains(.transcribing),
                       "Pipeline must transition through .transcribing after stop")
-        XCTAssertEqual(observed.last?.sessionState, .idle)
+        XCTAssertEqual(observed.last?.sessionState, .completed)
         XCTAssertEqual(observed.last?.lastCompletedResult?.text, "Hello from hold.")
     }
 
@@ -890,7 +889,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
     }
 
-    private func deduplicatedStages(from snapshots: [PipelineSnapshot]) -> [PipelineStageID] {
+    private func deduplicatedStages(from snapshots: [SessionSnapshot]) -> [PipelineStageID] {
         var stages: [PipelineStageID] = []
         for stage in snapshots.compactMap(\.activeStage) where stages.last != stage {
             stages.append(stage)
@@ -898,7 +897,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         return stages
     }
 
-    private func deduplicatedSessionStates(from snapshots: [PipelineSnapshot]) -> [SessionState] {
+    private func deduplicatedSessionStates(from snapshots: [SessionSnapshot]) -> [SessionState] {
         var states: [SessionState] = []
         for state in snapshots.map(\.sessionState) where states.last != state {
             states.append(state)
@@ -907,7 +906,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
     }
 
     private func progressSnapshotsByRevision(
-        from snapshots: [PipelineSnapshot]
+        from snapshots: [SessionSnapshot]
     ) -> [Int: TranscriptProgress] {
         var revisions: [Int: TranscriptProgress] = [:]
         for progress in snapshots.compactMap(\.transcriptProgress) {

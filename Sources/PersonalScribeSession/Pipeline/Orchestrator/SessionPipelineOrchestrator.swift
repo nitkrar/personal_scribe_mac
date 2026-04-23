@@ -10,10 +10,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private let contextProvider: any PipelineContextProviding
     private let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
 
-    private var currentSnapshot: PipelineSnapshot
+    private var currentSnapshot: SessionSnapshot
     private var activeContext: PipelineContextSnapshot
     private var latestStageFailure: PipelineStageFailure?
-    private var snapshotContinuations: [UUID: AsyncStream<PipelineSnapshot>.Continuation] = [:]
+    private var snapshotContinuations: [UUID: AsyncStream<SessionSnapshot>.Continuation] = [:]
     private var bufferedAudio: [PCMBuffer] = []
     private var captureTask: Task<Void, Never>?
     private var audioLevelContinuations: [UUID: AsyncStream<Float>.Continuation] = [:]
@@ -67,12 +67,23 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.contextProvider = contextProvider
         self.persistenceHandler = persistenceHandler
         self.activeContext = initialContext
-        self.currentSnapshot = PipelineSnapshot(context: initialContext)
+        self.currentSnapshot = SessionSnapshot()
+        Task { [weak self] in
+            for await progress in transcriber.modelDownloadProgress() {
+                guard let self else {
+                    return
+                }
+
+                await self.publish { snapshot in
+                    snapshot.modelDownloadProgress = Self.normalizeModelDownloadProgress(progress)
+                }
+            }
+        }
     }
 
     public func toggleCapture() async {
         switch currentSnapshot.sessionState {
-        case .idle:
+        case .idle, .completed:
             await startRecording()
         case .recording, .holdRecording:
             await stopRecordingAndRunPipeline()
@@ -91,7 +102,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
     public func startHoldCapture() async {
         switch currentSnapshot.sessionState {
-        case .idle:
+        case .idle, .completed:
             await startHoldRecording()
         case .error:
             publish { snapshot in
@@ -110,7 +121,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         switch currentSnapshot.sessionState {
         case .recording, .holdRecording:
             await discardActiveCapture()
-        case .idle, .transcribing, .error:
+        case .idle, .completed, .transcribing, .error:
             logger.info("Ignored cancel from non-active session state")
         }
     }
@@ -119,11 +130,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         try await transcriber.prepare()
     }
 
-    public func snapshot() -> PipelineSnapshot {
+    public func snapshot() -> SessionSnapshot {
         currentSnapshot
     }
 
-    public func snapshotStream() -> AsyncStream<PipelineSnapshot> {
+    public func snapshotStream() -> AsyncStream<SessionSnapshot> {
         let id = UUID()
 
         return AsyncStream { continuation in
@@ -167,8 +178,23 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         audioLevelContinuations[id] = nil
     }
 
-    private func publish(_ mutation: (inout PipelineSnapshot) -> Void) {
+    private static func normalizeModelDownloadProgress(
+        _ progress: ModelDownloadProgress
+    ) -> ModelDownloadProgress? {
+        switch progress.phase {
+        case .idle, .finished:
+            return nil
+        case .downloading, .loading:
+            return progress
+        }
+    }
+
+    private func publish(_ mutation: (inout SessionSnapshot) -> Void) {
+        let previous = currentSnapshot
         mutation(&currentSnapshot)
+        guard currentSnapshot != previous else {
+            return
+        }
         let snapshot = currentSnapshot
         for continuation in snapshotContinuations.values {
             continuation.yield(snapshot)
@@ -217,7 +243,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.activeStage = .capture
                 snapshot.transcriptProgress = nil
                 snapshot.recordingDuration = .zero
-                snapshot.context = activeContext
             }
 
             captureTask = Task { [weak self] in
@@ -249,7 +274,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             snapshot.activeStage = nil
             snapshot.transcriptProgress = nil
             snapshot.recordingDuration = nil
-            snapshot.context = activeContext
         }
     }
 
@@ -272,7 +296,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             snapshot.activeStage = .capture
             snapshot.transcriptProgress = nil
             snapshot.recordingDuration = .zero
-            snapshot.context = activeContext
         }
 
         do {
@@ -344,7 +367,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.activeStage = .transcription
                 snapshot.transcriptProgress = rawProgress
                 snapshot.recordingDuration = rawResult.audioDuration
-                snapshot.context = activeContext
             }
 
             try await deliverPartialIfEnabled(rawProgress)
@@ -399,12 +421,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             try await deliverFinal(finalResult)
 
             publish { snapshot in
-                snapshot.sessionState = .idle
+                snapshot.sessionState = .completed
                 snapshot.activeStage = nil
                 snapshot.transcriptProgress = cleanedProgress
                 snapshot.lastCompletedResult = finalResult
                 snapshot.recordingDuration = rawResult.audioDuration
-                snapshot.context = activeContext
             }
         } catch let failure as PipelineStageFailure {
             handleStageFailure(failure)
