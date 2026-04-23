@@ -1,6 +1,7 @@
 import Foundation
 import os.signpost
 import PersonalScribeCore
+import PersonalScribeVAD
 
 public actor SessionCoordinator {
     private let capture: any AudioCapturing
@@ -26,7 +27,9 @@ public actor SessionCoordinator {
         capture: any AudioCapturing,
         transcriber: any Transcribing,
         logger: PersonalScribeLogger,
-        transcriptRepository: TranscriptRepository? = nil
+        transcriptRepository: TranscriptRepository? = nil,
+        vadProvider: (any VadProviding)? = nil,
+        vadPreferences: (any VadPreferencesReading)? = nil
     ) {
         let pipelineTranscriber = CoordinatorPipelineTranscriber(
             fixedTranscriber: transcriber,
@@ -43,8 +46,13 @@ public actor SessionCoordinator {
             capture: capture,
             pipelineTranscriber: pipelineTranscriber,
             transcriptRepository: transcriptRepository,
-            logger: logger
+            logger: logger,
+            vadProvider: vadProvider,
+            vadPreferences: vadPreferences
         )
+        Task { [weak self] in
+            await self?.installAutoStopHandler()
+        }
     }
 
     public init(
@@ -52,7 +60,9 @@ public actor SessionCoordinator {
         modelService: any ModelService,
         transcriberProvider: any ModelBoundTranscriberProviding,
         logger: PersonalScribeLogger,
-        transcriptRepository: TranscriptRepository? = nil
+        transcriptRepository: TranscriptRepository? = nil,
+        vadProvider: (any VadProviding)? = nil,
+        vadPreferences: (any VadPreferencesReading)? = nil
     ) {
         let pipelineTranscriber = CoordinatorPipelineTranscriber(
             modelService: modelService,
@@ -70,8 +80,24 @@ public actor SessionCoordinator {
             capture: capture,
             pipelineTranscriber: pipelineTranscriber,
             transcriptRepository: transcriptRepository,
-            logger: logger
+            logger: logger,
+            vadProvider: vadProvider,
+            vadPreferences: vadPreferences
         )
+        Task { [weak self] in
+            await self?.installAutoStopHandler()
+        }
+    }
+
+    /// Installs the VAD auto-stop handler on the pipeline. Fires from a
+    /// deferred Task to avoid referencing `self` before init completes. The
+    /// handler captures `[weak self]` and routes through `stopIfActive()` so
+    /// it's idempotent vs. concurrent manual stops (actor-serialized, first
+    /// wins, second observes post-stop state and no-ops).
+    private func installAutoStopHandler() async {
+        await pipeline.setAutoStopHandler { [weak self] in
+            await self?.stopIfActive()
+        }
     }
 
     public func toggle() async {
@@ -286,7 +312,9 @@ public actor SessionCoordinator {
         capture: any AudioCapturing,
         pipelineTranscriber: CoordinatorPipelineTranscriber,
         transcriptRepository: TranscriptRepository?,
-        logger: PersonalScribeLogger
+        logger: PersonalScribeLogger,
+        vadProvider: (any VadProviding)?,
+        vadPreferences: (any VadPreferencesReading)?
     ) -> SessionPipelineOrchestrator {
         SessionPipelineOrchestrator(
             capture: CoordinatorPipelineCapture(
@@ -301,7 +329,9 @@ public actor SessionCoordinator {
             persistenceHandler: makePersistenceHandler(
                 transcriptRepository: transcriptRepository,
                 logger: logger
-            )
+            ),
+            vadProvider: vadProvider,
+            vadPreferences: vadPreferences
         )
     }
 

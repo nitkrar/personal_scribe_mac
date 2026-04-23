@@ -4,6 +4,7 @@ import PersonalScribeAudio
 import PersonalScribeCore
 import PersonalScribeSession
 import PersonalScribeTranscription
+import PersonalScribeVAD
 
 @MainActor
 public enum AppComposition {
@@ -48,6 +49,28 @@ public enum AppComposition {
         AppKitActiveModeProvider(modelService: modelService)
     }()
 
+    /// VAD provider — nil if the bundled Silero `.mlmodelc` resource failed
+    /// to resolve (dev / shipping error). Failure is silent: the orchestrator
+    /// treats nil identically to the "feature disabled" path, so recording
+    /// still works exactly as it did pre-#046. Not routed through
+    /// `SessionState.error` per design lock.
+    public static let vadProvider: (any VadProviding)? = {
+        let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+        do {
+            return try FluidAudioVadProvider()
+        } catch {
+            logger.error(
+                "Bundled VAD model not found; auto-stop silently disabled",
+                error: error
+            )
+            return nil
+        }
+    }()
+
+    /// VAD preferences reader — UserDefaults-backed snapshot. Orchestrator
+    /// calls `current()` once per session start.
+    public static let vadPreferences: any VadPreferencesReading = UserDefaultsVadPreferencesReader()
+
     public static let sessionCoordinator: SessionCoordinator = {
         let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
         let capture = AVAudioCaptureService(
@@ -61,7 +84,9 @@ public enum AppComposition {
             modelService: modelService,
             transcriberProvider: transcriberProvider,
             logger: logger,
-            transcriptRepository: transcriptRepository
+            transcriptRepository: transcriptRepository,
+            vadProvider: vadProvider,
+            vadPreferences: vadPreferences
         )
     }()
 

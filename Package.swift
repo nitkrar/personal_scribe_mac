@@ -21,6 +21,10 @@ let package = Package(
             targets: ["PersonalScribeTranscription"]
         ),
         .library(
+            name: "PersonalScribeVAD",
+            targets: ["PersonalScribeVAD"]
+        ),
+        .library(
             name: "PersonalScribeSession",
             targets: ["PersonalScribeSession"]
         ),
@@ -67,11 +71,23 @@ let package = Package(
             path: "Sources/PersonalScribeTranscription"
         ),
         .target(
+            name: "PersonalScribeVAD",
+            dependencies: [
+                "PersonalScribeCore",
+                .product(name: "FluidAudio", package: "FluidAudio"),
+            ],
+            path: "Sources/PersonalScribeVAD",
+            resources: [
+                .copy("Resources/silero-vad-unified-256ms-v6.0.0.mlmodelc"),
+            ]
+        ),
+        .target(
             name: "PersonalScribeSession",
             dependencies: [
                 "PersonalScribeCore",
                 "PersonalScribeAudio",
                 "PersonalScribeTranscription",
+                "PersonalScribeVAD",
             ],
             path: "Sources/PersonalScribeSession"
         ),
@@ -89,6 +105,7 @@ let package = Package(
                 "PersonalScribeSession",
                 "PersonalScribeAudio",
                 "PersonalScribeTranscription",
+                "PersonalScribeVAD",
             ],
             path: "Sources/PersonalScribeAppKit",
             resources: [
@@ -133,10 +150,18 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "PersonalScribeVADTests",
+            dependencies: [
+                "PersonalScribeVAD",
+            ],
+            path: "Tests/PersonalScribeVADTests"
+        ),
+        .testTarget(
             name: "PersonalScribeSessionTests",
             dependencies: [
                 "PersonalScribeSession",
                 "PersonalScribeTestSupport",
+                "PersonalScribeVAD",
             ],
             path: "Tests/PersonalScribeSessionTests"
         ),
@@ -156,6 +181,7 @@ let package = Package(
                 "ManualSQLiteVerification.md",
                 "ManualStatusItemVerification.md",
                 "ManualTranscriptionsVerification.md",
+                "ManualVADVerification.md",
                 "ManualVisualVerification.md",
                 "ManualWeek1Verification.md",
             ]

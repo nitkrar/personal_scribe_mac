@@ -1,5 +1,6 @@
 import Foundation
 import PersonalScribeCore
+import PersonalScribeVAD
 
 public actor SessionPipelineOrchestrator: SessionPipelining {
     private let capture: any AudioCapturing
@@ -9,6 +10,20 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private let outputSink: any PipelineOutputSink
     private let contextProvider: any PipelineContextProviding
     private let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
+    /// VAD provider — nil means the feature is compiled in but not wired (tests)
+    /// OR the bundled model failed to load and the provider elected to go silent.
+    /// Orchestrator treats either case identically: no VAD monitoring.
+    private let vadProvider: (any VadProviding)?
+    /// Preference reader called ONCE per session start (in `consumeCaptureStream`).
+    /// Mid-session preference changes do not apply to the current recording;
+    /// they take effect on the next session. Documented for users in the
+    /// Settings card copy.
+    private let vadPreferences: (any VadPreferencesReading)?
+    /// Installed by `SessionCoordinator` via `setAutoStopHandler(_:)` after
+    /// init. Fires from `consumeCaptureStream` via a detached Task so the
+    /// capture consumer can keep draining buffers — inline await would
+    /// self-deadlock on `captureTask.value`. See #046 codex design review.
+    private var onAutoStopRequested: (@Sendable () async -> Void)?
 
     private var currentSnapshot: SessionSnapshot
     private var activeContext: PipelineContextSnapshot
@@ -28,7 +43,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         logger: PersonalScribeLogger,
         postProcessingPipeline: any PostProcessingPipeline = DefaultPostProcessingPipeline(),
         outputSink: any PipelineOutputSink,
-        contextProvider: any PipelineContextProviding
+        contextProvider: any PipelineContextProviding,
+        vadProvider: (any VadProviding)? = nil,
+        vadPreferences: (any VadPreferencesReading)? = nil
     ) {
         let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
         if let repository = transcriptRepository {
@@ -45,7 +62,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
             contextProvider: contextProvider,
-            persistenceHandler: persistenceHandler
+            persistenceHandler: persistenceHandler,
+            vadProvider: vadProvider,
+            vadPreferences: vadPreferences
         )
     }
 
@@ -56,7 +75,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         postProcessingPipeline: any PostProcessingPipeline,
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
-        persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
+        persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?,
+        vadProvider: (any VadProviding)? = nil,
+        vadPreferences: (any VadPreferencesReading)? = nil
     ) {
         let initialContext = contextProvider.currentContext()
         self.capture = capture
@@ -66,6 +87,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.outputSink = outputSink
         self.contextProvider = contextProvider
         self.persistenceHandler = persistenceHandler
+        self.vadProvider = vadProvider
+        self.vadPreferences = vadPreferences
         self.activeContext = initialContext
         self.currentSnapshot = SessionSnapshot()
         Task { [weak self] in
@@ -128,6 +151,16 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
     public func prepareTranscriber() async throws {
         try await transcriber.prepare()
+    }
+
+    /// Install the closure called when VAD fires `.speechEnded`. `SessionCoordinator`
+    /// calls this from a post-init Task; until it runs, VAD is cleanly
+    /// disabled for any in-flight session — `consumeCaptureStream` snapshots
+    /// the handler at session start and skips `makeSession` entirely when
+    /// the handler is nil, so no VAD handle is created and no silent-sink
+    /// on the one-shot `vadAlreadyFired` flag is possible.
+    public func setAutoStopHandler(_ handler: @escaping @Sendable () async -> Void) {
+        self.onAutoStopRequested = handler
     }
 
     public func snapshot() -> SessionSnapshot {
@@ -322,6 +355,13 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     private func stopRecordingAndRunPipeline() async {
+        // Invariant: `capture.stop()` MUST happen BEFORE `captureTask?.value`.
+        // The VAD auto-stop path (#046) fires this method from a detached Task
+        // while the consumer loop is still live inside `captureTask`. Awaiting
+        // `captureTask.value` first would self-wait on the task that hasn't
+        // exited yet — the only thing that ends the loop is `capture.stop()`
+        // closing the stream. Reversing this order reintroduces the codex-
+        // caught deadlock.
         await capture.stop()
         await captureTask?.value
         captureTask = nil
@@ -510,16 +550,56 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     private func consumeCaptureStream(_ stream: AsyncThrowingStream<PCMBuffer, Error>) async {
+        // Snapshot preferences + provider + handler ONCE at session start.
+        // Freezing the handler here (not reading `onAutoStopRequested` per-buffer)
+        // closes the race where `SessionCoordinator.installAutoStopHandler`
+        // hasn't run yet: if the handler is nil at session-start, VAD is never
+        // wired in the first place — `makeSession` isn't called and no stale
+        // handle can silent-sink the one shot. Mid-session preference flips do
+        // not rescue the current recording (documented UX). Hold-mode sessions
+        // skip VAD entirely (release is the stop signal).
+        let vadHandler = onAutoStopRequested
+        let vadHandle = await makeVadSessionHandleIfApplicable(handler: vadHandler)
+        var vadAlreadyFired = false
+
         do {
             for try await buffer in stream {
                 bufferedAudio.append(buffer)
                 publish { snapshot in
                     snapshot.recordingDuration = (snapshot.recordingDuration ?? .zero) + buffer.duration
                 }
+                if !vadAlreadyFired,
+                   let handle = vadHandle,
+                   let handler = vadHandler,
+                   case .speechEnded = await handle.ingest(buffer.samples) {
+                    vadAlreadyFired = true
+                    // Detached Task escapes captureTask so the stop path (which
+                    // awaits `captureTask.value`) doesn't self-deadlock. We
+                    // continue draining the stream so the final buffers reach
+                    // transcription; capture.stop() fired by the stop path will
+                    // close the stream and end this loop naturally.
+                    Task { await handler() }
+                }
             }
         } catch {
             handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
         }
+    }
+
+    private func makeVadSessionHandleIfApplicable(
+        handler: (@Sendable () async -> Void)?
+    ) async -> VadSessionHandle? {
+        guard let provider = vadProvider,
+              let prefs = vadPreferences?.current(),
+              prefs.autoStopEnabled,
+              handler != nil,
+              currentSnapshot.sessionState == .recording
+        else {
+            return nil
+        }
+        return await provider.makeSession(
+            silenceThresholdSeconds: prefs.silenceThresholdSeconds
+        )
     }
 
     private func handleStageFailure(_ failure: PipelineStageFailure) {
