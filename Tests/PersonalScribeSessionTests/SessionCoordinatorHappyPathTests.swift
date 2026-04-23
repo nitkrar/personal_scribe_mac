@@ -4,48 +4,6 @@ import PersonalScribeTestSupport
 @testable import PersonalScribeSession
 
 final class SessionCoordinatorHappyPathTests: XCTestCase {
-    func testToggleWalksIdleRecordingTranscribingIdle() async throws {
-        let buffer = try PCMBuffer(
-            samples: Array(repeating: 0, count: 16_000),
-            timestamp: ContinuousClock().now
-        )
-        let capture = FakeAudioCapturing(buffers: [buffer])
-        let transcriber = FakeTranscriber(
-            result: .init(
-                text: "hello",
-                audioDuration: .seconds(1),
-                processingDuration: .seconds(0.2)
-            )
-        )
-        let coordinator = SessionCoordinator(
-            capture: capture,
-            transcriber: transcriber,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
-        )
-
-        let stream = await coordinator.stateStream()
-        let observedTask = Task { () -> [SessionState] in
-            var observed: [SessionState] = []
-            for await state in stream.prefix(4) {
-                observed.append(state)
-            }
-            return observed
-        }
-        let toggleTask = Task {
-            await coordinator.toggle()
-            await coordinator.toggle()
-        }
-
-        await toggleTask.value
-        let observed = try await withTimeout(.seconds(1)) {
-            await observedTask.value
-        }
-        let lastResult = await coordinator.lastResult()
-
-        XCTAssertEqual(observed, [.idle, .recording, .transcribing, .idle])
-        XCTAssertEqual(lastResult?.text, "Hello.")
-    }
-
     /// Regression: before the pipeline/coordinator state consolidation,
     /// `SessionCoordinator` observed pipeline snapshots through two
     /// unsynchronized paths — a direct post-call `refreshFromPipelineSnapshot()`

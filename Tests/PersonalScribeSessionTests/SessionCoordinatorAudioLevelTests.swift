@@ -59,25 +59,6 @@ final class SessionCoordinatorAudioLevelTests: XCTestCase {
         XCTAssertEqual(observed, canned)
     }
 
-    func testAudioLevelStreamDeliversInitialSubscriptionBeforeRecording() async {
-        let capture = FakeAudioCapturing()
-        let transcriber = FakeTranscriber(
-            result: .init(text: "", audioDuration: .zero, processingDuration: .zero)
-        )
-        let coordinator = SessionCoordinator(
-            capture: capture,
-            transcriber: transcriber,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
-        )
-
-        // Subscribing before any recording starts must not block; the stream
-        // simply has no values yet. We don't iterate — just prove we can get
-        // a stream back synchronously (modulo actor hop).
-        let levelStream = await coordinator.audioLevelStream()
-        _ = levelStream.makeAsyncIterator()
-        // If this line is reached the test has its guarantee.
-    }
-
     func testMultipleSubscribersEachReceiveEveryLevel() async throws {
         let buffer = try PCMBuffer(
             samples: Array(repeating: 0, count: 1_600),

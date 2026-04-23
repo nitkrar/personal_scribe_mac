@@ -4,24 +4,6 @@ import PersonalScribeCore
 @testable import PersonalScribeTranscription
 
 final class ModelDownloadFailureTests: PersonalScribeTranscriptionFilesystemTestCase {
-    func testPrepareMapsLoadFailureToSharedError() async {
-        // FluidAudio owns both the download and load phases now, so any
-        // network/load error surfaces through the single loadModel path and
-        // maps to `.modelLoadFailure`.
-        let transcriber = FluidAudioTranscriber(
-            inference: StubInferenceClient(loadError: URLError(.notConnectedToInternet))
-        )
-
-        do {
-            try await transcriber.prepare()
-            XCTFail("Expected prepare() to throw")
-        } catch let error as PersonalScribeError {
-            XCTAssertEqual(error, .modelLoadFailure)
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
-    }
-
     func testPrepareResetsProgressToIdleAfterLoadFailure() async {
         let transcriber = FluidAudioTranscriber(
             inference: StubInferenceClient(

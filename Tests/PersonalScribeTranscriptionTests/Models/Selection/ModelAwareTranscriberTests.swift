@@ -48,46 +48,6 @@ final class ModelAwareTranscriberTests: XCTestCase {
         XCTAssertEqual(loadedDirectories, [modelDirectory])
     }
 
-    func testPrepareForwardsFluidAudioProgressThroughDownloadStream() async throws {
-        let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
-        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
-        let inference = StubModelAwareInferenceClient(
-            scriptedLoadProgress: [
-                .init(fractionCompleted: 0.1, phase: .downloading(completedFiles: 1, totalFiles: 5)),
-                .init(fractionCompleted: 0.5, phase: .downloading(completedFiles: 3, totalFiles: 5)),
-                .init(fractionCompleted: 0.95, phase: .compiling(modelName: "Decoder")),
-            ]
-        )
-        let transcriber = ModelAwareFluidAudioTranscriber(
-            descriptor: descriptor,
-            runtimeVariant: .parakeetTDTCTC110M,
-            storageLocator: storageLocator,
-            inference: inference
-        )
-
-        let stream = transcriber.modelDownloadProgress()
-        let collector: Task<[ModelDownloadProgress], Never> = Task {
-            var snapshots: [ModelDownloadProgress] = []
-            for await snapshot in stream {
-                snapshots.append(snapshot)
-                if snapshots.count == 5 { break }
-            }
-            return snapshots
-        }
-
-        try await transcriber.prepare()
-        let snapshots = await collector.value
-
-        XCTAssertEqual(snapshots.count, 5)
-        XCTAssertEqual(snapshots[0].phase, .idle)
-        XCTAssertEqual(snapshots[1].phase, .downloading)
-        XCTAssertEqual(snapshots[1].fractionCompleted, 0.1, accuracy: 1e-9)
-        XCTAssertEqual(snapshots[2].phase, .downloading)
-        XCTAssertEqual(snapshots[2].fractionCompleted, 0.5, accuracy: 1e-9)
-        XCTAssertEqual(snapshots[3].phase, .loading)
-        XCTAssertEqual(snapshots[4].phase, .finished)
-    }
-
     func testPrepareResetsProgressToIdleAfterLoadFailure() async {
         let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
         let storageLocator = TestStorageLocator(baseDirectory: try! temporaryRootDirectory())

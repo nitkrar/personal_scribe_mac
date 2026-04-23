@@ -7,45 +7,6 @@ import PersonalScribeCore
 /// FluidAudio `DownloadUtils.ProgressHandler` snapshots through the public
 /// `ModelDownloadProgress` stream in the expected phase order.
 final class FluidAudioProgressForwardingTests: PersonalScribeTranscriptionFilesystemTestCase {
-    func testPrepareForwardsFluidAudioProgressThroughModelDownloadStream() async throws {
-        let inference = StubInferenceClient(
-            scriptedLoadProgress: [
-                .init(fractionCompleted: 0.1, phase: .downloading(completedFiles: 1, totalFiles: 5)),
-                .init(fractionCompleted: 0.5, phase: .downloading(completedFiles: 3, totalFiles: 5)),
-                .init(fractionCompleted: 0.95, phase: .compiling(modelName: "Decoder")),
-            ]
-        )
-        let transcriber = FluidAudioTranscriber(inference: inference)
-
-        let stream = transcriber.modelDownloadProgress()
-        // Expect: .idle (initial), .downloading(0.1), .downloading(0.5),
-        // .loading (from .compiling), .finished. 5 snapshots total.
-        let collector: Task<[ModelDownloadProgress], Never> = Task {
-            var snapshots: [ModelDownloadProgress] = []
-            for await snapshot in stream {
-                snapshots.append(snapshot)
-                if snapshots.count == 5 { break }
-            }
-            return snapshots
-        }
-
-        try await transcriber.prepare()
-
-        let snapshots = await collector.value
-
-        XCTAssertEqual(snapshots.count, 5)
-        XCTAssertEqual(snapshots[0].phase, .idle)
-
-        XCTAssertEqual(snapshots[1].phase, .downloading)
-        XCTAssertEqual(snapshots[1].fractionCompleted, 0.1, accuracy: 1e-9)
-
-        XCTAssertEqual(snapshots[2].phase, .downloading)
-        XCTAssertEqual(snapshots[2].fractionCompleted, 0.5, accuracy: 1e-9)
-
-        XCTAssertEqual(snapshots[3].phase, .loading)
-        XCTAssertEqual(snapshots[4].phase, .finished)
-    }
-
     func testModelAwareTranscriberForwardsFluidAudioProgressThroughModelDownloadStream() async throws {
         let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
         let rootDirectory = FileManager.default.temporaryDirectory

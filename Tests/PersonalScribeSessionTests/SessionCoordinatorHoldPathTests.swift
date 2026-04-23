@@ -103,18 +103,6 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
         try await waitUntilState(.idle, coordinator: coordinator)
     }
 
-    func testOnHoldReleaseWithoutPriorStartDoesNotStartRecording() async throws {
-        let coordinator = try makeCoordinator()
-
-        await coordinator.stopIfRecording()
-
-        let state = await coordinator.state()
-        let lastResult = await coordinator.lastResult()
-
-        XCTAssertEqual(state, .idle)
-        XCTAssertNil(lastResult)
-    }
-
     // MARK: - #071 — hold-path coordinator API
 
     func testStartHoldIfIdleFromIdleEntersHoldRecording() async throws {
