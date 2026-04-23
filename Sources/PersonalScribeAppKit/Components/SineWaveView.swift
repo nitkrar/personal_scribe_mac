@@ -147,10 +147,11 @@ public struct SineWaveView: View {
     /// nested `enum` so tests can verify behaviour without rendering
     /// SwiftUI or waiting on real wall-clock time.
     public enum Geometry {
-        /// Fraction of the canvas half-height used by the peak wave at
-        /// `smoothedLevel == 1.0`. Chosen so a 28 pt pill panel
-        /// (14 pt half-height) shows a clearly visible ~5.6 pt peak.
-        public static let maxAmpFactor: CGFloat = 0.4
+        /// Fraction of the canvas height used by the peak wave offset from
+        /// the midline at `smoothedLevel == 1.0`. On a 28 pt pill panel
+        /// this yields a 14 pt peak offset — the wave fills the full
+        /// canvas at max level (stroke midline to top/bottom edge).
+        public static let maxAmpFactor: CGFloat = 0.5
 
         public static func clampedLevel(_ raw: Double) -> Double {
             min(1.0, max(0.0, raw))
@@ -166,15 +167,15 @@ public struct SineWaveView: View {
         /// produces visible modulation instead of sub-pixel amplitude.
         /// Endpoints are preserved: `level = 0 → 0`, `level = 1 → peak`.
         ///
-        /// Example (canvasHeight = 28, maxAmpFactor = 0.4 → peak = 11.2pt):
+        /// Example (canvasHeight = 28, maxAmpFactor = 0.5 → peak = 14.0pt):
         ///
-        /// | RMS    | Linear (old)  | sqrt (Option A, current) |
-        /// | ------ | ------------- | ------------------------ |
-        /// | 0.05   | 0.56pt        | 2.50pt                   |
-        /// | 0.10   | 1.12pt        | 3.54pt                   |
-        /// | 0.30   | 3.36pt        | 6.13pt                   |
-        /// | 0.60   | 6.72pt        | 8.67pt                   |
-        /// | 1.00   | 11.20pt       | 11.20pt                  |
+        /// | RMS    | sqrt × 0.4 (prior) | sqrt × 0.5 (current) |
+        /// | ------ | ------------------ | -------------------- |
+        /// | 0.05   | 2.50pt             | 3.13pt               |
+        /// | 0.10   | 3.54pt             | 4.43pt               |
+        /// | 0.30   | 6.13pt             | 7.67pt               |
+        /// | 0.60   | 8.67pt             | 10.84pt              |
+        /// | 1.00   | 11.20pt            | 14.00pt              |
         ///
         /// ## Alternatives considered (kept here for rollback / tuning)
         ///
