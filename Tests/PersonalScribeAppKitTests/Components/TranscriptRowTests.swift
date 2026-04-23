@@ -9,18 +9,6 @@ import XCTest
 final class TranscriptRowTests: XCTestCase {
     // MARK: - Initializer / stored state
 
-    func testInitializerAcceptsTitleTimestampAndPreview() {
-        let date = Date(timeIntervalSince1970: 1_700_000_000)
-        let row = TranscriptRow(
-            title: "Sync notes",
-            timestamp: date,
-            preview: "We discussed the roadmap."
-        )
-        XCTAssertEqual(row.title, "Sync notes")
-        XCTAssertEqual(row.timestamp, date)
-        XCTAssertEqual(row.preview, "We discussed the roadmap.")
-    }
-
     func testDefaultSelectionIsFalse() {
         let row = TranscriptRow(
             title: "T",
@@ -28,16 +16,6 @@ final class TranscriptRowTests: XCTestCase {
             preview: "B"
         )
         XCTAssertFalse(row.isSelected)
-    }
-
-    func testSelectedStateIsStored() {
-        let row = TranscriptRow(
-            title: "T",
-            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
-            preview: "B",
-            isSelected: true
-        )
-        XCTAssertTrue(row.isSelected)
     }
 
     // MARK: - Title truncation

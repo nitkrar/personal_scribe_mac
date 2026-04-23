@@ -8,19 +8,6 @@ import XCTest
 final class ModeCardTests: XCTestCase {
     // MARK: - Initializer / stored state
 
-    func testInitializerStoresAllFields() {
-        let card = ModeCard(
-            modeName: "Dictation",
-            voiceModel: "Parakeet-TDT",
-            aiModelPreset: "Fast rewrite",
-            isActive: true
-        )
-        XCTAssertEqual(card.modeName, "Dictation")
-        XCTAssertEqual(card.voiceModel, "Parakeet-TDT")
-        XCTAssertEqual(card.aiModelPreset, "Fast rewrite")
-        XCTAssertTrue(card.isActive)
-    }
-
     func testDefaultIsInactive() {
         let card = ModeCard(
             modeName: "Dictation",

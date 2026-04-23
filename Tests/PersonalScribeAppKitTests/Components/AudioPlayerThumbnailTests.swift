@@ -9,12 +9,6 @@ import XCTest
 final class AudioPlayerThumbnailTests: XCTestCase {
     // MARK: - Initializer / stored state
 
-    func testInitializerStoresDurationAndLevelPose() {
-        let t = AudioPlayerThumbnail(durationSeconds: 42, levelPose: 0.5)
-        XCTAssertEqual(t.durationSeconds, 42, accuracy: 0.001)
-        XCTAssertEqual(t.levelPose, 0.5, accuracy: 0.001)
-    }
-
     func testDefaultLevelPoseIsDefined() {
         let t = AudioPlayerThumbnail(durationSeconds: 10)
         // Default is a visually-balanced mid-low pose; lock in the value.

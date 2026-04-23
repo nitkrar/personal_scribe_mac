@@ -138,20 +138,6 @@ final class LaunchAtLoginServiceTests: XCTestCase {
 
         XCTAssertTrue(viewModel.launchAtLogin)
     }
-
-    func testDefaultInitCompilesWithoutExplicitService() {
-        // Belt-and-braces — the `launchAtLoginService:` parameter has
-        // a default, so existing call sites that don't pass a service
-        // (GeneralTabViewModelTests, GeneralTabViewModelThemeTests)
-        // keep compiling. Also covered implicitly by those suites, but
-        // asserted here so a future breaking change shows up in the
-        // #005 test file.
-        let viewModel = GeneralTabViewModel(defaults: isolatedDefaults())
-        // launchAtLogin reflects whatever SMAppService.mainApp reports
-        // in the test host — either value is acceptable, just assert
-        // the init didn't crash and the property is readable.
-        _ = viewModel.launchAtLogin
-    }
 }
 
 // MARK: - Fake

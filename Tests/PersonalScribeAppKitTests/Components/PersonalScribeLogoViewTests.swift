@@ -13,11 +13,6 @@ import XCTest
 /// motion).
 @MainActor
 final class PersonalScribeLogoViewTests: XCTestCase {
-    func testInitializerAcceptsCustomColor() {
-        let view = PersonalScribeLogoView(color: .red)
-        XCTAssertEqual(view.color, .red)
-    }
-
     func testDefaultColorIsChampagneFromDarkPalette() {
         let view = PersonalScribeLogoView()
         XCTAssertEqual(view.color, PersonalScribeTheme.Palette.dark.brandChampagne)

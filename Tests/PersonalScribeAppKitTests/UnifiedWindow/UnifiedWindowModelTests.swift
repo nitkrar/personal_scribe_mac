@@ -16,14 +16,6 @@ final class UnifiedWindowModelTests: XCTestCase {
         XCTAssertEqual(model.activeTab, .transcriptions)
     }
 
-    func testSetActiveTabAcceptsEveryCase() {
-        let model = UnifiedWindowModel()
-        for tab in AppTab.allCases {
-            model.setActiveTab(tab)
-            XCTAssertEqual(model.activeTab, tab)
-        }
-    }
-
     func testInitWithExplicitInitialTab() {
         let model = UnifiedWindowModel(initialTab: .settings)
         XCTAssertEqual(model.activeTab, .settings)

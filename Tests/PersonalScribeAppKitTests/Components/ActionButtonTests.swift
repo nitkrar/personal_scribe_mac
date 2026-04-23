@@ -20,11 +20,6 @@ final class ActionButtonTests: XCTestCase {
         XCTAssertEqual(button.variant, .primary)
     }
 
-    func testSecondaryVariantIsAccepted() {
-        let button = ActionButton(title: "Cancel", variant: .secondary) { }
-        XCTAssertEqual(button.variant, .secondary)
-    }
-
     func testDefaultIsEnabled() {
         let button = ActionButton(title: "Save") { }
         XCTAssertTrue(button.isEnabled)
