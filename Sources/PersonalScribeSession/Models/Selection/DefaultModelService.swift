@@ -40,6 +40,7 @@ public final class DefaultModelService: ModelService {
         ModelDescriptor,
         @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws -> Void
+    private let removeDownloadedHandler: @Sendable (ModelDescriptor) throws -> Void
     private let modelsDirectoryProvider: @Sendable () -> URL?
     private let diskSpaceProvider: @Sendable (URL) -> Int64?
     private let logger: PersonalScribeLogger
@@ -81,6 +82,9 @@ public final class DefaultModelService: ModelService {
             download: { descriptor, progress in
                 try await provider.download(descriptor, progress: progress)
             },
+            removeDownloaded: { descriptor in
+                try provider.removeDownloadedFiles(descriptor)
+            },
             modelsDirectoryProvider: { storageLocator.url(for: .models) },
             diskSpaceProvider: Self.liveDiskSpaceProvider,
             logger: logger
@@ -95,6 +99,7 @@ public final class DefaultModelService: ModelService {
             ModelDescriptor,
             @escaping @Sendable (ModelDownloadProgress) -> Void
         ) async throws -> Void,
+        removeDownloaded: @escaping @Sendable (ModelDescriptor) throws -> Void = { _ in },
         modelsDirectoryProvider: @escaping @Sendable () -> URL? = { nil },
         diskSpaceProvider: @escaping @Sendable (URL) -> Int64? = { _ in nil },
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
@@ -103,6 +108,7 @@ public final class DefaultModelService: ModelService {
         self.registeredModels = registeredModels
         self.isDownloadedHandler = isDownloaded
         self.downloadHandler = download
+        self.removeDownloadedHandler = removeDownloaded
         self.modelsDirectoryProvider = modelsDirectoryProvider
         self.diskSpaceProvider = diskSpaceProvider
         self.logger = logger
@@ -203,6 +209,24 @@ public final class DefaultModelService: ModelService {
         let canonical = try canonicalVoiceModel(for: descriptor.id)
         try ensureSufficientDiskSpace(for: canonical)
         try await downloadHandler(canonical, progress)
+    }
+
+    /// Ticket #024: remove `descriptor`'s on-disk artifacts and flip the
+    /// published download-state back to `.notDownloaded`. No confirmation
+    /// gate, no last-model rule, no active-model check — the caller owns
+    /// any policy. Active selection is intentionally left untouched; if
+    /// the deleted model happened to be active, the next `setActive`
+    /// will re-download it via the normal path.
+    public func removeDownloaded(_ descriptor: ModelDescriptor) throws {
+        let canonical = try canonicalVoiceModel(for: descriptor.id)
+        try removeDownloadedHandler(canonical)
+        publishDownloadState(
+            ModelDownloadState(
+                descriptorId: canonical.id,
+                phase: .notDownloaded,
+                fractionCompleted: 0
+            )
+        )
     }
 
     /// Re-sync `downloadStates` against the injected disk-presence

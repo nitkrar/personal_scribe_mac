@@ -300,6 +300,49 @@ final class DefaultModelServiceTests: XCTestCase {
         )
     }
 
+    // MARK: - #024 — per-row delete
+
+    func testRemoveDownloadedInvokesHandlerAndPublishesNotDownloaded() throws {
+        let target = BuiltInModelCatalog.parakeetTDTCTC110M
+        let spy = LockedDescriptorRecorder()
+        // Shadow descriptor with the same id as `target` — proves the
+        // service canonicalizes to the registered descriptor before
+        // calling the handler.
+        let shadowDescriptor = ModelDescriptor(
+            id: target.id,
+            displayName: "Shadow",
+            shortDescription: "Test fixture.",
+            architecture: "Test",
+            repository: "FluidInference/shadow",
+            revision: "shadow",
+            requiredRelativePaths: [],
+            approximateSizeBytes: 0,
+            engine: .parakeetTDT
+        )
+        let service = DefaultModelService(
+            selectionPreference: Preference<ActiveModelDescriptor>(
+                key: DefaultModelService.preferenceKey,
+                default: BuiltInModelCatalog.defaultActiveDescriptor,
+                defaults: isolatedDefaults()
+            ),
+            isDownloaded: { descriptor in descriptor.id == target.id },
+            download: { _, _ in },
+            removeDownloaded: { descriptor in
+                spy.record(descriptor)
+            }
+        )
+
+        // Sanity: constructor seeded `.ready` for `target` via the
+        // isDownloaded handler.
+        XCTAssertEqual(service.downloadStates[target.id]?.phase, .ready)
+
+        try service.removeDownloaded(shadowDescriptor)
+
+        XCTAssertEqual(spy.descriptors, [target])
+        XCTAssertEqual(service.downloadStates[target.id]?.phase, .notDownloaded)
+        XCTAssertEqual(service.downloadStates[target.id]?.fractionCompleted, 0)
+    }
+
     func testDescriptorForModeFallsBackToDefaultVoiceModelAndPreservesAISelection() {
         let service = DefaultModelService(
             selectionPreference: Preference<ActiveModelDescriptor>(

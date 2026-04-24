@@ -34,7 +34,8 @@ public struct AIModelsTab: View {
                             descriptor: descriptor,
                             state: service.downloadStates[descriptor.id],
                             isActive: service.activeDescriptor.voiceModel.id == descriptor.id,
-                            onActivate: { activate(descriptor) }
+                            onActivate: { activate(descriptor) },
+                            onDelete: { delete(descriptor) }
                         )
                     }
                 }
@@ -59,6 +60,13 @@ public struct AIModelsTab: View {
             try? await service.setActive(target)
         }
     }
+
+    private func delete(_ descriptor: ModelDescriptor) {
+        // #024: the service publishes `.notDownloaded` inside
+        // `removeDownloaded`, so `@ObservedObject` will rerender the
+        // row — no explicit `refresh()` call needed here.
+        try? service.removeDownloaded(descriptor)
+    }
 }
 
 /// A single row in the AI Models voice-model list.
@@ -82,6 +90,7 @@ struct ModelRow: View {
     /// Defaults to the catalog-registered list.
     let siblings: [ModelDescriptor]
     let onActivate: () -> Void
+    let onDelete: () -> Void
 
     @State private var isInfoPopoverPresented = false
 
@@ -90,13 +99,15 @@ struct ModelRow: View {
         state: ModelDownloadState?,
         isActive: Bool,
         siblings: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
-        onActivate: @escaping () -> Void
+        onActivate: @escaping () -> Void,
+        onDelete: @escaping () -> Void = {}
     ) {
         self.descriptor = descriptor
         self.state = state
         self.isActive = isActive
         self.siblings = siblings
         self.onActivate = onActivate
+        self.onDelete = onDelete
     }
 
     var body: some View {
@@ -111,21 +122,79 @@ struct ModelRow: View {
                     }
 
                     if !descriptor.shortDescription.isEmpty {
-                        Text(descriptor.shortDescription)
-                            .font(PersonalScribeTheme.Typography.caption.font)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                        HStack(spacing: 6) {
+                            Text(descriptor.shortDescription)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Text("·")
+                            Text(Self.diskSizeLabel(for: descriptor))
+                        }
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
                     }
                 }
 
                 Spacer(minLength: 0)
 
-                StatusPill(status: chip.status, label: chip.label)
-
-                actionButton
+                trailingControls
             }
         }
+    }
+
+    // MARK: - Trailing controls
+
+    @ViewBuilder
+    private var trailingControls: some View {
+        switch phase {
+        case .downloading, .loading, .failed:
+            StatusPill(status: chip.status, label: chip.label)
+            actionButton
+        case .notDownloaded, .ready:
+            activityDot
+            if phase == .ready, !isActive {
+                Button("Activate", action: onActivate)
+                    .buttonStyle(.borderless)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+            }
+            stableIconButton
+        }
+    }
+
+    private var activityDot: some View {
+        let isReadyAndActive = (phase == .ready) && isActive
+        return Circle()
+            .fill(isReadyAndActive ? Color.green : Color.secondary)
+            .frame(width: 8, height: 8)
+            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var stableIconButton: some View {
+        switch phase {
+        case .notDownloaded:
+            Button(action: onActivate) {
+                Image(systemName: "arrow.down.circle")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Download \(descriptor.displayName)")
+            .help("Download \(descriptor.displayName)")
+        case .ready:
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Delete \(descriptor.displayName)")
+            .help("Delete \(descriptor.displayName)")
+        case .downloading, .loading, .failed:
+            EmptyView()
+        }
+    }
+
+    private static func diskSizeLabel(for descriptor: ModelDescriptor) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useMB, .useGB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: descriptor.approximateSizeBytes)
     }
 
     // MARK: - Info popover
@@ -178,28 +247,19 @@ struct ModelRow: View {
         }
     }
 
-    // MARK: - Action button
+    // MARK: - Action button (transient phases only)
 
     @ViewBuilder
     private var actionButton: some View {
         switch phase {
-        case .notDownloaded:
-            Button("Download", action: onActivate)
-                .buttonStyle(.borderedProminent)
         case .downloading, .loading:
             EmptyView()
-        case .ready:
-            if isActive {
-                Button("Active") {}
-                    .buttonStyle(.bordered)
-                    .disabled(true)
-            } else {
-                Button("Set Active", action: onActivate)
-                    .buttonStyle(.bordered)
-            }
         case .failed:
             Button("Retry", action: onActivate)
                 .buttonStyle(.borderedProminent)
+        case .notDownloaded, .ready:
+            // Stable phases are handled by `stableIconButton`.
+            EmptyView()
         }
     }
 }
