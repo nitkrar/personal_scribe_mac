@@ -51,7 +51,11 @@ final class DefaultModelServiceTests: XCTestCase {
         XCTAssertEqual(preference.resolve(), BuiltInModelCatalog.defaultActiveDescriptor)
     }
 
-    func testSetActiveVoiceModelAutoDownloadsMissingModelAndPublishesUpdate() async throws {
+    /// `setActive` is a pure persist+assign after #024 follow-up — it
+    /// never calls the download handler. The UI gates `setActive`
+    /// behind "model is downloaded" (Modes tab hides non-downloaded
+    /// modes; AI Models tab only shows Activate on `.ready` rows).
+    func testSetActiveVoiceModelPersistsAndAssignsWithoutCallingDownloadHandler() async throws {
         let defaults = isolatedDefaults()
         let preference = Preference<ActiveModelDescriptor>(
             key: DefaultModelService.preferenceKey,
@@ -62,41 +66,17 @@ final class DefaultModelServiceTests: XCTestCase {
         let recorder = DownloadRecorder()
         let service = DefaultModelService(
             selectionPreference: preference,
-            isDownloaded: { descriptor in
-                descriptor.id != target.id
-            },
-            download: { descriptor, progress in
+            isDownloaded: { _ in true },
+            download: { descriptor, _ in
                 await recorder.record(descriptor)
-                progress(
-                    .init(
-                        phase: .downloading,
-                        fractionCompleted: 1,
-                        receivedBytes: 1,
-                        expectedBytes: 1
-                    )
-                )
             }
         )
 
-        let updates = Task { () -> ActiveModelDescriptor? in
-            var seen = 0
-            for await value in service.$activeDescriptor.values {
-                seen += 1
-                if seen == 2 {
-                    return value
-                }
-            }
-            return nil
-        }
-        await Task.yield()
-
         try await service.setActiveVoiceModel(target.id)
 
-        let published = await updates.value
         let recordedDescriptors = await recorder.recordedDescriptors()
-
-        XCTAssertEqual(published?.voiceModel.id, target.id)
-        XCTAssertEqual(recordedDescriptors, [target])
+        XCTAssertTrue(recordedDescriptors.isEmpty, "setActive must not invoke the download handler")
+        XCTAssertEqual(service.activeDescriptor.voiceModel.id, target.id)
         XCTAssertEqual(preference.resolve().voiceModel.id, target.id)
     }
 
@@ -161,7 +141,7 @@ final class DefaultModelServiceTests: XCTestCase {
         XCTAssertFalse(service.isDownloaded(missingDescriptor))
     }
 
-    func testDownloadPassesCanonicalDescriptorAndProgressThroughToHandler() async throws {
+    func testDownloadPassesCanonicalDescriptorAndPublishesReady() async throws {
         let target = BuiltInModelCatalog.parakeetTDTCTC110M
         let shadowDescriptor = ModelDescriptor(
             id: target.id,
@@ -175,21 +155,6 @@ final class DefaultModelServiceTests: XCTestCase {
             engine: .parakeetTDT
         )
         let descriptorRecorder = LockedDescriptorRecorder()
-        let progressRecorder = LockedProgressRecorder()
-        let expectedSnapshots: [ModelDownloadProgress] = [
-            .init(
-                phase: .downloading,
-                fractionCompleted: 0.25,
-                receivedBytes: 25,
-                expectedBytes: 100
-            ),
-            .init(
-                phase: .finished,
-                fractionCompleted: 1,
-                receivedBytes: 100,
-                expectedBytes: 100
-            ),
-        ]
         let service = DefaultModelService(
             selectionPreference: Preference<ActiveModelDescriptor>(
                 key: DefaultModelService.preferenceKey,
@@ -197,18 +162,16 @@ final class DefaultModelServiceTests: XCTestCase {
                 defaults: isolatedDefaults()
             ),
             isDownloaded: { _ in false },
-            download: { descriptor, progress in
+            download: { descriptor, _ in
                 descriptorRecorder.record(descriptor)
-                expectedSnapshots.forEach(progress)
             }
         )
 
-        try await service.download(shadowDescriptor) { snapshot in
-            progressRecorder.record(snapshot)
-        }
+        try await service.download(shadowDescriptor)
 
         XCTAssertEqual(descriptorRecorder.descriptors, [target])
-        XCTAssertEqual(progressRecorder.snapshots, expectedSnapshots)
+        XCTAssertEqual(service.downloadStates[target.id]?.phase, .ready)
+        XCTAssertEqual(service.downloadStates[target.id]?.fractionCompleted, 1)
     }
 
     func testDownloadPropagatesHandlerError() async {
@@ -225,7 +188,7 @@ final class DefaultModelServiceTests: XCTestCase {
         )
 
         do {
-            try await service.download(BuiltInModelCatalog.parakeetTDTCTC110M) { _ in }
+            try await service.download(BuiltInModelCatalog.parakeetTDTCTC110M)
             XCTFail("Expected download to throw when the injected handler fails")
         } catch let error as DownloadTestError {
             XCTAssertEqual(error, .handlerFailure)

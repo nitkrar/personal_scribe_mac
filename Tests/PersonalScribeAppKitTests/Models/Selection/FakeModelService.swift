@@ -54,19 +54,8 @@ final class FakeModelService: ModelService {
         downloadedModelIDs.contains(descriptor.id)
     }
 
-    func download(
-        _ descriptor: ModelDescriptor,
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws {
+    func download(_ descriptor: ModelDescriptor) async throws {
         downloadRequests.append(descriptor.id)
         downloadedModelIDs.insert(descriptor.id)
-        progress(
-            .init(
-                phase: .finished,
-                fractionCompleted: 1,
-                receivedBytes: 0,
-                expectedBytes: nil
-            )
-        )
     }
 }

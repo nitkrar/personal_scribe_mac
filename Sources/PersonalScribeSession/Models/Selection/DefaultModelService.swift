@@ -136,51 +136,16 @@ public final class DefaultModelService: ModelService {
         )
     }
 
+    /// Persist `descriptor` as the active selection and assign it to
+    /// `activeDescriptor`. Never downloads. The UI gates `setActive`
+    /// behind "model is downloaded" (Modes tab hides non-downloaded
+    /// modes; AI Models tab only shows Activate on `.ready` rows), so
+    /// callers reaching this method can assume the underlying voice
+    /// model is already on disk. If it isn't, the next `prepare()` on
+    /// the transcriber will fetch via FluidAudio's own path — this
+    /// method has no opinion on that.
     public func setActive(_ descriptor: ActiveModelDescriptor) async throws {
         let canonical = try canonicalDescriptor(for: descriptor)
-        let voiceModel = canonical.voiceModel
-
-        if !isDownloaded(voiceModel) {
-            try ensureSufficientDiskSpace(for: voiceModel)
-            do {
-                try await download(voiceModel) { [weak self] progress in
-                    Task { @MainActor [weak self] in
-                        self?.ingest(progress: progress, for: voiceModel)
-                    }
-                }
-            } catch {
-                publishDownloadState(
-                    ModelDownloadState(
-                        descriptorId: voiceModel.id,
-                        phase: .failed(message: String(describing: error)),
-                        fractionCompleted: 0
-                    )
-                )
-                throw error
-            }
-            // Ensure the final state is `.ready` even if the underlying
-            // download handler never emitted `.finished` (the contract of
-            // `download(_:progress:)` does not require a terminal tick).
-            publishDownloadState(
-                ModelDownloadState(
-                    descriptorId: voiceModel.id,
-                    phase: .ready,
-                    fractionCompleted: 1
-                )
-            )
-        } else {
-            // Model already on disk → guarantee the surface reflects that
-            // even if the service was constructed before disk state was
-            // truthy for this descriptor.
-            publishDownloadState(
-                ModelDownloadState(
-                    descriptorId: voiceModel.id,
-                    phase: .ready,
-                    fractionCompleted: 1
-                )
-            )
-        }
-
         selectionPreference.persist(canonical)
         activeDescriptor = canonical
     }
@@ -202,13 +167,50 @@ public final class DefaultModelService: ModelService {
         return isDownloadedHandler(canonical)
     }
 
-    public func download(
-        _ descriptor: ModelDescriptor,
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws {
+    /// Download `descriptor`'s artifacts. Never touches the active
+    /// selection. Idempotent — a no-op publish of `.ready` when already
+    /// on disk. Progress is ingested into `downloadStates` internally
+    /// (no external progress closure) so `@ObservedObject` subscribers
+    /// see `.downloading` / `.loading` / `.ready` phases flow through
+    /// without a separate observer wired at the call site.
+    public func download(_ descriptor: ModelDescriptor) async throws {
         let canonical = try canonicalVoiceModel(for: descriptor.id)
+
+        if isDownloaded(canonical) {
+            publishDownloadState(
+                ModelDownloadState(
+                    descriptorId: canonical.id,
+                    phase: .ready,
+                    fractionCompleted: 1
+                )
+            )
+            return
+        }
+
         try ensureSufficientDiskSpace(for: canonical)
-        try await downloadHandler(canonical, progress)
+        do {
+            try await downloadHandler(canonical) { [weak self] progress in
+                Task { @MainActor [weak self] in
+                    self?.ingest(progress: progress, for: canonical)
+                }
+            }
+        } catch {
+            publishDownloadState(
+                ModelDownloadState(
+                    descriptorId: canonical.id,
+                    phase: .failed(message: String(describing: error)),
+                    fractionCompleted: 0
+                )
+            )
+            throw error
+        }
+        publishDownloadState(
+            ModelDownloadState(
+                descriptorId: canonical.id,
+                phase: .ready,
+                fractionCompleted: 1
+            )
+        )
     }
 
     /// Ticket #024: remove `descriptor`'s on-disk artifacts and flip the

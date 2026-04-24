@@ -1,4 +1,5 @@
 import PersonalScribeCore
+import PersonalScribeSession
 import SwiftUI
 
 /// Modes tab for the unified NavigationSplitView window (M3.4).
@@ -20,9 +21,14 @@ import SwiftUI
 @MainActor
 struct ModesTab: View {
     @ObservedObject private var viewModel: ModesTabViewModel
+    @ObservedObject private var modelService: DefaultModelService
 
-    init(viewModel: ModesTabViewModel) {
+    init(
+        viewModel: ModesTabViewModel,
+        modelService: DefaultModelService = AppComposition.modelService
+    ) {
         self.viewModel = viewModel
+        self.modelService = modelService
     }
 
     var body: some View {
@@ -31,7 +37,11 @@ struct ModesTab: View {
                 .font(PersonalScribeTheme.Typography.largeTitle.font)
 
             VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
-                ForEach(viewModel.modes) { mode in
+                // #024 follow-up: only show modes whose voice model is
+                // on disk. Modes pointing at not-downloaded voice models
+                // are hidden so `setActive` never fires on a missing
+                // model. User downloads via the AI Models tab first.
+                ForEach(downloadedModes) { mode in
                     ModeCard(
                         modeName: mode.name,
                         voiceModel: voiceModelName(for: mode),
@@ -45,6 +55,12 @@ struct ModesTab: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var downloadedModes: [ModeDescriptor] {
+        viewModel.modes.filter { mode in
+            modelService.downloadStates[mode.voiceModelID]?.phase == .ready
+        }
     }
 
     // MARK: - Derivation helpers

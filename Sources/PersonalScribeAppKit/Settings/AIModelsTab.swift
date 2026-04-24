@@ -35,6 +35,7 @@ public struct AIModelsTab: View {
                             state: service.downloadStates[descriptor.id],
                             isActive: service.activeDescriptor.voiceModel.id == descriptor.id,
                             onActivate: { activate(descriptor) },
+                            onDownload: { download(descriptor) },
                             onDelete: { delete(descriptor) }
                         )
                     }
@@ -67,6 +68,14 @@ public struct AIModelsTab: View {
         // row — no explicit `refresh()` call needed here.
         try? service.removeDownloaded(descriptor)
     }
+
+    private func download(_ descriptor: ModelDescriptor) {
+        // #024 follow-up: `download` is the download-only path. It
+        // never reassigns the active model — that's `setActive`.
+        Task { @MainActor in
+            try? await service.download(descriptor)
+        }
+    }
 }
 
 /// A single row in the AI Models voice-model list.
@@ -90,6 +99,7 @@ struct ModelRow: View {
     /// Defaults to the catalog-registered list.
     let siblings: [ModelDescriptor]
     let onActivate: () -> Void
+    let onDownload: () -> Void
     let onDelete: () -> Void
 
     @State private var isInfoPopoverPresented = false
@@ -100,6 +110,7 @@ struct ModelRow: View {
         isActive: Bool,
         siblings: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
         onActivate: @escaping () -> Void,
+        onDownload: @escaping () -> Void = {},
         onDelete: @escaping () -> Void = {}
     ) {
         self.descriptor = descriptor
@@ -107,6 +118,7 @@ struct ModelRow: View {
         self.isActive = isActive
         self.siblings = siblings
         self.onActivate = onActivate
+        self.onDownload = onDownload
         self.onDelete = onDelete
     }
 
@@ -172,7 +184,7 @@ struct ModelRow: View {
     private var stableIconButton: some View {
         switch phase {
         case .notDownloaded:
-            Button(action: onActivate) {
+            Button(action: onDownload) {
                 Image(systemName: "arrow.down.circle")
             }
             .buttonStyle(.plain)

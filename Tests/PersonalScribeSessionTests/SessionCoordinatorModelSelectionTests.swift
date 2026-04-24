@@ -174,12 +174,7 @@ private final class StubModelService: ModelService {
         true
     }
 
-    func download(
-        _ descriptor: ModelDescriptor,
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws {
-        progress(.init(phase: .finished, fractionCompleted: 1, receivedBytes: 0, expectedBytes: nil))
-    }
+    func download(_ descriptor: ModelDescriptor) async throws {}
 }
 
 private struct StubModelBoundTranscriberProvider: ModelBoundTranscriberProviding {

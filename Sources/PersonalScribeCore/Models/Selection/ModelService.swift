@@ -22,10 +22,7 @@ public protocol ModelService: ObservableObject, Sendable {
     func setActive(_ descriptor: ActiveModelDescriptor) async throws
     func setActiveVoiceModel(_ id: String) async throws
     func isDownloaded(_ descriptor: ModelDescriptor) -> Bool
-    func download(
-        _ descriptor: ModelDescriptor,
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws
+    func download(_ descriptor: ModelDescriptor) async throws
 }
 
 extension ModelService {

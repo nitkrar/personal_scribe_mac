@@ -45,7 +45,7 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
         )
     }
 
-    func testSetActiveEmitsDownloadingLoadingAndReadyPhasesInOrder() async throws {
+    func testDownloadEmitsDownloadingLoadingAndReadyPhasesInOrder() async throws {
         let target = BuiltInModelCatalog.parakeetTDTCTC110M
         let service = makeService(
             isDownloaded: { _ in false },
@@ -85,17 +85,11 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
                 }
             }
 
-        try await service.setActive(
-            ActiveModelDescriptor(voiceModel: target, aiModelID: nil)
-        )
+        try await service.download(target)
 
         cancellable.cancel()
 
         let phases = collector.phases()
-
-        // Drop duplicates (the initial `.notDownloaded` + any `.downloading`
-        // ticks may coalesce). Assert on the ordered unique sequence so the
-        // test is robust against Combine delivery quirks.
         let uniquePhases = phases.reduce(into: [ModelDownloadState.Phase]()) { acc, phase in
             if acc.last != phase { acc.append(phase) }
         }
@@ -106,7 +100,7 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
         )
     }
 
-    func testSetActivePublishesFailedStateWhenDownloadThrows() async {
+    func testDownloadPublishesFailedStateWhenHandlerThrows() async {
         let target = BuiltInModelCatalog.parakeetTDTCTC110M
         let service = makeService(
             isDownloaded: { _ in false },
@@ -116,10 +110,8 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
         )
 
         do {
-            try await service.setActive(
-                ActiveModelDescriptor(voiceModel: target, aiModelID: nil)
-            )
-            XCTFail("Expected setActive to rethrow handler failure")
+            try await service.download(target)
+            XCTFail("Expected download to rethrow handler failure")
         } catch {
             // expected
         }
@@ -131,7 +123,7 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
         XCTAssertFalse(message.isEmpty)
     }
 
-    func testSetActiveEmitsReadyImmediatelyWhenModelAlreadyDownloaded() async throws {
+    func testDownloadEmitsReadyImmediatelyWhenModelAlreadyDownloaded() async throws {
         let target = BuiltInModelCatalog.parakeetTDTCTC110M
         let service = makeService(
             isDownloaded: { _ in true },
@@ -140,9 +132,7 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
             }
         )
 
-        try await service.setActive(
-            ActiveModelDescriptor(voiceModel: target, aiModelID: nil)
-        )
+        try await service.download(target)
 
         XCTAssertEqual(service.downloadStates[target.id]?.phase, .ready)
     }
@@ -151,14 +141,11 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
 
     /// Precheck: when the volume containing the models directory has
     /// less free space than the model's `approximateSizeBytes + 200 MB`
-    /// buffer, `setActive` must refuse to start the download, publish a
-    /// `.failed(...)` state with a "disk space" message, and throw
+    /// buffer, `download` must refuse to start, publish a `.failed(...)`
+    /// state with a "disk space" message, and throw
     /// `ModelSelectionError.insufficientDiskSpace(...)`.
-    func testSetActiveRejectsDownloadWhenDiskSpaceIsInsufficient() async {
+    func testDownloadRejectsWhenDiskSpaceIsInsufficient() async {
         let target = BuiltInModelCatalog.parakeetTDT06Bv2
-        // parakeetTDT06Bv2.approximateSizeBytes == 450_000_000 (see
-        // BuiltInModelCatalog). Report 100 MB free — well below the
-        // `450 MB + 200 MB` requirement.
         let availableBytes: Int64 = 100 * 1024 * 1024
         let downloadInvocations = LockedCounter()
         let service = makeService(
@@ -172,17 +159,13 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
         )
 
         do {
-            try await service.setActive(
-                ActiveModelDescriptor(voiceModel: target, aiModelID: nil)
-            )
-            XCTFail("Expected setActive to throw ModelSelectionError.insufficientDiskSpace")
+            try await service.download(target)
+            XCTFail("Expected download to throw ModelSelectionError.insufficientDiskSpace")
         } catch let error as ModelSelectionError {
             guard case .insufficientDiskSpace(let required, let available) = error else {
                 XCTFail("Expected .insufficientDiskSpace, got \(error)")
                 return
             }
-            // Required must include the 200 MB buffer on top of the
-            // declared model size.
             XCTAssertGreaterThan(required, target.approximateSizeBytes)
             XCTAssertEqual(available, availableBytes)
         } catch {
@@ -195,8 +178,6 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
             XCTFail("Expected .failed phase after precheck; got \(String(describing: service.downloadStates[target.id]?.phase))")
             return
         }
-        // Message must mention disk space so the AIModelsTab row's
-        // "Failed: <message>" chip is self-explanatory.
         XCTAssertTrue(
             message.lowercased().contains("disk space"),
             "Expected failure message to mention 'disk space'; got \(message)"
@@ -204,12 +185,11 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
     }
 
     /// Regression guard: when the provider reports ample free space the
-    /// existing download path runs normally — precheck must not become
-    /// a blocker on healthy machines.
-    func testSetActiveProceedsWhenDiskSpaceProviderReportsAmpleSpace() async throws {
+    /// download path runs normally — precheck must not become a blocker
+    /// on healthy machines.
+    func testDownloadProceedsWhenDiskSpaceProviderReportsAmpleSpace() async throws {
         let target = BuiltInModelCatalog.parakeetTDTCTC110M
         let downloadInvocations = LockedCounter()
-        // 50 GB free — far more than `approximateSizeBytes + buffer`.
         let availableBytes: Int64 = 50 * 1024 * 1024 * 1024
         let service = makeService(
             isDownloaded: { _ in false },
@@ -228,9 +208,7 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
             diskSpaceProvider: { _ in availableBytes }
         )
 
-        try await service.setActive(
-            ActiveModelDescriptor(voiceModel: target, aiModelID: nil)
-        )
+        try await service.download(target)
 
         XCTAssertEqual(downloadInvocations.value, 1)
         XCTAssertEqual(service.downloadStates[target.id]?.phase, .ready)
@@ -306,9 +284,7 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
         let target = BuiltInModelCatalog.parakeetTDTCTC110M
 
         let downloadTask = Task {
-            try await service.setActive(
-                ActiveModelDescriptor(voiceModel: target, aiModelID: nil)
-            )
+            try await service.download(target)
         }
         // Wait for the progress tick to be ingested.
         try await Task.sleep(nanoseconds: 20_000_000)
@@ -338,10 +314,8 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
         let target = BuiltInModelCatalog.parakeetTDTCTC110M
 
         do {
-            try await service.setActive(
-                ActiveModelDescriptor(voiceModel: target, aiModelID: nil)
-            )
-            XCTFail("Expected setActive to rethrow")
+            try await service.download(target)
+            XCTFail("Expected download to rethrow")
         } catch {
             // expected
         }
