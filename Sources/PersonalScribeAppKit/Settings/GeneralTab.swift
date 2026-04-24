@@ -236,9 +236,14 @@ public struct GeneralTab: View {
         }
     }
 
-    /// Auto-stop card (#046). Master toggle + silence threshold slider. Both
-    /// preferences freeze at session start — mid-session edits apply to the
-    /// NEXT recording only. Slider is dimmed when the toggle is off.
+    /// Auto-stop card (#046). Master toggle + silence threshold slider + two
+    /// optional warn/notify toggles. Both-prefs preferences freeze at session
+    /// start — mid-session edits apply to the NEXT recording only.
+    ///
+    /// Stage B collapsed layout: the master toggle stays always visible;
+    /// the threshold slider + warn/notify toggles render only when the
+    /// master is on. No `DisclosureGroup`; vertical stacking only. No
+    /// `.animation(...)` — intentionally skipped for MVP per plan.
     private var autoStopCard: some View {
         SettingsCard {
             Text("Auto-stop")
@@ -252,31 +257,49 @@ public struct GeneralTab: View {
                 )
             )
 
-            Divider()
+            if viewModel.vadAutoStopEnabled {
+                Divider()
 
-            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
-                Text("Silence threshold")
-                    .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+                VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                    Text("Silence threshold")
+                        .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
 
-                Text(viewModel.vadSilenceThresholdDescription)
-                    .font(PersonalScribeTheme.Typography.caption.font)
-                    .foregroundStyle(.secondary)
+                    Text(viewModel.vadSilenceThresholdDescription)
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
 
-                Slider(
-                    value: Binding(
-                        get: { viewModel.vadSilenceThresholdSeconds },
-                        set: { viewModel.setVadSilenceThresholdSeconds($0) }
-                    ),
-                    in: VadPreferences.minSilenceThresholdSeconds...VadPreferences.maxSilenceThresholdSeconds,
-                    step: 0.5
+                    Slider(
+                        value: Binding(
+                            get: { viewModel.vadSilenceThresholdSeconds },
+                            set: { viewModel.setVadSilenceThresholdSeconds($0) }
+                        ),
+                        in: VadPreferences.minSilenceThresholdSeconds...VadPreferences.maxSilenceThresholdSeconds,
+                        step: 0.5
+                    )
+
+                    Text("Changes apply to the next recording — the current session keeps its frozen setting.")
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
+                Toggle(
+                    "Warn before stopping",
+                    isOn: Binding(
+                        get: { viewModel.vadShowStoppingWarning },
+                        set: { viewModel.setVadShowStoppingWarning($0) }
+                    )
                 )
 
-                Text("Changes apply to the next recording — the current session keeps its frozen setting.")
-                    .font(PersonalScribeTheme.Typography.caption.font)
-                    .foregroundStyle(.secondary)
+                Toggle(
+                    "Show stop notification",
+                    isOn: Binding(
+                        get: { viewModel.vadShowAutoStoppedNotification },
+                        set: { viewModel.setVadShowAutoStoppedNotification($0) }
+                    )
+                )
             }
-            .opacity(viewModel.vadAutoStopEnabled ? 1.0 : 0.5)
-            .disabled(!viewModel.vadAutoStopEnabled)
         }
     }
 
@@ -472,6 +495,14 @@ final class GeneralTabViewModel: ObservableObject {
     /// Silence duration threshold in seconds. Range and step enforced by the
     /// Settings slider (1.0–5.0s, step 0.5). Read-clamped in the preference.
     @Published private(set) var vadSilenceThresholdSeconds: Double
+    /// Stage B warn toggle (#046). When `true`, orchestrator opens a 0.8s
+    /// grace window before auto-stop and ResponseCard surfaces a
+    /// "…stopping, speak to continue" prompt. Default `false`.
+    @Published private(set) var vadShowStoppingWarning: Bool
+    /// Stage B notification toggle (#046). When `true`, ResponseCard shows
+    /// "Auto stopped. Update settings to change." after VAD-triggered stop.
+    /// Default `false`.
+    @Published private(set) var vadShowAutoStoppedNotification: Bool
     /// Master theme (Light / Dark / System). Drives
     /// `showsTintPicker` — tint is hidden when the effective scheme
     /// is dark (mockup-gaps G, 2026-04-21).
@@ -527,6 +558,8 @@ final class GeneralTabViewModel: ObservableObject {
         self.pasteEnabled = PasteEnabledPreference.resolve(from: defaults)
         self.vadAutoStopEnabled = VadAutoStopEnabledPreference.resolve(from: defaults)
         self.vadSilenceThresholdSeconds = VadSilenceThresholdPreference.resolve(from: defaults)
+        self.vadShowStoppingWarning = VadShowStoppingWarningPreference.resolve(from: defaults)
+        self.vadShowAutoStoppedNotification = VadShowAutoStoppedNotificationPreference.resolve(from: defaults)
         self.appTheme = AppTheme.resolve(from: defaults)
         self.currentSystemIsDark = systemIsDarkProvider()
 
@@ -614,6 +647,16 @@ final class GeneralTabViewModel: ObservableObject {
     func setVadSilenceThresholdSeconds(_ seconds: Double) {
         vadSilenceThresholdSeconds = seconds
         VadSilenceThresholdPreference.persist(seconds, to: defaults)
+    }
+
+    func setVadShowStoppingWarning(_ enabled: Bool) {
+        vadShowStoppingWarning = enabled
+        VadShowStoppingWarningPreference.persist(enabled, to: defaults)
+    }
+
+    func setVadShowAutoStoppedNotification(_ enabled: Bool) {
+        vadShowAutoStoppedNotification = enabled
+        VadShowAutoStoppedNotificationPreference.persist(enabled, to: defaults)
     }
 
     func setWindowTint(_ tint: WindowTint) {
