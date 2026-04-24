@@ -28,9 +28,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// local `vadAlreadyFired` bool so the actor can expose `resolveGrace*`
     /// methods callable from timer-elapsed and cleanup paths.
     private var gracePhase: GracePhase = .idle
-    /// Grace-window duration. Production: 0.8s hard-coded per Stage B spec.
-    /// Overridable at init for tests that want to exercise the timer without
-    /// sleeping a full 0.8s.
+    /// Grace-window duration. Production: 3.0s hard-coded per Stage B spec
+    /// (bumped from 0.8s on 2026-04-24 after dogfood).
+    /// Overridable at init for tests that want to exercise the timer
+    /// without sleeping a full grace window.
     private let graceDurationSeconds: Double
 
     /// Local phase owned by the orchestrator actor. `.pending` carries the
@@ -676,7 +677,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         )
     }
 
-    /// Stage B warn-enabled path: schedule the 0.8s grace timer, publish
+    /// Stage B warn-enabled path: schedule the grace timer, publish
     /// the pending snapshot fields. Timer task calls `resolveGracePending`
     /// when it elapses — the token check there prevents double-fire if a
     /// cleanup path has already moved phase off `.pending`.
@@ -761,7 +762,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
     /// Default grace-window duration. Only overridden in tests (passed via
     /// `graceDurationSeconds:` init arg).
-    public static let defaultGraceDurationSeconds: Double = 0.8
+    public static let defaultGraceDurationSeconds: Double = 3.0
 
     private func handleStageFailure(_ failure: PipelineStageFailure) {
         latestStageFailure = failure

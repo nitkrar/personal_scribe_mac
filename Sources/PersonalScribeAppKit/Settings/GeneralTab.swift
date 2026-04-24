@@ -493,9 +493,9 @@ final class GeneralTabViewModel: ObservableObject {
     /// VAD wiring entirely — recording only stops via manual hotkey / pill / Esc.
     @Published private(set) var vadAutoStopEnabled: Bool
     /// Silence duration threshold in seconds. Range and step enforced by the
-    /// Settings slider (1.0–5.0s, step 0.5). Read-clamped in the preference.
+    /// Settings slider (1.0–10.0s, step 0.5). Read-clamped in the preference.
     @Published private(set) var vadSilenceThresholdSeconds: Double
-    /// Stage B warn toggle (#046). When `true`, orchestrator opens a 0.8s
+    /// Stage B warn toggle (#046). When `true`, orchestrator opens a 3.0s
     /// grace window before auto-stop and ResponseCard surfaces a
     /// "…stopping, speak to continue" prompt. Default `false`.
     @Published private(set) var vadShowStoppingWarning: Bool

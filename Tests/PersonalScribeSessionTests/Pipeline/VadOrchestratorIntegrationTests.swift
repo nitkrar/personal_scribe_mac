@@ -102,9 +102,9 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
     }
 
     func testGraceTimerFiresAutoStopAfterDuration() async throws {
-        // Stage B warn-enabled path: speechEnded → 0.8s grace (shortened to
+        // Stage B warn-enabled path: speechEnded → grace window (shortened to
         // 50ms in tests) → handler fires once. Asserts the full grace-window
-        // lifecycle end-to-end.
+        // lifecycle end-to-end. Production default is 3.0s.
         let capture = FakeAudioCapturing(
             buffers: try Self.makeBuffers(count: 3),
             delayPerBuffer: .milliseconds(10)

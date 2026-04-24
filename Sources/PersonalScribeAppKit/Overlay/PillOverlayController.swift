@@ -251,9 +251,21 @@ public final class PillOverlayController: ObservableObject {
             }
             recordingStatusCardContent = next
             advanceLastSeenFireToken(renderedContent: next, snapshotToken: vadFireToken)
-        case (_?, nil):
-            presenter.hideRecordingStatusCard()
-            recordingStatusCardContent = nil
+        case (let current?, nil):
+            // Notifications self-dismiss via the ResponseCard's 2.0s timer
+            // (installed in `show(...)`). If we hide here, the card vanishes
+            // the instant the driver returns nil — which happens as soon as
+            // the snapshot transitions to `.transcribing` (fireToken has been
+            // seen, driver's token gate drops it). Let the timer finish;
+            // clear local tracking so subsequent content flows normally.
+            // Any non-notification content (warning, error, record-without-
+            // transcribe) still gets an explicit hide.
+            if current.link?.action == .openVadSettings {
+                recordingStatusCardContent = nil
+            } else {
+                presenter.hideRecordingStatusCard()
+                recordingStatusCardContent = nil
+            }
         default:
             break
         }

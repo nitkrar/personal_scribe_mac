@@ -4,9 +4,9 @@ Runbook for the VAD auto-stop feature. Assumes a fresh DMG with the bundled Sile
 
 ## MV-VAD-1 — Enabled happy path
 
-1. Settings → General → Auto-stop: toggle **on**, threshold slider at **2.5s** (default).
+1. Settings → General → Auto-stop: toggle **on**, threshold slider at **5.0s** (default).
 2. Hotkey-record a sentence, stop talking.
-3. **Expect:** pill transitions `.recording → .transcribing` automatically ~2.5s after you stop speaking. No manual hotkey press. Transcript lands in the active app via the normal paste path.
+3. **Expect:** pill transitions `.recording → .transcribing` automatically ~5s after you stop speaking. No manual hotkey press. Transcript lands in the active app via the normal paste path.
 
 ## MV-VAD-2 — Disabled preference is inert
 
@@ -16,35 +16,35 @@ Runbook for the VAD auto-stop feature. Assumes a fresh DMG with the bundled Sile
 
 ## MV-VAD-3 — Hold-to-record ignores VAD
 
-1. Auto-stop **on**, threshold 2.5s.
+1. Auto-stop **on**, threshold 5.0s.
 2. Press-and-hold the hotkey, speak, then hold silently for 5s (well past the threshold).
 3. **Expect:** pill stays on `.holdToRecord` the entire time. Release stops and transcribes as usual. VAD must not fire for the hold path — release is the sole stop signal.
 
 ## MV-VAD-4 — Manual stop during VAD countdown races safely
 
-1. Auto-stop **on**, threshold 2.5s.
+1. Auto-stop **on**, threshold 5.0s.
 2. Hotkey-record, stop talking, immediately (within <1s) press the hotkey to stop.
 3. **Expect:** exactly one transcript. No double-stop crash, no duplicate paste. (The race is actor-serialized; whichever stop wins, the other no-ops against `.transcribing` state.)
 
 ## MV-VAD-5 — Threshold slider change applies next session
 
-1. Auto-stop **on**, threshold 2.5s.
-2. Start recording (hotkey), while still recording open Settings → General and drag threshold to 5.0s.
+1. Auto-stop **on**, threshold 5.0s (default).
+2. Start recording (hotkey), while still recording open Settings → General and drag threshold to 2.5s.
 3. Stop talking, wait.
-4. **Expect:** current session auto-stops at the original ~2.5s (frozen-at-session-start). Start a new session; that one auto-stops at ~5s.
+4. **Expect:** current session auto-stops at the original ~5s (frozen-at-session-start). Start a new session; that one auto-stops at ~2.5s.
 
 ## Stage B preferences
 
 Stage B adds two opt-in toggles inside Settings → General → Auto-stop (visible only when the master toggle is on). Both default **off** — shipped behavior is unchanged until the user turns them on.
 
-- **Warn before stopping** — when on, VAD `.speechEnded` starts an 0.8s grace window. During grace, the ResponseCard shows `…stopping, speak to continue`. Three exits: timer elapses (fires), user resumes speaking (cancels + keeps recording), user presses the hotkey (fires immediately).
+- **Warn before stopping** — when on, VAD `.speechEnded` starts a 3.0s grace window. During grace, the ResponseCard shows `…stopping, speak to continue`. Three exits: timer elapses (fires), user resumes speaking (cancels + keeps recording), user presses the hotkey (fires immediately).
 - **Show stop notification** — when on, after VAD-triggered auto-stop transitions to `.transcribing`, the ResponseCard briefly shows `Auto stopped. Update settings to change.` with a clickable link. Auto-dismisses at 2.0s OR when the next session starts.
 
 ## MV-VAD-6 — Warn enabled, notification off
 
 1. Settings → General → Auto-stop: master on, **Warn before stopping: on**, **Show stop notification: off**.
 2. Hotkey-record, speak a sentence, stop talking.
-3. **Expect:** pill stays in `.recording` during the 0.8s grace. ResponseCard shows `…stopping, speak to continue`. After 0.8s uncancelled, session transitions to `.transcribing` normally. Card disappears.
+3. **Expect:** pill stays in `.recording` during the 3.0s grace. ResponseCard shows `…stopping, speak to continue`. After 3.0s uncancelled, session transitions to `.transcribing` normally. Card disappears.
 
 ## MV-VAD-7 — Warn enabled, speech resumes during grace
 

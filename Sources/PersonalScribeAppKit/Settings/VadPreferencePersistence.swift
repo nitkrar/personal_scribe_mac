@@ -21,7 +21,7 @@ public enum VadAutoStopEnabledPreference {
     }
 }
 
-/// Stage B opt-in (#046): enable the 0.8s grace window + "…stopping,
+/// Stage B opt-in (#046): enable the grace window + "…stopping,
 /// speak to continue" ResponseCard before auto-stop fires.
 public enum VadShowStoppingWarningPreference {
     public static let userDefaultsKey = "VadShowStoppingWarning"
@@ -59,11 +59,11 @@ public enum VadShowAutoStoppedNotificationPreference {
 
 /// Silence duration (seconds) after which VAD auto-stop fires. Clamped to
 /// `VadPreferences.minSilenceThresholdSeconds ... maxSilenceThresholdSeconds`
-/// (1.0–5.0s) at read/write time as defense in depth — the Settings slider
-/// also constrains the live edit range. Default 2.5s.
+/// (1.0–10.0s) at read/write time as defense in depth — the Settings slider
+/// also constrains the live edit range. Default 5.0s.
 public enum VadSilenceThresholdPreference {
     public static let userDefaultsKey = "VadSilenceDurationSeconds"
-    public static let `default`: Double = 2.5
+    public static let `default`: Double = 5.0
 
     public static func resolve(from defaults: UserDefaults = .standard) -> Double {
         guard defaults.object(forKey: userDefaultsKey) != nil else {

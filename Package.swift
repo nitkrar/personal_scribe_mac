@@ -112,19 +112,16 @@ let package = Package(
                 .process("Resources"),
             ]
         ),
-        // `exclude:` keeps Manual*Verification.md runbooks in the test
-        // target directory (next to the related tests, where they're
-        // discoverable) without SwiftPM complaining about unhandled
-        // files. These are plaintext docs — not resources, not tests.
+        // Manual*Verification.md runbooks now live under
+        // `Tests/ManualVerifications/`, out of every test target's source
+        // path. SwiftPM no longer sees them so no `exclude:` entries
+        // needed. They're plaintext dev/QA docs — not resources, not tests.
         .testTarget(
             name: "PersonalScribeCoreTests",
             dependencies: [
                 "PersonalScribeCore",
             ],
-            path: "Tests/PersonalScribeCoreTests",
-            exclude: [
-                "ManualConfigVerification.md",
-            ]
+            path: "Tests/PersonalScribeCoreTests"
         ),
         .testTarget(
             name: "PersonalScribeAudioTests",
@@ -132,11 +129,7 @@ let package = Package(
                 "PersonalScribeAudio",
                 "PersonalScribeTestSupport",
             ],
-            path: "Tests/PersonalScribeAudioTests",
-            exclude: [
-                "ManualAudioCaptureVerification.md",
-                "ManualAudioLevelVerification.md",
-            ]
+            path: "Tests/PersonalScribeAudioTests"
         ),
         .testTarget(
             name: "PersonalScribeTranscriptionTests",
@@ -144,10 +137,7 @@ let package = Package(
                 "PersonalScribeTranscription",
                 "PersonalScribeTestSupport",
             ],
-            path: "Tests/PersonalScribeTranscriptionTests",
-            exclude: [
-                "ManualTranscriptionVerification.md",
-            ]
+            path: "Tests/PersonalScribeTranscriptionTests"
         ),
         .testTarget(
             name: "PersonalScribeVADTests",
@@ -171,20 +161,7 @@ let package = Package(
                 "PersonalScribeAppKit",
                 "PersonalScribeTestSupport",
             ],
-            path: "Tests/PersonalScribeAppKitTests",
-            exclude: [
-                "ManualCompositesVerification.md",
-                "ManualHotkeyVerification.md",
-                "ManualNotesVerification.md",
-                "ManualPillOverlayVerification.md",
-                "ManualSettingsVerification.md",
-                "ManualSQLiteVerification.md",
-                "ManualStatusItemVerification.md",
-                "ManualTranscriptionsVerification.md",
-                "ManualVADVerification.md",
-                "ManualVisualVerification.md",
-                "ManualWeek1Verification.md",
-            ]
+            path: "Tests/PersonalScribeAppKitTests"
         ),
     ],
     swiftLanguageModes: [

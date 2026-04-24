@@ -4,7 +4,7 @@ public struct VadPreferences: Sendable, Equatable, Codable {
     public var autoStopEnabled: Bool
     public var silenceThresholdSeconds: Double
     /// Stage B opt-in (#046). When true, VAD `.speechEnded` triggers a
-    /// 0.8s grace window before the auto-stop handler fires, surfaced via
+    /// grace window before the auto-stop handler fires, surfaced via
     /// the ResponseCard. Default false.
     public var showStoppingWarning: Bool
     /// Stage B opt-in (#046). When true, auto-stop firing publishes a
@@ -26,11 +26,11 @@ public struct VadPreferences: Sendable, Equatable, Codable {
 
     public static let `default` = VadPreferences(
         autoStopEnabled: true,
-        silenceThresholdSeconds: 2.5
+        silenceThresholdSeconds: 5.0
     )
 
     public static let minSilenceThresholdSeconds: Double = 1.0
-    public static let maxSilenceThresholdSeconds: Double = 5.0
+    public static let maxSilenceThresholdSeconds: Double = 10.0
 
     private static func clamp(_ seconds: Double) -> Double {
         min(max(seconds, minSilenceThresholdSeconds), maxSilenceThresholdSeconds)
