@@ -8,6 +8,7 @@ public struct GeneralTab: View {
     @StateObject private var viewModel: GeneralTabViewModel
     @StateObject private var shortcutsViewModel: ShortcutsTabViewModel
     @State private var isRecordingHotkeyRecorderPresented = false
+    @State private var isBackgroundModeInfoPresented = false
     @Environment(\.colorScheme) private var colorScheme
 
     public init(
@@ -129,13 +130,42 @@ public struct GeneralTab: View {
 
             Divider()
 
+            // Inline-icon label: info icon sits inside the Toggle's label
+            // with a tap gesture driving the popover. Keeps the whole row
+            // as a single Toggle — no sibling Button — and the info
+            // affordance is discoverable on tap (not just hover), so it
+            // doesn't inherit the tooltip-only discoverability bug from
+            // the Launch at Login icon (#073).
             Toggle(
-                "Show in Dock",
                 isOn: Binding(
-                    get: { viewModel.showInDock },
-                    set: { viewModel.setShowInDock($0) }
+                    get: { viewModel.backgroundMode },
+                    set: { viewModel.setBackgroundMode($0) }
                 )
-            )
+            ) {
+                HStack(spacing: 4) {
+                    Text("Background mode")
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.secondary)
+                        .onTapGesture {
+                            isBackgroundModeInfoPresented.toggle()
+                        }
+                        .popover(isPresented: $isBackgroundModeInfoPresented) {
+                            Text(
+                                "Background mode hides \(AppBrand.displayName) from the Dock, the Cmd+Tab switcher, and the Force Quit window. "
+                                    + "Only the menu bar icon and the floating pill remain — useful for a clutter-free dictation setup. "
+                                    + "Turn it off to run \(AppBrand.displayName) as a regular Mac app.")
+                                .font(PersonalScribeTheme.Typography.body.font)
+                                .padding()
+                                .frame(width: 320)
+                        }
+                }
+            }
+
+            if viewModel.backgroundModeRestartRequired {
+                RestartRequiredCaption(
+                    message: "Restart \(AppBrand.displayName) for background-mode changes to take effect."
+                )
+            }
         }
     }
 
@@ -415,9 +445,8 @@ public struct GeneralTab: View {
                     isRecordingHotkeyRecorderPresented = true
                 },
                 changeEnabled: true,
-                footnoteIcon: "arrow.clockwise",
-                footnote: shortcutsViewModel.requiresRestartNotice
-                    ? "Restart required: relaunch \(AppBrand.displayName) before the new recording hotkey takes effect."
+                restartRequiredMessage: shortcutsViewModel.requiresRestartNotice
+                    ? "Relaunch \(AppBrand.displayName) for the new recording hotkey to take effect."
                     : nil
             )
         }
@@ -430,8 +459,7 @@ public struct GeneralTab: View {
         notes: String,
         changeAction: @escaping () -> Void,
         changeEnabled: Bool,
-        footnoteIcon: String,
-        footnote: String?
+        restartRequiredMessage: String?
     ) -> some View {
         SettingsCard {
             HStack(alignment: .top, spacing: SettingsLayout.itemSpacing) {
@@ -455,12 +483,9 @@ public struct GeneralTab: View {
                 }
             }
 
-            if let footnote {
+            if let restartRequiredMessage {
                 Divider()
-
-                Label(footnote, systemImage: footnoteIcon)
-                    .font(PersonalScribeTheme.Typography.caption.font)
-                    .foregroundStyle(.secondary)
+                RestartRequiredCaption(message: restartRequiredMessage)
             }
         }
     }
@@ -487,7 +512,21 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var pasteRestoreDelay: PasteRestoreDelay
     @Published private(set) var visibilityError: VisibilityConfigError?
     @Published private(set) var launchAtLogin: Bool
-    @Published private(set) var showInDock: Bool
+    /// Background mode = menu-bar-only accessory app. Default `false`
+    /// (app is a regular app with Dock icon / Cmd+Tab entry / Force Quit
+    /// entry). When `true`, the app becomes an `NSApplicationActivationPolicy.accessory`
+    /// process at NEXT launch. Changes do NOT take effect live — toggling
+    /// sets `backgroundModeRestartRequired = true` and persists the pref;
+    /// the runtime `NSApp.setActivationPolicy` call lives in
+    /// `PersonalScribeAppMain` startup, which reads this pref once.
+    @Published private(set) var backgroundMode: Bool
+    /// `true` whenever the user has toggled `backgroundMode` since the
+    /// Settings window opened. Drives the "Restart required" caption
+    /// under the toggle. Does NOT clear on toggle-back — the relaunch
+    /// gate is per-session regardless of whether the user ended up at
+    /// the original value, which is acceptable UX and keeps the state
+    /// machine trivial.
+    @Published private(set) var backgroundModeRestartRequired: Bool = false
     @Published private(set) var pasteEnabled: Bool
     /// VAD auto-stop master toggle (#046). When `false`, orchestrator skips
     /// VAD wiring entirely — recording only stops via manual hotkey / pill / Esc.
@@ -554,7 +593,7 @@ final class GeneralTabViewModel: ObservableObject {
         // (`SystemLaunchAtLoginService`) reads SMAppService.mainApp.status
         // — .enabled means the app is registered to launch at login.
         self.launchAtLogin = launchAtLoginService.isEnabled
-        self.showInDock = ShowInDockPreference.resolve(from: defaults)
+        self.backgroundMode = BackgroundModePreference.resolve(from: defaults)
         self.pasteEnabled = PasteEnabledPreference.resolve(from: defaults)
         self.vadAutoStopEnabled = VadAutoStopEnabledPreference.resolve(from: defaults)
         self.vadSilenceThresholdSeconds = VadSilenceThresholdPreference.resolve(from: defaults)
@@ -691,24 +730,23 @@ final class GeneralTabViewModel: ObservableObject {
         style.persist(to: defaults)
     }
 
-    /// Persists the "Show in Dock" preference AND applies the new
-    /// activation policy so the Dock icon is added / removed at
-    /// runtime. `.regular` shows the app in the Dock; `.accessory`
-    /// runs it as a menu-bar / pill-only process (LSUIElement-style).
+    /// Persists the "Background mode" preference. Does NOT apply the
+    /// activation policy live — flipping `NSApp.setActivationPolicy`
+    /// mid-session while a window is open produces visible weirdness
+    /// (Dock icon appearing / disappearing, Cmd+Tab list shifting
+    /// under the user). Instead we flag the VM so the Settings UI can
+    /// render a "Restart required" note; the real policy flip happens
+    /// at next launch in `PersonalScribeAppMain`, which reads this
+    /// preference once on startup and calls
+    /// `NSApp.setActivationPolicy(.accessory)` if true.
     ///
-    /// No cross-check against menu-bar / pill visibility: the brief
-    /// keeps Show in Dock independent. If a user hides the menu bar
-    /// AND pill AND Dock, they can still reach the app via hotkey
-    /// (⌥/) — no conflict error is surfaced here.
-    func setShowInDock(_ enabled: Bool) {
-        showInDock = enabled
-        ShowInDockPreference.persist(enabled, to: defaults)
-        // `GeneralTabViewModel` is already `@MainActor`-isolated;
-        // `NSApp.setActivationPolicy` therefore runs on the main
-        // thread without additional dispatch. `NSApp` resolves to the
-        // same shared application the unified window was created
-        // under — safe to touch directly.
-        NSApp.setActivationPolicy(enabled ? .regular : .accessory)
+    /// The app's `Info.plist` no longer carries `LSUIElement: true` —
+    /// launch default is `.regular`. Users who want background mode opt
+    /// in via this setter.
+    func setBackgroundMode(_ enabled: Bool) {
+        backgroundMode = enabled
+        BackgroundModePreference.persist(enabled, to: defaults)
+        backgroundModeRestartRequired = true
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {

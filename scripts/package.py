@@ -298,8 +298,13 @@ def info_plist_contents() -> str:
     <string>public.app-category.productivity</string>
     <key>LSMinimumSystemVersion</key>
     <string>{MIN_MACOS}</string>
-    <key>LSUIElement</key>
-    <true/>
+    <!-- No LSUIElement: the app launches as a regular (Dock-visible)
+         process. Users who want a menu-bar-only setup enable
+         "Background mode" in Settings → General → Application; the
+         app reads that preference in `PersonalScribeAppMain` at startup
+         and calls `NSApp.setActivationPolicy(.accessory)` to hide
+         from the Dock / Cmd+Tab / Force Quit. Changes only take
+         effect on relaunch. -->
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>

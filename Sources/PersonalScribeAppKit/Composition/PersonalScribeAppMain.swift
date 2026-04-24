@@ -261,6 +261,16 @@ struct PersonalScribeAppMain: App {
         sceneModel.startObserving()
         startupCoordinator.start()
 
+        // Apply the persisted "Background mode" preference. Info.plist no
+        // longer carries `LSUIElement: true` — the app launches as
+        // `.regular` by default. If the user has opted in to background
+        // mode, flip to `.accessory` here. Changes only take effect on
+        // relaunch (the Settings toggle does not flip live — see
+        // `GeneralTabViewModel.setBackgroundMode`).
+        if BackgroundModePreference.resolve(from: defaults) {
+            NSApp.setActivationPolicy(.accessory)
+        }
+
         // #015: watch the permission service and flip
         // `OnboardingCompleted` the first time Mic + Input Monitoring
         // both land as `.granted`. Covers the "perms granted before

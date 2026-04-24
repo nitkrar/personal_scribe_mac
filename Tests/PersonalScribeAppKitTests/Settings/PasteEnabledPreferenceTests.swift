@@ -3,7 +3,7 @@ import XCTest
 
 /// Tests for `PasteEnabledPreference` — the master "paste result text"
 /// toggle added in mockup-gaps D.3 alongside the TEXT INPUT Settings
-/// section. Same pattern as `ShowInDockPreferenceTests`.
+/// section.
 final class PasteEnabledPreferenceTests: XCTestCase {
     func testDefaultIsTrue() {
         XCTAssertTrue(PasteEnabledPreference.default)

@@ -10,7 +10,7 @@ import Foundation
 /// bundle-scoped already). Default `true` so existing behaviour is
 /// preserved until a user explicitly disables it.
 ///
-/// Storage shape mirrors `ShowInDockPreference` — namespace with static
+/// Storage shape mirrors `BackgroundModePreference` — namespace with static
 /// `resolve(from:)` + `persist(_:to:)` using `object(forKey:)` to
 /// distinguish unset from explicit-false.
 ///
