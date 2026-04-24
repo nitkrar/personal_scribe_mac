@@ -221,8 +221,12 @@ Recommend **A** — active affordance, zero ambiguity, the destination is a real
 
 ### #072 — Paste to cursorless surface silently drops clipboard too
 
-`bug` · `P0` · `open` · `area: output, paste, clipboard`
+`bug` · `P0` · `done` · `area: output, paste, clipboard`
 *Updated 2026-04-24*
+
+**Landed (2026-04-24, `8d06afc`):** Fix direction D — opt-in restore. New `ClipboardRestoreEnabled` pref defaults to `false` → transcript stays on clipboard indefinitely, structurally preventing the silent-drop symptom. Paired with `restoreSnapshotIfUnchanged(_:token:)` changeCount guard (for users who opt restore ON) so the delayed restore skips if anything has written to the clipboard since our transcript landed — handles sequential-recording + user-Cmd+C + external-app-write races. Auto-paste toggle (replacing `PasteMode` picker + unwired `PasteEnabledPreference`) defaults to `true`. Slider default bumped 0.5s→3.0s, max 5.0s→10.0s. Settings UI consolidated into a single "Transcribe output" section with an adaptive summary caption. `PasteboardSnapshotService` + `ClipboardBatchOutput.savedItems` unified into one service (pre-empts the #074 anti-pattern example). Unverified build-wise at commit time — Santa manifest popup blocked iterative verification; user confirmed paste works in the DMG after allowlisting.
+
+**Residual UX gap (not a bug, not fixing now):** when auto-paste is on, paste is posted via `CGEventPost`, and the target surface has no cursor, the event goes to /dev/null — no visual hint to the user that they should press `Cmd+V` manually. The notice card only fires when paste was SKIPPED, not when it was posted-but-not-received. Transcript is still on the clipboard so `Cmd+V` works; discoverability is the gap. Live with it for now.
 
 **Symptom (user, 2026-04-24):** When the frontmost surface has no text cursor to receive a paste (e.g., Finder window, a dialog with focus on a non-text control, a web page that doesn't trap `Cmd+V`), the paste silently no-ops AND the clipboard ends up empty. The transcript lands in history but is not recoverable via `Cmd+V` — user has to copy it manually from the Transcriptions tab. From the user's vantage this reads as "nothing happened" until they discover the history entry.
 
@@ -253,6 +257,30 @@ My read: **A or D** is the right default. B re-introduces the #042 regression. C
 2. Switch focus to a Finder window (no text field focused) or any surface without a text cursor.
 3. Stop recording.
 4. Observe: pill confirms "Copied · ⌘V to paste"; press `Cmd+V` in a real text editor → paste is empty. Transcript is present in the Transcriptions tab.
+
+---
+
+### #075 — Hold-to-record + too-short recording wedges hold path
+
+`bug` · `P1` · `done` · `area: session, pill, hotkey`
+*Updated 2026-04-24*
+
+Hold the recording hotkey for <1s, release. Orchestrator published `.error(.recordingTooShort)` (`SessionPipelineOrchestrator.swift:434-445`). Pill rendered the "Recording too short." error state, but subsequent hold-to-record presses did NOT start a new hold session — dead hotkey until user tap-started via pill click or tap-hotkey. Tap path re-armed the state machine; hold path alone didn't. User also observed tap-hotkey + pill-click paths wedging from `.error` too — broader than just hold.
+
+**Root cause (user-identified):** "Recording too short" was misclassified as an error. It's a normal pipeline shortcut (nothing to transcribe), not a failure. The wedge was emergent from `.error` being a sticky state with inconsistent recovery paths per entry point; the double-render was from two surfaces (pill + card) both observing `.error(.recordingTooShort)`.
+
+**Fix direction:** reclassify. New `SessionState.shortExit` non-error terminal case, display-maps to `.idle` so every entry-point guard accepts it as startable. `PersonalScribeError.recordingTooShort` deleted. Pill flips straight to idle (no chip, no message — the short hold itself is the signal); card renders nothing for `.shortExit`.
+
+**Changelog**
+- 2026-04-24 `597055e` step 1.1 — `SessionState.shortExit` case + `SessionCoordinator.displayState(for:)` maps `.shortExit → .idle` (same pattern as `.completed`). All exhaustive switches across Orchestrator, AppStore, AppStoreSnapshot, StatusItemController, StatusItemMenuModel, RecordingStatusCardDriver updated to route `.shortExit` alongside `.completed` / `.idle`. Test: `testShortExitDisplayStateMapsToIdle`.
+- 2026-04-24 `c89a6d8` step 1.2 — Orchestrator at `SessionPipelineOrchestrator.swift:434` publishes `.shortExit` instead of `.error(.recordingTooShort)`. Kills the wedge by construction across hold/tap/click entry points. Tests: `testShortRecordingPublishesShortExitWithoutTranscribing`, `testShortRecordingPublishesShortExitWithoutCallingTranscriber`, `testStartHoldIfIdleFromShortExitEntersHoldRecording` (wedge regression).
+- 2026-04-24 `6d89cd5` step 1.3 — Initial approach: AppStore emits `.error(message:)` chip for 1.5s. (Superseded by step 1.7 — chip dropped entirely per user.)
+- 2026-04-24 `13b6b0f` step 1.4 — Card-driver regression test: `testDriverEmitsNothingForShortExit`. Driver already returns `nil` for `.shortExit` by construction (error branch matches only `.error`, default branch returns nil).
+- 2026-04-24 `6ebbc31` step 1.5 — Deleted `PersonalScribeError.recordingTooShort` and its `LocalizedError` branches. `PillOverlayViewModel.pillMessage` + `AppStore.pillMessage` no longer map it. Pre-existing error-visibility test rewritten to use `.resampleFailure`.
+- 2026-04-24 `c8ac42d` step 1.6 — Manual verification `MV-SHORT-1..6` in `ManualHotkeyVerification.md`.
+- 2026-04-24 `82eade2` step 1.7 — Dropped the too-short chip entirely. User feedback: reusing `.error(message:)` kept the misclassified framing in the UI layer and hit a pre-existing SwiftUI rendering quirk where error text persists past panel resize. `.shortExit` now flips pill straight to idle via normal `rederivePillVisibility`. Test renamed: `testShortExitFlipsPillStraightToIdle`.
+- Dogfood verification 2026-04-24: user confirmed (a) hold-record works from `.shortExit` (wedge fixed across entry points), (b) response card no longer renders for short-hold, (c) pill flips cleanly to idle post step 1.7.
+- Follow-up not filed: `.error(message:)` text-persistence in SwiftUI pill rendering is theoretically reachable via remaining real errors (`.micPermissionDenied`, `.transcriptionFailure`, etc.), but those are rare enough that this isn't worth pre-filing. File if/when observed in dogfood.
 
 ---
 
@@ -403,12 +431,26 @@ A net-new welcome/tour window would be fresh UX territory (hotkey walkthrough, m
 
 ### #017 — Hotkey customization in Settings (collision detection)
 
-`feature` · `P2` · `open` · `phase: 3` · `area: settings, hotkey`
-*Updated 2026-04-21*
+`feature` · `P2` · `done` · `phase: 3` · `area: settings, hotkey`
+*Updated 2026-04-24*
 
-Shortcuts subsection exists (demoted from standalone tab via `a21e7b6`). Needs recorder UI wired to `HotkeyPreference`, collision detection against system shortcuts, conflict warnings.
+Shortcuts subsection exists (demoted from standalone tab via `a21e7b6`). Stage A landed 2026-04-24 (`9d01f84`): restore-default, plist-backed system-shortcut collision with disabled-warning state, intra-app reserved registry, live apply (no relaunch).
 
 **Legacy:** `PLAN_PHASES.md` Phase 3.G
+
+**Changelog**
+- 2026-04-24 `9d01f84` stage A landed as one commit spanning 4 steps:
+  - **1.1** `ShortcutsTabViewModel.restoreDefault()` + "Restore default" button on the Shortcuts card (disabled when already at `opt + /`). 1 test.
+  - **1.2** `ReservedInAppHotkeys` registry (single seed: Esc). `HotkeyRecorder.handle(event:)` tightened to cancel only on plain Esc; `Cmd+Esc`/`Opt+Esc` now fall through to `rejectionReason` which calls the registry. 1 test.
+  - **1.3** `SystemHotkeyRegistry` reads `~/Library/Preferences/com.apple.symbolichotkeys.plist` (pure-`parse` helper + file-loader); new `CaptureResult.capturedWithWarning(_, warning:)` case — `canConfirm` true, `warningMessage` exposed — triggers when the captured shortcut matches a *disabled* system shortcut. Enabled-system-shortcut collisions stay hard-rejected with the system name. 5 tests (3 registry, 2 recorder).
+  - **1.4** `GlobalHotkeyMonitor.recordingHotkey: let` → `private(set) var`; new `updateRecordingHotkey(_:)` swaps binding + `resetState()`. `ShortcutsTabViewModel` gained an `onHotkeyUpdate` callback wired by `GeneralTab.init`'s default to `AppComposition.hotkeyMonitor.updateRecordingHotkey(_:)`. `requiresRestartNotice` + the shortcut card's `RestartRequiredCaption` removed (Background mode still uses the caption). 2 tests (swap + reset-in-flight).
+- Runbook `MV-HK-1..4` appended to `Tests/ManualVerifications/ManualHotkeyVerification.md`.
+- All 9 new tests passed on the other-laptop verification run; no #017-owned regressions.
+
+**Known limitations (not filed as follow-up):**
+- Modifier-only binding (e.g. double-tap ⌥) is still deliberately unimplemented end-to-end — `HotkeyRecorder.captureModifierChange` rejects any `.flagsChanged` chord, and `GlobalHotkeyMonitor.handle(event:)` no-ops `.flagsChanged` with a comment pointing at future work. User confirmed 2026-04-24 this is acceptable; default `opt + /` is the intended binding. Reintroducing modifier-only input would need recorder + monitor gesture-machine changes in both layers.
+- `ReservedInAppHotkeys`'s Esc entry is inert for plain Esc (captured by the recorder's cancel short-circuit first). Kept for `Cmd+Esc`/`Opt+Esc` rejection messaging and as scaffolding for future in-app hotkeys (#068, #070).
+- Stale "right Option" strings in `PillOverlayView.swift:216` + `StatusItemMenuModel.swift:262,278` — cosmetic copy drift from the pre-`opt + /` spec; out of scope here.
 
 ---
 
