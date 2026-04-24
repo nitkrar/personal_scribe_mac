@@ -76,7 +76,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         contextProvider: any PipelineContextProviding,
         vadProvider: (any VadProviding)? = nil,
         vadPreferences: (any VadPreferencesReading)? = nil,
-        graceDurationSeconds: Double = Self.defaultGraceDurationSeconds
+        graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
     ) {
         let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
         if let repository = transcriptRepository {
@@ -110,7 +110,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?,
         vadProvider: (any VadProviding)? = nil,
         vadPreferences: (any VadPreferencesReading)? = nil,
-        graceDurationSeconds: Double = Self.defaultGraceDurationSeconds
+        graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
     ) {
         let initialContext = contextProvider.currentContext()
         self.capture = capture

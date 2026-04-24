@@ -28,13 +28,19 @@ public actor FluidAudioVadProvider: VadProviding {
     private var loadState: LoadState = .notLoaded
 
     /// Convenience init that locates the bundled model inside the module
-    /// resources. Throws if the resource is missing (dev error — shouldn't
-    /// happen in a released build).
+    /// resources. Throws if the resource is missing — that's a build-time
+    /// invariant violation (Package.swift / resource-copy drift), NOT a
+    /// user-facing failure mode. Debug builds also assert so a dev build
+    /// with a mis-configured bundle crashes early rather than silently
+    /// proceeding to the production fallback path.
     public init() throws {
         guard let url = Bundle.module.url(
             forResource: "silero-vad-unified-256ms-v6.0.0",
             withExtension: "mlmodelc"
         ) else {
+            assertionFailure(
+                "Bundled VAD model missing — Package.swift `resources:` out of sync with Sources/PersonalScribeVAD/Resources/"
+            )
             throw BundledModelError.resourceNotFound
         }
         self.modelDirectoryURL = url

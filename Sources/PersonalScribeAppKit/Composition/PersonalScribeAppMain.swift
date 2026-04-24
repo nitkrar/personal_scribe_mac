@@ -206,6 +206,10 @@ struct PersonalScribeAppMain: App {
         let openSettingsTab: @MainActor () -> Void = {
             unifiedWindowControllerHost.showWindow(selecting: .settings)
         }
+        // #046 Stage B: wire the pill's VAD auto-stopped notification link
+        // to the same Settings-open closure. Post-init setter because the
+        // pill controller is constructed before `unifiedWindowControllerHost`.
+        pillController.setOpenVadSettingsAction(openSettingsTab)
         // Menu-bar "Copy Last Transcript" is strict copy-to-clipboard —
         // no auto-paste, no AX probe. The paste-at-cursor flow is
         // served by the hotkey / pill path where cursor context is

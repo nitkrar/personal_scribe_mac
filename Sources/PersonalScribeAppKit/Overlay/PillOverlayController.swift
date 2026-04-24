@@ -22,7 +22,12 @@ public final class PillOverlayController: ObservableObject {
     /// Injected at composition time (Chunk E wires this to the
     /// `openSettingsTab` closure from `PersonalScribeAppMain`). When
     /// nil, the link still renders but taps are no-ops.
-    private let openVadSettingsAction: (@MainActor @Sendable () -> Void)?
+    /// Closure that opens Settings at the VAD-prefs section. Injected by
+    /// composition via `setOpenVadSettingsAction` AFTER the unified-window
+    /// host exists — the host is constructed later than `PillOverlayController`
+    /// in `PersonalScribeAppMain`, so we can't pass it at init. The
+    /// "Auto stopped" notification's link-tap routes through here.
+    private var openVadSettingsAction: (@MainActor @Sendable () -> Void)?
 
     // Stage 2 compatibility bridge. Delete these public publisher-backed
     // initializers in the Stage 3 duplicate-observation cleanup pass.
@@ -155,6 +160,15 @@ public final class PillOverlayController: ObservableObject {
 
     public func showClipboardOnlyNotice() {
         presenter.showClipboardOnlyNotice()
+    }
+
+    /// Late-binding install for the Settings-deep-link closure. Called by
+    /// `PersonalScribeAppMain` after `unifiedWindowControllerHost` exists
+    /// (which is instantiated later in the composition flow than this
+    /// controller). The closure is invoked when the user taps the
+    /// "Update settings to change" link on the VAD auto-stopped notification.
+    public func setOpenVadSettingsAction(_ action: @escaping @MainActor @Sendable () -> Void) {
+        openVadSettingsAction = action
     }
 
     private func applySnapshot(_ snapshot: AppStoreSnapshot) {

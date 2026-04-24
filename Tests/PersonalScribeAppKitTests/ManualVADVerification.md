@@ -1,6 +1,6 @@
-# Manual VAD Verification (#046 Stage A)
+# Manual VAD Verification (#046 Stage A + Stage B)
 
-Runbook for the VAD auto-stop feature. Assumes a fresh DMG with the bundled Silero CoreML model. Pill waveform is the primary user signal — no pill UI changes in Stage A.
+Runbook for the VAD auto-stop feature. Assumes a fresh DMG with the bundled Silero CoreML model. Pill waveform is the primary Stage A signal; Stage B adds two opt-in preferences that surface through the ResponseCard (not the pill).
 
 ## MV-VAD-1 — Enabled happy path
 
@@ -33,7 +33,47 @@ Runbook for the VAD auto-stop feature. Assumes a fresh DMG with the bundled Sile
 3. Stop talking, wait.
 4. **Expect:** current session auto-stops at the original ~2.5s (frozen-at-session-start). Start a new session; that one auto-stops at ~5s.
 
-## Known Stage A gaps (deferred)
+## Stage B preferences
 
-- **No grace window.** VAD auto-stop is instant — Esc after auto-stop fires hits `.transcribing` (a no-op for cancel). Tracked for Stage B (about-to-stop sub-state, dogfood-gated).
-- **Bundled-model load failure is silent.** If the bundled `.mlmodelc` can't be found (shouldn't happen in a released build), the feature silently disables. Settings toggle still appears normal; no pill error. Logged under category `session` at error level.
+Stage B adds two opt-in toggles inside Settings → General → Auto-stop (visible only when the master toggle is on). Both default **off** — shipped behavior is unchanged until the user turns them on.
+
+- **Warn before stopping** — when on, VAD `.speechEnded` starts an 0.8s grace window. During grace, the ResponseCard shows `…stopping, speak to continue`. Three exits: timer elapses (fires), user resumes speaking (cancels + keeps recording), user presses the hotkey (fires immediately).
+- **Show stop notification** — when on, after VAD-triggered auto-stop transitions to `.transcribing`, the ResponseCard briefly shows `Auto stopped. Update settings to change.` with a clickable link. Auto-dismisses at 2.0s OR when the next session starts.
+
+## MV-VAD-6 — Warn enabled, notification off
+
+1. Settings → General → Auto-stop: master on, **Warn before stopping: on**, **Show stop notification: off**.
+2. Hotkey-record, speak a sentence, stop talking.
+3. **Expect:** pill stays in `.recording` during the 0.8s grace. ResponseCard shows `…stopping, speak to continue`. After 0.8s uncancelled, session transitions to `.transcribing` normally. Card disappears.
+
+## MV-VAD-7 — Warn enabled, speech resumes during grace
+
+1. Same prefs as MV-VAD-6.
+2. Hotkey-record, speak, stop talking for ~0.5s, then start talking again.
+3. **Expect:** ResponseCard briefly showed `…stopping, speak to continue`, then disappeared when speech resumed. Session stays `.recording`. Keep talking; the session only ends when you either stop manually or go silent long enough for a fresh grace window to elapse.
+
+## MV-VAD-8 — Warn off, notification on
+
+1. Settings: master on, **Warn: off**, **Show stop notification: on**.
+2. Hotkey-record, speak, stop talking.
+3. **Expect:** instant auto-stop (Stage A behavior). Session transitions to `.transcribing`. ResponseCard shows `Auto stopped. Update settings to change.` for ~2s, then auto-dismisses.
+
+## MV-VAD-9 — Notification link opens Settings
+
+1. Same prefs as MV-VAD-8. Trigger auto-stop to see the notification.
+2. While the card is visible, click the linked text `Update settings to change`.
+3. **Expect:** Settings window opens. (Sub-tab focus on General is nice-to-have but not required in Stage B — user may see whatever sub-tab was last active.)
+
+## MV-VAD-10 — Warn and notification both on
+
+1. Settings: master on, **Warn: on**, **Show stop notification: on**.
+2. Hotkey-record, speak, stop talking. Let the grace elapse.
+3. **Expect:** during grace — card shows `…stopping, speak to continue`. After grace fires — card switches to `Auto stopped. Update settings to change.` for 2s. Then auto-dismisses.
+4. **Variant:** repeat, but press the hotkey during the grace window. Session stops immediately. Notification does **NOT** fire — manual preemption is treated as a user-initiated stop, not a VAD-triggered one.
+5. **Variant:** repeat, but resume speaking during grace. Grace cancels, card disappears. No notification fires (the stop didn't happen).
+
+## Known gaps (carried from Stage A + Stage B scope limits)
+
+- **Bundled-model load failure is a build-time invariant.** Guarded by `testFluidAudioVadProviderLoadsBundledModelAndProducesSession` in `PersonalScribeVADTests`, plus a debug-build `assertionFailure` in `FluidAudioVadProvider.init()`. If it somehow fires in production (malicious app-bundle tamper), VAD silently disables (recording still works); logged under category `session` at error level.
+- **Esc semantics unchanged.** Esc during grace still true-discards the recording per #002 — it does NOT "cancel grace and keep recording." The two cancel paths during grace are (a) resumed speech (b) wait out the timer. This is deliberate to avoid overloading Esc.
+- **Settings sub-tab focus.** Clicking the notification link opens Settings but may not force-select the General sub-tab if another was active. Promoting sub-tab routing into the unified-window model is deferred.
