@@ -296,12 +296,12 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
     }
 
-    /// `#075`: `.shortExit` (non-error terminal) shows the "Too short —
-    /// try again" chip on the pill for 1.5s, then fades to hidden.
-    /// Session state itself remains `.shortExit` (which maps to `.idle`
-    /// in display-state), so the pill rederive returns the non-alwaysOn
-    /// idle visibility = `.hidden`.
-    func testShortExitVisibilityShowsChipThenTransitionsToHidden() async {
+    /// `#075`: `.shortExit` flips pill straight to idle — no chip, no
+    /// message. The short hold itself is the user-facing signal; the
+    /// pill returning to idle confirms the pipeline exited. Session
+    /// state display-maps `.shortExit → .idle` so entry guards accept
+    /// the next action.
+    func testShortExitFlipsPillStraightToIdle() async {
         let session = FakeAppStoreSessionProvider()
         let clock = ManualAppStoreClock()
         let store = makeStore(
@@ -316,17 +316,6 @@ final class AppStoreTests: XCTestCase {
         await clock.advance(by: .zero)
 
         session.emitState(.shortExit)
-        await waitUntil {
-            store.snapshot.pillVisibility == .error(message: AppStore.shortExitMessage)
-        }
-
-        await clock.advance(by: .milliseconds(1_499))
-        XCTAssertEqual(
-            store.snapshot.pillVisibility,
-            .error(message: AppStore.shortExitMessage)
-        )
-
-        await clock.advance(by: .milliseconds(1))
         await waitUntil {
             store.snapshot.pillVisibility == .hidden
         }

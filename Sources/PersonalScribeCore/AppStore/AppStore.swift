@@ -6,8 +6,6 @@ public final class AppStore: ObservableObject {
     public static let doneVisibilityDuration: Duration = .milliseconds(1_000)
     public static let errorVisibilityDuration: Duration = .milliseconds(1_500)
     public static let recordingDurationTickInterval: Duration = .milliseconds(250)
-    /// Pill-chip message for the `.shortExit` non-error terminal. See `#075`.
-    public static let shortExitMessage = "Too short — try again"
 
     @Published public private(set) var snapshot: AppStoreSnapshot
 
@@ -156,26 +154,11 @@ public final class AppStore: ObservableObject {
             return
         }
 
-        // `#075`: `.shortExit` is a non-error terminal. Show the "too
-        // short" chip on the pill for the same 1.5s window as real
-        // errors, then fade through `rederivePillVisibility()` — which
-        // returns idle/hidden because `.shortExit` maps to
-        // `idleVisibility` in `derivePillVisibility`. Reuses the
-        // existing `.error(message:)` pill-state for the chip's visual
-        // rendering; the error semantic lives only in the UI-representation
-        // type, not in `SessionState`.
-        if newState == .shortExit {
-            guard previousState != .shortExit else {
-                return
-            }
-
-            updateSnapshot { snapshot in
-                snapshot.pillVisibility = .error(message: Self.shortExitMessage)
-            }
-            schedulePillTransition(after: Self.errorVisibilityDuration)
-            return
-        }
-
+        // `#075`: `.shortExit` flips pill straight to idle — no chip,
+        // no message. The short hold itself is the user-facing signal;
+        // the pill returning to idle confirms the pipeline exited.
+        // `rederivePillVisibility()` routes through `derivePillVisibility`,
+        // which maps `.shortExit` to `idleVisibility`.
         cancelPillTransition()
         rederivePillVisibility()
     }
