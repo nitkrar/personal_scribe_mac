@@ -120,6 +120,36 @@ methods instead of the toggle path.
   Release transitions to `.transcribing`; transcript appears once
   download + prepare complete.
 
+## #075 — Short-hold no longer wedges entry points (2026-04-24)
+
+Pre-fix: releasing a hold under 1 second published `.error(.recordingTooShort)`.
+The pill showed "Too short — try again" AND the response card showed
+the same message. Next hold/tap-hotkey/pill-click was a no-op —
+entry-point guards rejected `.error` and there was no clean recovery
+path. Post-fix: short-hold publishes `.shortExit` (non-error terminal);
+display-state maps it to `.idle` so every entry point accepts the next
+action; the pill shows the chip alone for 1.5s; the response card
+renders nothing.
+
+- [ ] **MV-SHORT-1** Hold the hotkey briefly (< 1s), release. Pill
+  shows "Too short — try again" chip for ~1.5s, then fades. **The
+  response card does NOT appear** — the pill is the sole surface.
+- [ ] **MV-SHORT-2** Immediately after MV-SHORT-1's chip appears
+  (within or after the 1.5s window), hold the hotkey again for ~1s
+  and speak. Recording starts cleanly; transcript pastes. No wedge.
+- [ ] **MV-SHORT-3** Same as MV-SHORT-1, but instead of a second hold,
+  tap the hotkey (double-tap ⌥, or the configured shortcut). New
+  recording starts cleanly. No wedge.
+- [ ] **MV-SHORT-4** Same as MV-SHORT-1, but click the pill after
+  the chip appears. New recording starts cleanly. No wedge.
+- [ ] **MV-SHORT-5** After MV-SHORT-1, wait past the 1.5s chip TTL
+  without any interaction. Pill returns to idle/hidden on its own —
+  no stale chip, no stuck state.
+- [ ] **MV-SHORT-6** Regression guard for real errors: deny mic
+  permission (or trigger another real error) to confirm the response
+  card still shows a full error description for genuine errors,
+  distinguishing them from the (pill-only) short-exit chip.
+
 ## #017 — Hotkey customization (Stage A, 2026-04-24)
 
 Ticket: `plans/backlog/#017` — split across Steps 1.1–1.4 in a single
