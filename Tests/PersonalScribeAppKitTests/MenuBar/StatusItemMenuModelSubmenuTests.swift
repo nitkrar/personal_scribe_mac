@@ -217,6 +217,49 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         XCTAssertEqual(quit.id, .quit)
     }
 
+    // MARK: - Mode submenu (#068)
+
+    func testModeSubmenuPresentWithChildrenAndActiveCheckmark() {
+        let modes = [
+            ModeRegistry.dictation,
+            ModeDescriptor(id: "command", name: "Command", voiceModelID: "v"),
+        ]
+        let model = StatusItemMenuModel.makeUnified(
+            sessionState: .idle,
+            micPermission: .granted,
+            inputMonitoringPermission: .granted,
+            activeModeName: ModeRegistry.dictation.name,
+            modes: modes,
+            currentModeID: ModeRegistry.dictation.id
+        )
+
+        let modeSubmenu = extractModeSubmenu(from: model)
+        XCTAssertEqual(modeSubmenu.title, ModeRegistry.dictation.name)
+        XCTAssertEqual(modeSubmenu.iconName, "switch.2")
+        XCTAssertEqual(modeSubmenu.children.map(\.modeID), [ModeRegistry.dictation.id, "command"])
+        let activeChildren = modeSubmenu.children.filter(\.isActive)
+        XCTAssertEqual(activeChildren.count, 1)
+        XCTAssertEqual(activeChildren.first?.modeID, ModeRegistry.dictation.id)
+    }
+
+    func testNoModeSubmenuWhenModesEmpty() {
+        let model = StatusItemMenuModel.makeUnified(
+            sessionState: .idle,
+            micPermission: .granted,
+            inputMonitoringPermission: .granted,
+            activeModeName: ModeRegistry.dictation.name,
+            modes: [],
+            currentModeID: nil
+        )
+
+        XCTAssertFalse(
+            model.items.contains(where: { item in
+                if case .modeSubmenu = item { return true } else { return false }
+            }),
+            "Empty modes list must omit the mode submenu entirely"
+        )
+    }
+
     // MARK: - Helpers
 
     private struct ExtractedSubmenu {
@@ -237,5 +280,25 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         }
         XCTFail("Expected a submenu in model", file: file, line: line)
         return ExtractedSubmenu(title: "", iconName: nil, children: [])
+    }
+
+    private struct ExtractedModeSubmenu {
+        let title: String
+        let iconName: String?
+        let children: [StatusItemMenuModel.ModeSubmenuChild]
+    }
+
+    private func extractModeSubmenu(
+        from model: StatusItemMenuModel,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> ExtractedModeSubmenu {
+        for item in model.items {
+            if case let .modeSubmenu(title, iconName, children) = item {
+                return ExtractedModeSubmenu(title: title, iconName: iconName, children: children)
+            }
+        }
+        XCTFail("Expected a mode submenu in model", file: file, line: line)
+        return ExtractedModeSubmenu(title: "", iconName: nil, children: [])
     }
 }

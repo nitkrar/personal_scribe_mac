@@ -248,6 +248,15 @@ struct PersonalScribeAppMain: App {
             },
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider,
+            modes: ModeRegistry.all,
+            setActiveMode: { mode in
+                do {
+                    try await modelService.setActive(modelService.descriptor(for: mode))
+                } catch {
+                    PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+                        .error("Failed to set active mode '\(mode.id)' from menu-bar submenu", error: error)
+                }
+            },
             prequitHandler: {
                 // Stop an active recording before terminate so
                 // `SystemAudioMuter` restores the prior output mute state.
@@ -407,6 +416,8 @@ final class StatusItemControllerHost: ObservableObject {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
         },
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
+        modes: [ModeDescriptor] = ModeRegistry.all,
+        setActiveMode: @escaping @MainActor (ModeDescriptor) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {}
     ) {
         self.controller = StatusItemController(
@@ -418,6 +429,8 @@ final class StatusItemControllerHost: ObservableObject {
             openCopyLastTranscript: openCopyLastTranscript,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider,
+            modes: modes,
+            setActiveMode: setActiveMode,
             prequitHandler: prequitHandler
         )
     }

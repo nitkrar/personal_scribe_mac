@@ -23,6 +23,7 @@ struct StatusItemMenuModel: Equatable {
         case action(ActionItem)
         case separator
         case submenu(title: String, iconName: String?, children: [SubmenuChild])
+        case modeSubmenu(title: String, iconName: String?, children: [ModeSubmenuChild])
     }
 
     /// One row inside a `.submenu(...)`. Currently used only for the
@@ -39,6 +40,21 @@ struct StatusItemMenuModel: Equatable {
 
         init(deviceID: String, title: String, isActive: Bool) {
             self.deviceID = deviceID
+            self.title = title
+            self.isActive = isActive
+        }
+    }
+
+    /// One row inside a `.modeSubmenu(...)`. `modeID` is the
+    /// `ModeDescriptor.id` payload forwarded to the `setActiveMode`
+    /// closure when the user selects a row.
+    struct ModeSubmenuChild: Equatable {
+        let modeID: String
+        let title: String
+        let isActive: Bool
+
+        init(modeID: String, title: String, isActive: Bool) {
+            self.modeID = modeID
             self.title = title
             self.isActive = isActive
         }
@@ -93,6 +109,11 @@ struct StatusItemMenuModel: Equatable {
         /// through this enum — the controller hands the id straight
         /// to `AudioInputDeviceProviding.selectDevice(id:)`.
         case selectAudioInputDevice
+        /// Dispatch id for Mode-submenu rows (#068). The payload
+        /// (`ModeDescriptor.id`) travels on the `ModeSubmenuChild`,
+        /// not through this enum — the controller hands the id to
+        /// the injected `setActiveMode` closure.
+        case selectMode
     }
 
     let items: [Item]
@@ -132,7 +153,9 @@ struct StatusItemMenuModel: Equatable {
         activeModeName: String? = nil,
         isOnboardingComplete: Bool = true,
         inputDevices: [AudioInputDevice] = [],
-        currentInputDeviceID: String? = nil
+        currentInputDeviceID: String? = nil,
+        modes: [ModeDescriptor] = [],
+        currentModeID: String? = nil
     ) -> StatusItemMenuModel {
         _ = isOnboardingComplete
         var items: [Item] = []
@@ -221,11 +244,34 @@ struct StatusItemMenuModel: Equatable {
             iconName: "doc.on.clipboard"
         )))
 
-        // The final separator is always present; the optional
-        // Microphone submenu (M5.3) slots between it and Quit.
-        // Omitting the submenu when no devices are discoverable keeps
+        // The final separator is always present; the optional Mode
+        // submenu (#068) and Microphone submenu (M5.3) slot between it
+        // and Quit. Mode renders above Mic when both are present —
+        // "what the app does" above "what hardware it listens on".
+        // Omitting either submenu when its source list is empty keeps
         // the baseline shape stable for unit tests.
         items.append(.separator)
+
+        if !modes.isEmpty {
+            let parentTitle: String = {
+                if let currentModeID,
+                   let current = modes.first(where: { $0.id == currentModeID }) {
+                    return current.name
+                }
+                return "Mode"
+            }()
+            items.append(.modeSubmenu(
+                title: parentTitle,
+                iconName: "switch.2",
+                children: modes.map { mode in
+                    ModeSubmenuChild(
+                        modeID: mode.id,
+                        title: mode.name,
+                        isActive: mode.id == currentModeID
+                    )
+                }
+            ))
+        }
 
         if !inputDevices.isEmpty {
             items.append(.submenu(

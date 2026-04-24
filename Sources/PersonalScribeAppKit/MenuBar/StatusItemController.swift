@@ -15,6 +15,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
     private let openURL: @MainActor (URL) -> Void
     private let inputDeviceProvider: any AudioInputDeviceProviding
+    private let modes: [ModeDescriptor]
+    private let setActiveMode: @MainActor (ModeDescriptor) async -> Void
     private let prequitHandler: @MainActor () async -> Void
     private let logger: PersonalScribeLogger
 
@@ -33,6 +35,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
+        modes: [ModeDescriptor] = ModeRegistry.all,
+        setActiveMode: @escaping @MainActor (ModeDescriptor) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {},
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
     ) {
@@ -49,6 +53,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             openMicrophoneSystemSettings: openMicrophoneSystemSettings,
             openInputMonitoringSystemSettings: openInputMonitoringSystemSettings,
             inputDeviceProvider: inputDeviceProvider,
+            modes: modes,
+            setActiveMode: setActiveMode,
             prequitHandler: prequitHandler,
             logger: logger
         )
@@ -67,6 +73,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
+        modes: [ModeDescriptor] = ModeRegistry.all,
+        setActiveMode: @escaping @MainActor (ModeDescriptor) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {},
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
     ) {
@@ -91,6 +99,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
         }
         self.inputDeviceProvider = inputDeviceProvider ?? EmptyAudioInputDeviceProvider()
+        self.modes = modes
+        self.setActiveMode = setActiveMode
         self.prequitHandler = prequitHandler
         self.logger = logger
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -169,6 +179,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             // silently ignoring catches future refactors that
             // mistakenly route here.
             logger.error("performMenuAction called for .selectAudioInputDevice; expected direct handleDeviceSelection path")
+        case .selectMode:
+            // Mode rows route through `handleModeSelection(_:)`
+            // directly (same pattern as `.selectAudioInputDevice`).
+            logger.error("performMenuAction called for .selectMode; expected direct handleModeSelection path")
         }
     }
 
@@ -258,7 +272,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             activeModeName: snapshot.activeMode?.name,
             isOnboardingComplete: isOnboardingCompleteProvider(),
             inputDevices: inputDevices,
-            currentInputDeviceID: currentInputDeviceID
+            currentInputDeviceID: currentInputDeviceID,
+            modes: modes,
+            currentModeID: snapshot.activeMode?.id
         )
 
         menu.removeAllItems()
@@ -319,6 +335,29 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 }
                 parent.submenu = submenu
                 menu.addItem(parent)
+            case .modeSubmenu(let title, let iconName, let children):
+                let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+                parent.isEnabled = true
+                if let iconName {
+                    parent.image = NSImage(
+                        systemSymbolName: iconName,
+                        accessibilityDescription: nil
+                    )
+                }
+                let submenu = NSMenu(title: title)
+                submenu.autoenablesItems = false
+                for child in children {
+                    let childItem = NSMenuItem()
+                    childItem.title = child.title
+                    childItem.state = child.isActive ? .on : .off
+                    childItem.isEnabled = true
+                    childItem.target = self
+                    childItem.action = #selector(handleModeSelection(_:))
+                    childItem.representedObject = child.modeID
+                    submenu.addItem(childItem)
+                }
+                parent.submenu = submenu
+                menu.addItem(parent)
             }
         }
     }
@@ -347,6 +386,26 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
         inputDeviceProvider.selectDevice(id: deviceID)
         rebuildMenu()
+    }
+
+    /// Mode-submenu row handler (#068). `representedObject` carries the
+    /// `ModeDescriptor.id` string; we resolve it back to the matching
+    /// `ModeDescriptor` from `modes` and hand it to `setActiveMode`.
+    /// The AppStore snapshot's `activeMode` flip then triggers
+    /// `handleSnapshotChange` → `rebuildMenu`, which refreshes the
+    /// checkmark and parent title.
+    @objc private func handleModeSelection(_ sender: NSMenuItem) {
+        guard let modeID = sender.representedObject as? String else {
+            logger.error("Mode selection fired with unknown representedObject")
+            return
+        }
+        guard let mode = modes.first(where: { $0.id == modeID }) else {
+            logger.error("Mode selection fired for unknown modeID=\(modeID)")
+            return
+        }
+        Task { @MainActor in
+            await setActiveMode(mode)
+        }
     }
 
     private func statusItemLabel(for sessionState: SessionState) -> String {
