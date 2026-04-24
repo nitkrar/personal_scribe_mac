@@ -27,12 +27,20 @@ public enum BuiltInModelCatalog {
     public static let parakeetTDT06Bv2 = ModelDescriptor(
         id: "parakeet-tdt-0.6b-v2",
         displayName: "Parakeet TDT 0.6B",
+        // FluidAudio's `Repo.parakeetV2.folderName` (default rule strips
+        // the `-coreml` suffix from `name`). Verified against
+        // `FluidAudio/Sources/FluidAudio/ModelNames.swift` switch.
+        repoFolderName: "parakeet-tdt-0.6b-v2",
+        kind: .asr,
         shortDescription: "High-accuracy default — balanced RAM and speed.",
         architecture: "FastConformer-TDT",
         repository: "FluidInference/parakeet-tdt-0.6b-v2-coreml",
         revision: "ee09c569f73759e6d44c9bd16766f477b2b36d39",
         requiredRelativePaths: splitFrontendRequiredPaths,
-        approximateSizeBytes: 450_000_000,
+        // Sum of required `.mlmodelc` + `parakeet_vocab.json` per HF
+        // tree API at the pinned revision (2026-04-25). Refreshed from
+        // the prior 450M estimate.
+        approximateSizeBytes: 464_413_247,
         engine: .parakeetTDT,
         // huggingface.co/nvidia/parakeet-tdt-0.6b-v2 (2026-04-22):
         // avg WER 6.05% (test-clean 1.69%, test-other 3.19%),
@@ -51,12 +59,22 @@ public enum BuiltInModelCatalog {
     public static let parakeetTDTCTC110M = ModelDescriptor(
         id: "parakeet-tdt-ctc-110m",
         displayName: "Parakeet TDT-CTC 110M",
+        // FluidAudio's `Repo.parakeetTdtCtc110m.folderName` (explicit
+        // case at `ModelNames.swift:151-152` returns
+        // `"parakeet-tdt-ctc-110m"` — drops the `-coreml` suffix the
+        // repo name carries on HF).
+        repoFolderName: "parakeet-tdt-ctc-110m",
+        kind: .asr,
         shortDescription: "Lightweight — faster, lower accuracy, minimal RAM.",
         architecture: "Hybrid FastConformer-TDT-CTC",
         repository: "FluidInference/parakeet-tdt-ctc-110m-coreml",
         revision: "9bc92ead6e8f17eca92a869fd578ae76842b82ba",
         requiredRelativePaths: fusedFrontendRequiredPaths,
-        approximateSizeBytes: 407_000_000,
+        // Sum of required `.mlmodelc` (Preprocessor + Decoder +
+        // JointDecision, fused frontend skips Encoder) + vocab per HF
+        // tree API at the pinned revision (2026-04-25). Prior estimate
+        // (407M) was nearly 2× the actual download.
+        approximateSizeBytes: 227_466_209,
         engine: .parakeetTDT,
         // huggingface.co/nvidia/parakeet-tdt_ctc-110m (2026-04-22):
         // avg WER 7.49% (test-clean 2.4%, test-other 5.2%),
@@ -68,18 +86,23 @@ public enum BuiltInModelCatalog {
         )
     )
 
-    // The authoritative Layer 6 plan still leaves the v3 revision pin open.
-    // Keep the catalog additive for Stage 1, but leave `defaultActiveDescriptor`
-    // on the pinned v2 descriptor until main session supplies the exact pin.
     public static let parakeetTDT06Bv3 = ModelDescriptor(
         id: "parakeet-tdt-0.6b-v3",
         displayName: "Parakeet TDT 0.6B v3",
-        shortDescription: "Newer 0.6B release — updated weights, larger disk footprint.",
+        // `Repo.parakeet.folderName` — default rule strips `-coreml`
+        // from `parakeet-tdt-0.6b-v3-coreml`.
+        repoFolderName: "parakeet-tdt-0.6b-v3",
+        kind: .asr,
+        shortDescription: "Multilingual (25 European languages) — same compute as v2.",
         architecture: "FastConformer-TDT",
         repository: "FluidInference/parakeet-tdt-0.6b-v3-coreml",
-        revision: "main",
+        // Pinned to the current HuggingFace `main` HEAD (2026-04-25).
+        // Was previously `"main"` (drift risk).
+        revision: "775be920d492d20e9e522ee0a969414fd6e6e0f7",
         requiredRelativePaths: splitFrontendRequiredPaths,
-        approximateSizeBytes: 700_000_000,
+        // Sum of required `.mlmodelc` + vocab per HF tree API at the
+        // pinned revision (2026-04-25). Prior 700M estimate was high.
+        approximateSizeBytes: 483_103_089,
         engine: .parakeetTDT,
         // huggingface.co/nvidia/parakeet-tdt-0.6b-v3 (2026-04-22):
         // avg WER 6.34% (test-clean 1.93%, test-other 3.59%),

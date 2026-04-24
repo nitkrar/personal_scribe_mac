@@ -6,6 +6,19 @@ public enum TranscriptionEngine: Sendable, Equatable {
     // Do not implement them now.
 }
 
+/// Broad capability category for a registered model. Used by the
+/// Settings UI to filter what's shown (e.g. AI Models tab today only
+/// surfaces `.asr`). Extensible: streaming/EOU, VAD, diarization, and
+/// TTS variants will land their own cases as we add transcriber
+/// adapters for them.
+public enum ModelKind: String, Sendable, Equatable, CaseIterable, Codable {
+    case asr
+    case streamingASR
+    case vad
+    case diarization
+    case tts
+}
+
 /// Published benchmark metrics for a registered model. Sourced from
 /// the vendor's model card (e.g. HuggingFace Open ASR leaderboard).
 /// All fields optional so ad-hoc descriptors constructed by tests for
@@ -45,8 +58,16 @@ public struct ModelPerformance: Sendable, Equatable, Codable {
 }
 
 public struct ModelDescriptor: Sendable, Equatable {
-    public let id: String                  // "parakeet-tdt-0.6b-v2" — also the on-disk directory name
-    public let displayName: String         // "Parakeet TDT 0.6B" — surfaces in future Settings UI
+    public let id: String                  // "parakeet-tdt-0.6b-v2" — user-facing identity, persisted in UserDefaults
+    public let displayName: String         // "Parakeet TDT 0.6B" — surfaces in Settings UI
+    /// On-disk folder name. **Must equal FluidAudio's `Repo.folderName`**
+    /// for the corresponding repo so FluidAudio's cache-hit short-circuit
+    /// matches what we wrote. Drift here causes silent re-downloads.
+    /// Source: `FluidAudio/Sources/FluidAudio/ModelNames.swift` `folderName` switch.
+    public let repoFolderName: String
+    /// Broad capability category — used by the Settings UI to filter
+    /// which models surface in the AI Models tab (today: `.asr` only).
+    public let kind: ModelKind
     /// One-line inline description shown under `displayName` in the
     /// Settings → AI Models row. Keep ≤70 chars so it fits on one line
     /// at the default settings content width (620pt) without
@@ -71,6 +92,13 @@ public struct ModelDescriptor: Sendable, Equatable {
     public init(
         id: String,
         displayName: String,
+        // `repoFolderName` defaults to `id` for ad-hoc test fixtures
+        // and any historical caller — preserves the pre-#024.5
+        // behavior where the on-disk folder equaled `id`. Catalog
+        // entries should pass FluidAudio's `Repo.folderName`
+        // explicitly.
+        repoFolderName: String? = nil,
+        kind: ModelKind = .asr,
         shortDescription: String,
         architecture: String,
         repository: String,
@@ -82,6 +110,8 @@ public struct ModelDescriptor: Sendable, Equatable {
     ) {
         self.id = id
         self.displayName = displayName
+        self.repoFolderName = repoFolderName ?? id
+        self.kind = kind
         self.shortDescription = shortDescription
         self.architecture = architecture
         self.repository = repository

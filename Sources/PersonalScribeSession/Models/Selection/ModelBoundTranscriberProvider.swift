@@ -78,9 +78,14 @@ private extension ModelBoundTranscriberProvider {
     }
 
     func modelDirectory(for descriptor: ModelDescriptor) -> URL {
+        // #024.5: derive the on-disk folder from FluidAudio's source of
+        // truth (`Repo.folderName`) via the descriptor's
+        // `repoFolderName`. They match by coincidence today; coupling
+        // them via this field removes the silent re-download risk if
+        // FluidAudio renames a repo's folderName upstream.
         storageLocator
             .url(for: .models)
-            .appendingPathComponent(descriptor.id, isDirectory: true)
+            .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
             .standardizedFileURL
     }
 

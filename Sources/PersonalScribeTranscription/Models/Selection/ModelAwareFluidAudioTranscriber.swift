@@ -258,10 +258,15 @@ private extension ModelAwareFluidAudioTranscriber {
     }
 
     func modelDirectory() throws -> URL {
+        // #024.5: derive the on-disk folder from FluidAudio's source of
+        // truth (`Repo.folderName`) via `descriptor.repoFolderName`.
+        // Aligns our cache layout with what `AsrModels.load(from:)`
+        // expects, removing silent re-download risk on FluidAudio
+        // upstream folder renames.
         try storageLocator.ensureDirectoriesExist()
         let directory = storageLocator
             .url(for: .models)
-            .appendingPathComponent(descriptor.id, isDirectory: true)
+            .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
             .standardizedFileURL
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
