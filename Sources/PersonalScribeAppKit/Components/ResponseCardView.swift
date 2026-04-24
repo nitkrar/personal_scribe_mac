@@ -9,22 +9,41 @@ import SwiftUI
 /// champagne gradient border, champagne-tinted body text, small `×`
 /// dismiss button in the top-right.
 ///
-/// Stateless: the owning `ResponseCard` panel passes in `text` and an
-/// `onDismiss` handler; this view has no persistent state of its own.
+/// Stateless: the owning `ResponseCard` panel passes in `text`, an
+/// optional `link` region + `onLinkTap` handler, and an `onDismiss`
+/// handler; this view has no persistent state of its own.
 @MainActor
 struct ResponseCardView: View {
     let text: String
+    /// Stage B (#046) optional link region inside `text`. When non-nil
+    /// the substring is rendered underlined and becomes tappable; tap
+    /// invokes `onLinkTap(link.action)`. When nil the body renders as
+    /// flat `Text` (unchanged from Stage A).
+    let link: StatusCardLink?
+    let onLinkTap: (@Sendable @MainActor (StatusCardLinkAction) -> Void)?
     let onDismiss: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
 
-    var body: some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+    /// Convenience init preserving the pre-Stage-B call shape for the
+    /// `#Preview` block and any text-only caller.
+    init(
+        text: String,
+        link: StatusCardLink? = nil,
+        onLinkTap: (@Sendable @MainActor (StatusCardLinkAction) -> Void)? = nil,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.text = text
+        self.link = link
+        self.onLinkTap = onLinkTap
+        self.onDismiss = onDismiss
+    }
 
+    var body: some View {
         ZStack(alignment: .topTrailing) {
             // Material + fill background
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(palette.pillBackground.opacity(0.93))
+                .fill(PersonalScribeTheme.Palette.for(scheme: colorScheme).pillBackground.opacity(0.93))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(
@@ -47,7 +66,7 @@ struct ResponseCardView: View {
             // Body text — leading-aligned, 12pt, scheme-invariant
             // champagne fg. Hard 2-line limit keeps the card compact;
             // longer responses are truncated with an ellipsis.
-            Text(text)
+            bodyText
                 .font(.system(size: 12))
                 .foregroundColor(PersonalScribeTheme.Pill.Dark.waveform)
                 .lineSpacing(3)
@@ -72,6 +91,39 @@ struct ResponseCardView: View {
         // then the SwiftUI shadow composites cleanly on top.
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
+    }
+
+    /// When `link` is nil the body is a plain `Text`. When a link is
+    /// provided, the body is built from an `AttributedString` with the
+    /// link substring underlined; the whole body reports a tap gesture
+    /// that invokes the link action when the link is present.
+    ///
+    /// Tap-on-substring (vs. tap-on-whole-card) is out of scope for
+    /// Stage B: the notification's only clickable affordance is the
+    /// link text, and the card only ever renders the single
+    /// notification message, so tapping anywhere on the card routes to
+    /// the link action.
+    @ViewBuilder
+    private var bodyText: some View {
+        if let link, let onLinkTap {
+            Text(attributedBody(link: link))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onLinkTap(link.action)
+                }
+        } else {
+            Text(text)
+        }
+    }
+
+    private func attributedBody(link: StatusCardLink) -> AttributedString {
+        var attributed = AttributedString(text)
+        if let lower = AttributedString.Index(link.range.lowerBound, within: attributed),
+           let upper = AttributedString.Index(link.range.upperBound, within: attributed) {
+            attributed[lower..<upper].underlineStyle = .single
+            attributed[lower..<upper].foregroundColor = PersonalScribeTheme.Pill.Dark.waveform
+        }
+        return attributed
     }
 }
 

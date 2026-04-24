@@ -11,7 +11,18 @@ public final class PillOverlayController: ObservableObject {
     private let legacyVisibilityModeBridge: LegacyVisibilityModeBridge?
     private let presenter: PillOverlayPresenter
     private var cancellables: Set<AnyCancellable> = []
-    private var recordingStatusCardText: String?
+    private var recordingStatusCardContent: StatusCardContent?
+    /// Stage B (#046) consumer-side cache of the last VAD fire-token
+    /// this controller rendered a notification for. Compared against
+    /// `SessionSnapshot.vadAutoStopFireToken` by the driver to guarantee
+    /// the notification renders exactly once per auto-stop fire.
+    private var lastSeenVadFireToken: UUID?
+    /// Stage B (#046) closure invoked when the user taps the "Update
+    /// settings to change" link inside the auto-stopped notification.
+    /// Injected at composition time (Chunk E wires this to the
+    /// `openSettingsTab` closure from `PersonalScribeAppMain`). When
+    /// nil, the link still renders but taps are no-ops.
+    private let openVadSettingsAction: (@MainActor @Sendable () -> Void)?
 
     // Stage 2 compatibility bridge. Delete these public publisher-backed
     // initializers in the Stage 3 duplicate-observation cleanup pass.
@@ -36,7 +47,8 @@ public final class PillOverlayController: ObservableObject {
         preparationProgressPublisher: AnyPublisher<ModelDownloadProgress?, Never>,
         audioLevelPublisher: AnyPublisher<Double, Never>?,
         visibilityMode: PillVisibilityMode = .autoShow,
-        onTap: @escaping @MainActor () -> Void = {}
+        onTap: @escaping @MainActor () -> Void = {},
+        openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil
     ) {
         let visibilityModeBridge = LegacyVisibilityModeBridge(initialMode: visibilityMode)
         let appStore = AppStore(
@@ -56,7 +68,8 @@ public final class PillOverlayController: ObservableObject {
             defaults: nil,
             legacyVisibilityModeBridge: visibilityModeBridge,
             onTap: onTap,
-            panelBuilder: AppKitPillOverlayPanelBuilder()
+            panelBuilder: AppKitPillOverlayPanelBuilder(),
+            openVadSettingsAction: openVadSettingsAction
         )
     }
 
@@ -65,7 +78,8 @@ public final class PillOverlayController: ObservableObject {
         audioLevelPublisher: AnyPublisher<Double, Never>? = nil,
         defaults: UserDefaults = .standard,
         onTap: @escaping @MainActor () -> Void = {},
-        panelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder()
+        panelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
+        openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil
     ) {
         self.init(
             appStore: appStore,
@@ -73,7 +87,8 @@ public final class PillOverlayController: ObservableObject {
             defaults: defaults,
             legacyVisibilityModeBridge: nil,
             onTap: onTap,
-            panelBuilder: panelBuilder
+            panelBuilder: panelBuilder,
+            openVadSettingsAction: openVadSettingsAction
         )
     }
 
@@ -83,7 +98,8 @@ public final class PillOverlayController: ObservableObject {
         defaults: UserDefaults?,
         legacyVisibilityModeBridge: LegacyVisibilityModeBridge?,
         onTap: @escaping @MainActor () -> Void = {},
-        panelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder()
+        panelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
+        openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil
     ) {
         let initialMode = legacyVisibilityModeBridge?.currentPillVisibilityMode()
             ?? PillVisibilityMode.resolve(from: defaults ?? .standard)
@@ -91,6 +107,7 @@ public final class PillOverlayController: ObservableObject {
         self.appStore = appStore
         self.defaults = defaults
         self.legacyVisibilityModeBridge = legacyVisibilityModeBridge
+        self.openVadSettingsAction = openVadSettingsAction
 
         let viewModel = PillOverlayViewModel(
             visibility: appStore.snapshot.pillVisibility,
@@ -148,32 +165,128 @@ public final class PillOverlayController: ObservableObject {
 
         applyRecordingStatusCardState(
             sessionState: snapshot.sessionState,
-            progress: snapshot.modelDownloadProgress
+            progress: snapshot.modelDownloadProgress,
+            vadGracePending: snapshot.session.vadAutoStopGracePending,
+            vadFireToken: snapshot.session.vadAutoStopFireToken
         )
     }
 
+    /// Feeds the snapshot-derived inputs (plus the two Stage B VAD
+    /// prefs, read fresh per update so mid-session toggles take effect
+    /// on the next snapshot — see also `SessionPipelineOrchestrator`
+    /// which freezes the prefs at session start for the actual
+    /// grace/notify decisions) into `RecordingStatusCardDriver` and
+    /// routes the result to the presenter. Tracks
+    /// `lastSeenVadFireToken` locally so the notification renders
+    /// exactly once per auto-stop fire.
     private func applyRecordingStatusCardState(
         sessionState: SessionState,
-        progress: ModelDownloadProgress?
+        progress: ModelDownloadProgress?,
+        vadGracePending: Bool,
+        vadFireToken: UUID?
     ) {
-        let nextText = RecordingStatusCardDriver.statusText(
-            sessionState: sessionState,
-            progress: progress
+        let showStoppingWarning = VadShowStoppingWarningPreference.resolve(
+            from: defaults ?? .standard
+        )
+        let showAutoStoppedNotification = VadShowAutoStoppedNotificationPreference.resolve(
+            from: defaults ?? .standard
         )
 
-        switch (recordingStatusCardText, nextText) {
+        let nextContent = RecordingStatusCardDriver.statusContent(
+            sessionState: sessionState,
+            progress: progress,
+            vadGracePending: vadGracePending,
+            vadFireToken: vadFireToken,
+            vadLastSeenFireToken: lastSeenVadFireToken,
+            showStoppingWarning: showStoppingWarning,
+            showAutoStoppedNotification: showAutoStoppedNotification
+        )
+
+        switch (recordingStatusCardContent, nextContent) {
         case (nil, let next?):
-            presenter.showRecordingStatusCard(text: next)
-            recordingStatusCardText = next
+            presenter.showRecordingStatusCard(
+                text: next.text,
+                link: next.link,
+                autoDismissAfter: autoDismissDuration(for: next),
+                onLinkTap: linkTapHandler(for: next)
+            )
+            recordingStatusCardContent = next
+            advanceLastSeenFireToken(renderedContent: next, snapshotToken: vadFireToken)
         case (let current?, let next?) where current != next:
-            presenter.updateRecordingStatusCard(text: next)
-            recordingStatusCardText = next
+            // When the new content only differs from the current card
+            // in its text (no link on either side), keep using the
+            // cheap `update(text:)` path so the record-without-
+            // transcribe progress ticks don't flash the whole card in
+            // and out. Any change that touches the link region (or
+            // brings in a link where there was none) needs a full
+            // `show(...)` so the link-tap gesture + auto-dismiss timer
+            // are re-attached consistently. The notification contract
+            // — "2.0s OR new session start, whichever first" — is
+            // preserved because each notification token flip goes
+            // through `show(...)` (either link: nil → link: some or
+            // between two different link ranges).
+            if current.link == nil && next.link == nil {
+                presenter.updateRecordingStatusCard(text: next.text)
+            } else {
+                presenter.showRecordingStatusCard(
+                    text: next.text,
+                    link: next.link,
+                    autoDismissAfter: autoDismissDuration(for: next),
+                    onLinkTap: linkTapHandler(for: next)
+                )
+            }
+            recordingStatusCardContent = next
+            advanceLastSeenFireToken(renderedContent: next, snapshotToken: vadFireToken)
         case (_?, nil):
             presenter.hideRecordingStatusCard()
-            recordingStatusCardText = nil
+            recordingStatusCardContent = nil
         default:
             break
         }
+    }
+
+    /// The "Auto stopped. Update settings to change." notification
+    /// auto-dismisses after 2.0s per the locked Stage B spec. Every
+    /// other message (error, warning, record-without-transcribe)
+    /// sticks until the next state change hides or replaces it.
+    private func autoDismissDuration(for content: StatusCardContent) -> TimeInterval? {
+        content.link?.action == .openVadSettings ? 2.0 : nil
+    }
+
+    /// Builds a link-tap callback that invokes `openVadSettingsAction`
+    /// on the main actor when the rendered content carries a link.
+    /// Returns nil for link-less content so `ResponseCardView` skips
+    /// the gesture recognizer entirely.
+    private func linkTapHandler(
+        for content: StatusCardContent
+    ) -> (@Sendable @MainActor (StatusCardLinkAction) -> Void)? {
+        guard content.link != nil,
+              let openVadSettingsAction
+        else {
+            return nil
+        }
+
+        return { @Sendable @MainActor action in
+            switch action {
+            case .openVadSettings:
+                openVadSettingsAction()
+            }
+        }
+    }
+
+    /// Advances `lastSeenVadFireToken` to the snapshot's fire-token
+    /// after the notification renders so the driver returns nil on the
+    /// next snapshot carrying the same token. Only fires after the
+    /// notification branch (link present) actually rendered — the
+    /// warning and error branches must not eat the token.
+    private func advanceLastSeenFireToken(
+        renderedContent: StatusCardContent,
+        snapshotToken: UUID?
+    ) {
+        guard renderedContent.link?.action == .openVadSettings else {
+            return
+        }
+        lastSeenVadFireToken = snapshotToken
     }
 
     private func currentVisibilityMode() -> PillVisibilityMode {

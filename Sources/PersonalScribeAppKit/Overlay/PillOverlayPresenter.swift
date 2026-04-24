@@ -506,6 +506,25 @@ public final class PillOverlayPresenter {
     /// `hideRecordingStatusCard()` is called or replaced via
     /// `updateRecordingStatusCard(text:)`.
     func showRecordingStatusCard(text: String) {
+        showRecordingStatusCard(
+            text: text,
+            link: nil,
+            autoDismissAfter: nil,
+            onLinkTap: nil
+        )
+    }
+
+    /// Stage B (#046) overload: supports an optional link region and an
+    /// explicit auto-dismiss. Used for the "Auto stopped. Update
+    /// settings to change." notification (2.0s auto-dismiss + link) and
+    /// the "…stopping, speak to continue" warning (no link, no
+    /// auto-dismiss — dismissed when grace resolves).
+    func showRecordingStatusCard(
+        text: String,
+        link: StatusCardLink?,
+        autoDismissAfter: TimeInterval?,
+        onLinkTap: (@Sendable @MainActor (StatusCardLinkAction) -> Void)?
+    ) {
         guard let anchorWindow = panel?.anchorWindow else {
             diagnosticLogger.info("PillOverlayPresenter.showRecordingStatusCard — skipped because no anchor window is available")
             return
@@ -515,8 +534,10 @@ public final class PillOverlayPresenter {
         self.responseCard = responseCard
         responseCard.show(
             text: text,
+            link: link,
             above: anchorWindow,
-            autoDismissAfter: nil
+            autoDismissAfter: autoDismissAfter,
+            onLinkTap: onLinkTap
         )
     }
 

@@ -127,4 +127,116 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         )
         XCTAssertNil(text)
     }
+
+    // MARK: - Stage B (#046) — statusContent() driver
+
+    /// Warning card must only appear when `showStoppingWarning` is on.
+    /// Same inputs otherwise.
+    func testDriverEmitsWarningOnlyWhenPrefOn() {
+        let onContent = RecordingStatusCardDriver.statusContent(
+            sessionState: .recording,
+            progress: nil,
+            vadGracePending: true,
+            vadFireToken: nil,
+            vadLastSeenFireToken: nil,
+            showStoppingWarning: true,
+            showAutoStoppedNotification: false
+        )
+        XCTAssertEqual(onContent?.text, "…stopping, speak to continue")
+        XCTAssertNil(onContent?.link)
+
+        let offContent = RecordingStatusCardDriver.statusContent(
+            sessionState: .recording,
+            progress: nil,
+            vadGracePending: true,
+            vadFireToken: nil,
+            vadLastSeenFireToken: nil,
+            showStoppingWarning: false,
+            showAutoStoppedNotification: false
+        )
+        XCTAssertNil(offContent)
+    }
+
+    /// Notification must fire on every new token, then go quiet once
+    /// the consumer advances its `lastSeenFireToken`. Re-firing is the
+    /// job of the producer emitting a fresh token.
+    func testDriverNotificationFiresOnceForEachToken() {
+        let firstToken = UUID()
+        let secondToken = UUID()
+
+        let firstContent = RecordingStatusCardDriver.statusContent(
+            sessionState: .transcribing,
+            progress: nil,
+            vadGracePending: false,
+            vadFireToken: firstToken,
+            vadLastSeenFireToken: nil,
+            showStoppingWarning: false,
+            showAutoStoppedNotification: true
+        )
+        XCTAssertEqual(firstContent?.text, "Auto stopped. Update settings to change.")
+        XCTAssertNotNil(firstContent?.link)
+        XCTAssertEqual(firstContent?.link?.action, .openVadSettings)
+        if let text = firstContent?.text, let range = firstContent?.link?.range {
+            XCTAssertEqual(String(text[range]), "Update settings to change")
+        } else {
+            XCTFail("expected link range inside notification content")
+        }
+
+        // Consumer has seen the token — same token must go quiet.
+        let secondContent = RecordingStatusCardDriver.statusContent(
+            sessionState: .transcribing,
+            progress: nil,
+            vadGracePending: false,
+            vadFireToken: firstToken,
+            vadLastSeenFireToken: firstToken,
+            showStoppingWarning: false,
+            showAutoStoppedNotification: true
+        )
+        XCTAssertNil(secondContent)
+
+        // A fresh token reopens the notification.
+        let thirdContent = RecordingStatusCardDriver.statusContent(
+            sessionState: .transcribing,
+            progress: nil,
+            vadGracePending: false,
+            vadFireToken: secondToken,
+            vadLastSeenFireToken: firstToken,
+            showStoppingWarning: false,
+            showAutoStoppedNotification: true
+        )
+        XCTAssertEqual(thirdContent?.text, "Auto stopped. Update settings to change.")
+        XCTAssertNotNil(thirdContent?.link)
+    }
+
+    /// Error state must short-circuit before any VAD state is
+    /// considered, even when grace + fire-token + both prefs are all
+    /// active. Error > warning > notification.
+    func testDriverErrorOverridesVadStates() {
+        let token = UUID()
+        let content = RecordingStatusCardDriver.statusContent(
+            sessionState: .error(.resampleFailure),
+            progress: nil,
+            vadGracePending: true,
+            vadFireToken: token,
+            vadLastSeenFireToken: nil,
+            showStoppingWarning: true,
+            showAutoStoppedNotification: true
+        )
+        XCTAssertNotNil(content)
+        XCTAssertNil(content?.link, "error branch must never carry a VAD settings link")
+        XCTAssertNotEqual(
+            content?.text,
+            "…stopping, speak to continue",
+            "grace warning must not fire when the session is in error"
+        )
+        XCTAssertNotEqual(
+            content?.text,
+            "Auto stopped. Update settings to change.",
+            "auto-stopped notification must not fire when the session is in error"
+        )
+        XCTAssertEqual(
+            content?.text,
+            PersonalScribeError.resampleFailure.errorDescription
+        )
+    }
 }

@@ -8,6 +8,19 @@ protocol ResponseCardPresenting: AnyObject {
     /// explicit `hide()` — used during record-without-transcribe when we
     /// want the card to stay up for as long as the user is recording.
     func show(text: String, above pillWindow: NSWindow, autoDismissAfter: TimeInterval?)
+    /// Stage B (#046) overload: show with an optional tappable link
+    /// region inside `text`. `onLinkTap` is invoked on the main actor
+    /// when the user clicks the link substring. Default implementation
+    /// drops the link and forwards to the text-only `show(...)` — keeps
+    /// existing test doubles working without needing to implement the
+    /// link path.
+    func show(
+        text: String,
+        link: StatusCardLink?,
+        above pillWindow: NSWindow,
+        autoDismissAfter: TimeInterval?,
+        onLinkTap: (@Sendable @MainActor (StatusCardLinkAction) -> Void)?
+    )
     /// Replace the visible text without rebuilding the card or resetting
     /// the pending dismiss timer. Caller contract: `show(...)` must have
     /// been called first.
@@ -19,6 +32,24 @@ protocol ResponseCardPresenting: AnyObject {
     /// the presenter also moved it). No-op if the card isn't visible.
     func reanchor(abovePillFrame pillFrame: NSRect)
     func hide()
+}
+
+extension ResponseCardPresenting {
+    /// Default implementation forwards to the text-only `show(...)` so
+    /// pre-Stage-B test doubles (and any caller that doesn't need a
+    /// link) keep working verbatim. The production `ResponseCard`
+    /// overrides this to render the link.
+    func show(
+        text: String,
+        link: StatusCardLink?,
+        above pillWindow: NSWindow,
+        autoDismissAfter: TimeInterval?,
+        onLinkTap: (@Sendable @MainActor (StatusCardLinkAction) -> Void)?
+    ) {
+        _ = link
+        _ = onLinkTap
+        show(text: text, above: pillWindow, autoDismissAfter: autoDismissAfter)
+    }
 }
 
 @MainActor
@@ -74,7 +105,7 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
     private static let defaultAutoDismissAfter: TimeInterval = 6.0
 
     public init() {
-        let content = ResponseCardView(text: "", onDismiss: {})
+        let content = ResponseCardView(text: "", link: nil, onLinkTap: nil, onDismiss: {})
         hostingView = NSHostingView(rootView: content)
         super.init(
             contentRect: .zero,
@@ -111,6 +142,27 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
         above pillWindow: NSWindow,
         autoDismissAfter: TimeInterval?
     ) {
+        show(
+            text: text,
+            link: nil,
+            above: pillWindow,
+            autoDismissAfter: autoDismissAfter,
+            onLinkTap: nil
+        )
+    }
+
+    /// Stage B (#046) primary entry point. Renders the linked substring
+    /// (if any) as an underlined tappable region that invokes
+    /// `onLinkTap` with the link's `action`. The text-only `show(...)`
+    /// overload forwards here with `link: nil` so both call sites share
+    /// one layout path.
+    func show(
+        text: String,
+        link: StatusCardLink?,
+        above pillWindow: NSWindow,
+        autoDismissAfter: TimeInterval?,
+        onLinkTap: (@Sendable @MainActor (StatusCardLinkAction) -> Void)?
+    ) {
         dismissTimer?.invalidate()
         dismissTimer = nil
 
@@ -129,9 +181,12 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
             display: false
         )
 
-        hostingView.rootView = ResponseCardView(text: text) { [weak self] in
-            self?.hide()
-        }
+        hostingView.rootView = ResponseCardView(
+            text: text,
+            link: link,
+            onLinkTap: onLinkTap,
+            onDismiss: { [weak self] in self?.hide() }
+        )
 
         if !isVisible {
             alphaValue = 0
@@ -160,9 +215,12 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
     /// transcribe to move the "Recording — transcribing when model is
     /// ready (NN%)" progress without flashing the card.
     func update(text: String) {
-        hostingView.rootView = ResponseCardView(text: text) { [weak self] in
-            self?.hide()
-        }
+        hostingView.rootView = ResponseCardView(
+            text: text,
+            link: nil,
+            onLinkTap: nil,
+            onDismiss: { [weak self] in self?.hide() }
+        )
 
         let currentWidth = frame.width
         let newHeight = Self.estimatedHeight(for: text, width: currentWidth)
