@@ -78,7 +78,7 @@ let package = Package(
             ],
             path: "Sources/PersonalScribeVAD",
             resources: [
-                .copy("Resources/silero-vad-unified-256ms-v6.0.0.mlmodelc"),
+                .copy("Resources/silero-vad.mlmodelc"),
             ]
         ),
         .target(
