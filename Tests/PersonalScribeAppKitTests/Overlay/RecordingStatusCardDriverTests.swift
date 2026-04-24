@@ -208,6 +208,23 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         XCTAssertNotNil(thirdContent?.link)
     }
 
+    /// `#075`: `.shortExit` is a non-error terminal. The pill is the
+    /// sole surface for the "too short" chip; the card must render
+    /// nothing for this state. Distinct from real errors, which still
+    /// render on the card (see `testDriverErrorOverridesVadStates`).
+    func testDriverEmitsNothingForShortExit() {
+        let content = RecordingStatusCardDriver.statusContent(
+            sessionState: .shortExit,
+            progress: nil,
+            vadGracePending: false,
+            vadFireToken: nil,
+            vadLastSeenFireToken: nil,
+            showStoppingWarning: false,
+            showAutoStoppedNotification: false
+        )
+        XCTAssertNil(content)
+    }
+
     /// Error state must short-circuit before any VAD state is
     /// considered, even when grace + fire-token + both prefs are all
     /// active. Error > warning > notification.
