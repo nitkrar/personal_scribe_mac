@@ -2,8 +2,23 @@ import Foundation
 
 public enum TranscriptionEngine: Sendable, Equatable {
     case parakeetTDT
-    // Reserve shape for future engines (parakeetCTC, whisper, etc.).
-    // Do not implement them now.
+    /// Streaming end-of-utterance ASR (parakeet-realtime-eou-120m,
+    /// chunked encoder). Different manager class
+    /// (`StreamingEouAsrManager`).
+    case parakeetEOU
+    /// Qwen3 0.6B ASR — multilingual transformer-based ASR. Different
+    /// manager class (`Qwen3AsrManager`). Catalog includes both f32
+    /// and int8 precision variants.
+    case qwen3ASR
+    /// Speaker diarization (pyannote segmentation + WeSpeaker
+    /// embedding). Different manager class
+    /// (`OfflineDiarizerManager`).
+    case diarization
+    // Adapters in `PersonalScribeTranscription` exist only for
+    // `.parakeetTDT` today. Catalog entries with other engines are
+    // surfaced for visibility in the AI Models tab; downloads will
+    // fail with `unknownVoiceModelID` until per-engine inference
+    // clients land.
 }
 
 /// Broad capability category for a registered model. Used by the

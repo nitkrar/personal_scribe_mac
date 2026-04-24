@@ -114,10 +114,139 @@ public enum BuiltInModelCatalog {
         )
     )
 
+    // MARK: - Streaming ASR (parakeet realtime EOU)
+    //
+    // Parakeet 120M with end-of-utterance detection. Three chunk-size
+    // variants (160ms, 320ms, 1280ms) under one HuggingFace repo,
+    // `parakeet-realtime-eou-120m-coreml`, with FluidAudio's `subPath`
+    // selecting the variant. Drives `StreamingEouAsrManager` (separate
+    // from `AsrManager`) — adapter not yet wired in
+    // PersonalScribeTranscription, so downloads via this descriptor
+    // currently fail with `unknownVoiceModelID` (interim).
+    private static let parakeetEouRequiredPaths = [
+        "streaming_encoder.mlmodelc/coremldata.bin",
+        "decoder.mlmodelc/coremldata.bin",
+        "joint_decision.mlmodelc/coremldata.bin",
+        "vocab.json",
+    ]
+
+    public static let parakeetEou160ms = ModelDescriptor(
+        id: "parakeet-realtime-eou-120m-160ms",
+        displayName: "Parakeet Realtime EOU 120M (160ms)",
+        repoFolderName: "parakeet-eou-streaming/160ms",
+        kind: .streamingASR,
+        shortDescription: "Streaming ASR with 160ms chunks — lowest latency.",
+        architecture: "Streaming FastConformer-TDT + EOU head",
+        repository: "FluidInference/parakeet-realtime-eou-120m-coreml",
+        revision: "40a23f4c0b333aa17ad8c0f2ea47ec2347f2f355",
+        requiredRelativePaths: parakeetEouRequiredPaths,
+        approximateSizeBytes: 224_047_838,
+        engine: .parakeetEOU
+    )
+
+    public static let parakeetEou320ms = ModelDescriptor(
+        id: "parakeet-realtime-eou-120m-320ms",
+        displayName: "Parakeet Realtime EOU 120M (320ms)",
+        repoFolderName: "parakeet-eou-streaming/320ms",
+        kind: .streamingASR,
+        shortDescription: "Streaming ASR with 320ms chunks — balanced.",
+        architecture: "Streaming FastConformer-TDT + EOU head",
+        repository: "FluidInference/parakeet-realtime-eou-120m-coreml",
+        revision: "40a23f4c0b333aa17ad8c0f2ea47ec2347f2f355",
+        requiredRelativePaths: parakeetEouRequiredPaths,
+        approximateSizeBytes: 224_238_270,
+        engine: .parakeetEOU
+    )
+
+    public static let parakeetEou1280ms = ModelDescriptor(
+        id: "parakeet-realtime-eou-120m-1280ms",
+        displayName: "Parakeet Realtime EOU 120M (1280ms)",
+        repoFolderName: "parakeet-eou-streaming/1280ms",
+        kind: .streamingASR,
+        shortDescription: "Streaming ASR with 1280ms chunks — highest quality.",
+        architecture: "Streaming FastConformer-TDT + EOU head",
+        repository: "FluidInference/parakeet-realtime-eou-120m-coreml",
+        revision: "40a23f4c0b333aa17ad8c0f2ea47ec2347f2f355",
+        requiredRelativePaths: parakeetEouRequiredPaths,
+        approximateSizeBytes: 224_525_706,
+        engine: .parakeetEOU
+    )
+
+    // MARK: - Qwen3 ASR (Alibaba transformer ASR)
+    //
+    // 16-language multilingual transformer-based ASR (EN, ZH, JA, KO,
+    // VI, TH, ID, MS, HI, AR, TR, RU, DE, FR, ES, multilingual). One
+    // HuggingFace repo `qwen3-asr-0.6b-coreml` with two precision
+    // variants under `f32/` and `int8/` subPaths. Drives
+    // `Qwen3AsrManager` (separate from `AsrManager`) — adapter not
+    // wired yet, downloads currently fail (interim).
+    private static let qwen3AsrRequiredPaths = [
+        "qwen3_asr_audio_encoder_v2.mlmodelc/coremldata.bin",
+        "qwen3_asr_embedding.mlmodelc/coremldata.bin",
+        "qwen3_asr_decoder_stateful.mlmodelc/coremldata.bin",
+    ]
+
+    public static let qwen3AsrF32 = ModelDescriptor(
+        id: "qwen3-asr-0.6b-f32",
+        displayName: "Qwen3 ASR 0.6B (f32)",
+        repoFolderName: "qwen3-asr-0.6b/f32",
+        kind: .asr,
+        shortDescription: "Multilingual ASR (16 languages) — full precision.",
+        architecture: "Qwen3 transformer ASR",
+        repository: "FluidInference/qwen3-asr-0.6b-coreml",
+        revision: "c081689ec58bcf29c2ef7c474ef78a164bda672b",
+        requiredRelativePaths: qwen3AsrRequiredPaths,
+        approximateSizeBytes: 1_569_667_932,
+        engine: .qwen3ASR
+    )
+
+    public static let qwen3AsrInt8 = ModelDescriptor(
+        id: "qwen3-asr-0.6b-int8",
+        displayName: "Qwen3 ASR 0.6B (int8)",
+        repoFolderName: "qwen3-asr-0.6b/int8",
+        kind: .asr,
+        shortDescription: "Multilingual ASR (16 languages) — int8 quantized.",
+        architecture: "Qwen3 transformer ASR (int8)",
+        repository: "FluidInference/qwen3-asr-0.6b-coreml",
+        revision: "c081689ec58bcf29c2ef7c474ef78a164bda672b",
+        requiredRelativePaths: qwen3AsrRequiredPaths,
+        approximateSizeBytes: 974_722_368,
+        engine: .qwen3ASR
+    )
+
+    // MARK: - Speaker diarization
+    //
+    // Pyannote segmentation + WeSpeaker-v2 embedding. FluidAudio's
+    // online diarizer default. Drives `OfflineDiarizerManager` despite
+    // the name — see FluidAudio's variant routing in
+    // `getRequiredModelNames`. Adapter not wired (interim).
+    public static let speakerDiarization = ModelDescriptor(
+        id: "speaker-diarization",
+        displayName: "Speaker Diarization",
+        repoFolderName: "speaker-diarization",
+        kind: .diarization,
+        shortDescription: "Pyannote segmentation + WeSpeaker-v2 embedding.",
+        architecture: "Pyannote 3.1 + WeSpeaker-v2",
+        repository: "FluidInference/speaker-diarization-coreml",
+        revision: "1ed7a662fdc7109e36d822db793ee6eebdaf8594",
+        requiredRelativePaths: [
+            "pyannote_segmentation.mlmodelc/coremldata.bin",
+            "wespeaker_v2.mlmodelc/coremldata.bin",
+        ],
+        approximateSizeBytes: 13_720_676,
+        engine: .diarization
+    )
+
     public static let registeredModels: [ModelDescriptor] = [
         parakeetTDT06Bv2,
         parakeetTDTCTC110M,
         parakeetTDT06Bv3,
+        parakeetEou160ms,
+        parakeetEou320ms,
+        parakeetEou1280ms,
+        qwen3AsrF32,
+        qwen3AsrInt8,
+        speakerDiarization,
     ]
 
     public static let defaultActiveDescriptor = ActiveModelDescriptor(

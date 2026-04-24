@@ -3,6 +3,9 @@ import Foundation
 extension TranscriptionEngine: Codable {
     private enum CodableValue: String, Codable {
         case parakeetTDT
+        case parakeetEOU
+        case qwen3ASR
+        case diarization
     }
 
     public init(from decoder: Decoder) throws {
@@ -12,6 +15,12 @@ extension TranscriptionEngine: Codable {
         switch rawValue {
         case .parakeetTDT:
             self = .parakeetTDT
+        case .parakeetEOU:
+            self = .parakeetEOU
+        case .qwen3ASR:
+            self = .qwen3ASR
+        case .diarization:
+            self = .diarization
         }
     }
 
@@ -21,6 +30,12 @@ extension TranscriptionEngine: Codable {
         switch self {
         case .parakeetTDT:
             try container.encode(CodableValue.parakeetTDT)
+        case .parakeetEOU:
+            try container.encode(CodableValue.parakeetEOU)
+        case .qwen3ASR:
+            try container.encode(CodableValue.qwen3ASR)
+        case .diarization:
+            try container.encode(CodableValue.diarization)
         }
     }
 }
