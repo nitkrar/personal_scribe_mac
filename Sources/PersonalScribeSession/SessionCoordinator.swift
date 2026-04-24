@@ -108,7 +108,8 @@ public actor SessionCoordinator {
             await performStop()
         case .transcribing, .error:
             await performToggle()
-        case .completed:
+        case .completed, .shortExit:
+            // Unreachable via `currentDisplayState()` — both map to `.idle`.
             await performStart()
         }
     }
@@ -152,7 +153,7 @@ public actor SessionCoordinator {
         switch await currentDisplayState() {
         case .recording, .holdRecording:
             await performStop()
-        case .idle, .completed, .transcribing, .error:
+        case .idle, .completed, .shortExit, .transcribing, .error:
             return
         }
     }
@@ -166,7 +167,7 @@ public actor SessionCoordinator {
         switch await currentDisplayState() {
         case .recording, .holdRecording:
             await performCancel()
-        case .idle, .completed, .transcribing, .error:
+        case .idle, .completed, .shortExit, .transcribing, .error:
             return
         }
     }
@@ -365,9 +366,9 @@ public actor SessionCoordinator {
         return Self.displayState(for: snapshot.sessionState)
     }
 
-    private static func displayState(for state: SessionState) -> SessionState {
+    static func displayState(for state: SessionState) -> SessionState {
         switch state {
-        case .completed:
+        case .completed, .shortExit:
             return .idle
         case .idle, .recording, .holdRecording, .transcribing, .error:
             return state

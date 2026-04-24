@@ -4,6 +4,15 @@ import PersonalScribeTestSupport
 @testable import PersonalScribeSession
 
 final class SessionCoordinatorHoldPathTests: XCTestCase {
+    /// `#075`: `.shortExit` is a non-error terminal state. It must display
+    /// as `.idle` so every entry-point guard (`startHoldIfIdle`,
+    /// `startIfIdle`, `toggle`) accepts it as startable — otherwise the
+    /// pipeline's short-hold termination wedges every entry point until
+    /// something non-guarded re-arms the state machine.
+    func testShortExitDisplayStateMapsToIdle() {
+        XCTAssertEqual(SessionCoordinator.displayState(for: .shortExit), .idle)
+    }
+
     func testStartIfIdleFromIdleStartsRecording() async throws {
         let coordinator = try makeCoordinator()
 

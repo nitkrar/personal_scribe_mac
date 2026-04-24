@@ -316,7 +316,7 @@ public final class AppStore: ObservableObject {
             return .holdToRecord
         case .transcribing:
             return transcribingVisibility(progress: progress)
-        case .completed:
+        case .completed, .shortExit:
             return idleVisibility(for: mode, progress: progress)
         case .error:
             return .hidden

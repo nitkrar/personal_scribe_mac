@@ -264,7 +264,7 @@ struct StatusItemMenuModel: Equatable {
         // hotkey is surfaced as plain text in the title instead of an
         // AppKit key-equivalent binding.
         switch sessionState {
-        case .idle, .completed, .error:
+        case .idle, .completed, .shortExit, .error:
             return "Start Recording   ⌥⌥"
         case .recording, .holdRecording:
             return "Stop Recording   ⌥⌥"
@@ -287,7 +287,7 @@ struct StatusItemMenuModel: Equatable {
         switch sessionState {
         case .transcribing:
             return false
-        case .idle, .completed, .recording, .holdRecording, .error:
+        case .idle, .completed, .shortExit, .recording, .holdRecording, .error:
             return true
         }
     }

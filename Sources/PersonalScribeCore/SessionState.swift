@@ -9,5 +9,12 @@ public enum SessionState: Sendable, Equatable {
     case holdRecording
     case transcribing
     case completed
+    /// Non-error terminal state: the pipeline exited early without producing
+    /// a transcription (e.g. the recording was too short to be worth
+    /// transcribing). Distinct from `.error` — real errors (permission,
+    /// model, transcription failures) still use `.error`. Display-mapped to
+    /// `.idle` so entry points accept it as startable without special-casing
+    /// `.error` recovery. See `#075`.
+    case shortExit
     case error(PersonalScribeError)
 }

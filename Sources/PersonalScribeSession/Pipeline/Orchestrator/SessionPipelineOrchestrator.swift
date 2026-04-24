@@ -141,7 +141,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
     public func toggleCapture() async {
         switch currentSnapshot.sessionState {
-        case .idle, .completed:
+        case .idle, .completed, .shortExit:
             await startRecording()
         case .recording, .holdRecording:
             await stopRecordingAndRunPipeline()
@@ -160,7 +160,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
     public func startHoldCapture() async {
         switch currentSnapshot.sessionState {
-        case .idle, .completed:
+        case .idle, .completed, .shortExit:
             await startHoldRecording()
         case .error:
             publish { snapshot in
@@ -179,7 +179,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         switch currentSnapshot.sessionState {
         case .recording, .holdRecording:
             await discardActiveCapture()
-        case .idle, .completed, .transcribing, .error:
+        case .idle, .completed, .shortExit, .transcribing, .error:
             logger.info("Ignored cancel from non-active session state")
         }
     }
