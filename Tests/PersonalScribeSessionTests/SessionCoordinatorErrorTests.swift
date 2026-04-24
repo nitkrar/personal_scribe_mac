@@ -47,12 +47,12 @@ final class SessionCoordinatorErrorTests: XCTestCase {
         await coordinator.toggle()
     }
 
-    func testShortRecordingPublishesRecordingTooShortErrorWithoutTranscribing() async throws {
+    func testShortRecordingPublishesShortExitWithoutTranscribing() async throws {
         // Sub-1-second audio buffer: 8 000 samples at 16 kHz = 0.5 s.
         // FluidAudio rejects anything below 1 s with "Invalid audio
-        // data"; coordinator should short-circuit before calling the
-        // transcriber so the user sees a "too short" error instead of
-        // a silent pill-hide.
+        // data"; coordinator short-circuits before calling the
+        // transcriber and publishes `.shortExit` (non-error terminal)
+        // so entry guards see `.idle` and no wedge happens. See `#075`.
         let shortBuffer = try PCMBuffer(
             samples: Array(repeating: 0, count: 8_000),
             sampleRate: 16_000,
@@ -73,11 +73,14 @@ final class SessionCoordinatorErrorTests: XCTestCase {
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
         )
 
-        let stream = await coordinator.stateStream()
+        let snapshotStream = await coordinator.snapshotStream()
         let observedTask = Task { () -> [SessionState] in
             var observed: [SessionState] = []
-            for await state in stream.prefix(3) {
-                observed.append(state)
+            for await snapshot in snapshotStream {
+                observed.append(snapshot.sessionState)
+                if snapshot.sessionState == .shortExit {
+                    break
+                }
             }
             return observed
         }
@@ -91,9 +94,15 @@ final class SessionCoordinatorErrorTests: XCTestCase {
         }
 
         XCTAssertEqual(
-            observed,
-            [.idle, .recording, .error(.recordingTooShort)],
-            "Sub-1s recording must publish .error(.recordingTooShort) instead of routing through .transcribing and letting FluidAudio error later"
+            observed.last, .shortExit,
+            "Sub-1s recording must publish .shortExit (non-error terminal), not .error"
+        )
+        XCTAssertFalse(
+            observed.contains(where: { state in
+                if case .error = state { return true }
+                return false
+            }),
+            "`.shortExit` must not be rendered through the `.error` channel"
         )
     }
 

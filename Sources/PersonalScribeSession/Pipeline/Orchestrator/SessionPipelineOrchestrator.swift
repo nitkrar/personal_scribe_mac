@@ -433,10 +433,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
         guard bufferedDuration >= .milliseconds(1_000) else {
             publish { snapshot in
-                snapshot.sessionState = .error(.recordingTooShort)
-                snapshot.activeStage = .transcription
+                // `#075`: Short-hold is a pipeline shortcut (nothing to
+                // transcribe), not an error. Publishing `.shortExit`
+                // routes through the `.idle` display mapping so entry
+                // guards accept the next user action and no wedge
+                // occurs.
+                snapshot.sessionState = .shortExit
+                snapshot.activeStage = nil
                 snapshot.recordingDuration = bufferedDuration
-                // Error supersedes any VAD UX signals.
                 snapshot.vadAutoStopGracePending = false
                 snapshot.vadAutoStopGraceDeadline = nil
                 snapshot.vadAutoStopFireToken = nil

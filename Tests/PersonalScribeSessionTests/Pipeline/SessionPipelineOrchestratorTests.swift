@@ -153,7 +153,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(sinkResetCount2, 2)
     }
 
-    func testShortRecordingPublishesRecordingTooShortWithoutCallingTranscriber() async throws {
+    func testShortRecordingPublishesShortExitWithoutCallingTranscriber() async throws {
         let shortBuffer = try makeBuffer(sampleCount: 8_000)
         let transcriber = CountingTranscriber(
             result: TranscriptionResult(
@@ -172,7 +172,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             var snapshots: [SessionSnapshot] = []
             for await snapshot in stream {
                 snapshots.append(snapshot)
-                if snapshot.sessionState == .error(.recordingTooShort) {
+                if snapshot.sessionState == .shortExit {
                     break
                 }
             }
@@ -187,9 +187,12 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             await observedTask.value
         }
 
+        // Sub-1s recording exits cleanly via `.shortExit` (non-error
+        // terminal) rather than the old `.error(.recordingTooShort)`.
+        // See `#075`.
         XCTAssertEqual(
             deduplicatedSessionStates(from: observed),
-            [.idle, .recording, .error(.recordingTooShort)]
+            [.idle, .recording, .shortExit]
         )
         let transcribeCount0 = await transcriber.transcribeCallCount()
         XCTAssertEqual(transcribeCount0, 0)

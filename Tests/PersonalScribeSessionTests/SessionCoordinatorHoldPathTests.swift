@@ -13,6 +13,68 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
         XCTAssertEqual(SessionCoordinator.displayState(for: .shortExit), .idle)
     }
 
+    /// `#075` wedge regression: after a short-hold publishes `.shortExit`,
+    /// the next `startHoldIfIdle()` must start a new hold session. The
+    /// pre-fix bug was that `.error(.recordingTooShort)` stuck around and
+    /// `startHoldIfIdle`'s `.idle` guard rejected the second hold-press.
+    func testStartHoldIfIdleFromShortExitEntersHoldRecording() async throws {
+        let shortBuffer = try PCMBuffer(
+            samples: Array(repeating: 0, count: 8_000),
+            sampleRate: 16_000,
+            channelCount: 1,
+            timestamp: ContinuousClock().now
+        )
+        let coordinator = SessionCoordinator(
+            capture: FakeAudioCapturing(buffers: [shortBuffer]),
+            transcriber: FakeTranscriber(
+                result: .init(
+                    text: "hello",
+                    audioDuration: .seconds(1),
+                    processingDuration: .zero
+                )
+            ),
+            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+        )
+
+        // First hold: short release produces `.shortExit`.
+        await coordinator.startHoldIfIdle()
+        try await Task.sleep(for: .milliseconds(50))
+        await coordinator.stopIfActive()
+
+        // Observe the raw snapshot stream for `.shortExit` (which maps to
+        // `.idle` in display-state, so `waitUntilState` won't see it).
+        try await waitUntilRawState(.shortExit, coordinator: coordinator)
+
+        let stateBeforeSecondHold = await coordinator.snapshot().sessionState
+        XCTAssertEqual(
+            stateBeforeSecondHold, .shortExit,
+            "Precondition for wedge test: session should be in .shortExit before second hold."
+        )
+
+        // Second hold: must enter `.holdRecording`, not no-op.
+        await coordinator.startHoldIfIdle()
+
+        let stateAfterSecondHold = await coordinator.snapshot().sessionState
+        XCTAssertEqual(
+            stateAfterSecondHold, .holdRecording,
+            "Wedge regression: hold-press from .shortExit must start a new hold session (#075)."
+        )
+
+        await coordinator.cancelIfActive()
+    }
+
+    private func waitUntilRawState(
+        _ expected: SessionState,
+        coordinator: SessionCoordinator
+    ) async throws {
+        try await withTimeout(.seconds(1)) {
+            while await coordinator.snapshot().sessionState != expected {
+                try Task.checkCancellation()
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
+    }
+
     func testStartIfIdleFromIdleStartsRecording() async throws {
         let coordinator = try makeCoordinator()
 
