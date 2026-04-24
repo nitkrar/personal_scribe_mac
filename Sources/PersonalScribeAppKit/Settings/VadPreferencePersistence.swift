@@ -21,6 +21,42 @@ public enum VadAutoStopEnabledPreference {
     }
 }
 
+/// Stage B opt-in (#046): enable the 0.8s grace window + "…stopping,
+/// speak to continue" ResponseCard before auto-stop fires.
+public enum VadShowStoppingWarningPreference {
+    public static let userDefaultsKey = "VadShowStoppingWarning"
+    public static let `default`: Bool = false
+
+    public static func resolve(from defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: userDefaultsKey) != nil else {
+            return `default`
+        }
+        return defaults.bool(forKey: userDefaultsKey)
+    }
+
+    public static func persist(_ value: Bool, to defaults: UserDefaults = .standard) {
+        defaults.set(value, forKey: userDefaultsKey)
+    }
+}
+
+/// Stage B opt-in (#046): enable the "Auto stopped. Update settings to
+/// change." ResponseCard notification after VAD-triggered auto-stop.
+public enum VadShowAutoStoppedNotificationPreference {
+    public static let userDefaultsKey = "VadShowAutoStoppedNotification"
+    public static let `default`: Bool = false
+
+    public static func resolve(from defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: userDefaultsKey) != nil else {
+            return `default`
+        }
+        return defaults.bool(forKey: userDefaultsKey)
+    }
+
+    public static func persist(_ value: Bool, to defaults: UserDefaults = .standard) {
+        defaults.set(value, forKey: userDefaultsKey)
+    }
+}
+
 /// Silence duration (seconds) after which VAD auto-stop fires. Clamped to
 /// `VadPreferences.minSilenceThresholdSeconds ... maxSilenceThresholdSeconds`
 /// (1.0–5.0s) at read/write time as defense in depth — the Settings slider
@@ -63,7 +99,9 @@ public struct UserDefaultsVadPreferencesReader: VadPreferencesReading {
     public func current() -> VadPreferences {
         VadPreferences(
             autoStopEnabled: VadAutoStopEnabledPreference.resolve(),
-            silenceThresholdSeconds: VadSilenceThresholdPreference.resolve()
+            silenceThresholdSeconds: VadSilenceThresholdPreference.resolve(),
+            showStoppingWarning: VadShowStoppingWarningPreference.resolve(),
+            showAutoStoppedNotification: VadShowAutoStoppedNotificationPreference.resolve()
         )
     }
 }

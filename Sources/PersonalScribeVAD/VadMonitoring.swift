@@ -1,11 +1,17 @@
 import Foundation
 
-/// Event surfaced by a VAD session. Today only `.speechEnded` — fires at most
-/// once per session, at the tail of a speech-then-silence pattern. The first-
-/// chunk gate is implicit: `.speechEnded` requires a prior speech-start inside
-/// the Silero streaming state machine.
+/// Event surfaced by a VAD session.
+///
+/// - `.speechEnded` fires at the tail of a speech-then-silence pattern.
+///   The first-chunk gate is implicit: requires a prior speech-start
+///   inside the Silero streaming state machine.
+/// - `.speechResumed` fires when Silero detects speech AFTER a prior
+///   `.speechEnded` has been emitted — i.e. the user starts talking
+///   again during or after a grace window. Consumer uses this to
+///   cancel a pending grace. Added for #046 Stage B.
 public enum VadEvent: Sendable, Equatable {
     case speechEnded
+    case speechResumed
 }
 
 /// Type-erased handle to a per-capture VAD session. Orchestrator holds one of

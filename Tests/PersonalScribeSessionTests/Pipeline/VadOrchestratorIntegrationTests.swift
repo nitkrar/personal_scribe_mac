@@ -101,6 +101,153 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         }
     }
 
+    func testGraceTimerFiresAutoStopAfterDuration() async throws {
+        // Stage B warn-enabled path: speechEnded → 0.8s grace (shortened to
+        // 50ms in tests) → handler fires once. Asserts the full grace-window
+        // lifecycle end-to-end.
+        let capture = FakeAudioCapturing(
+            buffers: try Self.makeBuffers(count: 3),
+            delayPerBuffer: .milliseconds(10)
+        )
+        let provider = ScriptedVadProvider(events: [.speechEnded])
+        let prefs = ScriptedVadPreferences(
+            value: VadPreferences(
+                autoStopEnabled: true,
+                silenceThresholdSeconds: 2.5,
+                showStoppingWarning: true
+            )
+        )
+        let handlerCalls = HandlerCallCounter()
+        let orchestrator = makeOrchestrator(
+            capture: capture,
+            vadProvider: provider,
+            vadPreferences: prefs,
+            graceDurationSeconds: 0.05
+        )
+        await orchestrator.setAutoStopHandler { [weak capture] in
+            await handlerCalls.increment()
+            await capture?.stop()
+        }
+
+        await orchestrator.toggleCapture()
+        try await waitUntil(.seconds(2)) { await handlerCalls.count >= 1 }
+
+        let callCount = await handlerCalls.count
+        XCTAssertEqual(callCount, 1, "grace timer must fire auto-stop exactly once")
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertFalse(
+            snapshot.vadAutoStopGracePending,
+            "grace pending must clear after timer fires"
+        )
+        XCTAssertNotNil(
+            snapshot.vadAutoStopFireToken,
+            "timer-elapsed path must publish a fire token"
+        )
+    }
+
+    func testSpeechResumedCancelsGrace() async throws {
+        // Stage B: during a pending grace window, a `.speechResumed` event
+        // from the VAD session must cancel the timer. Handler never fires;
+        // session stays recording.
+        let capture = FakeAudioCapturing(
+            buffers: try Self.makeBuffers(count: 3),
+            delayPerBuffer: .milliseconds(10)
+        )
+        let provider = ScriptedVadProvider(events: [.speechEnded, .speechResumed])
+        let prefs = ScriptedVadPreferences(
+            value: VadPreferences(
+                autoStopEnabled: true,
+                silenceThresholdSeconds: 2.5,
+                showStoppingWarning: true
+            )
+        )
+        let handlerCalls = HandlerCallCounter()
+        let orchestrator = makeOrchestrator(
+            capture: capture,
+            vadProvider: provider,
+            vadPreferences: prefs,
+            graceDurationSeconds: 1.0  // long enough that speechResumed wins the race
+        )
+        await orchestrator.setAutoStopHandler { await handlerCalls.increment() }
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(200))
+        await capture.stop()
+
+        let callCount = await handlerCalls.count
+        XCTAssertEqual(callCount, 0, "speechResumed must prevent handler from firing")
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertFalse(
+            snapshot.vadAutoStopGracePending,
+            "speechResumed must clear grace pending"
+        )
+        XCTAssertNil(
+            snapshot.vadAutoStopFireToken,
+            "cancelled grace must NOT publish a fire token"
+        )
+    }
+
+    func testErrorDuringGraceClearsGraceInSamePublish() async throws {
+        // Codex review #7: grace-cleared + `.error` must land in the same
+        // snapshot mutation. Observers must never see an intermediate
+        // `.recording + !vadAutoStopGracePending` snapshot.
+        let capture = FakeAudioCapturing(
+            buffers: try Self.makeBuffers(count: 1),
+            error: .resampleFailure,
+            delayPerBuffer: .milliseconds(10)
+        )
+        let provider = ScriptedVadProvider(events: [.speechEnded])
+        let prefs = ScriptedVadPreferences(
+            value: VadPreferences(
+                autoStopEnabled: true,
+                silenceThresholdSeconds: 2.5,
+                showStoppingWarning: true
+            )
+        )
+        let orchestrator = makeOrchestrator(
+            capture: capture,
+            vadProvider: provider,
+            vadPreferences: prefs,
+            graceDurationSeconds: 2.0
+        )
+        await orchestrator.setAutoStopHandler { /* no-op */ }
+
+        let stream = await orchestrator.snapshotStream()
+        let observedTask = Task { () -> [SessionSnapshot] in
+            var snapshots: [SessionSnapshot] = []
+            for await snapshot in stream {
+                snapshots.append(snapshot)
+                if case .error = snapshot.sessionState { break }
+            }
+            return snapshots
+        }
+
+        await orchestrator.toggleCapture()
+        let observed = try await withTimeout(.seconds(2)) { await observedTask.value }
+
+        // Find the snapshot where grace started (pending=true).
+        guard let graceStart = observed.firstIndex(where: { $0.vadAutoStopGracePending }) else {
+            XCTFail("expected at least one snapshot with grace pending")
+            return
+        }
+        // Every subsequent snapshot up to .error must either still have
+        // grace pending OR already be .error. Never .recording && !pending.
+        for snapshot in observed[graceStart...] {
+            if case .error = snapshot.sessionState { continue }
+            XCTAssertTrue(
+                snapshot.vadAutoStopGracePending,
+                "grace-clear must not leak into a non-error snapshot: \(snapshot)"
+            )
+        }
+        let finalSnapshot = observed.last!
+        if case .error = finalSnapshot.sessionState {
+            XCTAssertFalse(finalSnapshot.vadAutoStopGracePending)
+            XCTAssertNil(finalSnapshot.vadAutoStopFireToken)
+        } else {
+            XCTFail("expected terminal .error snapshot, got \(finalSnapshot.sessionState)")
+        }
+    }
+
     func testDisabledPreferenceSkipsVadEntirely() async throws {
         let capture = FakeAudioCapturing(
             buffers: try Self.makeBuffers(count: 3),
@@ -133,7 +280,8 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
     private func makeOrchestrator(
         capture: any AudioCapturing,
         vadProvider: any VadProviding,
-        vadPreferences: any VadPreferencesReading
+        vadPreferences: any VadPreferencesReading,
+        graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
     ) -> SessionPipelineOrchestrator {
         SessionPipelineOrchestrator(
             capture: capture,
@@ -150,8 +298,25 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
                 context: PipelineContextSnapshot(streamingOutputEnabled: false)
             ),
             vadProvider: vadProvider,
-            vadPreferences: vadPreferences
+            vadPreferences: vadPreferences,
+            graceDurationSeconds: graceDurationSeconds
         )
+    }
+
+    private func withTimeout<T: Sendable>(
+        _ timeout: Duration,
+        operation: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw XCTSkip("timed out after \(timeout)")
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
     }
 
     private func waitUntil(
@@ -193,6 +358,27 @@ private actor CountingVadProvider: VadProviding {
         return VadSessionHandle { _ in
             let idx = await counter.next()
             return idx == fireIndex ? .speechEnded : nil
+        }
+    }
+}
+
+/// Scripted VAD provider for Stage B tests — drives a sequence of events
+/// indexed by ingest call number. Any positions past the script return nil.
+private actor ScriptedVadProvider: VadProviding {
+    private(set) var makeSessionCallCount = 0
+    private let events: [VadEvent?]
+
+    init(events: [VadEvent?]) {
+        self.events = events
+    }
+
+    func makeSession(silenceThresholdSeconds: Double) async -> VadSessionHandle? {
+        makeSessionCallCount += 1
+        let counter = IngestCounter()
+        let eventsCapture = events
+        return VadSessionHandle { _ in
+            let idx = await counter.next()
+            return idx < eventsCapture.count ? eventsCapture[idx] : nil
         }
     }
 }

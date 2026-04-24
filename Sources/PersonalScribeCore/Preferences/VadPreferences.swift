@@ -3,10 +3,25 @@ import Foundation
 public struct VadPreferences: Sendable, Equatable, Codable {
     public var autoStopEnabled: Bool
     public var silenceThresholdSeconds: Double
+    /// Stage B opt-in (#046). When true, VAD `.speechEnded` triggers a
+    /// 0.8s grace window before the auto-stop handler fires, surfaced via
+    /// the ResponseCard. Default false.
+    public var showStoppingWarning: Bool
+    /// Stage B opt-in (#046). When true, auto-stop firing publishes a
+    /// fire-token that the ResponseCard renders as a short notification
+    /// with a link to Settings. Default false.
+    public var showAutoStoppedNotification: Bool
 
-    public init(autoStopEnabled: Bool, silenceThresholdSeconds: Double) {
+    public init(
+        autoStopEnabled: Bool,
+        silenceThresholdSeconds: Double,
+        showStoppingWarning: Bool = false,
+        showAutoStoppedNotification: Bool = false
+    ) {
         self.autoStopEnabled = autoStopEnabled
         self.silenceThresholdSeconds = Self.clamp(silenceThresholdSeconds)
+        self.showStoppingWarning = showStoppingWarning
+        self.showAutoStoppedNotification = showAutoStoppedNotification
     }
 
     public static let `default` = VadPreferences(

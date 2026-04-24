@@ -24,6 +24,36 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// capture consumer can keep draining buffers — inline await would
     /// self-deadlock on `captureTask.value`. See #046 codex design review.
     private var onAutoStopRequested: (@Sendable () async -> Void)?
+    /// #046 Stage B: grace-window state machine. Replaces Stage A's loop-
+    /// local `vadAlreadyFired` bool so the actor can expose `resolveGrace*`
+    /// methods callable from timer-elapsed and cleanup paths.
+    private var gracePhase: GracePhase = .idle
+    /// Grace-window duration. Production: 0.8s hard-coded per Stage B spec.
+    /// Overridable at init for tests that want to exercise the timer without
+    /// sleeping a full 0.8s.
+    private let graceDurationSeconds: Double
+
+    /// Local phase owned by the orchestrator actor. `.pending` carries the
+    /// timer task + a UUID token so concurrent timer-fire vs. session-cleanup
+    /// paths can safely invalidate each other without double-firing.
+    private enum GracePhase: Sendable {
+        case idle
+        case pending(token: UUID, handler: @Sendable () async -> Void, timerTask: Task<Void, Never>, deadline: Date)
+        case resolved
+    }
+
+    /// Resolution reason passed to `resolveGracePending`. Drives snapshot
+    /// mutations + handler invocation.
+    private enum GraceResolveTrigger: Sendable {
+        /// Timer elapsed without cancellation. Fires the stop handler and
+        /// publishes a fresh `vadAutoStopFireToken` so the notification
+        /// path can render.
+        case timerElapsed
+        /// User resumed speaking OR a cleanup path (manual stop, cancel,
+        /// new session) preempted the grace. Clears grace fields; no
+        /// fire token; no handler.
+        case cancelled
+    }
 
     private var currentSnapshot: SessionSnapshot
     private var activeContext: PipelineContextSnapshot
@@ -45,7 +75,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
         vadProvider: (any VadProviding)? = nil,
-        vadPreferences: (any VadPreferencesReading)? = nil
+        vadPreferences: (any VadPreferencesReading)? = nil,
+        graceDurationSeconds: Double = Self.defaultGraceDurationSeconds
     ) {
         let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
         if let repository = transcriptRepository {
@@ -64,7 +95,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             contextProvider: contextProvider,
             persistenceHandler: persistenceHandler,
             vadProvider: vadProvider,
-            vadPreferences: vadPreferences
+            vadPreferences: vadPreferences,
+            graceDurationSeconds: graceDurationSeconds
         )
     }
 
@@ -77,7 +109,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         contextProvider: any PipelineContextProviding,
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?,
         vadProvider: (any VadProviding)? = nil,
-        vadPreferences: (any VadPreferencesReading)? = nil
+        vadPreferences: (any VadPreferencesReading)? = nil,
+        graceDurationSeconds: Double = Self.defaultGraceDurationSeconds
     ) {
         let initialContext = contextProvider.currentContext()
         self.capture = capture
@@ -89,6 +122,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.persistenceHandler = persistenceHandler
         self.vadProvider = vadProvider
         self.vadPreferences = vadPreferences
+        self.graceDurationSeconds = graceDurationSeconds
         self.activeContext = initialContext
         self.currentSnapshot = SessionSnapshot()
         Task { [weak self] in
@@ -246,6 +280,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         nextRevision = 0
         latestStageFailure = nil
         activeContext = contextProvider.currentContext()
+        resetGraceForNewSession()
 
         do {
             let stream = try await capture.start()
@@ -276,6 +311,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.activeStage = .capture
                 snapshot.transcriptProgress = nil
                 snapshot.recordingDuration = .zero
+                snapshot.vadAutoStopGracePending = false
+                snapshot.vadAutoStopGraceDeadline = nil
+                snapshot.vadAutoStopFireToken = nil
             }
 
             captureTask = Task { [weak self] in
@@ -291,6 +329,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// in-memory buffer, and publishes `.idle` directly — no
     /// `.transcribing` stage, no output delivery. See `#002`.
     private func discardActiveCapture() async {
+        cancelPendingGraceTimer()
         await capture.stop()
         await captureTask?.value
         captureTask = nil
@@ -307,6 +346,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             snapshot.activeStage = nil
             snapshot.transcriptProgress = nil
             snapshot.recordingDuration = nil
+            snapshot.vadAutoStopGracePending = false
+            snapshot.vadAutoStopGraceDeadline = nil
+            snapshot.vadAutoStopFireToken = nil
         }
     }
 
@@ -323,12 +365,16 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         nextRevision = 0
         latestStageFailure = nil
         activeContext = contextProvider.currentContext()
+        resetGraceForNewSession()
 
         publish { snapshot in
             snapshot.sessionState = .holdRecording
             snapshot.activeStage = .capture
             snapshot.transcriptProgress = nil
             snapshot.recordingDuration = .zero
+            snapshot.vadAutoStopGracePending = false
+            snapshot.vadAutoStopGraceDeadline = nil
+            snapshot.vadAutoStopFireToken = nil
         }
 
         do {
@@ -362,6 +408,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         // exited yet — the only thing that ends the loop is `capture.stop()`
         // closing the stream. Reversing this order reintroduces the codex-
         // caught deadlock.
+        //
+        // Cancel any pending VAD grace timer BEFORE tearing down capture, so
+        // a timer that's about to fire doesn't publish a spurious fire-token
+        // against a session we're already stopping (#046 Stage B).
+        cancelPendingGraceTimer()
         await capture.stop()
         await captureTask?.value
         captureTask = nil
@@ -384,14 +435,24 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.sessionState = .error(.recordingTooShort)
                 snapshot.activeStage = .transcription
                 snapshot.recordingDuration = bufferedDuration
+                // Error supersedes any VAD UX signals.
+                snapshot.vadAutoStopGracePending = false
+                snapshot.vadAutoStopGraceDeadline = nil
+                snapshot.vadAutoStopFireToken = nil
             }
             return
         }
 
+        // Transition to .transcribing. Clear grace pending/deadline (the
+        // timer has been cancelled above). PRESERVE `vadAutoStopFireToken`
+        // — if we got here via the VAD-fire path, that token is what the
+        // notification driver keys off.
         publish { snapshot in
             snapshot.sessionState = .transcribing
             snapshot.activeStage = .transcription
             snapshot.recordingDuration = bufferedDuration
+            snapshot.vadAutoStopGracePending = false
+            snapshot.vadAutoStopGraceDeadline = nil
         }
 
         do {
@@ -558,9 +619,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         // handle can silent-sink the one shot. Mid-session preference flips do
         // not rescue the current recording (documented UX). Hold-mode sessions
         // skip VAD entirely (release is the stop signal).
+        let vadPrefs = vadPreferences?.current()
         let vadHandler = onAutoStopRequested
-        let vadHandle = await makeVadSessionHandleIfApplicable(handler: vadHandler)
-        var vadAlreadyFired = false
+        let vadHandle = await makeVadSessionHandleIfApplicable(prefs: vadPrefs, handler: vadHandler)
 
         do {
             for try await buffer in stream {
@@ -568,17 +629,29 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 publish { snapshot in
                     snapshot.recordingDuration = (snapshot.recordingDuration ?? .zero) + buffer.duration
                 }
-                if !vadAlreadyFired,
-                   let handle = vadHandle,
-                   let handler = vadHandler,
-                   case .speechEnded = await handle.ingest(buffer.samples) {
-                    vadAlreadyFired = true
-                    // Detached Task escapes captureTask so the stop path (which
-                    // awaits `captureTask.value`) doesn't self-deadlock. We
-                    // continue draining the stream so the final buffers reach
-                    // transcription; capture.stop() fired by the stop path will
-                    // close the stream and end this loop naturally.
-                    Task { await handler() }
+                guard let handle = vadHandle,
+                      let handler = vadHandler,
+                      let prefs = vadPrefs
+                else {
+                    continue
+                }
+                if case .resolved = gracePhase { continue }
+                let event = await handle.ingest(buffer.samples)
+                switch event {
+                case .speechEnded:
+                    if case .idle = gracePhase {
+                        if prefs.showStoppingWarning {
+                            startGracePending(handler: handler)
+                        } else {
+                            fireAutoStopImmediately(handler: handler)
+                        }
+                    }
+                case .speechResumed:
+                    if case .pending(let token, _, _, _) = gracePhase {
+                        await resolveGracePending(token: token, trigger: .cancelled)
+                    }
+                case .none:
+                    break
                 }
             }
         } catch {
@@ -587,10 +660,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     private func makeVadSessionHandleIfApplicable(
+        prefs: VadPreferences?,
         handler: (@Sendable () async -> Void)?
     ) async -> VadSessionHandle? {
         guard let provider = vadProvider,
-              let prefs = vadPreferences?.current(),
+              let prefs,
               prefs.autoStopEnabled,
               handler != nil,
               currentSnapshot.sessionState == .recording
@@ -602,11 +676,106 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         )
     }
 
+    /// Stage B warn-enabled path: schedule the 0.8s grace timer, publish
+    /// the pending snapshot fields. Timer task calls `resolveGracePending`
+    /// when it elapses — the token check there prevents double-fire if a
+    /// cleanup path has already moved phase off `.pending`.
+    private func startGracePending(handler: @escaping @Sendable () async -> Void) {
+        let token = UUID()
+        let durationSeconds = graceDurationSeconds
+        let deadline = Date().addingTimeInterval(durationSeconds)
+        let timerTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(Int(durationSeconds * 1000)))
+            if Task.isCancelled { return }
+            await self?.resolveGracePending(token: token, trigger: .timerElapsed)
+        }
+        gracePhase = .pending(token: token, handler: handler, timerTask: timerTask, deadline: deadline)
+        publish { snapshot in
+            snapshot.vadAutoStopGracePending = true
+            snapshot.vadAutoStopGraceDeadline = deadline
+        }
+    }
+
+    /// Stage A fast path — warn preference off. Fires the handler via a
+    /// detached Task (deadlock-avoiding, per Stage A invariant) and
+    /// publishes the fire token so the notification path can render if
+    /// its own preference is on.
+    private func fireAutoStopImmediately(handler: @escaping @Sendable () async -> Void) {
+        gracePhase = .resolved
+        let fireToken = UUID()
+        publish { snapshot in
+            snapshot.vadAutoStopFireToken = fireToken
+        }
+        Task { await handler() }
+    }
+
+    /// Single transition gate for `pending → resolved`. Actor-isolated so
+    /// timer-elapsed and cleanup paths can race safely — the token check
+    /// at the top drops stale invocations.
+    private func resolveGracePending(token: UUID, trigger: GraceResolveTrigger) async {
+        guard case .pending(let currentToken, let handler, let timerTask, _) = gracePhase,
+              currentToken == token
+        else {
+            return
+        }
+        timerTask.cancel()
+        gracePhase = .resolved
+        switch trigger {
+        case .timerElapsed:
+            let fireToken = UUID()
+            publish { snapshot in
+                snapshot.vadAutoStopGracePending = false
+                snapshot.vadAutoStopGraceDeadline = nil
+                snapshot.vadAutoStopFireToken = fireToken
+            }
+            Task { await handler() }
+        case .cancelled:
+            publish { snapshot in
+                snapshot.vadAutoStopGracePending = false
+                snapshot.vadAutoStopGraceDeadline = nil
+            }
+        }
+    }
+
+    /// Cancel any in-flight timer + transition phase. Used by cleanup
+    /// paths (manual stop, cancel, error, new session). Callers publish
+    /// their own snapshot mutations — this method does NOT publish, so
+    /// grace-clear can be bundled into the caller's state transition
+    /// (avoids an intermediate "recording-without-grace" snapshot per
+    /// codex review #7).
+    private func cancelPendingGraceTimer() {
+        if case .pending(_, _, let timerTask, _) = gracePhase {
+            timerTask.cancel()
+        }
+        gracePhase = .resolved
+    }
+
+    /// New-session variant — same cancel, but transitions phase to
+    /// `.idle` so the next grace window can start fresh.
+    private func resetGraceForNewSession() {
+        if case .pending(_, _, let timerTask, _) = gracePhase {
+            timerTask.cancel()
+        }
+        gracePhase = .idle
+    }
+
+    /// Default grace-window duration. Only overridden in tests (passed via
+    /// `graceDurationSeconds:` init arg).
+    public static let defaultGraceDurationSeconds: Double = 0.8
+
     private func handleStageFailure(_ failure: PipelineStageFailure) {
         latestStageFailure = failure
+        // Cancel any in-flight VAD grace timer and clear grace + fire-token
+        // fields in the SAME publish as `.error`. Without this, observers
+        // would see an intermediate `recording + no-grace` snapshot between
+        // grace-clear and error-set. Per codex review #7 (#046 Stage B).
+        cancelPendingGraceTimer()
         publish { snapshot in
             snapshot.sessionState = .error(failure.mappedError)
             snapshot.activeStage = failure.stage
+            snapshot.vadAutoStopGracePending = false
+            snapshot.vadAutoStopGraceDeadline = nil
+            snapshot.vadAutoStopFireToken = nil
         }
     }
 

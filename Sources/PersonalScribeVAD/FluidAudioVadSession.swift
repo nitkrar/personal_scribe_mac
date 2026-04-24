@@ -20,6 +20,13 @@ actor FluidAudioVadSession {
     private let config: VadSegmentationConfig
     private var streamState: VadStreamState = .initial()
     private var pendingSamples: [Float] = []
+    /// Tracks whether this session has already emitted a `.speechEnded`.
+    /// Gates the `.speechResumed` emission: Silero's state machine emits
+    /// a fresh `speechStart` when `triggered` flips `false → true`, but
+    /// the very first `.speechStart` at session open is NOT a "resumed"
+    /// event — it's the first detection. Only subsequent transitions
+    /// after a prior `.speechEnd` count as resumed speech.
+    private var hasEmittedSpeechEnded: Bool = false
 
     init(inference: @escaping StreamingVadInference, config: VadSegmentationConfig) {
         self.inference = inference
@@ -28,12 +35,9 @@ actor FluidAudioVadSession {
 
     /// Feed samples. Accumulates into `VadManager.chunkSize` (4096) windows,
     /// runs each through the Silero streaming state machine. Returns
-    /// `.speechEnded` the first time the state machine emits `.speechEnd`;
-    /// thereafter the session will keep running but is unlikely to produce
-    /// another event in the same recording (the orchestrator also gates
-    /// with a loop-local `vadAlreadyFired` flag). Inference errors are
-    /// swallowed and logged-at-debug — a single bad CoreML call shouldn't
-    /// tear down a recording.
+    /// `.speechEnded` on `speechEnd`, `.speechResumed` on `speechStart`
+    /// AFTER a prior `.speechEnded`, or nil. Inference errors are swallowed
+    /// — a single bad CoreML call shouldn't tear down a recording.
     func ingest(_ samples: [Float]) async -> VadEvent? {
         pendingSamples.append(contentsOf: samples)
         while pendingSamples.count >= VadManager.chunkSize {
@@ -43,8 +47,14 @@ actor FluidAudioVadSession {
                 continue
             }
             streamState = result.state
-            if result.event?.kind == .speechEnd {
+            switch result.event?.kind {
+            case .speechEnd:
+                hasEmittedSpeechEnded = true
                 return .speechEnded
+            case .speechStart where hasEmittedSpeechEnded:
+                return .speechResumed
+            default:
+                continue
             }
         }
         return nil
