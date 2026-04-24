@@ -732,27 +732,30 @@ Migrate `transcripts.sqlite` to SQLCipher-backed encrypted DB. Key via Keychain.
 
 ### #068 — In-pill mode switcher (quick UX)
 
-`feature` · `P2` · `open` · `phase: 3` · `area: pill, ui, modes`
-*Updated 2026-04-22*
+`feature` · `P2` · `Stage A done · Stage B pending` · `phase: 3` · `area: pill, ui, modes`
+*Updated 2026-04-24*
 
-Switch the active mode directly from the pill overlay (or the menu-bar status item) instead of having to open Settings → Modes tab. Today mode switching is a multi-click journey through the unified window; this ticket makes it a one-click (or one-hotkey) flip next to where the user is already looking.
+Switch the active mode directly from the pill overlay (or the menu-bar status item) instead of having to open Settings → Modes tab. Today mode switching is a multi-click journey through the unified window; this ticket makes it a one-click flip next to where the user is already looking.
 
-**Scope considerations + open UX questions** (land during design, not here):
+**Status (2026-04-24)** — Stage A shipped (menu-bar submenu). Stage B (pill bottom-row icon) deferred until a second mode lands; with `ModeRegistry.all = [dictation]` today the menu-bar submenu is one-item scaffolding that auto-lights-up when modes infra grows.
 
-- **Where does the switcher live?** Options:
-  - *(a)* Menu-bar status item — add a "Mode" submenu next to the existing Microphone submenu (M5.3 precedent). Cheapest; the plumbing already exists.
-  - *(b)* Hover-reveal chip on the pill — small `Dictation` / `Command` / `<mode name>` pill-adjacent affordance. Richer, needs popover plumbing against a non-activating panel.
-  - *(c)* Long-press on pill to reveal an inline switcher on the pill itself.
-  - *(d)* All of the above (menu bar for discovery, pill affordance for speed). Pick one per Stage.
-- **Does the switcher show only the default modes, or user-defined modes too?** `ModeDescriptor` already supports named modes. List them all; newly-added modes appear automatically.
-- **Does it switch immediately, or queue for the next recording?** Mid-recording mode flip is dangerous (pipeline state mid-flight) — probably "takes effect from next session start." Document this.
-- **Keyboard shortcut?** A chord like `⌥ + 1 / 2 / 3` to cycle modes would be faster than even menu-bar. Track as Stage B.
+**Locked design decisions (2026-04-24 session):**
+- **Where**: menu-bar "Mode" submenu (Stage A) + pill bottom-row icon → click opens picker (Stage B). Click-only — no hover chip, no long-press.
+- **Modes listed**: all wired modes including user-defined; unwired modes hidden until they have distinct behavior.
+- **When it applies**: immediately (next session starts in new mode). Mid-recording flip out of scope.
+- **Keyboard chord**: dropped. Discoverability problem (no way to surface the cycle direction) outweighed the speed win.
 
-**Stage A (minimum):** menu-bar "Mode" submenu (option *a*). Mirrors `StatusItemMenuModel` Microphone-submenu pattern: lists `ModeDescriptor` entries, checkmark on the active one, selection routes through `AppStore.activeModeProvider.selectMode(id:)`. No popover plumbing needed. Small scope, ships behind normal UX testing.
+**Stage A — DONE** (`bf28dd3`, 2026-04-24): menu-bar "Mode" submenu. Mirrors `StatusItemMenuModel` Microphone-submenu pattern via a new `.modeSubmenu` `Item` + `ModeSubmenuChild`. Lists `ModeRegistry.all`, checkmark on the active mode, selection routes through `modelService.setActive(modelService.descriptor(for: mode))` — same closure shape as the existing `UnifiedWindowController` ModesTab path. Snapshot observer rebuilds the menu on `activeMode` change → checkmark + parent title update automatically. Tests: 2 new in `StatusItemMenuModelSubmenuTests` + 9 existing mic-submenu tests + 20 baseline `StatusItemMenuModelTests` all pass. Runtime click-through not yet manually verified.
 
-**Stage B:** pill-adjacent hover chip (option *b* or *c*). Needs popover-against-non-activating-panel work. Depends on Stage A being in place so the routing target already exists.
+**Stage B — PENDING**: pill bottom-row mode icon → click opens picker. Real architectural cost; explicitly NOT minimal.
+- Pill geometry today is single-row HStacks at fixed dimensional bands (`PillOverlayView.swift:40-78`, `size(for:)` at L96-119). Adding a row changes the height bands and breaks the `PillOverlayPresenter` per-state panel-resize tween (#044).
+- Sub-region clicks inside the pill don't fire SwiftUI gestures — `ClickThroughHostingView.mouseDown` overrides without `super`. Needs AppKit hit-testing for the new icon region (see memory `project_pill_hit_testing`).
+- Click target needs to open a picker against a non-activating `NSPanel` — popover plumbing not currently wired anywhere on the pill.
+- Per-state visibility (does the icon show during recording / downloading / error?) is a design call.
 
-**Depends on:** none (ModesTab + `ModeDescriptor` are already live)
+**Stage B preconditions:** (a) ≥ 2 wired modes exist (otherwise Stage B is shipping complex infra to point at a list-of-one); (b) decision on whether the icon shows in active-recording states or only in idle.
+
+**Depends on:** none for Stage A (ModesTab + `ModeDescriptor` already live). Stage B effectively blocked on additional modes infra landing.
 **Legacy:** none — net-new ticket from 2026-04-22 UX session.
 
 ---
