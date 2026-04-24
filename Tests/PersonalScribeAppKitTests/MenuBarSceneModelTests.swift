@@ -428,7 +428,7 @@ final class MenuBarSceneModelTests: XCTestCase {
     }
 
     private func makeBuffer() throws -> PCMBuffer {
-        // >= 1s of audio to clear SessionCoordinator's recordingTooShort guard.
+        // >= 1s of audio to clear SessionPipelineOrchestrator's `.shortExit` guard.
         try PCMBuffer(
             samples: Array(repeating: 0.25, count: 16_000),
             timestamp: ContinuousClock().now

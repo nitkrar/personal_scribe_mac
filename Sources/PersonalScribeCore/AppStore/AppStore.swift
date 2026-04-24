@@ -387,8 +387,6 @@ public final class AppStore: ObservableObject {
 
     private static func pillMessage(for error: PersonalScribeError) -> String {
         switch error {
-        case .recordingTooShort:
-            return "Too short — try again"
         case .transcriptionFailure:
             return "Transcription failed"
         case .micPermissionDenied:

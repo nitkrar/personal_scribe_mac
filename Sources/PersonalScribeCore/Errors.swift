@@ -8,7 +8,6 @@ public enum PersonalScribeError: Error, Sendable, Equatable {
     case transcriptionFailure
     case cancelled
     case invalidState
-    case recordingTooShort
 }
 
 extension PersonalScribeError: LocalizedError {
@@ -28,8 +27,6 @@ extension PersonalScribeError: LocalizedError {
             "The operation was cancelled."
         case .invalidState:
             "The session entered an invalid state."
-        case .recordingTooShort:
-            "Recording too short."
         }
     }
 
@@ -49,8 +46,6 @@ extension PersonalScribeError: LocalizedError {
             "The operation was stopped before it finished."
         case .invalidState:
             "A shared component detected an impossible transition or misuse."
-        case .recordingTooShort:
-            "The transcriber needs at least one second of audio."
         }
     }
 
@@ -68,8 +63,6 @@ extension PersonalScribeError: LocalizedError {
             "Retry the operation if you still need it."
         case .invalidState:
             "Reset the session and try again."
-        case .recordingTooShort:
-            "Hold the hotkey or record for at least one second before releasing."
         }
     }
 }

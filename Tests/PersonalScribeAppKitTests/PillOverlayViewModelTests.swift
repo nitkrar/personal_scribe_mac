@@ -56,10 +56,10 @@ final class PillOverlayViewModelTests: XCTestCase {
         )
 
         let vmB = PillOverlayViewModel()
-        vmB.apply(sessionState: .error(.recordingTooShort), preparationProgress: nil)
+        vmB.apply(sessionState: .error(.resampleFailure), preparationProgress: nil)
         XCTAssertEqual(
             vmB.visibility,
-            .error(message: PillOverlayViewModel.pillMessage(for: .recordingTooShort))
+            .error(message: PillOverlayViewModel.pillMessage(for: .resampleFailure))
         )
     }
 

@@ -33,8 +33,8 @@ enum DevelopmentComposition {
         )
     }
 
-    // One second of silence — enough to clear SessionCoordinator's
-    // `recordingTooShort` guard (>= 1s of buffered audio).
+    // One second of silence — enough to clear SessionPipelineOrchestrator's
+    // `.shortExit` guard (>= 1s of buffered audio).
     private static func defaultBuffers() -> [PCMBuffer] {
         guard let buffer = try? PCMBuffer(
             samples: Array(repeating: 0, count: 16_000),

@@ -352,15 +352,15 @@ final class AppStoreTests: XCTestCase {
         store.start()
         await clock.advance(by: .zero)
 
-        session.emitState(.error(.recordingTooShort))
+        session.emitState(.error(.resampleFailure))
         await waitUntil {
-            store.snapshot.pillVisibility == .error(message: "Too short — try again")
+            store.snapshot.pillVisibility == .error(message: "Recording failed")
         }
 
         await clock.advance(by: .milliseconds(1_499))
         XCTAssertEqual(
             store.snapshot.pillVisibility,
-            .error(message: "Too short — try again")
+            .error(message: "Recording failed")
         )
 
         await clock.advance(by: .milliseconds(1))
@@ -368,7 +368,7 @@ final class AppStoreTests: XCTestCase {
             store.snapshot.pillVisibility == .hidden
         }
 
-        XCTAssertEqual(store.snapshot.sessionState, .error(.recordingTooShort))
+        XCTAssertEqual(store.snapshot.sessionState, .error(.resampleFailure))
         XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
     }
 
