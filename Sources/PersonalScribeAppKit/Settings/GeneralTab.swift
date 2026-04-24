@@ -378,8 +378,8 @@ public struct GeneralTab: View {
         }
     }
 
-    /// Residual Behavior card — Waveform decay. Restore-delay slider moved
-    /// into `transcribeOutputCard` per #072.
+    /// Residual Behavior card — Waveform decay + Mute-while-recording.
+    /// Restore-delay slider moved into `transcribeOutputCard` per #072.
     private var behaviorCard: some View {
         SettingsCard {
             Text("Behavior")
@@ -395,6 +395,16 @@ public struct GeneralTab: View {
                 Text("Immediate").tag(WaveformDecayMode.immediate)
                 Text("Animated").tag(WaveformDecayMode.animated)
             }
+
+            Divider()
+
+            Toggle(
+                "Mute system audio while recording",
+                isOn: Binding(
+                    get: { viewModel.muteOutputWhileRecording },
+                    set: { viewModel.setMuteOutputWhileRecording($0) }
+                )
+            )
         }
     }
 
@@ -561,6 +571,12 @@ final class GeneralTabViewModel: ObservableObject {
     /// clipboard after `clipboardRestoreDelay`. When `false`, the transcript
     /// stays on the clipboard until the user writes something new.
     @Published private(set) var clipboardRestoreEnabled: Bool
+    /// "Mute system audio while recording" toggle. When `true`,
+    /// `AVAudioCaptureService` mutes the OS volume flag at capture start
+    /// and restores the prior state on every end-of-capture path.
+    /// Prevents speaker → mic bleed from polluting the transcript.
+    /// Default `false` — fresh installs behave exactly as before.
+    @Published private(set) var muteOutputWhileRecording: Bool
     /// VAD auto-stop master toggle (#046). When `false`, orchestrator skips
     /// VAD wiring entirely — recording only stops via manual hotkey / pill / Esc.
     @Published private(set) var vadAutoStopEnabled: Bool
@@ -628,6 +644,7 @@ final class GeneralTabViewModel: ObservableObject {
         self.backgroundMode = BackgroundModePreference.resolve(from: defaults)
         self.autoPasteEnabled = AutoPasteEnabledPreference.resolve(from: defaults)
         self.clipboardRestoreEnabled = ClipboardRestoreEnabledPreference.resolve(from: defaults)
+        self.muteOutputWhileRecording = MuteOutputWhileRecordingPreference.resolve(from: defaults)
         self.vadAutoStopEnabled = VadAutoStopEnabledPreference.resolve(from: defaults)
         self.vadSilenceThresholdSeconds = VadSilenceThresholdPreference.resolve(from: defaults)
         self.vadShowStoppingWarning = VadShowStoppingWarningPreference.resolve(from: defaults)
@@ -699,6 +716,11 @@ final class GeneralTabViewModel: ObservableObject {
     func setClipboardRestoreEnabled(_ enabled: Bool) {
         clipboardRestoreEnabled = enabled
         ClipboardRestoreEnabledPreference.persist(enabled, to: defaults)
+    }
+
+    func setMuteOutputWhileRecording(_ enabled: Bool) {
+        muteOutputWhileRecording = enabled
+        MuteOutputWhileRecordingPreference.persist(enabled, to: defaults)
     }
 
     /// Description line rendered above the silence-threshold slider. Formats

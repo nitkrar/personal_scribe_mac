@@ -8,7 +8,8 @@ import PersonalScribeCore
 public actor AVAudioCaptureService: AudioCapturing {
     public init(
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.audio),
-        inputDeviceProvider: any AudioInputDeviceProviding = NoOpAudioInputDeviceProvider()
+        inputDeviceProvider: any AudioInputDeviceProviding = NoOpAudioInputDeviceProvider(),
+        shouldMuteOutput: @escaping @Sendable () -> Bool = { false }
     ) {
         self.init(
             logger: logger,
@@ -22,7 +23,9 @@ public actor AVAudioCaptureService: AudioCapturing {
                     logger: logger
                 )
             },
-            inputDeviceProvider: inputDeviceProvider
+            inputDeviceProvider: inputDeviceProvider,
+            shouldMuteOutput: shouldMuteOutput,
+            systemAudioMuter: SystemAudioMuter()
         )
     }
 
@@ -31,13 +34,17 @@ public actor AVAudioCaptureService: AudioCapturing {
         authorizationStatusProvider: @escaping @Sendable () -> AVAuthorizationStatus,
         engineDriver: AudioEngineDriver,
         resamplerFactory: @escaping @Sendable (Double, PersonalScribeLogger) throws -> AudioResampler,
-        inputDeviceProvider: any AudioInputDeviceProviding = NoOpAudioInputDeviceProvider()
+        inputDeviceProvider: any AudioInputDeviceProviding = NoOpAudioInputDeviceProvider(),
+        shouldMuteOutput: @escaping @Sendable () -> Bool = { false },
+        systemAudioMuter: SystemAudioMuter = SystemAudioMuter()
     ) {
         self.logger = logger
         self.authorizationStatusProvider = authorizationStatusProvider
         self.engineDriver = engineDriver
         self.resamplerFactory = resamplerFactory
         self.inputDeviceProvider = inputDeviceProvider
+        self.shouldMuteOutput = shouldMuteOutput
+        self.systemAudioMuter = systemAudioMuter
     }
 
     public func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
@@ -87,7 +94,15 @@ public actor AVAudioCaptureService: AudioCapturing {
         let (stream, continuation) = AsyncThrowingStream<PCMBuffer, Error>.makeStream()
         let (levelStream, levelContinuation) = AsyncStream<Float>.makeStream()
 
-        // 5. Install tap, prepare, start engine
+        // 5. Mute system audio output if the user opted in. Placed here so
+        // any earlier throw path (auth / double-start / resampler) never
+        // leaves the machine muted. Any failure after this point MUST
+        // call `systemAudioMuter.restoreIfNeeded()`.
+        if shouldMuteOutput() {
+            systemAudioMuter.muteIfNeeded()
+        }
+
+        // 6. Install tap, prepare, start engine
         do {
             try engineDriver.installTap { [weak self] buffer, _ in
                 // Called on the engine's tap thread. Extract Sendable values only.
@@ -101,6 +116,7 @@ public actor AVAudioCaptureService: AudioCapturing {
             try engineDriver.start()
         } catch {
             logger.error("Engine startup failed", error: error)
+            systemAudioMuter.restoreIfNeeded()
             engineDriver.removeTap()
             engineDriver.stop()
             engineDriver.reset()
@@ -169,6 +185,7 @@ public actor AVAudioCaptureService: AudioCapturing {
         engineDriver.removeTap()
         engineDriver.stop()
         engineDriver.reset()
+        systemAudioMuter.restoreIfNeeded()
 
         continuation?.finish()
         continuation = nil
@@ -243,6 +260,7 @@ public actor AVAudioCaptureService: AudioCapturing {
         engineDriver.removeTap()
         engineDriver.stop()
         engineDriver.reset()
+        systemAudioMuter.restoreIfNeeded()
         continuation?.finish(throwing: error)
         continuation = nil
         levelContinuation?.finish()
@@ -261,6 +279,7 @@ public actor AVAudioCaptureService: AudioCapturing {
         engineDriver.removeTap()
         engineDriver.stop()
         engineDriver.reset()
+        systemAudioMuter.restoreIfNeeded()
         levelContinuation?.finish()
         levelContinuation = nil
         pendingLevelStream = nil
@@ -307,6 +326,8 @@ public actor AVAudioCaptureService: AudioCapturing {
     private let engineDriver: AudioEngineDriver
     private let resamplerFactory: @Sendable (Double, PersonalScribeLogger) throws -> AudioResampler
     private let inputDeviceProvider: any AudioInputDeviceProviding
+    private let shouldMuteOutput: @Sendable () -> Bool
+    private var systemAudioMuter: SystemAudioMuter
     private var continuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?
     private var resampler: AudioResampler?
     private var isCapturing = false

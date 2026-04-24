@@ -75,7 +75,8 @@ public enum AppComposition {
         let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
         let capture = AVAudioCaptureService(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.audio),
-            inputDeviceProvider: AVFoundationInputDeviceProvider(defaults: .standard)
+            inputDeviceProvider: AVFoundationInputDeviceProvider(defaults: .standard),
+            shouldMuteOutput: { MuteOutputWhileRecordingPreference.resolve() }
         )
         let transcriberProvider = ModelBoundTranscriberProvider()
 

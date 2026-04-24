@@ -15,6 +15,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
     private let openURL: @MainActor (URL) -> Void
     private let inputDeviceProvider: any AudioInputDeviceProviding
+    private let prequitHandler: @MainActor () async -> Void
     private let logger: PersonalScribeLogger
 
     private var snapshotCancellable: AnyCancellable?
@@ -32,6 +33,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
+        prequitHandler: @escaping @MainActor () async -> Void = {},
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
     ) {
         self.init(
@@ -47,6 +49,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             openMicrophoneSystemSettings: openMicrophoneSystemSettings,
             openInputMonitoringSystemSettings: openInputMonitoringSystemSettings,
             inputDeviceProvider: inputDeviceProvider,
+            prequitHandler: prequitHandler,
             logger: logger
         )
     }
@@ -64,6 +67,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
+        prequitHandler: @escaping @MainActor () async -> Void = {},
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
     ) {
         let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
@@ -87,6 +91,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
         }
         self.inputDeviceProvider = inputDeviceProvider ?? EmptyAudioInputDeviceProvider()
+        self.prequitHandler = prequitHandler
         self.logger = logger
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
@@ -147,7 +152,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         case .openInputMonitoringSystemSettings:
             openURL(PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .inputMonitoring))
         case .quit:
-            NSApplication.shared.terminate(nil)
+            // Route through the prequit handler first so an in-flight
+            // recording can tear down cleanly (e.g. restoring the system
+            // mute state set by `SystemAudioMuter`) before the process
+            // exits. Force-quit / crash / SIGKILL still leak — accepted
+            // scope.
+            Task { @MainActor in
+                await prequitHandler()
+                NSApplication.shared.terminate(nil)
+            }
         case .selectAudioInputDevice:
             // Device rows route through `handleDeviceSelection(_:)`
             // directly — the deviceID payload is on the NSMenuItem,

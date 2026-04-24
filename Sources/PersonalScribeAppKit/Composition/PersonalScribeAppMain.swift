@@ -247,7 +247,12 @@ struct PersonalScribeAppMain: App {
                 Task { await copyLastTranscriptAction.perform() }
             },
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
-            inputDeviceProvider: inputDeviceProvider
+            inputDeviceProvider: inputDeviceProvider,
+            prequitHandler: {
+                // Stop an active recording before terminate so
+                // `SystemAudioMuter` restores the prior output mute state.
+                await AppComposition.sessionCoordinator.stopIfActive()
+            }
         )
         _sceneModel = StateObject(wrappedValue: sceneModel)
         _pillController = StateObject(
@@ -401,7 +406,8 @@ final class StatusItemControllerHost: ObservableObject {
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
         },
-        inputDeviceProvider: (any AudioInputDeviceProviding)? = nil
+        inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
+        prequitHandler: @escaping @MainActor () async -> Void = {}
     ) {
         self.controller = StatusItemController(
             sceneModel: sceneModel,
@@ -411,7 +417,8 @@ final class StatusItemControllerHost: ObservableObject {
             openSettings: openSettings,
             openCopyLastTranscript: openCopyLastTranscript,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
-            inputDeviceProvider: inputDeviceProvider
+            inputDeviceProvider: inputDeviceProvider,
+            prequitHandler: prequitHandler
         )
     }
 
