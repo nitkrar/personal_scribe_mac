@@ -118,12 +118,22 @@ public struct GeneralTab: View {
                 // the service after the call (#005).
                 launchStatusDot
 
-                // Tooltip-only affordance — macOS does not natively prompt
-                // for Login Items registration, so point the user at the
-                // system-settings pane that does.
+                // Clickable deep-link: opens System Settings → General →
+                // Login Items so the user can verify / change the
+                // registration without leaving the app. macOS does not
+                // natively prompt for Login Items, so we route them to
+                // the pane that does. `.help(...)` stays as a hover
+                // tooltip for the 50% of the time SwiftUI honors it on
+                // a bare Image; the `.onTapGesture` is the primary
+                // discoverable affordance (fixes #073).
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
-                    .help("Verify or change this in System Settings → General → Login Items")
+                    .onTapGesture {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .help("Open System Settings → General → Login Items")
 
                 Spacer()
             }
