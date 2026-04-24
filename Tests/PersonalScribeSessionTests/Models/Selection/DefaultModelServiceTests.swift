@@ -55,6 +55,16 @@ final class DefaultModelServiceTests: XCTestCase {
     /// never calls the download handler. The UI gates `setActive`
     /// behind "model is downloaded" (Modes tab hides non-downloaded
     /// modes; AI Models tab only shows Activate on `.ready` rows).
+    ///
+    /// Invariants pinned:
+    /// 1. `isDownloaded: { _ in false }` — exercises the branch the
+    ///    pre-#024.3 chain short-circuited *out of*; the old
+    ///    "download if missing" path would have invoked the handler
+    ///    here. Flipping the stub makes the "no download handler"
+    ///    assertion load-bearing instead of vacuous.
+    /// 2. `$activeDescriptor` must publish the change — observers like
+    ///    `AppKitActiveModeProvider` subscribe to the publisher, not
+    ///    the current value.
     func testSetActiveVoiceModelPersistsAndAssignsWithoutCallingDownloadHandler() async throws {
         let defaults = isolatedDefaults()
         let preference = Preference<ActiveModelDescriptor>(
@@ -66,16 +76,31 @@ final class DefaultModelServiceTests: XCTestCase {
         let recorder = DownloadRecorder()
         let service = DefaultModelService(
             selectionPreference: preference,
-            isDownloaded: { _ in true },
+            isDownloaded: { _ in false },
             download: { descriptor, _ in
                 await recorder.record(descriptor)
             }
         )
 
+        let publications = Task { () -> ActiveModelDescriptor? in
+            var seen = 0
+            for await value in service.$activeDescriptor.values {
+                seen += 1
+                if seen == 2 {
+                    return value
+                }
+            }
+            return nil
+        }
+        await Task.yield()
+
         try await service.setActiveVoiceModel(target.id)
 
+        let published = await publications.value
         let recordedDescriptors = await recorder.recordedDescriptors()
+
         XCTAssertTrue(recordedDescriptors.isEmpty, "setActive must not invoke the download handler")
+        XCTAssertEqual(published?.voiceModel.id, target.id, "setActive must publish through $activeDescriptor")
         XCTAssertEqual(service.activeDescriptor.voiceModel.id, target.id)
         XCTAssertEqual(preference.resolve().voiceModel.id, target.id)
     }

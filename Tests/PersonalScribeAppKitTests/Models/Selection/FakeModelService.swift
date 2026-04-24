@@ -6,7 +6,6 @@ import PersonalScribeCore
 final class FakeModelService: ModelService {
     let registeredModels: [ModelDescriptor]
     @Published private(set) var activeDescriptor: ActiveModelDescriptor
-    private(set) var downloadRequests: [String] = []
     private var downloadedModelIDs: Set<String>
 
     init(
@@ -55,7 +54,6 @@ final class FakeModelService: ModelService {
     }
 
     func download(_ descriptor: ModelDescriptor) async throws {
-        downloadRequests.append(descriptor.id)
         downloadedModelIDs.insert(descriptor.id)
     }
 }

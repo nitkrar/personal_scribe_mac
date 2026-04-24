@@ -267,7 +267,11 @@ struct ModelRow: View {
         case .downloading, .loading:
             EmptyView()
         case .failed:
-            Button("Retry", action: onActivate)
+            // #024.4: Retry re-runs the download, not setActive. Before
+            // the activate/download split, onActivate auto-downloaded;
+            // after the split, Retry must route to onDownload or the
+            // failed row is permanently stuck.
+            Button("Retry", action: onDownload)
                 .buttonStyle(.borderedProminent)
         case .notDownloaded, .ready:
             // Stable phases are handled by `stableIconButton`.
