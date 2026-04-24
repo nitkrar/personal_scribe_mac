@@ -17,7 +17,8 @@ public struct HotkeyRecorder: View {
         _model = StateObject(
             wrappedValue: HotkeyRecorderModel(
                 onConfirm: onConfirm,
-                onCancel: onCancel
+                onCancel: onCancel,
+                systemHotkeys: SystemHotkeyRegistry.load()
             )
         )
     }
@@ -55,6 +56,14 @@ public struct HotkeyRecorder: View {
                         .font(PersonalScribeTheme.Typography.caption.font)
                         .foregroundStyle(.secondary)
                 }
+
+                if let warningMessage = model.warningMessage {
+                    Divider()
+
+                    Label(warningMessage, systemImage: "exclamationmark.triangle")
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.orange)
+                }
             }
 
             HStack(spacing: SettingsLayout.inlineSpacing) {
@@ -85,6 +94,7 @@ final class HotkeyRecorderModel: ObservableObject {
     enum CaptureResult: Equatable {
         case idle
         case captured(HotkeyPreference)
+        case capturedWithWarning(HotkeyPreference, warning: String)
         case rejected(reason: String)
     }
 
@@ -102,27 +112,32 @@ final class HotkeyRecorderModel: ObservableObject {
 
     private let onConfirm: @MainActor (HotkeyPreference) -> Void
     private let onCancel: @MainActor () -> Void
+    private let systemHotkeys: [SystemHotkey]
 
     init(
         onConfirm: @escaping @MainActor (HotkeyPreference) -> Void,
-        onCancel: @escaping @MainActor () -> Void
+        onCancel: @escaping @MainActor () -> Void,
+        systemHotkeys: [SystemHotkey] = []
     ) {
         self.onConfirm = onConfirm
         self.onCancel = onCancel
+        self.systemHotkeys = systemHotkeys
     }
 
     var canConfirm: Bool {
-        if case .captured = captureResult {
+        switch captureResult {
+        case .captured, .capturedWithWarning:
             return true
+        case .idle, .rejected:
+            return false
         }
-        return false
     }
 
     var captureSummary: String {
         switch captureResult {
         case .idle:
             return "Press a shortcut"
-        case let .captured(preference):
+        case let .captured(preference), let .capturedWithWarning(preference, _):
             return HotkeyShortcutFormatter.displayString(for: preference)
         case .rejected:
             return "No valid shortcut captured"
@@ -136,6 +151,13 @@ final class HotkeyRecorderModel: ObservableObject {
         return reason
     }
 
+    var warningMessage: String? {
+        guard case let .capturedWithWarning(_, warning) = captureResult else {
+            return nil
+        }
+        return warning
+    }
+
     @discardableResult
     func handle(event: NSEvent) throws -> Bool {
         switch event.type {
@@ -143,7 +165,8 @@ final class HotkeyRecorderModel: ObservableObject {
             captureModifierChange(event)
             return true
         case .keyDown:
-            if event.keyCode == Self.escapeKeyCode {
+            let modifiers = normalizedModifierFlags(event.modifierFlags)
+            if event.keyCode == Self.escapeKeyCode, modifiers.isEmpty {
                 cancel()
                 return true
             }
@@ -156,11 +179,12 @@ final class HotkeyRecorderModel: ObservableObject {
     }
 
     func confirm() {
-        guard case let .captured(preference) = captureResult else {
+        switch captureResult {
+        case let .captured(preference), let .capturedWithWarning(preference, _):
+            onConfirm(preference)
+        case .idle, .rejected:
             return
         }
-
-        onConfirm(preference)
     }
 
     func cancel() {
@@ -198,7 +222,19 @@ final class HotkeyRecorderModel: ObservableObject {
             return
         }
 
-        captureResult = .captured(preference)
+        switch SystemHotkeyRegistry.collision(for: preference, against: systemHotkeys) {
+        case let .enabled(name):
+            captureResult = .rejected(
+                reason: "Conflicts with \(name) (macOS system shortcut)."
+            )
+        case let .disabled(name):
+            captureResult = .capturedWithWarning(
+                preference,
+                warning: "\(name) is currently disabled in System Settings — re-enabling it will conflict with this shortcut."
+            )
+        case .none:
+            captureResult = .captured(preference)
+        }
     }
 
     private func normalizedModifierFlags(_ modifierFlags: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
@@ -213,6 +249,10 @@ final class HotkeyRecorderModel: ObservableObject {
         for preference: HotkeyPreference,
         charactersIgnoringModifiers: String
     ) -> String? {
+        if let reason = ReservedInAppHotkeys.reservationReason(for: preference) {
+            return reason
+        }
+
         let modifiers = preference.modifierFlags
 
         if modifiers == [.command], preference.keyCode == spaceKeyCode {

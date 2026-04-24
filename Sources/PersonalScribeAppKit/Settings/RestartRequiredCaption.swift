@@ -9,11 +9,12 @@ import PersonalScribeCore
 /// which defaults to `AppRelauncher.relaunch()` — the caller can
 /// override for tests.
 ///
-/// Intentionally kept trivial. Two callers today (Application card's
-/// "Background mode", Shortcuts card's recording hotkey). More may
-/// arrive; any future preference that requires a restart should set
-/// its own view-model `*RestartRequired: Bool` flag and render this
-/// view conditionally rather than inventing a one-off footnote.
+/// Intentionally kept trivial. Single caller today (Application card's
+/// "Background mode"); the recording-hotkey card used to need it too
+/// but live-apply under #017 removed that dependency. Any future
+/// preference that requires a restart should set its own view-model
+/// `*RestartRequired: Bool` flag and render this view conditionally
+/// rather than inventing a one-off footnote.
 struct RestartRequiredCaption: View {
     let message: String
     var onRelaunch: @MainActor () -> Void = AppRelauncher.relaunch

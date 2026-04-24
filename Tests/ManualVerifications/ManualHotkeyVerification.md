@@ -119,3 +119,36 @@ methods instead of the toggle path.
   model is ready" status card (from `RecordingStatusCardDriver`).
   Release transitions to `.transcribing`; transcript appears once
   download + prepare complete.
+
+## #017 — Hotkey customization (Stage A, 2026-04-24)
+
+Ticket: `plans/backlog/#017` — split across Steps 1.1–1.4 in a single
+landing lane.
+
+Covers: restore-default affordance, intra-app reserved registry (Esc),
+plist-backed system-shortcut collision detection with disabled-shortcut
+warning, live apply (no relaunch).
+
+- [ ] **MV-HK-1** Settings → General → Shortcuts. Press "Change…",
+  capture a non-default combination (e.g. `⌘⇧R`). Confirm. Without
+  relaunching, press `⌘⇧R` from another app — recording starts. Press
+  again — recording stops and transcript pastes. Press the default
+  `opt + /` — nothing happens (old binding is gone). This is the live-
+  apply invariant from Step 1.4.
+- [ ] **MV-HK-2** With a non-default shortcut active, the "Restore
+  default" button on the shortcut card is enabled. Click it — the card
+  flips to `⌥/` and the next `opt + /` press starts recording. With
+  the default already selected, the button is greyed out.
+- [ ] **MV-HK-3** Press "Change…". While the recorder is open, attempt
+  to bind **Spotlight**'s shortcut (usually `⌘Space`). The recorder
+  displays a red-style rejection line naming "Spotlight" (or whatever
+  your system maps it to) and the **Set** button stays disabled.
+  Separately, try to bind any combination that includes **Escape**
+  (e.g. `⌘Esc`) — rejection names Escape. Plain `Esc` cancels the
+  recorder as before.
+- [ ] **MV-HK-4** Disable one of your system shortcuts in System
+  Settings → Keyboard → Keyboard Shortcuts (e.g. toggle Spotlight off).
+  Re-open Ninimma's recorder and press the disabled combination. The
+  recorder shows a yellow-style warning naming the disabled system
+  shortcut — and the **Set** button is enabled. Confirm and verify the
+  new binding fires. Re-enable the system shortcut after the test.

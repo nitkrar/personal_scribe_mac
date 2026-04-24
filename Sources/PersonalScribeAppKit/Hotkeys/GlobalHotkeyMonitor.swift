@@ -64,7 +64,11 @@ public final class GlobalHotkeyMonitor {
     private let onToggle: @MainActor () -> Void
     private let onHoldStart: @MainActor () -> Void
     private let onHoldRelease: @MainActor () -> Void
-    private let recordingHotkey: HotkeyPreference
+    /// Mutable so `updateRecordingHotkey(_:)` can swap the binding live
+    /// when the user changes it in Settings — `matchesHotkey` and the
+    /// swallow-decision paths read this property on every event, so no
+    /// tap restart is needed.
+    private(set) var recordingHotkey: HotkeyPreference
     private let holdThreshold: TimeInterval
     private let doubleTapWindow: TimeInterval
     private let scheduleHoldDetection: HoldScheduler
@@ -243,6 +247,18 @@ public final class GlobalHotkeyMonitor {
             NSEvent.removeMonitor(handle)
             localMonitor = nil
         }
+        resetState()
+    }
+
+    /// Swap the recording binding at runtime. Settings calls this the
+    /// moment the user confirms a new shortcut in `HotkeyRecorder` so
+    /// the change takes effect without a relaunch.
+    ///
+    /// In-flight gesture state is cleared so a release of the OLD
+    /// keyCode arriving after the update doesn't ghost-fire either the
+    /// old or new binding.
+    public func updateRecordingHotkey(_ preference: HotkeyPreference) {
+        recordingHotkey = preference
         resetState()
     }
 

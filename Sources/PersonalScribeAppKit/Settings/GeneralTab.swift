@@ -15,7 +15,10 @@ public struct GeneralTab: View {
         defaults: UserDefaults = .standard,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
-        launchAtLoginService: any LaunchAtLoginServicing = SystemLaunchAtLoginService()
+        launchAtLoginService: any LaunchAtLoginServicing = SystemLaunchAtLoginService(),
+        onHotkeyUpdate: @escaping @MainActor (HotkeyPreference) -> Void = { preference in
+            AppComposition.hotkeyMonitor.updateRecordingHotkey(preference)
+        }
     ) {
         _viewModel = StateObject(
             wrappedValue: GeneralTabViewModel(
@@ -26,7 +29,7 @@ public struct GeneralTab: View {
             )
         )
         _shortcutsViewModel = StateObject(
-            wrappedValue: ShortcutsTabViewModel(defaults: defaults)
+            wrappedValue: ShortcutsTabViewModel(defaults: defaults, onHotkeyUpdate: onHotkeyUpdate)
         )
     }
 
@@ -465,9 +468,10 @@ public struct GeneralTab: View {
                     isRecordingHotkeyRecorderPresented = true
                 },
                 changeEnabled: true,
-                restartRequiredMessage: shortcutsViewModel.requiresRestartNotice
-                    ? "Relaunch \(AppBrand.displayName) for the new recording hotkey to take effect."
-                    : nil
+                isAtDefault: shortcutsViewModel.recordingHotkey == .default,
+                restoreDefaultAction: {
+                    shortcutsViewModel.restoreDefault()
+                }
             )
         }
     }
@@ -479,7 +483,8 @@ public struct GeneralTab: View {
         notes: String,
         changeAction: @escaping () -> Void,
         changeEnabled: Bool,
-        restartRequiredMessage: String?
+        isAtDefault: Bool,
+        restoreDefaultAction: @escaping () -> Void
     ) -> some View {
         SettingsCard {
             HStack(alignment: .top, spacing: SettingsLayout.itemSpacing) {
@@ -498,14 +503,14 @@ public struct GeneralTab: View {
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .textSelection(.enabled)
 
-                    Button("Change…", action: changeAction)
-                        .disabled(changeEnabled == false)
-                }
-            }
+                    HStack(spacing: SettingsLayout.inlineSpacing) {
+                        Button("Restore default", action: restoreDefaultAction)
+                            .disabled(isAtDefault)
 
-            if let restartRequiredMessage {
-                Divider()
-                RestartRequiredCaption(message: restartRequiredMessage)
+                        Button("Change…", action: changeAction)
+                            .disabled(changeEnabled == false)
+                    }
+                }
             }
         }
     }
@@ -986,23 +991,31 @@ private struct PillStyleSelectorCard: View {
     }
 }
 
-// MARK: - Shortcuts subsection view model (bug #14)
+// MARK: - Shortcuts subsection view model (#017)
 
 @MainActor
 final class ShortcutsTabViewModel: ObservableObject {
     @Published private(set) var recordingHotkey: HotkeyPreference
-    @Published private(set) var requiresRestartNotice = false
 
     private let defaults: UserDefaults
+    private let onHotkeyUpdate: @MainActor (HotkeyPreference) -> Void
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        onHotkeyUpdate: @escaping @MainActor (HotkeyPreference) -> Void = { _ in }
+    ) {
         self.defaults = defaults
+        self.onHotkeyUpdate = onHotkeyUpdate
         self.recordingHotkey = HotkeyPreference.resolve(from: defaults)
     }
 
     func setRecordingHotkey(_ preference: HotkeyPreference) {
         recordingHotkey = preference
         preference.persist(to: defaults)
-        requiresRestartNotice = true
+        onHotkeyUpdate(preference)
+    }
+
+    func restoreDefault() {
+        setRecordingHotkey(.default)
     }
 }

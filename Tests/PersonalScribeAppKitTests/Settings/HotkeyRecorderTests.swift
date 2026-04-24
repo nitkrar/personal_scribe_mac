@@ -58,6 +58,26 @@ final class HotkeyRecorderTests: XCTestCase {
         XCTAssertTrue(reason.contains("Cmd+Space"))
     }
 
+    func testCaptureRejectsEscapeWithInAppReservedReason() throws {
+        let model = HotkeyRecorderModel(onConfirm: { _ in }, onCancel: { })
+
+        try model.handle(event: makeKeyDownEvent(
+            keyCode: 53,
+            modifierFlags: [.command],
+            characters: "\u{1B}",
+            timestamp: 1.0
+        ))
+
+        guard case let .rejected(reason) = model.captureResult else {
+            return XCTFail("Expected rejected capture result for Cmd+Esc")
+        }
+
+        XCTAssertTrue(
+            reason.contains("Escape"),
+            "Expected rejection reason to reference Escape, got: \(reason)"
+        )
+    }
+
     func testRejectsModifierOnlyChordWithReason() throws {
         let model = HotkeyRecorderModel(onConfirm: { _ in }, onCancel: { })
 
@@ -72,6 +92,72 @@ final class HotkeyRecorderTests: XCTestCase {
         }
 
         XCTAssertTrue(reason.contains("Modifier-only"))
+    }
+
+    func testRejectsShortcutThatMatchesEnabledSystemShortcut() throws {
+        // Cmd+E isn't in the built-in rejection table, so routing depends
+        // solely on the injected system-registry snapshot.
+        let simulated = SystemHotkey(
+            identifier: 75,
+            keyCode: 14,
+            modifiers: [.command],
+            isEnabled: true,
+            displayName: "Look up"
+        )
+        let model = HotkeyRecorderModel(
+            onConfirm: { _ in },
+            onCancel: { },
+            systemHotkeys: [simulated]
+        )
+
+        try model.handle(event: makeKeyDownEvent(
+            keyCode: 14,
+            modifierFlags: [.command],
+            characters: "E",
+            timestamp: 1.0
+        ))
+
+        guard case let .rejected(reason) = model.captureResult else {
+            return XCTFail("Expected rejection for Cmd+E matching enabled system shortcut")
+        }
+        XCTAssertTrue(
+            reason.contains("Look up"),
+            "Expected rejection to name the conflicting system shortcut; got: \(reason)"
+        )
+        XCTAssertFalse(model.canConfirm)
+    }
+
+    func testCapturesWithWarningWhenSystemShortcutIsDisabled() throws {
+        let disabled = SystemHotkey(
+            identifier: 32,
+            keyCode: 126,
+            modifiers: [.control],
+            isEnabled: false,
+            displayName: "Mission Control"
+        )
+        let model = HotkeyRecorderModel(
+            onConfirm: { _ in },
+            onCancel: { },
+            systemHotkeys: [disabled]
+        )
+
+        try model.handle(event: makeKeyDownEvent(
+            keyCode: 126,
+            modifierFlags: [.control],
+            characters: "",
+            timestamp: 1.0
+        ))
+
+        guard case let .capturedWithWarning(preference, warning) = model.captureResult else {
+            return XCTFail("Expected capturedWithWarning for disabled system-shortcut match")
+        }
+        XCTAssertEqual(preference.keyCode, 126)
+        XCTAssertTrue(
+            warning.contains("Mission Control") && warning.contains("disabled"),
+            "Expected warning to name the shortcut + mention disabled state; got: \(warning)"
+        )
+        XCTAssertTrue(model.canConfirm, "Warning state must still allow Set")
+        XCTAssertEqual(model.warningMessage, warning)
     }
 
     private func makeKeyDownEvent(

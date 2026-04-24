@@ -545,6 +545,122 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertFalse(monitor.isLocalMonitorActive)
     }
 
+    // MARK: - #017 live-apply (updateRecordingHotkey)
+
+    func testUpdateRecordingHotkeySwapsActiveBinding() throws {
+        let scheduler = HoldSchedulerSpy()
+        var toggles = 0
+        let original = Self.optSlash
+        let replacement = HotkeyPreference(
+            keyCode: 15, // R
+            tapCount: 1,
+            modifiers: NSEvent.ModifierFlags.command.union(.shift).rawValue
+        )
+
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: { toggles += 1 },
+            recordingHotkey: original,
+            scheduleHoldDetection: scheduler.schedule
+        )
+
+        // Original binding fires.
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: original.keyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: 1.0
+        ))
+        monitor.handle(event: try makeKeyUpEvent(
+            keyCode: original.keyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: 1.1
+        ))
+        XCTAssertEqual(toggles, 1, "Original binding must fire before update")
+
+        monitor.updateRecordingHotkey(replacement)
+
+        // Old binding no longer fires.
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: original.keyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: 2.0
+        ))
+        monitor.handle(event: try makeKeyUpEvent(
+            keyCode: original.keyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: 2.1
+        ))
+        XCTAssertEqual(toggles, 1, "Old binding must not fire after update")
+
+        // New binding fires.
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: replacement.keyCode,
+            modifierFlags: [.command, .shift],
+            characters: "R",
+            timestamp: 3.0
+        ))
+        monitor.handle(event: try makeKeyUpEvent(
+            keyCode: replacement.keyCode,
+            modifierFlags: [.command, .shift],
+            characters: "R",
+            timestamp: 3.1
+        ))
+        XCTAssertEqual(toggles, 2, "New binding must fire after update")
+    }
+
+    func testUpdateRecordingHotkeyResetsInFlightState() throws {
+        let scheduler = HoldSchedulerSpy()
+        var toggles = 0
+        var holdStarts = 0
+        var holdReleases = 0
+        let original = Self.optSlash
+        let replacement = HotkeyPreference(
+            keyCode: 15,
+            tapCount: 1,
+            modifiers: NSEvent.ModifierFlags.command.rawValue
+        )
+
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: { toggles += 1 },
+            onHoldStart: { holdStarts += 1 },
+            onHoldRelease: { holdReleases += 1 },
+            recordingHotkey: original,
+            scheduleHoldDetection: scheduler.schedule
+        )
+
+        // Press the original hotkey (no release yet — gesture in-flight).
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: original.keyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: 1.0
+        ))
+
+        // Swap binding mid-press.
+        monitor.updateRecordingHotkey(replacement)
+
+        // Release of the OLD keyCode must not ghost-fire anything —
+        // gesture state was cleared, so the monitor has no record of
+        // a matching keyDown for either binding.
+        monitor.handle(event: try makeKeyUpEvent(
+            keyCode: original.keyCode,
+            modifierFlags: [.option],
+            characters: "/",
+            timestamp: 1.2
+        ))
+
+        // And any stale hold-detection action from before the swap
+        // must be a no-op after state clear.
+        scheduler.fireScheduledActions()
+
+        XCTAssertEqual(toggles, 0, "No toggle should fire after update + stale release")
+        XCTAssertEqual(holdStarts, 0, "No hold-start should fire from stale timer")
+        XCTAssertEqual(holdReleases, 0, "No hold-release should fire without a completed hold")
+    }
+
     // MARK: - Helpers
 
     private func sendKeyDown(
