@@ -17,6 +17,33 @@ final class ClipboardBatchOutputTests: XCTestCase {
         return defaults
     }
 
+    /// Builds a `PasteboardSnapshotService` targeting the test-scoped
+    /// pasteboard. Reads / writes the real test `NSPasteboard` so existing
+    /// end-state assertions (`pasteboard.string(forType: .string)`) keep
+    /// working. `failStringWrite: true` simulates the
+    /// `ClipboardBatchOutput` pre-#072 `writeString: { _, _ in false }`
+    /// injection used by the write-failure rollback test.
+    private func makeSnapshotService(
+        for pasteboard: NSPasteboard,
+        failStringWrite: Bool = false
+    ) -> PasteboardSnapshotService {
+        PasteboardSnapshotService(
+            itemsReader: { pasteboard.pasteboardItems ?? [] },
+            itemsWriter: { items in
+                pasteboard.clearContents()
+                if !items.isEmpty {
+                    pasteboard.writeObjects(items)
+                }
+            },
+            stringWriter: { string in
+                if failStringWrite { return false }
+                pasteboard.clearContents()
+                return pasteboard.setString(string, forType: .string)
+            },
+            changeCountReader: { pasteboard.changeCount }
+        )
+    }
+
     func testPromptsAccessibilityWhenNotTrustedAndLeavesTranscriptOnClipboard() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
@@ -24,11 +51,11 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { false },
             requestAccessibilityPrompt: { promptCount += 1 },
@@ -54,11 +81,11 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: { promptCount += 1 },
@@ -76,18 +103,18 @@ final class ClipboardBatchOutputTests: XCTestCase {
         XCTAssertEqual(shortcutPostCount, 1)
     }
 
-    func testDeliverBatchReturnsClipboardOnlyWhenModeIsClipboardOnly() async {
+    func testDeliverBatchReturnsClipboardOnlyWhenAutoPasteDisabled() async {
         let defaults = isolatedDefaults()
-        PasteMode.preference(defaults: defaults).persist(.clipboardOnly)
+        AutoPasteEnabledPreference.persist(false, to: defaults)
         let pasteboard = makePasteboard()
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
@@ -112,16 +139,16 @@ final class ClipboardBatchOutputTests: XCTestCase {
     // paste-gating path anymore.
     func testDeliverBatchPastesWhenFrontmostIsSelfButFocusIsInAnotherApp() async {
         let defaults = isolatedDefaults()
-        PasteMode.preference(defaults: defaults).persist(.pasteAtCursor)
+        AutoPasteEnabledPreference.persist(true, to: defaults)
         let pasteboard = makePasteboard()
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.nitkrar.personal_scribe"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
@@ -148,11 +175,11 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { false },
             requestAccessibilityPrompt: { promptCount += 1 },
@@ -174,14 +201,17 @@ final class ClipboardBatchOutputTests: XCTestCase {
     func testDeliverBatchReadsRestoreDelayPreferencePerCall() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
+        // Restore is off by default post-#072; this test specifically
+        // exercises the scheduled-restore path, so turn it on.
+        ClipboardRestoreEnabledPreference.persist(true, to: defaults)
         var scheduledRestores: [(delay: TimeInterval, action: @MainActor () -> Void)] = []
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { delay, action in
                 scheduledRestores.append((delay: delay, action: action))
             },
@@ -193,7 +223,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         pasteboard.clearContents()
         _ = pasteboard.setString("original one", forType: .string)
-        PasteRestoreDelay.storedSeconds(defaults: defaults).persist(0.2)
+        ClipboardRestoreDelay.storedSeconds(defaults: defaults).persist(0.2)
 
         let firstResult = await service.deliverBatch(text: "transcript one")
 
@@ -206,7 +236,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         pasteboard.clearContents()
         _ = pasteboard.setString("original two", forType: .string)
-        PasteRestoreDelay.storedSeconds(defaults: defaults).persist(1.4)
+        ClipboardRestoreDelay.storedSeconds(defaults: defaults).persist(1.4)
 
         let secondResult = await service.deliverBatch(text: "transcript two")
 
@@ -218,17 +248,100 @@ final class ClipboardBatchOutputTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "original two")
     }
 
+    // MARK: - #072 restore toggle + changeCount guard
+
+    func testDeliverBatchSkipsScheduledRestoreWhenRestoreDisabled() async {
+        let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
+        // Default is OFF; set explicitly to document intent.
+        ClipboardRestoreEnabledPreference.persist(false, to: defaults)
+        var scheduledRestores: [(delay: TimeInterval, action: @MainActor () -> Void)] = []
+        let service = ClipboardBatchOutput(
+            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            snapshotService: makeSnapshotService(for: pasteboard),
+            scheduleRestore: { delay, action in
+                scheduledRestores.append((delay: delay, action: action))
+            },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in true },
+            focusedElementIsInAnotherApp: { true }
+        )
+
+        pasteboard.clearContents()
+        _ = pasteboard.setString("original", forType: .string)
+
+        let result = await service.deliverBatch(text: "transcript")
+
+        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertTrue(
+            scheduledRestores.isEmpty,
+            "Restore toggle off means no scheduleRestore call — transcript stays on clipboard"
+        )
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcript")
+    }
+
+    func testScheduledRestoreSkipsWhenClipboardChangedSinceWrite() async {
+        // #072 changeCount guard: if anything else (new recording, user Cmd+C,
+        // another app) wrote to the clipboard between our transcript write
+        // and the delayed restore, the restore must NOT clobber that content.
+        let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
+        ClipboardRestoreEnabledPreference.persist(true, to: defaults)
+        var scheduledRestores: [(delay: TimeInterval, action: @MainActor () -> Void)] = []
+        let service = ClipboardBatchOutput(
+            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            snapshotService: makeSnapshotService(for: pasteboard),
+            scheduleRestore: { delay, action in
+                scheduledRestores.append((delay: delay, action: action))
+            },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in true },
+            focusedElementIsInAnotherApp: { true }
+        )
+
+        pasteboard.clearContents()
+        _ = pasteboard.setString("user original", forType: .string)
+
+        let result = await service.deliverBatch(text: "transcript")
+        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(scheduledRestores.count, 1)
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcript")
+
+        // Simulate something else writing to the clipboard before the timer
+        // fires — e.g., a second recording landing Transcript B.
+        _ = pasteboard.setString("something else landed", forType: .string)
+
+        // Timer fires.
+        scheduledRestores[0].action()
+
+        XCTAssertEqual(
+            pasteboard.string(forType: .string),
+            "something else landed",
+            "changeCount guard must prevent the restore from clobbering newer content"
+        )
+    }
+
     func testFallsBackToClipboardWhenPasteShortcutCannotBePosted() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
@@ -248,18 +361,18 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
     func testClipboardOnlyWriteFailureRestoresExistingPasteboardContents() async {
         let defaults = isolatedDefaults()
-        PasteMode.preference(defaults: defaults).persist(.clipboardOnly)
+        AutoPasteEnabledPreference.persist(false, to: defaults)
         let pasteboard = makePasteboard()
         pasteboard.clearContents()
         _ = pasteboard.setString("existing value", forType: .string)
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard, failStringWrite: true),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
@@ -267,7 +380,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            writeString: { _, _ in false },
             focusedElementIsInAnotherApp: { true }
         )
 
@@ -287,11 +399,11 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var probeCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
@@ -320,11 +432,11 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var probeCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
@@ -351,11 +463,11 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let defaults = isolatedDefaults()
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
@@ -373,18 +485,18 @@ final class ClipboardBatchOutputTests: XCTestCase {
         )
     }
 
-    func testFocusedElementCheckIsNotConsultedWhenPasteModeIsClipboardOnly() async {
+    func testFocusedElementCheckIsNotConsultedWhenAutoPasteDisabled() async {
         let defaults = isolatedDefaults()
-        PasteMode.preference(defaults: defaults).persist(.clipboardOnly)
+        AutoPasteEnabledPreference.persist(false, to: defaults)
         let pasteboard = makePasteboard()
         var probeCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
@@ -398,7 +510,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let result = await service.deliverBatch(text: "clipboard-only mode")
 
         XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
-        XCTAssertEqual(probeCount, 0, "focused-element probe must be skipped when user picked clipboard-only mode")
+        XCTAssertEqual(probeCount, 0, "focused-element probe must be skipped when auto-paste is disabled")
         XCTAssertEqual(pasteboard.string(forType: .string), "clipboard-only mode")
     }
 
@@ -409,11 +521,11 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var promptCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-            pasteboard: pasteboard,
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
             ),
+            snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { false },
             requestAccessibilityPrompt: { promptCount += 1 },

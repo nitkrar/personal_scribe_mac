@@ -1,91 +1,194 @@
 import AppKit
 import Foundation
 
-/// Snapshot + restore of the system pasteboard's plain-text contents,
-/// used by the pill UX's Cancel Card Undo affordance (spec §2f + §4).
+/// Unified snapshot + restore of the system pasteboard, covering both the
+/// pill UX's Cancel Card Undo affordance (a durable session-lifecycle slot)
+/// and the `ClipboardBatchOutput` auto-restore timer (transient per-paste
+/// handles). Replaces the pre-#072 split where `PasteboardSnapshotService`
+/// held a string-only slot for Undo and `ClipboardBatchOutput.deliverBatch`
+/// held an inline `[NSPasteboardItem]` local for auto-restore — parallel
+/// implementations of the same concept. See `plans/072_snapshot_unification/`.
 ///
-/// # Rationale
+/// # Two-token model (Step 2 prerequisite)
 ///
-/// When the user cancels a recording via ✕ / Esc the transcript is
-/// discarded. The user's clipboard, however, may have been overwritten
-/// by a prior transcription (auto-paste always writes the transcript
-/// to the pasteboard before posting Cmd+V). If they click Undo on the
-/// Cancel Card, they expect their pre-recording clipboard contents
-/// restored.
+/// The service owns the pasteboard write boundary through
+/// `replaceContents(with:)`. A successful write returns a
+/// `ClipboardWriteToken` carrying the post-write `changeCount`. The output
+/// pipeline captures a transient snapshot (pre-write clipboard) *and* a
+/// write token (post-write checkpoint); when the delayed restore fires,
+/// `restoreSnapshotIfUnchanged(_:token:)` compares the current
+/// `changeCount` with the write token — only restoring if nothing
+/// else has touched the clipboard since our write landed. The guard
+/// itself ships unwired in Step 1; Step 2 flips the call site.
 ///
-/// `PasteboardSnapshotService` decouples this from `SessionCoordinator`
-/// (which lives in PersonalScribeSession, no AppKit access) and from
-/// the output pipeline. The composition layer owns a single instance
-/// and calls `snapshotCurrentContents()` when a new recording begins;
-/// `restoreLastSnapshot()` is invoked from the view model's
-/// `onUndoCancelledRecording` hook.
+/// # Empty snapshots are real snapshots
 ///
-/// # Contract
-///
-/// * `snapshotCurrentContents()` captures the current pasteboard string
-///   (or `nil` if empty / non-string). Only the most recent snapshot is
-///   retained — a second snapshot overwrites the first.
-/// * `restoreLastSnapshot()` writes the saved string back to the
-///   pasteboard, then clears the stored snapshot so a subsequent Undo
-///   is a no-op. Returns `true` if a snapshot existed and was restored,
-///   `false` otherwise.
-/// * `clearSnapshot()` discards the stored snapshot without writing it.
-///   Used when a recording completes successfully (the snapshot is
-///   no longer needed; future cancels should snapshot fresh contents).
-///
-/// # Test seams
-///
-/// The reader + writer closures are injected with `NSPasteboard.general`
-/// defaults so tests can drive the service with an in-memory backing
-/// store without touching the real system pasteboard.
+/// Capturing with nothing on the pasteboard yields a valid (empty)
+/// snapshot; restoring an empty snapshot clears the pasteboard. Matches
+/// the pre-#072 auto-restore semantic (`restorePasteboard([])` cleared
+/// and wrote nothing); the previous Undo path silently turned "no
+/// string" into a no-op — that was a scope cut, not an invariant.
 @MainActor
 public final class PasteboardSnapshotService {
-    public typealias StringReader = @MainActor () -> String?
-    public typealias StringWriter = @MainActor (String) -> Void
+    public enum Slot: Hashable, Sendable {
+        /// Pre-recording pasteboard contents captured on `idle → recording`
+        /// and consumed on Cancel Card Undo.
+        case cancelUndo
+    }
 
-    private let read: StringReader
-    private let write: StringWriter
-    private var savedString: String?
+    /// Opaque receipt for a transient snapshot. Must be returned to the
+    /// service's `restoreSnapshot(_:)`, `restoreSnapshotIfUnchanged(_:token:)`,
+    /// or `discardSnapshot(_:)`. Not constructible by callers outside this
+    /// file — the only way to obtain one is `captureTransientSnapshot()`.
+    public struct Handle: Hashable, Sendable {
+        fileprivate let id: UUID
+    }
 
-    public convenience init() {
+    public typealias ItemsReader = @MainActor () -> [NSPasteboardItem]
+    public typealias ItemsWriter = @MainActor ([NSPasteboardItem]) -> Void
+    public typealias StringWriter = @MainActor (String) -> Bool
+    public typealias ChangeCountReader = @MainActor () -> Int
+
+    private let itemsReader: ItemsReader
+    private let itemsWriter: ItemsWriter
+    private let stringWriter: StringWriter
+    private let changeCountReader: ChangeCountReader
+
+    private var slotSnapshots: [Slot: [NSPasteboardItem]] = [:]
+    private var transientSnapshots: [UUID: [NSPasteboardItem]] = [:]
+
+    public convenience init(pasteboard: NSPasteboard = .general) {
         self.init(
-            read: { NSPasteboard.general.string(forType: .string) },
-            write: { string in
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(string, forType: .string)
-            }
+            itemsReader: { Self.liveReadItems(from: pasteboard) },
+            itemsWriter: { Self.liveWriteItems($0, to: pasteboard) },
+            stringWriter: { Self.liveWriteString($0, to: pasteboard) },
+            changeCountReader: { pasteboard.changeCount }
         )
     }
 
     init(
-        read: @escaping StringReader,
-        write: @escaping StringWriter
+        itemsReader: @escaping ItemsReader,
+        itemsWriter: @escaping ItemsWriter,
+        stringWriter: @escaping StringWriter,
+        changeCountReader: @escaping ChangeCountReader
     ) {
-        self.read = read
-        self.write = write
+        self.itemsReader = itemsReader
+        self.itemsWriter = itemsWriter
+        self.stringWriter = stringWriter
+        self.changeCountReader = changeCountReader
     }
 
-    public func snapshotCurrentContents() {
-        savedString = read()
+    // MARK: - Durable slots
+
+    public func captureCurrentContents(into slot: Slot) {
+        slotSnapshots[slot] = Self.deepCopy(itemsReader())
     }
 
     @discardableResult
-    public func restoreLastSnapshot() -> Bool {
-        guard let savedString else {
+    public func restoreSnapshot(from slot: Slot) -> Bool {
+        guard let items = slotSnapshots.removeValue(forKey: slot) else {
             return false
         }
-        write(savedString)
-        self.savedString = nil
+        itemsWriter(items)
         return true
     }
 
-    public func clearSnapshot() {
-        savedString = nil
+    public func clearSnapshot(in slot: Slot) {
+        slotSnapshots.removeValue(forKey: slot)
     }
 
-    /// Exposed for tests only.
-    internal var currentSnapshot: String? {
-        savedString
+    // MARK: - Transient handles
+
+    public func captureTransientSnapshot() -> Handle {
+        let handle = Handle(id: UUID())
+        transientSnapshots[handle.id] = Self.deepCopy(itemsReader())
+        return handle
     }
+
+    @discardableResult
+    public func restoreSnapshot(_ handle: Handle) -> Bool {
+        guard let items = transientSnapshots.removeValue(forKey: handle.id) else {
+            return false
+        }
+        itemsWriter(items)
+        return true
+    }
+
+    /// Restore the snapshot referenced by `handle` **only if** the
+    /// pasteboard's current `changeCount` still matches `token.changeCount`
+    /// — i.e., nothing has written to the clipboard since the token was
+    /// minted by `replaceContents(with:)`. The handle is consumed in both
+    /// branches (match vs. mismatch). Returns `true` when restore actually
+    /// wrote.
+    @discardableResult
+    public func restoreSnapshotIfUnchanged(
+        _ handle: Handle,
+        token: ClipboardWriteToken
+    ) -> Bool {
+        guard let items = transientSnapshots.removeValue(forKey: handle.id) else {
+            return false
+        }
+        guard changeCountReader() == token.changeCount else {
+            return false
+        }
+        itemsWriter(items)
+        return true
+    }
+
+    public func discardSnapshot(_ handle: Handle) {
+        transientSnapshots.removeValue(forKey: handle.id)
+    }
+
+    // MARK: - Write boundary
+
+    /// The only sanctioned path for writing a transcript string to the
+    /// pasteboard. Clears existing contents, writes `string` as `.string`,
+    /// and returns a `ClipboardWriteToken` carrying the post-write
+    /// `changeCount`. Returns `nil` only when the underlying write fails
+    /// (preserves `ClipboardBatchOutput`'s pre-refactor rollback signal).
+    public func replaceContents(with string: String) -> ClipboardWriteToken? {
+        guard stringWriter(string) else {
+            return nil
+        }
+        return ClipboardWriteToken(changeCount: changeCountReader())
+    }
+
+    // MARK: - Helpers
+
+    private static func deepCopy(_ items: [NSPasteboardItem]) -> [NSPasteboardItem] {
+        items.map { source in
+            let copy = NSPasteboardItem()
+            for type in source.types {
+                if let data = source.data(forType: type) {
+                    copy.setData(data, forType: type)
+                }
+            }
+            return copy
+        }
+    }
+
+    private static func liveReadItems(from pasteboard: NSPasteboard) -> [NSPasteboardItem] {
+        deepCopy(pasteboard.pasteboardItems ?? [])
+    }
+
+    private static func liveWriteItems(_ items: [NSPasteboardItem], to pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+        if !items.isEmpty {
+            pasteboard.writeObjects(items)
+        }
+    }
+
+    private static func liveWriteString(_ string: String, to pasteboard: NSPasteboard) -> Bool {
+        pasteboard.clearContents()
+        return pasteboard.setString(string, forType: .string)
+    }
+}
+
+/// Opaque post-write checkpoint minted by
+/// `PasteboardSnapshotService.replaceContents(with:)`. Carries the
+/// pasteboard's `changeCount` at the moment the transcript write landed.
+/// Consumers pass it back to `restoreSnapshotIfUnchanged(_:token:)` so the
+/// service can tell whether our write is still the most recent.
+public struct ClipboardWriteToken: Equatable, Sendable {
+    fileprivate let changeCount: Int
 }

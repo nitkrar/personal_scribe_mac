@@ -78,8 +78,8 @@ Toggle `WaveformDecayMode` via
 
 ## Slice A — Clipboard-only fallback notice
 
-Leave `PasteMode` unset (default `"paste-at-cursor"`) unless a step
-below tells you to change it.
+Leave `AutoPasteEnabled` unset (default `true`) unless a step below
+tells you to change it. (Pre-#072 this was the `PasteMode` picker.)
 
 - [ ] **MV-B1-7 (self-frontmost fallback)** Start a recording by clicking
   the pill or the menu-bar `Start Recording` item so Ninimma is the
@@ -88,9 +88,9 @@ below tells you to change it.
   the pill reading `Copied to clipboard · ⌘V to paste`, dismisses after
   roughly 3 seconds, and the transcript pastes successfully into
   TextEdit with a manual `⌘V`.
-- [ ] **MV-B1-8 (clipboard-only mode)** Run
-  `defaults write com.nitkrar.personal_scribe PasteMode "clipboard-only"`
-  and relaunch. Trigger dictation from another app while its text cursor
+- [ ] **MV-B1-8 (auto-paste disabled = clipboard only)** Run
+  `defaults write com.nitkrar.personal_scribe AutoPasteEnabled -bool false`
+  and relaunch. (Pre-#072 this was `PasteMode "clipboard-only"`.) Trigger dictation from another app while its text cursor
   is active (hotkey or menu path). Confirm Ninimma never posts a
   synthetic paste, the same response card appears for roughly 3 seconds,
   and the transcript is available only via clipboard/manual `⌘V`.
@@ -329,8 +329,9 @@ recording). #044 makes the panel resize per visibility so panel frame
   out as the card fades in at the same bottom-center anchor. Pill↔pill
   morphs (MV-PILL-RESIZE-1) are size tweens; pill↔cancel is a pure
   opacity crossfade.
-- [ ] **MV-PILL-RESIZE-5 (Response card live-follow)** With `PasteMode
-  "clipboard-only"`, trigger a dictation from another app while the
+- [ ] **MV-PILL-RESIZE-5 (Response card live-follow)** With
+  `AutoPasteEnabled = false` (pre-#072: `PasteMode "clipboard-only"`),
+  trigger a dictation from another app while the
   pill cycles idle → recording → done. The `Copied to clipboard · ⌘V
   to paste` card that appears above the pill stays anchored to the
   visible pill's bottom-center through every pill resize: it does NOT

@@ -3,8 +3,6 @@ import ApplicationServices
 import Foundation
 import PersonalScribeCore
 
-typealias PasteboardStringWriter = @MainActor (NSPasteboard, String) -> Bool
-
 /// Probe returning `true` when the system-wide AX focused element is owned
 /// by a different process (another app). Paste is safe when focus is outside
 /// Ninimma. Injected as a dependency so tests can stub the result without
@@ -20,15 +18,14 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
     typealias PasteShortcutPoster = @MainActor (_ logger: PersonalScribeLogger) -> Bool
 
     private let logger: PersonalScribeLogger
-    private let pasteboard: NSPasteboard
     private let defaults: UserDefaults
     private let frontmostAppProvider: any FrontmostAppProviding
     private let selfBundleIdentifier: String
+    private let snapshotService: PasteboardSnapshotService
     private let scheduleRestore: RestoreScheduler
     private let isAccessibilityTrusted: @MainActor () -> Bool
     private let requestAccessibilityPrompt: @MainActor () -> Void
     private let pasteShortcutPoster: @MainActor () -> Bool
-    private let writeString: PasteboardStringWriter
     private let focusedElementIsInAnotherApp: FocusedElementExternalityProbe
 
     public convenience init() {
@@ -37,10 +34,10 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
 
     init(
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-        pasteboard: NSPasteboard = .general,
         defaults: UserDefaults = .standard,
         frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
         selfBundleIdentifier: String = AppBrand.bundleIdentifier,
+        snapshotService: PasteboardSnapshotService = PasteboardSnapshotService(),
         scheduleRestore: @escaping RestoreScheduler = { delay, action in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                 Task { @MainActor in
@@ -54,24 +51,20 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
             _ = AXIsProcessTrustedWithOptions(options)
         },
         pasteShortcutPoster: @escaping PasteShortcutPoster = ClipboardBatchOutput.postPasteShortcut,
-        writeString: @escaping PasteboardStringWriter = { pasteboard, text in
-            pasteboard.setString(text, forType: .string)
-        },
         focusedElementIsInAnotherApp: @escaping FocusedElementExternalityProbe
             = ClipboardBatchOutput.liveFocusedElementIsInAnotherApp
     ) {
         self.logger = logger
-        self.pasteboard = pasteboard
         self.defaults = defaults
         self.frontmostAppProvider = frontmostAppProvider
         self.selfBundleIdentifier = selfBundleIdentifier
+        self.snapshotService = snapshotService
         self.scheduleRestore = scheduleRestore
         self.isAccessibilityTrusted = isAccessibilityTrusted
         self.requestAccessibilityPrompt = requestAccessibilityPrompt
         self.pasteShortcutPoster = {
             pasteShortcutPoster(logger)
         }
-        self.writeString = writeString
         self.focusedElementIsInAnotherApp = focusedElementIsInAnotherApp
     }
 
@@ -80,81 +73,67 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
             return .ignoredEmptyInput
         }
 
-        let restoreDelay = PasteRestoreDelay.resolve(from: defaults).seconds
-        let pasteMode = PasteMode.resolve(from: defaults)
-        let savedItems = savePasteboard()
+        let autoPasteEnabled = AutoPasteEnabledPreference.resolve(from: defaults)
+        let restoreEnabled = ClipboardRestoreEnabledPreference.resolve(from: defaults)
+        let restoreDelay = ClipboardRestoreDelay.resolve(from: defaults).seconds
+        let handle = snapshotService.captureTransientSnapshot()
 
-        pasteboard.clearContents()
-
-        guard writeString(pasteboard, text) else {
+        guard let writeToken = snapshotService.replaceContents(with: text) else {
             logger.info("ClipboardBatchOutput: failed to write transcript to pasteboard; restoring previous clipboard contents")
-            restorePasteboard(savedItems)
+            snapshotService.restoreSnapshot(handle)
             return .failed(.clipboardWriteFailed)
         }
 
-        // Flow (2026-04-22 — #042 fix):
-        //   Transcription finished → copy to clipboard (always, above) → paste
-        //   only if the user hasn't opted into clipboard-only mode, AX
-        //   permission is granted, AND the AX focused element is owned by a
-        //   different process (another app). Otherwise return `.clipboardOnly`
-        //   so the existing "Copied to clipboard · ⌘V to paste" notice UI
-        //   continues to fire.
-        //
-        //   The earlier 2026-04-20 design probed for text-role / cursor
-        //   attributes directly; that under-included custom-drawn editors
-        //   (Sublime, VS Code, Electron) whose focused elements report
-        //   `AXGroup` / `AXUnknown` without exposing text attributes. The
-        //   PID check trusts the focus owner instead — if it's not us,
-        //   paste is intended.
+        // Schedules the user's pre-transcript clipboard to be restored after
+        // `restoreDelay` seconds, but only if nothing has written to the
+        // pasteboard since our transcript landed (changeCount guard — the
+        // `restoreSnapshotIfUnchanged` checks against `writeToken`). Runs for
+        // both the paste-at-cursor branch and the clipboard-only branch
+        // (AutoPasteEnabledPreference off, or AX untrusted, or externality
+        // probe says focus-is-in-self) — restore is orthogonal to paste mode.
+        let maybeScheduleRestore: @MainActor () -> Void = { [snapshotService, scheduleRestore] in
+            guard restoreEnabled else { return }
+            scheduleRestore(restoreDelay) {
+                snapshotService.restoreSnapshotIfUnchanged(handle, token: writeToken)
+            }
+        }
 
-        if pasteMode == .clipboardOnly {
-            logger.info("ClipboardBatchOutput: user selected clipboard-only paste mode; leaving transcript on clipboard")
+        if !autoPasteEnabled {
+            logger.info("ClipboardBatchOutput: AutoPasteEnabled = false; leaving transcript on clipboard for manual paste")
+            maybeScheduleRestore()
             return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
         }
+
+        // Flow (2026-04-22 — #042 fix + #072):
+        //   Transcription finished → copy to clipboard (always, above) → post
+        //   Cmd+V only if AX permission is granted AND the AX focused element
+        //   is owned by a different process. Otherwise return `.clipboardOnly`
+        //   so the existing "Copied to clipboard · ⌘V to paste" notice fires.
+        //
+        //   #042: earlier 2026-04-20 design probed for text-role / cursor
+        //   attributes directly; that under-included custom-drawn editors
+        //   (Sublime, VS Code, Electron). PID check trusts the focus owner.
 
         guard isAccessibilityTrusted() else {
             logger.info("ClipboardBatchOutput: Accessibility permission not granted; triggering system prompt and leaving transcript on clipboard for manual Cmd+V")
             requestAccessibilityPrompt()
+            maybeScheduleRestore()
             return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
         }
 
         guard focusedElementIsInAnotherApp() else {
             logger.info("ClipboardBatchOutput: AX focused element is owned by Ninimma (or not readable); leaving transcript on clipboard")
+            maybeScheduleRestore()
             return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
         }
 
         guard pasteShortcutPoster() else {
+            maybeScheduleRestore()
             return .delivered(target: .frontmostApp, delivery: .clipboardOnly)
         }
 
-        scheduleRestore(restoreDelay) { [pasteboard] in
-            pasteboard.clearContents()
-            if !savedItems.isEmpty {
-                pasteboard.writeObjects(savedItems)
-            }
-        }
-
+        maybeScheduleRestore()
         return .delivered(target: .frontmostApp, delivery: .paste)
-    }
-
-    private func savePasteboard() -> [NSPasteboardItem] {
-        let items = pasteboard.pasteboardItems ?? []
-        return items.map { source in
-            let copy = NSPasteboardItem()
-            for type in source.types {
-                if let data = source.data(forType: type) {
-                    copy.setData(data, forType: type)
-                }
-            }
-            return copy
-        }
-    }
-
-    private func restorePasteboard(_ items: [NSPasteboardItem]) {
-        pasteboard.clearContents()
-        if !items.isEmpty {
-            pasteboard.writeObjects(items)
-        }
     }
 
     private static func postPasteShortcut(logger: PersonalScribeLogger) -> Bool {

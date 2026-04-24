@@ -41,7 +41,7 @@ public struct GeneralTab: View {
                     appearanceCard
                     visibilityCard
                     applicationCard
-                    textInputCard
+                    transcribeOutputCard
                     autoStopCard
                     behaviorCard
                 }
@@ -49,6 +49,7 @@ public struct GeneralTab: View {
 
             shortcutsSection
         }
+        .toggleStyle(.switch)
         .sheet(isPresented: $isRecordingHotkeyRecorderPresented) {
             HotkeyRecorder(
                 currentPreference: shortcutsViewModel.recordingHotkey,
@@ -239,40 +240,71 @@ public struct GeneralTab: View {
         }
     }
 
-    /// TEXT INPUT section — mockup-gaps D.3. Master "Paste result
-    /// text" toggle + the existing Paste mode picker (moved here from
-    /// the former `behaviorCard`).
+    /// Transcribe output — consolidates all transcript-delivery preferences
+    /// (#072). Two orthogonal toggles:
     ///
-    /// D.3 DEFERRAL: the master toggle's `pasteEnabled` value is
-    /// persisted and published by the VM but NOT yet consulted by the
-    /// downstream paste / clipboard service. Selecting "off" here only
-    /// updates the preference; the next recording still pastes +
-    /// writes the clipboard. Wiring is tracked in the backlog append.
-    private var textInputCard: some View {
+    /// - **Auto-paste to cursor** gates the synthetic Cmd+V post. Off =
+    ///   clipboard-only (copy transcript, no paste attempt). On = post
+    ///   Cmd+V into the focused text field (subject to #042 gates: AX
+    ///   permission + focus-externality probe).
+    /// - **Restore clipboard** gates the scheduled restore of the user's
+    ///   pre-transcript clipboard. Off = transcript stays forever (until
+    ///   the next copy). On = restore after the slider-controlled delay,
+    ///   with a `changeCount` guard that skips the restore if anything
+    ///   else wrote to the clipboard in the meantime (#072 Step 2).
+    ///
+    /// Summary caption at bottom adapts to the current toggle combination
+    /// so the user can see what will actually happen without mentally
+    /// simulating the flow.
+    private var transcribeOutputCard: some View {
         SettingsCard {
-            Text("Text Input")
+            Text("Transcribe output")
                 .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
 
             Toggle(
-                "Paste result text",
+                "Auto-paste to cursor",
                 isOn: Binding(
-                    get: { viewModel.pasteEnabled },
-                    set: { viewModel.setPasteEnabled($0) }
+                    get: { viewModel.autoPasteEnabled },
+                    set: { viewModel.setAutoPasteEnabled($0) }
                 )
             )
 
             Divider()
 
-            Picker(
-                "Paste mode",
-                selection: Binding(
-                    get: { viewModel.pasteMode },
-                    set: { viewModel.setPasteMode($0) }
+            Toggle(
+                "Restore clipboard",
+                isOn: Binding(
+                    get: { viewModel.clipboardRestoreEnabled },
+                    set: { viewModel.setClipboardRestoreEnabled($0) }
                 )
-            ) {
-                Text("Paste-at-cursor").tag(PasteMode.pasteAtCursor)
-                Text("Clipboard-only").tag(PasteMode.clipboardOnly)
+            )
+
+            if viewModel.clipboardRestoreEnabled {
+                VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                    Text("Restore delay")
+                        .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+
+                    Text(viewModel.clipboardRestoreDelayDescription)
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
+
+                    Slider(
+                        value: Binding(
+                            get: { viewModel.clipboardRestoreDelay.seconds },
+                            set: { viewModel.setClipboardRestoreDelaySeconds($0) }
+                        ),
+                        in: ClipboardRestoreDelay.minimumSeconds...ClipboardRestoreDelay.maximumSeconds,
+                        step: 0.1
+                    )
+                }
             }
+
+            Divider()
+
+            Text(viewModel.transcribeOutputSummary)
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -343,10 +375,8 @@ public struct GeneralTab: View {
         }
     }
 
-    /// Residual Behavior card — Waveform decay + Clipboard restore
-    /// delay. The mockup is silent on these; D.3 deliberately keeps
-    /// them in place rather than deleting functionality the reference
-    /// doesn't call out. The Paste mode picker moved to `textInputCard`.
+    /// Residual Behavior card — Waveform decay. Restore-delay slider moved
+    /// into `transcribeOutputCard` per #072.
     private var behaviorCard: some View {
         SettingsCard {
             Text("Behavior")
@@ -361,26 +391,6 @@ public struct GeneralTab: View {
             ) {
                 Text("Immediate").tag(WaveformDecayMode.immediate)
                 Text("Animated").tag(WaveformDecayMode.animated)
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
-                Text("Clipboard restore delay")
-                    .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
-
-                Text(viewModel.pasteRestoreDelayDescription)
-                    .font(PersonalScribeTheme.Typography.caption.font)
-                    .foregroundStyle(.secondary)
-
-                Slider(
-                    value: Binding(
-                        get: { viewModel.pasteRestoreDelay.seconds },
-                        set: { viewModel.setPasteRestoreDelaySeconds($0) }
-                    ),
-                    in: 0.1...5.0,
-                    step: 0.1
-                )
             }
         }
     }
@@ -515,11 +525,10 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var pillVisibilityMode: PillVisibilityMode
     @Published private(set) var isMenuBarVisible: Bool
     @Published private(set) var waveformDecayMode: WaveformDecayMode
-    @Published private(set) var pasteMode: PasteMode
     @Published private(set) var windowTint: WindowTint
     @Published private(set) var pillAppearance: PillAppearance
     @Published private(set) var pillStyle: PillStyle
-    @Published private(set) var pasteRestoreDelay: PasteRestoreDelay
+    @Published private(set) var clipboardRestoreDelay: ClipboardRestoreDelay
     @Published private(set) var visibilityError: VisibilityConfigError?
     @Published private(set) var launchAtLogin: Bool
     /// Background mode = menu-bar-only accessory app. Default `false`
@@ -537,7 +546,16 @@ final class GeneralTabViewModel: ObservableObject {
     /// the original value, which is acceptable UX and keeps the state
     /// machine trivial.
     @Published private(set) var backgroundModeRestartRequired: Bool = false
-    @Published private(set) var pasteEnabled: Bool
+    /// "Auto-paste to cursor" toggle (#072). When `true`, `ClipboardBatchOutput`
+    /// posts a synthetic `Cmd+V` after writing the transcript to the
+    /// clipboard (subject to the remaining AX / externality gates).
+    /// When `false`, clipboard only — user pastes manually.
+    @Published private(set) var autoPasteEnabled: Bool
+    /// "Restore clipboard" toggle (#072). When `true`, `ClipboardBatchOutput`
+    /// schedules a `changeCount`-guarded restore of the user's pre-transcript
+    /// clipboard after `clipboardRestoreDelay`. When `false`, the transcript
+    /// stays on the clipboard until the user writes something new.
+    @Published private(set) var clipboardRestoreEnabled: Bool
     /// VAD auto-stop master toggle (#046). When `false`, orchestrator skips
     /// VAD wiring entirely — recording only stops via manual hotkey / pill / Esc.
     @Published private(set) var vadAutoStopEnabled: Bool
@@ -594,17 +612,17 @@ final class GeneralTabViewModel: ObservableObject {
         // Published upstream source.
         self.isMenuBarVisible = menuBarVisibilityProvider()
         self.waveformDecayMode = WaveformDecayMode.resolve(from: defaults)
-        self.pasteMode = PasteMode.resolve(from: defaults)
         self.windowTint = WindowTint.resolve(from: defaults)
         self.pillAppearance = PillAppearance.resolve(from: defaults)
         self.pillStyle = PillStyle.resolve(from: defaults)
-        self.pasteRestoreDelay = PasteRestoreDelay.resolve(from: defaults)
+        self.clipboardRestoreDelay = ClipboardRestoreDelay.resolve(from: defaults)
         // launchAtLogin seeds from the injected service. The real impl
         // (`SystemLaunchAtLoginService`) reads SMAppService.mainApp.status
         // — .enabled means the app is registered to launch at login.
         self.launchAtLogin = launchAtLoginService.isEnabled
         self.backgroundMode = BackgroundModePreference.resolve(from: defaults)
-        self.pasteEnabled = PasteEnabledPreference.resolve(from: defaults)
+        self.autoPasteEnabled = AutoPasteEnabledPreference.resolve(from: defaults)
+        self.clipboardRestoreEnabled = ClipboardRestoreEnabledPreference.resolve(from: defaults)
         self.vadAutoStopEnabled = VadAutoStopEnabledPreference.resolve(from: defaults)
         self.vadSilenceThresholdSeconds = VadSilenceThresholdPreference.resolve(from: defaults)
         self.vadShowStoppingWarning = VadShowStoppingWarningPreference.resolve(from: defaults)
@@ -668,18 +686,14 @@ final class GeneralTabViewModel: ObservableObject {
         mode.persist(to: defaults)
     }
 
-    func setPasteMode(_ mode: PasteMode) {
-        pasteMode = mode
-        mode.persist(to: defaults)
+    func setAutoPasteEnabled(_ enabled: Bool) {
+        autoPasteEnabled = enabled
+        AutoPasteEnabledPreference.persist(enabled, to: defaults)
     }
 
-    /// Persists the master "paste result text" toggle. D.3 only wires
-    /// the preference + Settings UI; the downstream `OutputService`
-    /// still delivers paste unconditionally until the follow-up
-    /// (tracked in the D.3 backlog append) lands.
-    func setPasteEnabled(_ enabled: Bool) {
-        pasteEnabled = enabled
-        PasteEnabledPreference.persist(enabled, to: defaults)
+    func setClipboardRestoreEnabled(_ enabled: Bool) {
+        clipboardRestoreEnabled = enabled
+        ClipboardRestoreEnabledPreference.persist(enabled, to: defaults)
     }
 
     /// Description line rendered above the silence-threshold slider. Formats
@@ -785,13 +799,33 @@ final class GeneralTabViewModel: ObservableObject {
         launchAtLogin = launchAtLoginService.isEnabled
     }
 
-    func setPasteRestoreDelaySeconds(_ seconds: TimeInterval) {
-        PasteRestoreDelay.persist(to: defaults, .init(seconds: seconds))
-        pasteRestoreDelay = PasteRestoreDelay.resolve(from: defaults)
+    func setClipboardRestoreDelaySeconds(_ seconds: TimeInterval) {
+        ClipboardRestoreDelay.persist(to: defaults, .init(seconds: seconds))
+        clipboardRestoreDelay = ClipboardRestoreDelay.resolve(from: defaults)
     }
 
-    var pasteRestoreDelayDescription: String {
-        "After paste, wait \(Self.formatSeconds(pasteRestoreDelay.seconds))s before restoring your clipboard"
+    var clipboardRestoreDelayDescription: String {
+        "After paste, wait \(Self.formatSeconds(clipboardRestoreDelay.seconds))s before restoring your clipboard"
+    }
+
+    /// Plain-English summary that adapts to the current toggle/slider
+    /// state. Rendered beneath the two toggles in `transcribeOutputCard`
+    /// so the user can see the concrete behavior instead of mentally
+    /// simulating the two-axis state space. `changeCount` guard is
+    /// baked in silently — when restore is on, the transcript is only
+    /// cleared if nothing else has touched the clipboard since our write.
+    var transcribeOutputSummary: String {
+        let seconds = Self.formatSeconds(clipboardRestoreDelay.seconds)
+        switch (autoPasteEnabled, clipboardRestoreEnabled) {
+        case (true, true):
+            return "Transcripts paste into the focused text field and stay on your clipboard. After \(seconds)s, your previous clipboard is restored — unless you've copied something new in the meantime."
+        case (true, false):
+            return "Transcripts paste into the focused text field and stay on your clipboard until you copy something else."
+        case (false, true):
+            return "Transcripts are copied to your clipboard. Press ⌘V to paste. After \(seconds)s, your previous clipboard is restored — unless you've copied something new."
+        case (false, false):
+            return "Transcripts are copied to your clipboard. Press ⌘V to paste. Your previous clipboard is not restored."
+        }
     }
 
     private static func formatSeconds(_ seconds: TimeInterval) -> String {

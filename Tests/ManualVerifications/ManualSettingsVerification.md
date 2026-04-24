@@ -220,3 +220,59 @@ row (not a tab-row).
 - **MV-ABOUT-4 — Active-state affordance:** while on About, the footer
   row reads at full opacity; the Microphone footer above remains muted.
   Click Home — the About footer dims back to muted caption opacity.
+
+## Transcribe output (#072)
+
+Consolidated section in Settings → General. Two orthogonal toggles
+("Auto-paste to cursor", default ON; "Restore clipboard", default OFF)
+plus a delay slider that surfaces only when Restore is ON, with a
+summary caption at the bottom that adapts to toggle state.
+
+- **MV-072-1 — Section layout matches spec:** open Settings → General.
+  Confirm the "Transcribe output" card contains, top-to-bottom: Auto-paste
+  to cursor toggle, divider, Restore clipboard toggle, divider, summary
+  caption. No "Paste result text" master toggle, no "Paste mode" picker,
+  no separate restore-delay slider under "Behavior" — those shipped pre-
+  #072 and were consolidated here.
+- **MV-072-2 — Restore slider toggles visibility:** with Restore clipboard
+  OFF, confirm no slider is visible between the toggle and the caption.
+  Flip Restore ON; a "Restore delay" slider + description appears
+  (default `3.0`s, range `0.1`–`10.0`). Flip OFF; slider disappears.
+- **MV-072-3 — Summary caption adapts:** cycle all four toggle
+  combinations and verify the caption sentence changes accordingly:
+  - AutoPaste ON + Restore ON: mentions "paste into the focused text
+    field", the slider seconds, and "restored — unless you've copied
+    something new in the meantime".
+  - AutoPaste ON + Restore OFF: mentions "paste into the focused text
+    field" and "until you copy something else".
+  - AutoPaste OFF + Restore ON: mentions "⌘V to paste" and the slider
+    seconds restore with the changeCount caveat.
+  - AutoPaste OFF + Restore OFF: mentions "⌘V to paste" and "not
+    restored".
+- **MV-072-4 — Cursorless paste no longer silently wipes transcript:**
+  start a recording, switch focus to a Finder window or any surface
+  without a text cursor, stop. The pill confirms "Copied · ⌘V to paste".
+  Switch to a text editor; press `⌘V`. With Restore OFF (default), the
+  transcript pastes correctly. With Restore ON + delay `3.0`s, press
+  `⌘V` within 3s — still pastes correctly; after 3s, the user's pre-
+  recording clipboard contents are restored.
+- **MV-072-5 — Sequential recordings don't corrupt clipboard
+  (changeCount guard):** with Restore ON, start Recording A, stop,
+  IMMEDIATELY start Recording B, stop. Before the 3s timer from A fires,
+  Transcript B should be on the clipboard. After 3s (A's timer) and
+  again after 6s (B's timer), Transcript B should STILL be on the
+  clipboard — not A's pre-recording snapshot, not A's transcript. The
+  `changeCount` guard prevents the stale restore from overwriting newer
+  content.
+- **MV-072-6 — Cancel Card Undo still works (System A unified into
+  service):** start a recording, click ✕ on the pill before transcription
+  completes (or press Esc). The Cancel Card appears briefly with an Undo
+  button. Click Undo. The clipboard returns to whatever it held
+  pre-recording — including non-string types like RTF or file URLs
+  (fidelity upgrade over pre-#072 string-only behavior).
+- **MV-072-7 — Auto-paste OFF skips Cmd+V post:** flip Auto-paste OFF.
+  Start a recording, stop with focus in TextEdit. No transcript appears
+  in TextEdit; the clipboard holds the transcript; `⌘V` pastes it.
+- **MV-072-8 — Restore default bump:** fresh install (delete
+  `UserDefaults` for `PasteRestoreDelaySeconds`). Open Settings, flip
+  Restore ON. Slider sits at `3.0`s — not the pre-#072 `0.5`s default.

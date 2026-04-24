@@ -56,9 +56,16 @@ struct PersonalScribeAppMain: App {
             visibilityModeSource: AppKitVisibilityModeProvider(defaults: defaults)
         )
         appStore.start()
+        // Shared snapshot service — #072 Step 1 unifies the Cancel Card Undo
+        // path and the auto-restore-after-paste path behind a single
+        // `PasteboardSnapshotService` instance. Previously split across
+        // `PasteboardSnapshotService` (session-lifecycle) and
+        // `ClipboardBatchOutput.savedItems` (output-pipeline).
+        let sharedSnapshotService = PasteboardSnapshotService()
         let resolvedOutputService = outputService
             ?? ClipboardBatchOutput(
                 defaults: defaults,
+                snapshotService: sharedSnapshotService,
                 isAccessibilityTrusted: isAccessibilityTrusted
             )
         var clipboardOnlyNotice: (@MainActor () -> Void)?
@@ -116,7 +123,8 @@ struct PersonalScribeAppMain: App {
         // wouldn't survive SwiftUI init re-runs.
         let pasteboardSnapshotHost = PasteboardSnapshotHost(
             appStore: appStore,
-            viewModel: pillController.viewModel
+            viewModel: pillController.viewModel,
+            service: sharedSnapshotService
         )
 
         // #002: global Esc truly discards an active recording — no
@@ -454,7 +462,7 @@ final class PasteboardSnapshotHost: ObservableObject {
         self.previousSessionState = appStore.snapshot.sessionState
 
         viewModel.onUndoCancelledRecording = { [weak service] in
-            service?.restoreLastSnapshot()
+            service?.restoreSnapshot(from: .cancelUndo)
         }
 
         appStore.objectWillChange
@@ -468,13 +476,13 @@ final class PasteboardSnapshotHost: ObservableObject {
                     // Snapshot on idle → recording. Pre-recording user
                     // clipboard contents are what Undo must restore.
                     if case .idle = self.previousSessionState, case .recording = next {
-                        service.snapshotCurrentContents()
+                        service.captureCurrentContents(into: .cancelUndo)
                     }
 
                     // Clear on transcribing → idle (successful complete).
                     // A fresh snapshot will be taken on the next recording.
                     if case .transcribing = self.previousSessionState, case .idle = next {
-                        service.clearSnapshot()
+                        service.clearSnapshot(in: .cancelUndo)
                     }
                 }
             }

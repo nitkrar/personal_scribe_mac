@@ -69,22 +69,22 @@ final class GeneralTabViewModelTests: XCTestCase {
         XCTAssertFalse(menuBarVisible)
     }
 
-    func testInitResolvesPersistedPasteRestoreDelay() {
+    func testInitResolvesPersistedClipboardRestoreDelay() {
         let defaults = isolatedDefaults()
-        PasteRestoreDelay.storedSeconds(defaults: defaults).persist(1.8)
+        ClipboardRestoreDelay.storedSeconds(defaults: defaults).persist(1.8)
 
         let viewModel = GeneralTabViewModel(defaults: defaults)
 
-        XCTAssertEqual(viewModel.pasteRestoreDelay.seconds, 1.8, accuracy: 0.0001)
+        XCTAssertEqual(viewModel.clipboardRestoreDelay.seconds, 1.8, accuracy: 0.0001)
     }
 
-    func testSetPasteRestoreDelaySecondsPersistsAndUpdatesState() {
+    func testSetClipboardRestoreDelaySecondsPersistsAndUpdatesState() {
         let defaults = isolatedDefaults()
         let viewModel = GeneralTabViewModel(defaults: defaults)
 
-        viewModel.setPasteRestoreDelaySeconds(2.4)
+        viewModel.setClipboardRestoreDelaySeconds(2.4)
 
-        XCTAssertEqual(viewModel.pasteRestoreDelay.seconds, 2.4, accuracy: 0.0001)
-        XCTAssertEqual(PasteRestoreDelay.resolve(from: defaults).seconds, 2.4, accuracy: 0.0001)
+        XCTAssertEqual(viewModel.clipboardRestoreDelay.seconds, 2.4, accuracy: 0.0001)
+        XCTAssertEqual(ClipboardRestoreDelay.resolve(from: defaults).seconds, 2.4, accuracy: 0.0001)
     }
 }

@@ -15,7 +15,7 @@ public enum CopyLastTranscriptOutcome: Equatable, Sendable {
 /// contract: read the single most-recent transcript via
 /// `TranscriptReading`, write it to the injected clipboard writer,
 /// and report the outcome. No auto-paste, no AX focused-element
-/// probe, no `PasteMode` branching.
+/// probe, no preference branching.
 ///
 /// This is deliberately *not* the same as `ClipboardBatchOutput.deliverBatch`:
 /// the paste-at-cursor flow is served by the hotkey / pill path where

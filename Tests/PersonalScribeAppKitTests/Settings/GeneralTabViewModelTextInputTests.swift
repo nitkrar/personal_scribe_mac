@@ -1,59 +1,121 @@
 import XCTest
 @testable import PersonalScribeAppKit
 
-/// Tests for the TEXT INPUT section's view-model wiring on
-/// `GeneralTabViewModel` — added in mockup-gaps D.3.
-///
-/// Covers the new `pasteEnabled` master toggle's init + setter +
-/// persistence. `pasteMode` binding isn't re-tested here (already
-/// covered implicitly by the existing view-model init and not
-/// changed by D.3 — the picker was only MOVED from the Behavior
-/// card into the new Text Input card).
+/// Tests for the "Transcribe output" section's view-model wiring on
+/// `GeneralTabViewModel`. Replaces pre-#072 TEXT INPUT tests — the
+/// `pasteEnabled` master + `pasteMode` picker were collapsed into a
+/// single `autoPasteEnabled` toggle (default `true`), and
+/// `clipboardRestoreEnabled` was added (default `false`).
 @MainActor
 final class GeneralTabViewModelTextInputTests: XCTestCase {
-    func testInitReadsPasteEnabledFromDefaults() {
+    // MARK: - Auto-paste toggle
+
+    func testInitReadsAutoPasteEnabledFromDefaults() {
         let defaults = Self.isolatedDefaults()
-        PasteEnabledPreference.persist(false, to: defaults)
+        AutoPasteEnabledPreference.persist(false, to: defaults)
 
         let viewModel = GeneralTabViewModel(defaults: defaults)
 
-        XCTAssertFalse(viewModel.pasteEnabled)
+        XCTAssertFalse(viewModel.autoPasteEnabled)
     }
 
-    func testInitFallsBackToTrueWhenDefaultsEmpty() {
+    func testInitFallsBackToAutoPasteTrueWhenDefaultsEmpty() {
         let defaults = Self.isolatedDefaults()
 
         let viewModel = GeneralTabViewModel(defaults: defaults)
 
-        XCTAssertTrue(viewModel.pasteEnabled)
+        XCTAssertTrue(viewModel.autoPasteEnabled)
     }
 
-    func testSetPasteEnabledPersistsAndPublishes() {
+    func testSetAutoPasteEnabledPersistsAndPublishes() {
         let defaults = Self.isolatedDefaults()
         let viewModel = GeneralTabViewModel(defaults: defaults)
 
-        viewModel.setPasteEnabled(false)
+        viewModel.setAutoPasteEnabled(false)
 
-        XCTAssertFalse(viewModel.pasteEnabled)
+        XCTAssertFalse(viewModel.autoPasteEnabled)
         XCTAssertEqual(
-            defaults.object(forKey: "PasteEnabled") as? Bool,
+            defaults.object(forKey: "AutoPasteEnabled") as? Bool,
             false
         )
     }
 
-    func testSetPasteEnabledTrueRoundTrips() {
+    // MARK: - Restore clipboard toggle
+
+    func testInitFallsBackToRestoreDisabledWhenDefaultsEmpty() {
         let defaults = Self.isolatedDefaults()
-        PasteEnabledPreference.persist(false, to: defaults)
+
         let viewModel = GeneralTabViewModel(defaults: defaults)
-        XCTAssertFalse(viewModel.pasteEnabled)
 
-        viewModel.setPasteEnabled(true)
+        XCTAssertFalse(viewModel.clipboardRestoreEnabled)
+    }
 
-        XCTAssertTrue(viewModel.pasteEnabled)
+    func testInitReadsClipboardRestoreEnabledFromDefaults() {
+        let defaults = Self.isolatedDefaults()
+        ClipboardRestoreEnabledPreference.persist(true, to: defaults)
+
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        XCTAssertTrue(viewModel.clipboardRestoreEnabled)
+    }
+
+    func testSetClipboardRestoreEnabledPersistsAndPublishes() {
+        let defaults = Self.isolatedDefaults()
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        viewModel.setClipboardRestoreEnabled(true)
+
+        XCTAssertTrue(viewModel.clipboardRestoreEnabled)
         XCTAssertEqual(
-            defaults.object(forKey: "PasteEnabled") as? Bool,
+            defaults.object(forKey: "ClipboardRestoreEnabled") as? Bool,
             true
         )
+    }
+
+    // MARK: - Summary caption adapts to toggle state
+
+    func testSummaryDescribesAutoPasteOnRestoreOn() {
+        let defaults = Self.isolatedDefaults()
+        AutoPasteEnabledPreference.persist(true, to: defaults)
+        ClipboardRestoreEnabledPreference.persist(true, to: defaults)
+
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        XCTAssertTrue(viewModel.transcribeOutputSummary.contains("paste into the focused text field"))
+        XCTAssertTrue(viewModel.transcribeOutputSummary.contains("your previous clipboard is restored"))
+    }
+
+    func testSummaryDescribesAutoPasteOnRestoreOff() {
+        let defaults = Self.isolatedDefaults()
+        AutoPasteEnabledPreference.persist(true, to: defaults)
+        ClipboardRestoreEnabledPreference.persist(false, to: defaults)
+
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        XCTAssertTrue(viewModel.transcribeOutputSummary.contains("paste into the focused text field"))
+        XCTAssertTrue(viewModel.transcribeOutputSummary.contains("until you copy something else"))
+    }
+
+    func testSummaryDescribesAutoPasteOffRestoreOn() {
+        let defaults = Self.isolatedDefaults()
+        AutoPasteEnabledPreference.persist(false, to: defaults)
+        ClipboardRestoreEnabledPreference.persist(true, to: defaults)
+
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        XCTAssertTrue(viewModel.transcribeOutputSummary.contains("⌘V to paste"))
+        XCTAssertTrue(viewModel.transcribeOutputSummary.contains("your previous clipboard is restored"))
+    }
+
+    func testSummaryDescribesBothOff() {
+        let defaults = Self.isolatedDefaults()
+        AutoPasteEnabledPreference.persist(false, to: defaults)
+        ClipboardRestoreEnabledPreference.persist(false, to: defaults)
+
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        XCTAssertTrue(viewModel.transcribeOutputSummary.contains("⌘V to paste"))
+        XCTAssertTrue(viewModel.transcribeOutputSummary.contains("is not restored"))
     }
 
     private static func isolatedDefaults() -> UserDefaults {
