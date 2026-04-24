@@ -45,6 +45,23 @@ public final class ModelBoundTranscriberProvider: ModelBoundTranscriberProviding
     ) async throws {
         try await resolvedTranscriber(for: descriptor).download(progress: progress)
     }
+
+    /// Remove the on-disk artifacts for `descriptor` and drop the cached
+    /// transcriber so the next `transcriber(for:)` call rebuilds.
+    ///
+    /// Ticket #024: delete path for the AI Models tab. Pure file-system
+    /// + cache operation — does not consult active selection, last-model
+    /// policy, or confirmation state. The caller owns policy.
+    public func removeDownloadedFiles(_ descriptor: ModelDescriptor) throws {
+        let directory = modelDirectory(for: descriptor)
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: directory.path) {
+            try fileManager.removeItem(at: directory)
+        }
+        lock.withLock {
+            transcribers[descriptor.id] = nil
+        }
+    }
 }
 
 private extension ModelBoundTranscriberProvider {

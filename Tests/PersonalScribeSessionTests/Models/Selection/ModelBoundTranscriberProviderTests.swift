@@ -53,6 +53,58 @@ final class ModelBoundTranscriberProviderTests: XCTestCase {
         XCTAssertFalse((first as AnyObject) === (second as AnyObject))
     }
 
+    func testRemoveDownloadedFilesDeletesModelDirectoryAndResetsCache() throws {
+        let storageLocator = TestStorageLocator(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let factoryCallCount = AtomicIntBox()
+        let provider = ModelBoundTranscriberProvider(
+            storageLocator: storageLocator,
+            transcriberFactory: { descriptor in
+                factoryCallCount.increment()
+                return ModelAwareFluidAudioTranscriber(
+                    descriptor: descriptor,
+                    storageLocator: storageLocator
+                )
+            }
+        )
+        let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
+        let modelsRoot = storageLocator.url(for: .models)
+        let modelDirectory = modelsRoot
+            .appendingPathComponent(descriptor.id, isDirectory: true)
+            .standardizedFileURL
+        let markerFile = modelDirectory.appendingPathComponent("marker.txt", isDirectory: false)
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(
+            at: modelDirectory,
+            withIntermediateDirectories: true
+        )
+        try Data("marker".utf8).write(to: markerFile)
+
+        // Seed the cache so we can prove it gets reset.
+        let seeded = provider.transcriber(for: descriptor)
+        XCTAssertEqual(factoryCallCount.value, 1)
+
+        try provider.removeDownloadedFiles(descriptor)
+
+        XCTAssertFalse(
+            fileManager.fileExists(atPath: modelDirectory.path),
+            "Model directory should be removed"
+        )
+
+        let rebuilt = provider.transcriber(for: descriptor)
+        XCTAssertEqual(
+            factoryCallCount.value,
+            2,
+            "Factory should be invoked again after cache reset"
+        )
+        XCTAssertFalse(
+            (seeded as AnyObject) === (rebuilt as AnyObject),
+            "Cache should have been cleared so a fresh transcriber is returned"
+        )
+    }
+
     func testDownloadForUnknownDescriptorThrowsDescriptorNotRegistered() async {
         let storageLocator = TestStorageLocator(
             baseDirectory: FileManager.default.temporaryDirectory
