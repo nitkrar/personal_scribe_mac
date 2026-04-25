@@ -52,7 +52,7 @@ final class PasteboardSnapshotHostTests: XCTestCase {
     /// the Core-tests fake target.
     private func makeAppStoreAndHost(
         backing: FakePasteboard
-    ) -> (AppStore, FakeSessionProvider, PillOverlayViewModel, PasteboardSnapshotService, PasteboardSnapshotHost) {
+    ) async -> (AppStore, FakeSessionProvider, PillOverlayViewModel, PasteboardSnapshotService, PasteboardSnapshotHost) {
         let sessionProvider = FakeSessionProvider()
         let permissionService = FakePermissionService()
         let appStore = AppStore(
@@ -69,6 +69,15 @@ final class PasteboardSnapshotHostTests: XCTestCase {
             service: service
         )
         appStore.start()
+        // Yield so AppStore's session-observation Task starts iterating
+        // `sessionProvider.snapshotStream()` and registers its continuation
+        // BEFORE any test calls `provider.emitState(_:)`. FakeSessionProvider
+        // does not buffer values for late subscribers — emits before
+        // subscription are silently dropped, which used to silently break
+        // every test that relied on the idle→capturing transition.
+        for _ in 0..<3 {
+            await Task.yield()
+        }
         return (appStore, sessionProvider, viewModel, service, host)
     }
 
@@ -93,7 +102,7 @@ final class PasteboardSnapshotHostTests: XCTestCase {
         let backing = FakePasteboard()
         backing.writeString("user pre-recording clipboard")
 
-        let (_, provider, _, service, host) = makeAppStoreAndHost(backing: backing)
+        let (_, provider, _, service, host) = await makeAppStoreAndHost(backing: backing)
         _ = host // retain for the lifetime of the test
 
         await emitAndSettle(.capturing, on: provider)
@@ -114,7 +123,7 @@ final class PasteboardSnapshotHostTests: XCTestCase {
         let backing = FakePasteboard()
         backing.writeString("user pre-recording clipboard")
 
-        let (_, provider, _, service, host) = makeAppStoreAndHost(backing: backing)
+        let (_, provider, _, service, host) = await makeAppStoreAndHost(backing: backing)
         _ = host
 
         // Walk the canonical happy path: idle → recording → transcribing → idle.
@@ -136,7 +145,7 @@ final class PasteboardSnapshotHostTests: XCTestCase {
         let backing = FakePasteboard()
         backing.writeString("user pre-recording clipboard")
 
-        let (_, provider, viewModel, _, host) = makeAppStoreAndHost(backing: backing)
+        let (_, provider, viewModel, _, host) = await makeAppStoreAndHost(backing: backing)
         _ = host
 
         await emitAndSettle(.capturing, on: provider)
@@ -156,7 +165,7 @@ final class PasteboardSnapshotHostTests: XCTestCase {
         let backing = FakePasteboard()
         backing.writeString("pre-recording")
 
-        let (_, provider, _, service, host) = makeAppStoreAndHost(backing: backing)
+        let (_, provider, _, service, host) = await makeAppStoreAndHost(backing: backing)
         _ = host
 
         // Go idle → recording (should capture).

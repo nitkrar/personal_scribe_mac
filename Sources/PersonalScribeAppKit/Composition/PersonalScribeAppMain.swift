@@ -505,12 +505,21 @@ final class PasteboardSnapshotHost: ObservableObject {
             service?.restoreSnapshot(from: .cancelUndo)
         }
 
-        appStore.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self, weak appStore, weak service] _ in
+        // Subscribe to `$snapshot` (the Published projected publisher) and read
+        // the new state from the closure parameter. Using `objectWillChange`
+        // here would fire inside willSet — `appStore.snapshot.sessionState`
+        // would still hold the old value, and the edge detection would never
+        // see a transition. The publisher delivers the new snapshot directly.
+        //
+        // No `.receive(on: DispatchQueue.main)` — AppStore is `@MainActor`,
+        // so `$snapshot` already fires on main. Adding a dispatch hop would
+        // defer execution past the test harness's `Task.yield()` settle
+        // window without changing semantics in production.
+        appStore.$snapshot
+            .sink { [weak self, weak service] newSnapshot in
                 MainActor.assumeIsolated {
-                    guard let self, let appStore, let service else { return }
-                    let next = appStore.snapshot.sessionState
+                    guard let self, let service else { return }
+                    let next = newSnapshot.sessionState
                     defer { self.previousSessionState = next }
 
                     // Snapshot on idle → recording. Pre-recording user
