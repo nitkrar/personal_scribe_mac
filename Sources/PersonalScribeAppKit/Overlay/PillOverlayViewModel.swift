@@ -7,7 +7,7 @@ public final class PillOverlayViewModel: ObservableObject {
     public typealias Visibility = PillVisibilityState
 
     @Published public private(set) var visibility: Visibility
-    @Published public private(set) var visibilityMode: PillVisibilityMode
+    @Published public private(set) var visibilityMode: PillVisibility
     @Published public var audioLevel: Double = 0
 
     /// Window during which the Cancel Card is visible after a cancel.
@@ -40,7 +40,7 @@ public final class PillOverlayViewModel: ObservableObject {
 
     public init(
         visibility: Visibility = .idle,
-        visibilityMode: PillVisibilityMode = .autoShow
+        visibilityMode: PillVisibility = .autoShow
     ) {
         self.visibility = visibility
         self.visibilityMode = visibilityMode
@@ -52,7 +52,7 @@ public final class PillOverlayViewModel: ObservableObject {
 
     public func apply(
         visibility: Visibility,
-        visibilityMode: PillVisibilityMode? = nil
+        visibilityMode: PillVisibility? = nil
     ) {
         if let visibilityMode {
             self.visibilityMode = visibilityMode
@@ -110,7 +110,7 @@ public final class PillOverlayViewModel: ObservableObject {
         }
     }
 
-    public func setVisibilityMode(_ mode: PillVisibilityMode) {
+    public func setVisibilityMode(_ mode: PillVisibility) {
         visibilityMode = mode
     }
 

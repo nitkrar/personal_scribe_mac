@@ -1,13 +1,13 @@
 import Foundation
 
 /// User-selectable pill *shape* preference — independent of
-/// `PillAppearance` (dark/light tokens) and `PillVisibilityMode`
+/// `PillAppearance` (dark/light tokens) and `PillVisibility`
 /// (when the pill is shown at all).
 ///
 /// Three variants:
 /// * `.classic` — full pill with voice-modulated waveform (default).
 /// * `.mini`    — compact flat pill, no inline content.
-/// * `.none`    — pill hidden regardless of `PillVisibilityMode`.
+/// * `.none`    — pill hidden regardless of `PillVisibility`.
 ///
 /// Persisted under `UserDefaults` key `"PillStyle"` (unprefixed —
 /// bundle-scoped already, per the project's

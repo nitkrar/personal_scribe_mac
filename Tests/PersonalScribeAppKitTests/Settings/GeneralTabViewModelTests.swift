@@ -37,7 +37,7 @@ final class GeneralTabViewModelTests: XCTestCase {
         // new persisted default.
         XCTAssertEqual(viewModel.pillVisibilityMode, .alwaysOn)
         XCTAssertTrue(viewModel.isMenuBarVisible)
-        XCTAssertEqual(PillVisibilityMode.resolve(from: defaults), .alwaysOn)
+        XCTAssertEqual(PillVisibility.resolve(from: defaults), .alwaysOn)
         XCTAssertTrue(menuBarVisible)
 
         let hidePillOnly = viewModel.applyVisibilityConfig(
@@ -51,7 +51,7 @@ final class GeneralTabViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.visibilityError)
         XCTAssertEqual(viewModel.pillVisibilityMode, .hidden)
         XCTAssertTrue(viewModel.isMenuBarVisible)
-        XCTAssertEqual(PillVisibilityMode.resolve(from: defaults), .hidden)
+        XCTAssertEqual(PillVisibility.resolve(from: defaults), .hidden)
         XCTAssertTrue(menuBarVisible)
 
         let hideMenuOnly = viewModel.applyVisibilityConfig(
@@ -65,7 +65,7 @@ final class GeneralTabViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.visibilityError)
         XCTAssertEqual(viewModel.pillVisibilityMode, .alwaysOn)
         XCTAssertFalse(viewModel.isMenuBarVisible)
-        XCTAssertEqual(PillVisibilityMode.resolve(from: defaults), .alwaysOn)
+        XCTAssertEqual(PillVisibility.resolve(from: defaults), .alwaysOn)
         XCTAssertFalse(menuBarVisible)
     }
 

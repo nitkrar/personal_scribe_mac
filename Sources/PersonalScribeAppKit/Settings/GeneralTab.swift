@@ -228,9 +228,9 @@ public struct GeneralTab: View {
                     }
                 )
             ) {
-                Text("Always-on").tag(PillVisibilityMode.alwaysOn)
-                Text("Auto-show").tag(PillVisibilityMode.autoShow)
-                Text("Hidden").tag(PillVisibilityMode.hidden)
+                Text("Always-on").tag(PillVisibility.alwaysOn)
+                Text("Auto-show").tag(PillVisibility.autoShow)
+                Text("Hidden").tag(PillVisibility.hidden)
             }
 
             if let visibilityErrorMessage = viewModel.visibilityErrorMessage {
@@ -529,7 +529,7 @@ public struct GeneralTab: View {
 @MainActor
 final class GeneralTabViewModel: ObservableObject {
     struct VisibilityConfig: Equatable {
-        let pillVisibilityMode: PillVisibilityMode
+        let pillVisibilityMode: PillVisibility
         let isMenuBarVisible: Bool
     }
 
@@ -537,7 +537,7 @@ final class GeneralTabViewModel: ObservableObject {
         case conflict
     }
 
-    @Published private(set) var pillVisibilityMode: PillVisibilityMode
+    @Published private(set) var pillVisibilityMode: PillVisibility
     @Published private(set) var isMenuBarVisible: Bool
     @Published private(set) var waveformDecayMode: WaveformDecayMode
     @Published private(set) var windowTint: WindowTint
@@ -624,7 +624,7 @@ final class GeneralTabViewModel: ObservableObject {
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.systemIsDarkProvider = systemIsDarkProvider
         self.launchAtLoginService = launchAtLoginService
-        self.pillVisibilityMode = PillVisibilityMode.resolve(from: defaults)
+        self.pillVisibilityMode = PillVisibility.resolve(from: defaults)
         // Snapshot-at-init: isMenuBarVisible is NOT re-read while the
         // Settings window is open. The General tab is the sole mutator
         // in Phase 3, so the snapshot is always current. If a second

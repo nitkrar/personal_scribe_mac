@@ -14,7 +14,7 @@ public final class AppKitVisibilityModeProvider: @unchecked Sendable, AppStoreVi
     }
 
     public func currentVisibilityMode() -> AppStoreVisibilityMode {
-        Self.map(PillVisibilityMode.resolve(from: defaults))
+        Self.map(PillVisibility.resolve(from: defaults))
     }
 
     public func visibilityModeStream() -> AsyncStream<AppStoreVisibilityMode> {
@@ -37,7 +37,7 @@ public final class AppKitVisibilityModeProvider: @unchecked Sendable, AppStoreVi
         }
     }
 
-    private static func map(_ mode: PillVisibilityMode) -> AppStoreVisibilityMode {
+    private static func map(_ mode: PillVisibility) -> AppStoreVisibilityMode {
         switch mode {
         case .alwaysOn:
             return .alwaysOn

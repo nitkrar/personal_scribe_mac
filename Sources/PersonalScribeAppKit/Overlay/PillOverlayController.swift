@@ -40,7 +40,7 @@ public final class PillOverlayController: ObservableObject {
             statePublisher: statePublisher,
             preparationProgressPublisher: preparationProgressPublisher,
             audioLevelPublisher: nil,
-            visibilityMode: PillVisibilityMode.resolve(),
+            visibilityMode: PillVisibility.resolve(),
             onTap: onTap
         )
     }
@@ -51,7 +51,7 @@ public final class PillOverlayController: ObservableObject {
         statePublisher: AnyPublisher<SessionState, Never>,
         preparationProgressPublisher: AnyPublisher<ModelDownloadProgress?, Never>,
         audioLevelPublisher: AnyPublisher<Double, Never>?,
-        visibilityMode: PillVisibilityMode = .autoShow,
+        visibilityMode: PillVisibility = .autoShow,
         onTap: @escaping @MainActor () -> Void = {},
         openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil
     ) {
@@ -106,8 +106,8 @@ public final class PillOverlayController: ObservableObject {
         panelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
         openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil
     ) {
-        let initialMode = legacyVisibilityModeBridge?.currentPillVisibilityMode()
-            ?? PillVisibilityMode.resolve(from: defaults ?? .standard)
+        let initialMode = legacyVisibilityModeBridge?.currentPillVisibility()
+            ?? PillVisibility.resolve(from: defaults ?? .standard)
 
         self.appStore = appStore
         self.defaults = defaults
@@ -150,7 +150,7 @@ public final class PillOverlayController: ObservableObject {
     }
 
     public func setVisibilityMode(
-        _ mode: PillVisibilityMode,
+        _ mode: PillVisibility,
         defaults: UserDefaults = .standard
     ) {
         viewModel.setVisibilityMode(mode)
@@ -315,31 +315,31 @@ public final class PillOverlayController: ObservableObject {
         lastSeenVadFireToken = snapshotToken
     }
 
-    private func currentVisibilityMode() -> PillVisibilityMode {
+    private func currentVisibilityMode() -> PillVisibility {
         if let legacyVisibilityModeBridge {
-            return legacyVisibilityModeBridge.currentPillVisibilityMode()
+            return legacyVisibilityModeBridge.currentPillVisibility()
         }
 
-        return PillVisibilityMode.resolve(from: defaults ?? .standard)
+        return PillVisibility.resolve(from: defaults ?? .standard)
     }
 }
 
 private final class LegacyVisibilityModeBridge: @unchecked Sendable, AppStoreVisibilityModeProviding {
     private let lock = NSLock()
-    private var mode: PillVisibilityMode
+    private var mode: PillVisibility
     private var continuations: [UUID: AsyncStream<AppStoreVisibilityMode>.Continuation] = [:]
 
-    init(initialMode: PillVisibilityMode) {
+    init(initialMode: PillVisibility) {
         mode = initialMode
     }
 
-    func currentPillVisibilityMode() -> PillVisibilityMode {
+    func currentPillVisibility() -> PillVisibility {
         lock.lock()
         defer { lock.unlock() }
         return mode
     }
 
-    func set(_ mode: PillVisibilityMode) {
+    func set(_ mode: PillVisibility) {
         lock.lock()
         self.mode = mode
         let mappedMode = Self.map(mode)
@@ -350,7 +350,7 @@ private final class LegacyVisibilityModeBridge: @unchecked Sendable, AppStoreVis
     }
 
     func currentVisibilityMode() -> AppStoreVisibilityMode {
-        Self.map(currentPillVisibilityMode())
+        Self.map(currentPillVisibility())
     }
 
     func visibilityModeStream() -> AsyncStream<AppStoreVisibilityMode> {
@@ -374,7 +374,7 @@ private final class LegacyVisibilityModeBridge: @unchecked Sendable, AppStoreVis
         lock.unlock()
     }
 
-    private static func map(_ mode: PillVisibilityMode) -> AppStoreVisibilityMode {
+    private static func map(_ mode: PillVisibility) -> AppStoreVisibilityMode {
         switch mode {
         case .alwaysOn:
             return .alwaysOn

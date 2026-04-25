@@ -23,13 +23,15 @@ import PersonalScribeCore
 ///   (see PLAN_PHASES.md line 293).
 ///
 /// ## Persistence
-/// Stored in `UserDefaults` at `PillVisibilityMode`. On first launch
+/// Stored in `UserDefaults` at the key `"PillVisibilityMode"` (the type
+/// was renamed to `PillVisibility` but the persisted key string is
+/// preserved for backward compatibility). On first launch
 /// (key absent), the default is `.alwaysOn`. The original mockup
 /// labelled Mode 2 as default (`.autoShow`), but dogfood feedback
 /// surfaced that a persistent visible pill is a more useful affordance
 /// between sessions — seeing the quill idle tells the user the app is
 /// ready without requiring a menu-bar glance.
-public enum PillVisibilityMode: String, CaseIterable, Codable, Sendable, Equatable {
+public enum PillVisibility: String, CaseIterable, Codable, Sendable, Equatable {
     case alwaysOn = "always-on"
     case autoShow = "auto-show"
     case hidden
@@ -48,7 +50,7 @@ public enum PillVisibilityMode: String, CaseIterable, Codable, Sendable, Equatab
     /// `.alwaysOn` if the key is missing or holds an unrecognised
     /// value (defensive: an older build might have written a legacy
     /// string).
-    public static func resolve(from defaults: UserDefaults = .standard) -> PillVisibilityMode {
+    public static func resolve(from defaults: UserDefaults = .standard) -> PillVisibility {
         preference(defaults: defaults).resolve()
     }
 
