@@ -28,7 +28,7 @@ public struct AppStoreSnapshot: Sendable, Equatable {
         switch session.sessionState {
         case .completed, .shortExit:
             return .idle
-        case .idle, .recording, .holdRecording, .transcribing, .error:
+        case .idle, .capturing, .holdRecording, .transcribing, .error:
             return session.sessionState
         }
     }

@@ -75,7 +75,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         // This test installs a handler that invokes the real pipeline stop
         // path (NOT just a counter). If the detached-Task escape in
         // consumeCaptureStream is intact, the session transitions out of
-        // `.recording` within the deadline. If it regresses to inline-await,
+        // `.capturing` within the deadline. If it regresses to inline-await,
         // the session is stuck and the deadline fires.
         let capture = FakeAudioCapturer(
             buffers: try Self.makeBuffers(count: 3),
@@ -97,7 +97,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         await orchestrator.toggleCapture()
         try await waitUntil(.seconds(3)) {
             let state = await orchestrator.snapshot().sessionState
-            return state != .recording && state != .idle
+            return state != .capturing && state != .idle
         }
     }
 
@@ -251,7 +251,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
     func testErrorDuringGraceClearsGraceInSamePublish() async throws {
         // Codex review #7: grace-cleared + `.error` must land in the same
         // snapshot mutation. Observers must never see an intermediate
-        // `.recording + !vadAutoStopGracePending` snapshot.
+        // `.capturing + !vadAutoStopGracePending` snapshot.
         let capture = FakeAudioCapturer(
             buffers: try Self.makeBuffers(count: 1),
             error: .resampleFailure,
@@ -292,7 +292,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
             return
         }
         // Every subsequent snapshot up to .error must either still have
-        // grace pending OR already be .error. Never .recording && !pending.
+        // grace pending OR already be .error. Never .capturing && !pending.
         for snapshot in observed[graceStart...] {
             if case .error = snapshot.sessionState { continue }
             XCTAssertTrue(

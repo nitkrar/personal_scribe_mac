@@ -83,7 +83,7 @@ final class StatusItemMenuModelTests: XCTestCase {
 
     func testRecordingStateSwitchesTitleToStop() {
         let model = StatusItemMenuModel.makeUnified(
-            sessionState: .recording,
+            sessionState: .capturing,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
             activeModeName: ModeRegistry.dictation.name

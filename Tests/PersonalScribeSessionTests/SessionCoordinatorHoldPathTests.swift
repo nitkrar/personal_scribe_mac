@@ -15,7 +15,7 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
 
     /// `#075` wedge regression: after a short-hold publishes `.shortExit`,
     /// the next `startHoldIfIdle()` must start a new hold session. The
-    /// pre-fix bug was that `.error(.recordingTooShort)` stuck around and
+    /// pre-fix bug was that `.error(.capturingTooShort)` stuck around and
     /// `startHoldIfIdle`'s `.idle` guard rejected the second hold-press.
     func testStartHoldIfIdleFromShortExitEntersHoldRecording() async throws {
         let shortBuffer = try PCMBuffer(
@@ -81,7 +81,7 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
         await coordinator.startIfIdle()
 
         let state = await coordinator.state()
-        XCTAssertEqual(state, .recording)
+        XCTAssertEqual(state, .capturing)
 
         try await Task.sleep(for: .milliseconds(50))
         await coordinator.stopIfRecording()
@@ -98,7 +98,7 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
         let state = await coordinator.state()
         let lastResult = await coordinator.lastResult()
 
-        XCTAssertEqual(state, .recording)
+        XCTAssertEqual(state, .capturing)
         XCTAssertNil(lastResult)
 
         await coordinator.stopIfRecording()
@@ -197,7 +197,7 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
         await coordinator.startHoldIfIdle()
 
         let state = await coordinator.state()
-        XCTAssertEqual(state, .recording, "startHoldIfIdle must not replace a running .recording session")
+        XCTAssertEqual(state, .capturing, "startHoldIfIdle must not replace a running .capturing session")
 
         await coordinator.stopIfActive()
     }
@@ -262,7 +262,7 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
         let coordinator = try makeCoordinator()
 
         await coordinator.startIfIdle()
-        try await waitUntilState(.recording, coordinator: coordinator)
+        try await waitUntilState(.capturing, coordinator: coordinator)
 
         await coordinator.cancelIfActive()
 

@@ -33,12 +33,12 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.modelDownloadProgress, downloading)
         XCTAssertEqual(store.snapshot.pillVisibility, .downloading(fractionCompleted: 0.42))
 
-        session.emitState(.recording)
+        session.emitState(.capturing)
         await waitUntil {
-            store.snapshot.sessionState == .recording
+            store.snapshot.sessionState == .capturing
         }
 
-        XCTAssertEqual(store.snapshot.sessionState, .recording)
+        XCTAssertEqual(store.snapshot.sessionState, .capturing)
         XCTAssertEqual(store.snapshot.pillVisibility, .recording)
 
         let finished = ModelDownloadProgress(
@@ -182,9 +182,9 @@ final class AppStoreTests: XCTestCase {
         await Task.yield()
         XCTAssertNil(store.snapshot.lastTranscriptionResult)
 
-        session.emitState(.recording)
+        session.emitState(.capturing)
         await waitUntil {
-            store.snapshot.sessionState == .recording
+            store.snapshot.sessionState == .capturing
         }
         session.setLastResult(makeResult(text: "Ignored recording to idle"))
         session.emitState(.idle)
@@ -374,7 +374,7 @@ final class AppStoreTests: XCTestCase {
 
         store.start()
 
-        session.emitState(.recording)
+        session.emitState(.capturing)
         await waitUntil {
             store.snapshot.currentRecordingDuration == .zero
         }

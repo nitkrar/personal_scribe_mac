@@ -104,7 +104,7 @@ public actor SessionCoordinator {
         switch await currentDisplayState() {
         case .idle:
             await performStart()
-        case .recording, .holdRecording:
+        case .capturing, .holdRecording:
             await performStop()
         case .transcribing, .error:
             await performToggle()
@@ -136,14 +136,14 @@ public actor SessionCoordinator {
     }
 
     public func stopIfRecording() async {
-        guard await currentDisplayState() == .recording else {
+        guard await currentDisplayState() == .capturing else {
             return
         }
 
         await performStop()
     }
 
-    /// Mode-agnostic stop. Transitions either `.recording` or
+    /// Mode-agnostic stop. Transitions either `.capturing` or
     /// `.holdRecording` into `.transcribing` via the normal pipeline
     /// stop path. Preferred entry point for hold-release, VAD auto-stop
     /// (#046), and app-quit cleanup — those callers don't know or care
@@ -151,21 +151,21 @@ public actor SessionCoordinator {
     /// or `.error`.
     public func stopIfActive() async {
         switch await currentDisplayState() {
-        case .recording, .holdRecording:
+        case .capturing, .holdRecording:
             await performStop()
         case .idle, .completed, .shortExit, .transcribing, .error:
             return
         }
     }
 
-    /// Mode-agnostic true-cancel. Transitions either `.recording` or
+    /// Mode-agnostic true-cancel. Transitions either `.capturing` or
     /// `.holdRecording` directly to `.idle` via `pipeline.cancelCapture()`
     /// — buffered audio is discarded, transcribe + output stages are
     /// skipped entirely. Preferred entry point for Esc and the pill ✕
     /// button (#002). No-op from `.idle`, `.transcribing`, or `.error`.
     public func cancelIfActive() async {
         switch await currentDisplayState() {
-        case .recording, .holdRecording:
+        case .capturing, .holdRecording:
             await performCancel()
         case .idle, .completed, .shortExit, .transcribing, .error:
             return
@@ -370,7 +370,7 @@ public actor SessionCoordinator {
         switch state {
         case .completed, .shortExit:
             return .idle
-        case .idle, .recording, .holdRecording, .transcribing, .error:
+        case .idle, .capturing, .holdRecording, .transcribing, .error:
             return state
         }
     }

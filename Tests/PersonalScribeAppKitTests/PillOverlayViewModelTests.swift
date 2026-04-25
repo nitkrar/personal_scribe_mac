@@ -30,7 +30,7 @@ final class PillOverlayViewModelTests: XCTestCase {
     func testRecordingMapsToRecording() {
         let viewModel = PillOverlayViewModel()
 
-        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
 
         XCTAssertEqual(viewModel.visibility, .recording)
     }
@@ -115,7 +115,7 @@ final class PillOverlayViewModelTests: XCTestCase {
             expectedBytes: 100
         )
 
-        viewModel.apply(sessionState: .recording, preparationProgress: progress)
+        viewModel.apply(sessionState: .capturing, preparationProgress: progress)
 
         XCTAssertEqual(viewModel.visibility, .recording)
     }
@@ -148,7 +148,7 @@ final class PillOverlayViewModelTests: XCTestCase {
     func testAlwaysOnModeShowsRecordingWhenRecording() {
         let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
 
-        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
 
         XCTAssertEqual(viewModel.visibility, .recording)
     }
@@ -164,7 +164,7 @@ final class PillOverlayViewModelTests: XCTestCase {
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
         XCTAssertEqual(viewModel.visibility, .hidden)
 
-        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
         XCTAssertEqual(viewModel.visibility, .recording,
                        "Recording must override hidden mode (stop affordance)")
 
@@ -254,7 +254,7 @@ final class PillOverlayViewModelTests: XCTestCase {
                 }
             }
 
-        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
         viewModel.apply(sessionState: .transcribing, preparationProgress: nil)
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
         viewModel.apply(sessionState: .error(.audioEngineFailure), preparationProgress: nil)
@@ -278,7 +278,7 @@ final class PillOverlayViewModelTests: XCTestCase {
         // mode's normal idle after `doneConfirmationDuration`.
         let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
 
-        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
         XCTAssertEqual(viewModel.visibility, .recording)
 
         viewModel.apply(sessionState: .transcribing, preparationProgress: nil)
@@ -299,7 +299,7 @@ final class PillOverlayViewModelTests: XCTestCase {
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
         XCTAssertEqual(viewModel.visibility, .done)
 
-        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
         XCTAssertEqual(viewModel.visibility, .recording)
     }
 

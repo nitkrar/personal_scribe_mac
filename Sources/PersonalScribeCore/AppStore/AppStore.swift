@@ -315,7 +315,7 @@ public final class AppStore: ObservableObject {
         switch sessionState {
         case .idle:
             return idleVisibility(for: mode, progress: progress)
-        case .recording:
+        case .capturing:
             return .recording
         case .holdRecording:
             return .holdToRecord
@@ -396,7 +396,7 @@ private extension SessionState {
     }
 
     var isRecording: Bool {
-        if case .recording = self {
+        if case .capturing = self {
             return true
         }
 

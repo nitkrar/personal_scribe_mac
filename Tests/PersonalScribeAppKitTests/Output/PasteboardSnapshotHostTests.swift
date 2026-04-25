@@ -96,7 +96,7 @@ final class PasteboardSnapshotHostTests: XCTestCase {
         let (_, provider, _, service, host) = makeAppStoreAndHost(backing: backing)
         _ = host // retain for the lifetime of the test
 
-        await emitAndSettle(.recording, on: provider)
+        await emitAndSettle(.capturing, on: provider)
 
         // Overwrite clipboard post-capture and restore via the slot API:
         // if the host captured, the slot now holds the pre-recording
@@ -118,7 +118,7 @@ final class PasteboardSnapshotHostTests: XCTestCase {
         _ = host
 
         // Walk the canonical happy path: idle → recording → transcribing → idle.
-        await emitAndSettle(.recording, on: provider)
+        await emitAndSettle(.capturing, on: provider)
         await emitAndSettle(.transcribing, on: provider)
         await emitAndSettle(.idle, on: provider)
 
@@ -139,7 +139,7 @@ final class PasteboardSnapshotHostTests: XCTestCase {
         let (_, provider, viewModel, _, host) = makeAppStoreAndHost(backing: backing)
         _ = host
 
-        await emitAndSettle(.recording, on: provider)
+        await emitAndSettle(.capturing, on: provider)
         backing.writeString("transcript replaced it")
 
         // Simulate the user clicking Undo on the Cancel Card — the host
@@ -160,7 +160,7 @@ final class PasteboardSnapshotHostTests: XCTestCase {
         _ = host
 
         // Go idle → recording (should capture).
-        await emitAndSettle(.recording, on: provider)
+        await emitAndSettle(.capturing, on: provider)
         // Consume the slot to prove a snapshot existed.
         let captured = service.restoreSnapshot(from: .cancelUndo)
         XCTAssertTrue(captured, "Sanity: idle→recording should have captured")

@@ -87,7 +87,7 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
         let secondTranscribeCountAfterFirstSession = await secondTranscriber.transcribeCallCount
         let firstResultText = await coordinator.lastResult()?.text
 
-        XCTAssertEqual(firstStates, [.idle, .recording, .transcribing, .idle])
+        XCTAssertEqual(firstStates, [.idle, .capturing, .transcribing, .idle])
         XCTAssertEqual(firstPrepareCount, 1)
         XCTAssertEqual(firstTranscribeCount, 1)
         XCTAssertEqual(secondPrepareCountAfterFirstSession, 0)
@@ -118,7 +118,7 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
         let secondTranscribeCount = await secondTranscriber.transcribeCallCount
         let secondResultText = await coordinator.lastResult()?.text
 
-        XCTAssertEqual(secondStates, [.idle, .recording, .transcribing, .idle])
+        XCTAssertEqual(secondStates, [.idle, .capturing, .transcribing, .idle])
         XCTAssertEqual(secondPrepareCount, 1)
         XCTAssertEqual(secondTranscribeCount, 1)
         XCTAssertEqual(secondResultText, "Second model.")

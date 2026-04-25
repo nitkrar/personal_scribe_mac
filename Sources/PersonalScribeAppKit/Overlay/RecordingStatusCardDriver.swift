@@ -124,7 +124,7 @@ enum RecordingStatusCardDriver {
         }
 
         switch sessionState {
-        case .recording, .holdRecording:
+        case .capturing, .holdRecording:
             return recordingMessage(for: progress)
         case .transcribing:
             return transcribingMessage(for: progress)

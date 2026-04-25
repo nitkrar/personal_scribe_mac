@@ -38,11 +38,11 @@ final class SessionCoordinatorErrorTests: XCTestCase {
 
         XCTAssertEqual(
             observed,
-            [.idle, .recording, .error(.audioEngineFailure), .idle, .recording]
+            [.idle, .capturing, .error(.audioEngineFailure), .idle, .capturing]
         )
         try await Task.sleep(for: .milliseconds(50))
         let retriedState = await coordinator.state()
-        XCTAssertEqual(retriedState, .recording)
+        XCTAssertEqual(retriedState, .capturing)
 
         await coordinator.toggle()
     }
@@ -149,7 +149,7 @@ final class SessionCoordinatorErrorTests: XCTestCase {
         }
         let lastResult = await coordinator.lastResult()
 
-        XCTAssertEqual(observed, [.idle, .recording, .transcribing, .idle])
+        XCTAssertEqual(observed, [.idle, .capturing, .transcribing, .idle])
         XCTAssertEqual(lastResult?.text, "Hello.")
     }
 
@@ -186,7 +186,7 @@ final class SessionCoordinatorErrorTests: XCTestCase {
         let finalState = await coordinator.state()
         let lastResult = await coordinator.lastResult()
 
-        XCTAssertEqual(observed, [.idle, .recording, .error(.audioEngineFailure)])
+        XCTAssertEqual(observed, [.idle, .capturing, .error(.audioEngineFailure)])
         XCTAssertEqual(finalState, .error(.audioEngineFailure))
         XCTAssertNil(lastResult, "transcription must not run when capture failed")
     }

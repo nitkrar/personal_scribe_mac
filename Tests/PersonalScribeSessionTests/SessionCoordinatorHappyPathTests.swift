@@ -57,7 +57,7 @@ final class SessionCoordinatorHappyPathTests: XCTestCase {
 
         XCTAssertEqual(
             observed,
-            [.idle, .recording, .transcribing, .idle],
+            [.idle, .capturing, .transcribing, .idle],
             "State stream must settle at terminal .idle with no stale pre-terminal republish."
         )
     }

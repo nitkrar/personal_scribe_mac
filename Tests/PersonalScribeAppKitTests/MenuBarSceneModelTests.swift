@@ -49,7 +49,7 @@ final class MenuBarSceneModelTests: XCTestCase {
         // failure via SessionCoordinator → .error rather than blocking the tap.
         let sessionState = await coordinator.state()
         let requestCount = permissionService.callCount(for: .microphone)
-        XCTAssertEqual(sessionState, .recording)
+        XCTAssertEqual(sessionState, .capturing)
         XCTAssertEqual(requestCount, 1)
     }
 
@@ -65,7 +65,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
         let sessionState = await coordinator.state()
         let requestCount = permissionService.callCount(for: .microphone)
-        XCTAssertEqual(sessionState, .recording)
+        XCTAssertEqual(sessionState, .capturing)
         XCTAssertEqual(requestCount, 0)
     }
 
@@ -96,7 +96,7 @@ final class MenuBarSceneModelTests: XCTestCase {
         let sessionState = await coordinator.state()
         let requestCount = permissionService.callCount(for: .microphone)
         XCTAssertEqual(model.snapshot.permissions[.microphone], .granted)
-        XCTAssertEqual(sessionState, .recording)
+        XCTAssertEqual(sessionState, .capturing)
         XCTAssertEqual(requestCount, 1)
     }
 
@@ -123,7 +123,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
         let sessionState = await coordinator.state()
         let requestCount = permissionService.callCount(for: .microphone)
-        XCTAssertEqual(sessionState, .recording,
+        XCTAssertEqual(sessionState, .capturing,
                        "Coordinator toggle must fire even when permissions are denied")
         XCTAssertEqual(requestCount, 0,
                        "Denied microphone state should not regress into a legacy prompt path")
@@ -135,9 +135,9 @@ final class MenuBarSceneModelTests: XCTestCase {
 
         model.startObserving()
         await coordinator.toggle()
-        await waitForState(.recording, on: model)
+        await waitForState(.capturing, on: model)
 
-        XCTAssertEqual(model.state, .recording)
+        XCTAssertEqual(model.state, .capturing)
     }
 
     func testStartObservingIsIdempotent() async throws {
@@ -174,7 +174,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
         model.startObserving()
         await coordinator.toggle()
-        await waitForState(.recording, on: model)
+        await waitForState(.capturing, on: model)
         await coordinator.toggle()
         await waitForState(.idle, on: model)
         await waitForTranscriptText("Stub transcript.", on: model)
@@ -192,7 +192,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
         model.startObserving()
         await coordinator.toggle()
-        await waitForState(.recording, on: model)
+        await waitForState(.capturing, on: model)
         await coordinator.toggle()
         await waitForState(.idle, on: model)
         await waitForTranscriptText("Stub transcript.", on: model)
@@ -219,7 +219,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
         model.startObserving()
         await coordinator.toggle()
-        await waitForState(.recording, on: model)
+        await waitForState(.capturing, on: model)
         await coordinator.toggle()
         await waitForState(.idle, on: model)
         await waitForTranscriptText("Stub transcript.", on: model)
@@ -247,7 +247,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
         model.startObserving()
         await coordinator.toggle()
-        await waitForState(.recording, on: model)
+        await waitForState(.capturing, on: model)
         await coordinator.toggle()
         await waitForState(.idle, on: model)
         await waitForTranscriptText("Stub transcript.", on: model)
@@ -268,7 +268,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
         model.startObserving()
         await coordinator.toggle()
-        await waitForState(.recording, on: model)
+        await waitForState(.capturing, on: model)
         await coordinator.toggle()
         await waitForState(.idle, on: model)
         await waitForTranscriptText("Stub transcript.", on: model)
@@ -277,7 +277,7 @@ final class MenuBarSceneModelTests: XCTestCase {
         }
 
         await coordinator.toggle()
-        await waitForState(.recording, on: model)
+        await waitForState(.capturing, on: model)
         await coordinator.toggle()
         await waitForState(.idle, on: model)
         await waitForTranscriptText("Stub transcript.", on: model)

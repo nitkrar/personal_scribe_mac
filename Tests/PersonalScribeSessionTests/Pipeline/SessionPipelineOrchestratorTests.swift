@@ -86,7 +86,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(finalSnapshot.sessionState, .completed)
         XCTAssertNil(finalSnapshot.activeStage)
         XCTAssertEqual(finalSnapshot.lastCompletedResult?.text, "Hello world.")
-        XCTAssertEqual(finalSnapshot.recordingDuration, .seconds(1))
+        XCTAssertEqual(finalSnapshot.capturingDuration, .seconds(1))
         XCTAssertEqual(partials, [rawProgress, cleanedProgress])
         XCTAssertEqual(
             finals,
@@ -146,7 +146,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         XCTAssertEqual(
             observed.map(\.sessionState),
-            [.idle, .recording, .error(.audioEngineFailure), .idle, .recording]
+            [.idle, .capturing, .error(.audioEngineFailure), .idle, .capturing]
         )
         XCTAssertEqual(observed.map(\.activeStage), [nil, .capture, .capture, nil, .capture])
         let sinkResetCount2 = await sink.resetCount()
@@ -188,11 +188,11 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         }
 
         // Sub-1s recording exits cleanly via `.shortExit` (non-error
-        // terminal) rather than the old `.error(.recordingTooShort)`.
+        // terminal) rather than the old `.error(.capturingTooShort)`.
         // See `#075`.
         XCTAssertEqual(
             deduplicatedSessionStates(from: observed),
-            [.idle, .recording, .shortExit]
+            [.idle, .capturing, .shortExit]
         )
         let transcribeCount0 = await transcriber.transcribeCallCount()
         XCTAssertEqual(transcribeCount0, 0)
@@ -278,8 +278,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         await orchestrator.toggleCapture()
 
         let recordingDurations = observed
-            .filter { $0.sessionState == .recording }
-            .compactMap(\.recordingDuration)
+            .filter { $0.sessionState == .capturing }
+            .compactMap(\.capturingDuration)
         let expectedDurations = [
             Duration.zero,
             buffers[0].duration,
@@ -292,13 +292,13 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
     func testStartRecordingKicksOffPrepareBeforePublishingRecording() async throws {
         // Regression: before the session-start race fix, startRecording()
-        // published `.recording` and *then* spawned a `.background`-
+        // published `.capturing` and *then* spawned a `.background`-
         // priority detached Task for prepare. If the user stopped
         // recording quickly, the pipeline would transition to
         // `.transcribing` and sit there for minutes because prepare had
         // never been scheduled. This test pins the corrected ordering:
         // prepare begins executing BEFORE the user can observe the
-        // `.recording` snapshot externally.
+        // `.capturing` snapshot externally.
         let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.1)
         let transcriber = SlowPrepareTranscriber(
             result: TranscriptionResult(
@@ -329,8 +329,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         }
 
         let snapshot = await orchestrator.snapshot()
-        XCTAssertEqual(snapshot.sessionState, .recording,
-                       "startRecording must have published `.recording` by the time prepare has entered")
+        XCTAssertEqual(snapshot.sessionState, .capturing,
+                       "startRecording must have published `.capturing` by the time prepare has entered")
     }
 
     func testStopCompletesWhileBackgroundPrepareIsStillRunning() async throws {
@@ -687,7 +687,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
     // MARK: - #002 — true-discard cancel path
 
-    /// `cancelCapture()` from `.recording` must drop the buffered audio,
+    /// `cancelCapture()` from `.capturing` must drop the buffered audio,
     /// skip transcribing, and return to `.idle` — never calling the
     /// transcriber or output sink.
     func testCancelCaptureFromRecordingSkipsTranscribeAndReturnsToIdle() async throws {
@@ -711,10 +711,10 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         await orchestrator.toggleCapture()
 
-        // Wait for .recording before cancelling. Without this the cancel
+        // Wait for .capturing before cancelling. Without this the cancel
         // could slip in before startRecording's publish lands.
         try await withTimeout(.seconds(1)) {
-            while await orchestrator.snapshot().sessionState != .recording {
+            while await orchestrator.snapshot().sessionState != .capturing {
                 try? await Task.sleep(for: .milliseconds(5))
             }
         }
@@ -726,7 +726,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertNil(snapshot.activeStage)
         XCTAssertNil(snapshot.lastCompletedResult,
                      "cancel must NOT produce a completed transcript")
-        XCTAssertNil(snapshot.recordingDuration)
+        XCTAssertNil(snapshot.capturingDuration)
 
         let transcribeCalls = await tracker.transcribeCallCount()
         XCTAssertEqual(transcribeCalls, 0, "transcriber must not be invoked on cancel")
@@ -799,10 +799,10 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             var states: [SessionState] = []
             for await snapshot in stream {
                 states.append(snapshot.sessionState)
-                if snapshot.sessionState == .idle && !states.contains(.recording) {
+                if snapshot.sessionState == .idle && !states.contains(.capturing) {
                     continue
                 }
-                if snapshot.sessionState == .idle && states.contains(.recording) {
+                if snapshot.sessionState == .idle && states.contains(.capturing) {
                     break
                 }
             }
@@ -811,7 +811,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         await orchestrator.toggleCapture()
         try await withTimeout(.seconds(1)) {
-            while await orchestrator.snapshot().sessionState != .recording {
+            while await orchestrator.snapshot().sessionState != .capturing {
                 try? await Task.sleep(for: .milliseconds(5))
             }
         }
@@ -923,7 +923,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         try FileManager.default.createDirectory(at: recordings, withIntermediateDirectories: true)
         let locator = FixedBaseDirectoryStorageLocator(
             baseDirectory: tempDirectory,
-            managedDirectoryOverrides: [.recordings: recordings]
+            managedDirectoryOverrides: [.capturings: recordings]
         )
         let database = try AppDatabase(locator: locator)
         return TranscriptRepository(database: database)

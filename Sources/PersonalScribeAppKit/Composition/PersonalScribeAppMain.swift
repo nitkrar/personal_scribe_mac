@@ -515,7 +515,7 @@ final class PasteboardSnapshotHost: ObservableObject {
 
                     // Snapshot on idle → recording. Pre-recording user
                     // clipboard contents are what Undo must restore.
-                    if case .idle = self.previousSessionState, case .recording = next {
+                    if case .idle = self.previousSessionState, case .capturing = next {
                         service.captureCurrentContents(into: .cancelUndo)
                     }
 

@@ -28,7 +28,7 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
 
         model.startObserving()
         await model.handleRecordButtonTap()
-        await waitForState(.recording, on: model)
+        await waitForState(.capturing, on: model)
 
         let transitionExpectation = expectation(description: "Wait for transcribing then idle")
         var observedStates: [SessionState] = []

@@ -153,7 +153,7 @@ final class PillOverlayPresenterTests: XCTestCase {
     /// `.autoShow` mode + active recording → presenter intends to show.
     func testPresenterShowsRecordingPillInAutoShowMode() {
         let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
-        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
         let panelBuilder = RecordingPanelBuilder()
 
         let presenter = PillOverlayPresenter(
@@ -169,7 +169,7 @@ final class PillOverlayPresenterTests: XCTestCase {
 
     func testShowRecordingStatusCardUsesPersistentAutoDismiss() {
         let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
-        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
         let panelBuilder = RecordingPanelBuilder()
         let responseCardBuilder = RecordingResponseCardBuilder()
         let presenter = PillOverlayPresenter(
@@ -193,7 +193,7 @@ final class PillOverlayPresenterTests: XCTestCase {
 
     func testUpdateRecordingStatusCardReusesSameCardInstance() {
         let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
-        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
         let panelBuilder = RecordingPanelBuilder()
         let responseCardBuilder = RecordingResponseCardBuilder()
         let presenter = PillOverlayPresenter(
@@ -240,7 +240,7 @@ final class PillOverlayPresenterTests: XCTestCase {
 
     func testClipboardOnlyNoticeUsesResponseCardInfrastructure() {
         let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
-        viewModel.apply(sessionState: .recording, preparationProgress: nil)
+        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
         let panelBuilder = RecordingPanelBuilder()
         let responseCardBuilder = RecordingResponseCardBuilder()
         let presenter = PillOverlayPresenter(

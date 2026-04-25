@@ -5,7 +5,7 @@ import PersonalScribeCore
 final class RecordingStatusCardDriverTests: XCTestCase {
     func testRecordingWhileDownloadingShowsPercentText() {
         let text = RecordingStatusCardDriver.statusText(
-            sessionState: .recording,
+            sessionState: .capturing,
             progress: .init(
                 phase: .downloading,
                 fractionCompleted: 0.25,
@@ -18,7 +18,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
 
     func testRecordingAtHundredPercentDownloadRoundsCleanly() {
         let text = RecordingStatusCardDriver.statusText(
-            sessionState: .recording,
+            sessionState: .capturing,
             progress: .init(
                 phase: .downloading,
                 fractionCompleted: 0.997,
@@ -31,7 +31,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
 
     func testRecordingWhileLoadingShowsLoadingText() {
         let text = RecordingStatusCardDriver.statusText(
-            sessionState: .recording,
+            sessionState: .capturing,
             progress: .init(
                 phase: .loading,
                 fractionCompleted: 1.0,
@@ -83,7 +83,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
 
     func testFinishedPhaseReturnsNil() {
         let text = RecordingStatusCardDriver.statusText(
-            sessionState: .recording,
+            sessionState: .capturing,
             progress: .init(
                 phase: .finished,
                 fractionCompleted: 1,
@@ -96,7 +96,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
 
     func testIdlePhaseReturnsNil() {
         let text = RecordingStatusCardDriver.statusText(
-            sessionState: .recording,
+            sessionState: .capturing,
             progress: .init(
                 phase: .idle,
                 fractionCompleted: 0,
@@ -109,7 +109,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
 
     func testNilProgressReturnsNil() {
         let text = RecordingStatusCardDriver.statusText(
-            sessionState: .recording,
+            sessionState: .capturing,
             progress: nil
         )
         XCTAssertNil(text)
@@ -134,7 +134,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
     /// Same inputs otherwise.
     func testDriverEmitsWarningOnlyWhenPrefOn() {
         let onContent = RecordingStatusCardDriver.statusContent(
-            sessionState: .recording,
+            sessionState: .capturing,
             progress: nil,
             vadGracePending: true,
             vadFireToken: nil,
@@ -146,7 +146,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         XCTAssertNil(onContent?.link)
 
         let offContent = RecordingStatusCardDriver.statusContent(
-            sessionState: .recording,
+            sessionState: .capturing,
             progress: nil,
             vadGracePending: true,
             vadFireToken: nil,

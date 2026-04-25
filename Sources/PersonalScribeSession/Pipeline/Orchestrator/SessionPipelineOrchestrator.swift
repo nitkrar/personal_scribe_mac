@@ -143,7 +143,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         switch currentSnapshot.sessionState {
         case .idle, .completed, .shortExit:
             await startRecording()
-        case .recording, .holdRecording:
+        case .capturing, .holdRecording:
             await stopRecordingAndRunPipeline()
         case .transcribing:
             logger.info("Ignored toggle while transcribing")
@@ -170,14 +170,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.recordingDuration = nil
             }
             await startHoldRecording()
-        case .recording, .holdRecording, .transcribing:
+        case .capturing, .holdRecording, .transcribing:
             logger.info("Ignored hold-start while session is not .idle")
         }
     }
 
     public func cancelCapture() async {
         switch currentSnapshot.sessionState {
-        case .recording, .holdRecording:
+        case .capturing, .holdRecording:
             await discardActiveCapture()
         case .idle, .completed, .shortExit, .transcribing, .error:
             logger.info("Ignored cancel from non-active session state")
@@ -296,7 +296,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 await self?.publishAudioLevel(0.0)
             }
 
-            // Kick off prepare BEFORE publishing `.recording` so the
+            // Kick off prepare BEFORE publishing `.capturing` so the
             // detached Task is scheduled before observers see the state
             // transition. Combined with the `.userInitiated` priority in
             // `prepareTranscriberInBackground()`, this closes the first-
@@ -308,7 +308,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             prepareTranscriberInBackground()
 
             publish { snapshot in
-                snapshot.sessionState = .recording
+                snapshot.sessionState = .capturing
                 snapshot.activeStage = .capture
                 snapshot.transcriptProgress = nil
                 snapshot.recordingDuration = .zero
@@ -672,7 +672,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
               let prefs,
               prefs.autoStopEnabled,
               handler != nil,
-              currentSnapshot.sessionState == .recording
+              currentSnapshot.sessionState == .capturing
         else {
             return nil
         }
