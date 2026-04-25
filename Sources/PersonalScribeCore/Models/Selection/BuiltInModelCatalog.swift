@@ -153,7 +153,11 @@ public enum BuiltInModelCatalog {
         revision: "40a23f4c0b333aa17ad8c0f2ea47ec2347f2f355",
         requiredRelativePaths: parakeetEouRequiredPaths,
         approximateSizeBytes: 224_047_838,
-        engine: .parakeetEOU
+        engine: .parakeetEOU,
+        madeBy: "NVIDIA · FluidInference",
+        worksWith: "English",
+        goodFor: "Streaming dictation, lowest latency",
+        license: "CC-BY-4.0"
     )
 
     public static let parakeetEou320ms = ModelDescriptor(
@@ -167,7 +171,11 @@ public enum BuiltInModelCatalog {
         revision: "40a23f4c0b333aa17ad8c0f2ea47ec2347f2f355",
         requiredRelativePaths: parakeetEouRequiredPaths,
         approximateSizeBytes: 224_238_270,
-        engine: .parakeetEOU
+        engine: .parakeetEOU,
+        madeBy: "NVIDIA · FluidInference",
+        worksWith: "English",
+        goodFor: "Streaming dictation, balanced latency",
+        license: "CC-BY-4.0"
     )
 
     public static let parakeetEou1280ms = ModelDescriptor(
@@ -181,7 +189,11 @@ public enum BuiltInModelCatalog {
         revision: "40a23f4c0b333aa17ad8c0f2ea47ec2347f2f355",
         requiredRelativePaths: parakeetEouRequiredPaths,
         approximateSizeBytes: 224_525_706,
-        engine: .parakeetEOU
+        engine: .parakeetEOU,
+        madeBy: "NVIDIA · FluidInference",
+        worksWith: "English",
+        goodFor: "Streaming dictation, highest accuracy",
+        license: "CC-BY-4.0"
     )
 
     // MARK: - Qwen3 ASR (Alibaba transformer ASR)
@@ -209,7 +221,11 @@ public enum BuiltInModelCatalog {
         revision: "c081689ec58bcf29c2ef7c474ef78a164bda672b",
         requiredRelativePaths: qwen3AsrRequiredPaths,
         approximateSizeBytes: 1_569_667_932,
-        engine: .qwen3ASR
+        engine: .qwen3ASR,
+        madeBy: "Alibaba Qwen team · FluidInference",
+        worksWith: "16 languages (multilingual)",
+        goodFor: "Multilingual dictation, non-English content",
+        license: "Apache 2.0"
     )
 
     public static let qwen3AsrInt8 = ModelDescriptor(
@@ -223,7 +239,11 @@ public enum BuiltInModelCatalog {
         revision: "c081689ec58bcf29c2ef7c474ef78a164bda672b",
         requiredRelativePaths: qwen3AsrRequiredPaths,
         approximateSizeBytes: 974_722_368,
-        engine: .qwen3ASR
+        engine: .qwen3ASR,
+        madeBy: "Alibaba Qwen team · FluidInference",
+        worksWith: "16 languages (multilingual)",
+        goodFor: "Multilingual dictation on lower-RAM devices",
+        license: "Apache 2.0"
     )
 
     // MARK: - Speaker diarization
@@ -246,7 +266,11 @@ public enum BuiltInModelCatalog {
             "wespeaker_v2.mlmodelc/coremldata.bin",
         ],
         approximateSizeBytes: 13_720_676,
-        engine: .diarization
+        engine: .diarization,
+        madeBy: "pyannote · WeSpeaker · FluidInference",
+        worksWith: "Language-agnostic",
+        goodFor: "Multi-speaker recordings, who-spoke-when",
+        license: "MIT + Apache 2.0"
     )
 
     public static let registeredModels: [ModelDescriptor] = [

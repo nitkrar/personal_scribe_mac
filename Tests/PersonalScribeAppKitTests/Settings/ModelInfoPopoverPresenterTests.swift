@@ -242,7 +242,7 @@ final class ModelInfoPopoverPresenterTests: XCTestCase {
     func testHumanFriendlyMadeByMatchesCatalog() {
         let p = presenter(for: BuiltInModelCatalog.parakeetTDT06Bv2)
         let row = p.humanFriendlyRows.first(where: { $0.title == "Made by" })
-        XCTAssertEqual(row?.value, "NVIDIA \u00b7 FluidInference")
+        XCTAssertEqual(row?.value, "NVIDIA · FluidInference")
     }
 
     func testHumanFriendlyWorksWithIsMultilingualForV3() {
@@ -278,6 +278,6 @@ final class ModelInfoPopoverPresenterTests: XCTestCase {
     func testModelTypeLabelForASRIsVoiceOffline() {
         let p = presenter(for: BuiltInModelCatalog.parakeetTDT06Bv2)
         let row = p.humanFriendlyRows.first(where: { $0.title == "Model type" })
-        XCTAssertEqual(row?.value, "Voice \u00b7 Offline")
+        XCTAssertEqual(row?.value, "Voice · Offline")
     }
 }
