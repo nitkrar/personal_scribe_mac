@@ -892,8 +892,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
     }
 
-    private func deduplicatedStages(from snapshots: [SessionSnapshot]) -> [PipelineStageID] {
-        var stages: [PipelineStageID] = []
+    private func deduplicatedStages(from snapshots: [SessionSnapshot]) -> [PipelineStepID] {
+        var stages: [PipelineStepID] = []
         for stage in snapshots.compactMap(\.activeStage) where stages.last != stage {
             stages.append(stage)
         }

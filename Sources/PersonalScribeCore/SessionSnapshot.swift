@@ -2,7 +2,7 @@ import Foundation
 
 public struct SessionSnapshot: Sendable, Equatable {
     public var sessionState: SessionState
-    public var activeStage: PipelineStageID?
+    public var activeStage: PipelineStepID?
     public var transcriptProgress: TranscriptProgress?
     public var lastCompletedResult: TranscriptionResult?
     public var recordingDuration: Duration?
@@ -22,7 +22,7 @@ public struct SessionSnapshot: Sendable, Equatable {
 
     public init(
         sessionState: SessionState = .idle,
-        activeStage: PipelineStageID? = nil,
+        activeStage: PipelineStepID? = nil,
         transcriptProgress: TranscriptProgress? = nil,
         lastCompletedResult: TranscriptionResult? = nil,
         recordingDuration: Duration? = nil,

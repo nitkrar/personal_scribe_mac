@@ -1,4 +1,4 @@
-public enum PipelineStageID: String, CaseIterable, Sendable, Equatable {
+public enum PipelineStepID: String, CaseIterable, Sendable, Equatable {
     case capture
     case transcription
     case postProcessing

@@ -2,13 +2,13 @@ public struct TranscriptProgress: Sendable, Equatable {
     public let revision: Int
     public let text: String
     public let isFinal: Bool
-    public let sourceStage: PipelineStageID
+    public let sourceStage: PipelineStepID
 
     public init(
         revision: Int,
         text: String,
         isFinal: Bool,
-        sourceStage: PipelineStageID
+        sourceStage: PipelineStepID
     ) {
         self.revision = revision
         self.text = text

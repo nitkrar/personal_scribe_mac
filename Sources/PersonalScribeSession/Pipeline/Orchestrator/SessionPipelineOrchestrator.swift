@@ -604,7 +604,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private func nextTranscriptProgress(
         text: String,
         isFinal: Bool,
-        sourceStage: PipelineStageID
+        sourceStage: PipelineStepID
     ) -> TranscriptProgress {
         nextRevision += 1
         return TranscriptProgress(
@@ -804,7 +804,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     private func makeStageFailure(
-        stage: PipelineStageID,
+        stage: PipelineStepID,
         error: any Error,
         fallback: PersonalScribeError
     ) -> PipelineStageFailure {
