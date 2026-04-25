@@ -15,7 +15,7 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
 
     /// `#075` wedge regression: after a short-hold publishes `.shortExit`,
     /// the next `startHoldIfIdle()` must start a new hold session. The
-    /// pre-fix bug was that `.error(.capturingTooShort)` stuck around and
+    /// pre-fix bug was that `.error(.recordingTooShort)` stuck around and
     /// `startHoldIfIdle`'s `.idle` guard rejected the second hold-press.
     func testStartHoldIfIdleFromShortExitEntersHoldRecording() async throws {
         let shortBuffer = try PCMBuffer(

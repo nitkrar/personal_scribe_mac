@@ -86,7 +86,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(finalSnapshot.sessionState, .completed)
         XCTAssertNil(finalSnapshot.activeStage)
         XCTAssertEqual(finalSnapshot.lastCompletedResult?.text, "Hello world.")
-        XCTAssertEqual(finalSnapshot.capturingDuration, .seconds(1))
+        XCTAssertEqual(finalSnapshot.recordingDuration, .seconds(1))
         XCTAssertEqual(partials, [rawProgress, cleanedProgress])
         XCTAssertEqual(
             finals,
@@ -188,7 +188,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         }
 
         // Sub-1s recording exits cleanly via `.shortExit` (non-error
-        // terminal) rather than the old `.error(.capturingTooShort)`.
+        // terminal) rather than the old `.error(.recordingTooShort)`.
         // See `#075`.
         XCTAssertEqual(
             deduplicatedSessionStates(from: observed),
@@ -279,7 +279,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         let recordingDurations = observed
             .filter { $0.sessionState == .capturing }
-            .compactMap(\.capturingDuration)
+            .compactMap(\.recordingDuration)
         let expectedDurations = [
             Duration.zero,
             buffers[0].duration,
@@ -726,7 +726,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertNil(snapshot.activeStage)
         XCTAssertNil(snapshot.lastCompletedResult,
                      "cancel must NOT produce a completed transcript")
-        XCTAssertNil(snapshot.capturingDuration)
+        XCTAssertNil(snapshot.recordingDuration)
 
         let transcribeCalls = await tracker.transcribeCallCount()
         XCTAssertEqual(transcribeCalls, 0, "transcriber must not be invoked on cancel")
@@ -923,7 +923,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         try FileManager.default.createDirectory(at: recordings, withIntermediateDirectories: true)
         let locator = FixedBaseDirectoryStorageLocator(
             baseDirectory: tempDirectory,
-            managedDirectoryOverrides: [.capturings: recordings]
+            managedDirectoryOverrides: [.recordings: recordings]
         )
         let database = try AppDatabase(locator: locator)
         return TranscriptRepository(database: database)
