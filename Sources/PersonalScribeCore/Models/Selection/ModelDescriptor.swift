@@ -128,6 +128,27 @@ public struct ModelDescriptor: Sendable, Equatable {
     /// empty-field struct for ad-hoc test fixtures.
     public let performance: ModelPerformance
 
+    // MARK: - Human-friendly popover metadata
+    //
+    // All optional — ad-hoc test fixtures don't need to declare them;
+    // the info popover hides rows whose value is nil.
+
+    /// Vendor / porter credit shown in the popover's "Made by" row.
+    /// E.g. "NVIDIA · FluidInference".
+    public let madeBy: String?
+
+    /// Language or locale support shown in the "Works with" row.
+    /// E.g. "English" or "25 European languages".
+    public let worksWith: String?
+
+    /// Primary use-case shown in the "Good for" row.
+    /// E.g. "General dictation, long-form transcription".
+    public let goodFor: String?
+
+    /// SPDX license identifier shown in the "License" row.
+    /// E.g. "CC-BY-4.0" or "Apache 2.0".
+    public let license: String?
+
     public init(
         id: String,
         displayName: String,
@@ -145,7 +166,11 @@ public struct ModelDescriptor: Sendable, Equatable {
         requiredRelativePaths: [String],
         approximateSizeBytes: Int64,
         engine: TranscriptionEngine,
-        performance: ModelPerformance = ModelPerformance()
+        performance: ModelPerformance = ModelPerformance(),
+        madeBy: String? = nil,
+        worksWith: String? = nil,
+        goodFor: String? = nil,
+        license: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -159,6 +184,10 @@ public struct ModelDescriptor: Sendable, Equatable {
         self.approximateSizeBytes = approximateSizeBytes
         self.engine = engine
         self.performance = performance
+        self.madeBy = madeBy
+        self.worksWith = worksWith
+        self.goodFor = goodFor
+        self.license = license
     }
 
     public func resolveURL(for relativePath: String) -> URL {

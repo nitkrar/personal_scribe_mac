@@ -49,7 +49,11 @@ public enum BuiltInModelCatalog {
             averageWER: 6.05,
             rtfx: 3386,
             parameterCount: 600_000_000
-        )
+        ),
+        madeBy: "NVIDIA · FluidInference",
+        worksWith: "English",
+        goodFor: "General dictation, long-form transcription",
+        license: "CC-BY-4.0"
     )
 
     /// The catalog's default model id — used by legacy code paths that still read a
@@ -83,7 +87,11 @@ public enum BuiltInModelCatalog {
             averageWER: 7.49,
             rtfx: 5345,
             parameterCount: 110_000_000
-        )
+        ),
+        madeBy: "NVIDIA · FluidInference",
+        worksWith: "English",
+        goodFor: "Quick dictation, battery-conscious use",
+        license: "CC-BY-4.0"
     )
 
     public static let parakeetTDT06Bv3 = ModelDescriptor(
@@ -111,7 +119,11 @@ public enum BuiltInModelCatalog {
             averageWER: 6.34,
             rtfx: 3333,
             parameterCount: 600_000_000
-        )
+        ),
+        madeBy: "NVIDIA · FluidInference",
+        worksWith: "25 European languages",
+        goodFor: "Multilingual dictation",
+        license: "Apache 2.0"
     )
 
     // MARK: - Streaming ASR (parakeet realtime EOU)

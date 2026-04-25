@@ -159,6 +159,13 @@ struct ModelRow: View {
                 trailingControls
             }
         }
+        // Tapping anywhere on the card (outside the trailing buttons)
+        // opens the info popover — mirrors the Superwhisper row-click
+        // pattern. The ⓘ button remains as a discoverable affordance.
+        .contentShape(Rectangle())
+        .onTapGesture {
+            isInfoPopoverPresented = true
+        }
     }
 
     // MARK: - Trailing controls

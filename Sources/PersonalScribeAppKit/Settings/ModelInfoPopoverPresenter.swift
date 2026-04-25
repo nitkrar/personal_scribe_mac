@@ -170,4 +170,43 @@ struct ModelInfoPopoverPresenter {
         }
         return InfoRow(title: "Parameters", value: formatted, monospaced: false)
     }
+
+    // MARK: - Human-friendly meta rows
+    //
+    // Shown below the hero Speed / Accuracy / Size trio in the redesigned
+    // popover. Each row is only included when the descriptor declares the
+    // corresponding optional field, so models without metadata don't show
+    // empty rows.
+
+    /// Ordered list of human-friendly label–value pairs for the popover's
+    /// lower section. Only rows with non-nil values are included.
+    var humanFriendlyRows: [InfoRow] {
+        var rows: [InfoRow] = []
+        if let v = descriptor.madeBy {
+            rows.append(InfoRow(title: "Made by", value: v, monospaced: false))
+        }
+        if let v = descriptor.worksWith {
+            rows.append(InfoRow(title: "Works with", value: v, monospaced: false))
+        }
+        if let v = descriptor.goodFor {
+            rows.append(InfoRow(title: "Good for", value: v, monospaced: false))
+        }
+        // Model type is derived from the descriptor's kind, not stored
+        // as a raw string, so we compute it here.
+        rows.append(InfoRow(title: "Model type", value: modelTypeLabel, monospaced: false))
+        if let v = descriptor.license {
+            rows.append(InfoRow(title: "License", value: v, monospaced: false))
+        }
+        return rows
+    }
+
+    private var modelTypeLabel: String {
+        switch descriptor.kind {
+        case .asr:         return "Voice · Offline"
+        case .streamingASR: return "Voice · Streaming"
+        case .diarization:  return "Diarization · Offline"
+        case .vad:          return "Voice activity detection"
+        case .tts:          return "Text-to-speech"
+        }
+    }
 }

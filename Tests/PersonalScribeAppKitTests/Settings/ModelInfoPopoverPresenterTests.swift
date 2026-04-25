@@ -224,4 +224,60 @@ final class ModelInfoPopoverPresenterTests: XCTestCase {
         let p = presenter(for: descriptor, siblings: [descriptor])
         XCTAssertFalse(p.detailRows.contains(where: { $0.title == "Parameters" }))
     }
+
+    // MARK: - Human-friendly rows
+
+    /// Catalog models declare all four optional fields; all four rows
+    /// plus the derived "Model type" row must appear.
+    func testHumanFriendlyRowsIncludeAllFiveRowsForCatalogModel() {
+        let p = presenter(for: BuiltInModelCatalog.parakeetTDT06Bv2)
+        let titles = p.humanFriendlyRows.map(\.title)
+        XCTAssertTrue(titles.contains("Made by"),    "Missing 'Made by' row")
+        XCTAssertTrue(titles.contains("Works with"), "Missing 'Works with' row")
+        XCTAssertTrue(titles.contains("Good for"),   "Missing 'Good for' row")
+        XCTAssertTrue(titles.contains("Model type"), "Missing 'Model type' row")
+        XCTAssertTrue(titles.contains("License"),    "Missing 'License' row")
+    }
+
+    func testHumanFriendlyMadeByMatchesCatalog() {
+        let p = presenter(for: BuiltInModelCatalog.parakeetTDT06Bv2)
+        let row = p.humanFriendlyRows.first(where: { $0.title == "Made by" })
+        XCTAssertEqual(row?.value, "NVIDIA \u00b7 FluidInference")
+    }
+
+    func testHumanFriendlyWorksWithIsMultilingualForV3() {
+        let p = presenter(for: BuiltInModelCatalog.parakeetTDT06Bv3)
+        let row = p.humanFriendlyRows.first(where: { $0.title == "Works with" })
+        XCTAssertEqual(row?.value, "25 European languages")
+    }
+
+    func testHumanFriendlyLicenseIsApacheForV3() {
+        let p = presenter(for: BuiltInModelCatalog.parakeetTDT06Bv3)
+        let row = p.humanFriendlyRows.first(where: { $0.title == "License" })
+        XCTAssertEqual(row?.value, "Apache 2.0")
+    }
+
+    /// Ad-hoc fixture with no optional fields — only the derived
+    /// "Model type" row should appear.
+    func testHumanFriendlyRowsContainOnlyModelTypeWhenNoOptionalFields() {
+        let descriptor = ModelDescriptor(
+            id: "bare",
+            displayName: "Bare",
+            shortDescription: "No optional fields.",
+            architecture: "Test",
+            repository: "example/bare",
+            revision: "00000000",
+            requiredRelativePaths: [],
+            approximateSizeBytes: 1,
+            engine: .parakeetTDT
+        )
+        let p = presenter(for: descriptor, siblings: [descriptor])
+        XCTAssertEqual(p.humanFriendlyRows.map(\.title), ["Model type"])
+    }
+
+    func testModelTypeLabelForASRIsVoiceOffline() {
+        let p = presenter(for: BuiltInModelCatalog.parakeetTDT06Bv2)
+        let row = p.humanFriendlyRows.first(where: { $0.title == "Model type" })
+        XCTAssertEqual(row?.value, "Voice \u00b7 Offline")
+    }
 }
