@@ -28,8 +28,37 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         modifiers: NSEvent.ModifierFlags.option.rawValue
     )
 
+    /// Installer that returns a sentinel `CFMachPort` for tests that exercise
+    /// `start()` lifecycle assertions. The default installer hits
+    /// `CGEvent.tapCreate`, which fails in test processes without Input
+    /// Monitoring permission — leaving the monitor's `tap` nil and
+    /// `isActive` false, which masquerades as a real bug in the lifecycle
+    /// path. Tests that don't care about real CGEventTap behaviour use this
+    /// to validate the wiring/state-machine instead.
+    private static func succeedingInstaller() -> HotkeyEventTap.Installer {
+        return { _, _ in
+            CFMachPortCreate(
+                kCFAllocatorDefault,
+                { _, _, _, _ in },
+                nil,
+                nil
+            )
+        }
+    }
+
+    /// Wraps the sentinel installer in an `EventTapFactory` for injection
+    /// into `GlobalHotkeyMonitor`'s internal init.
+    private static func succeedingEventTapFactory() -> GlobalHotkeyMonitor.EventTapFactory {
+        return { decider in
+            HotkeyEventTap(decider: decider, installer: succeedingInstaller())
+        }
+    }
+
     func testStartStopLifecycle() {
-        let monitor = GlobalHotkeyMonitor(onToggle: {})
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            eventTapFactory: Self.succeedingEventTapFactory()
+        )
 
         monitor.start()
         XCTAssertTrue(monitor.isActive)
@@ -39,7 +68,10 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
     }
 
     func testStartIsIdempotent() {
-        let monitor = GlobalHotkeyMonitor(onToggle: {})
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            eventTapFactory: Self.succeedingEventTapFactory()
+        )
 
         monitor.start()
         monitor.start()
@@ -344,7 +376,10 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
     /// also install `addLocalMonitorForEvents` so the hotkey works when
     /// our window has focus (bug #4, 2026-04-21 dogfood).
     func testStartInstallsBothLocalAndGlobalMonitors() {
-        let monitor = GlobalHotkeyMonitor(onToggle: {})
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: {},
+            eventTapFactory: Self.succeedingEventTapFactory()
+        )
 
         monitor.start()
         XCTAssertTrue(
