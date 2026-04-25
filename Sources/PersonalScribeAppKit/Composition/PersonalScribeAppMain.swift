@@ -180,6 +180,12 @@ struct PersonalScribeAppMain: App {
         // so sharing is safe and keeps both surfaces in sync.
         let inputDeviceProvider: any AudioInputDeviceProviding =
             AVFoundationInputDeviceProvider(defaults: defaults)
+        // Forward-declared reference so the UnifiedWindowController's
+        // factory closure can read `statusItemControllerHost` after
+        // the latter is constructed below. Captured-by-reference via
+        // the `var` binding — closure invocations (lazy, on first
+        // window show) see the value set after init completes.
+        var statusItemHostRef: StatusItemControllerHost?
         let unifiedWindowControllerHost = UnifiedWindowControllerHost(
             controllerFactory: {
                 UnifiedWindowController(
@@ -198,6 +204,12 @@ struct PersonalScribeAppMain: App {
                             PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
                                 .error("Failed to set active mode '\(mode.id)'", error: error)
                         }
+                    },
+                    menuBarVisibilityProvider: {
+                        statusItemHostRef?.isMenuBarVisible ?? true
+                    },
+                    menuBarVisibilitySetter: { isVisible in
+                        statusItemHostRef?.setMenuBarVisible(isVisible)
                     }
                 )
             }
@@ -263,6 +275,12 @@ struct PersonalScribeAppMain: App {
                 await AppComposition.sessionCoordinator.stopIfActive()
             }
         )
+        // Back-wire the menu-bar visibility ref so the unified window's
+        // Settings → General "Show menu bar item" toggle actually flips
+        // `NSStatusItem.isVisible`. Closures captured the `var` by
+        // reference; setting it now means any subsequent unified-window
+        // factory call resolves to the live host.
+        statusItemHostRef = statusItemControllerHost
         _sceneModel = StateObject(wrappedValue: sceneModel)
         _pillController = StateObject(
             wrappedValue: pillController

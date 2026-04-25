@@ -8,13 +8,24 @@ public struct SettingsTab: View {
 
     private let defaults: UserDefaults
     private let permissionService: any PermissionService
+    private let menuBarVisibilityProvider: @MainActor () -> Bool
+    private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
 
     public init(
         defaults: UserDefaults = .standard,
-        permissionService: any PermissionService
+        permissionService: any PermissionService,
+        // Default to a no-op + always-visible reading. Production
+        // wiring lives in `PersonalScribeAppMain` and points at
+        // `StatusItemControllerHost.{isMenuBarVisible, setMenuBarVisible}`.
+        // Default kept so existing test surfaces don't have to know
+        // about the menu-bar plumbing.
+        menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
+        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
         self.defaults = defaults
         self.permissionService = permissionService
+        self.menuBarVisibilityProvider = menuBarVisibilityProvider
+        self.menuBarVisibilitySetter = menuBarVisibilitySetter
     }
 
     public var body: some View {
@@ -30,7 +41,11 @@ public struct SettingsTab: View {
             Group {
                 switch selectedSubTab {
                 case .general:
-                    GeneralTab(defaults: defaults)
+                    GeneralTab(
+                        defaults: defaults,
+                        menuBarVisibilityProvider: menuBarVisibilityProvider,
+                        menuBarVisibilitySetter: menuBarVisibilitySetter
+                    )
                 case .aiModels:
                     AIModelsTab()
                 case .advanced:

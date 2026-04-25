@@ -26,6 +26,8 @@ struct UnifiedWindowView: View {
     @ObservedObject var microphoneFooterViewModel: MicrophoneFooterViewModel
     let permissionService: any PermissionService
     let defaults: UserDefaults
+    let menuBarVisibilityProvider: @MainActor () -> Bool
+    let menuBarVisibilitySetter: @MainActor (Bool) -> Void
 
     init(
         model: UnifiedWindowModel,
@@ -35,7 +37,9 @@ struct UnifiedWindowView: View {
         modesViewModel: ModesTabViewModel,
         microphoneFooterViewModel: MicrophoneFooterViewModel,
         permissionService: any PermissionService,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
+        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
         self.model = model
         self.windowTint = windowTint
@@ -45,6 +49,8 @@ struct UnifiedWindowView: View {
         self.microphoneFooterViewModel = microphoneFooterViewModel
         self.permissionService = permissionService
         self.defaults = defaults
+        self.menuBarVisibilityProvider = menuBarVisibilityProvider
+        self.menuBarVisibilitySetter = menuBarVisibilitySetter
     }
 
     var body: some View {
@@ -204,7 +210,12 @@ struct UnifiedWindowView: View {
         case .modes:
             ModesTab(viewModel: modesViewModel)
         case .settings:
-            SettingsTab(defaults: defaults, permissionService: permissionService)
+            SettingsTab(
+                defaults: defaults,
+                permissionService: permissionService,
+                menuBarVisibilityProvider: menuBarVisibilityProvider,
+                menuBarVisibilitySetter: menuBarVisibilitySetter
+            )
         case .about:
             AboutSubTab()
         }

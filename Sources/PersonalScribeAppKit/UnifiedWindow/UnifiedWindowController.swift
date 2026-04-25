@@ -25,6 +25,8 @@ final class UnifiedWindowController: NSWindowController {
     private let modesViewModel: ModesTabViewModel
     private let microphoneFooterViewModel: MicrophoneFooterViewModel
     private let permissionService: any PermissionService
+    private let menuBarVisibilityProvider: @MainActor () -> Bool
+    private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
     private var windowTintObserver: NSObjectProtocol?
 
     init(
@@ -37,11 +39,15 @@ final class UnifiedWindowController: NSWindowController {
         modes: [ModeDescriptor] = ModeRegistry.all,
         activeModeProvider: @escaping @MainActor () -> ModeDescriptor? = { nil },
         activeModeStream: (@MainActor () -> AsyncStream<ModeDescriptor?>)? = nil,
-        setActiveMode: (@MainActor (ModeDescriptor) async -> Void)? = nil
+        setActiveMode: (@MainActor (ModeDescriptor) async -> Void)? = nil,
+        menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
+        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
         self.defaults = defaults
         self.model = model
         self.permissionService = permissionService
+        self.menuBarVisibilityProvider = menuBarVisibilityProvider
+        self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.homeViewModel = HomeTabViewModel(reader: metricsReader)
         self.transcriptionsViewModel = TranscriptionsTabViewModel(reader: transcriptReader)
         self.modesViewModel = ModesTabViewModel(
@@ -64,7 +70,9 @@ final class UnifiedWindowController: NSWindowController {
             modesViewModel: modesViewModel,
             microphoneFooterViewModel: microphoneFooterViewModel,
             permissionService: permissionService,
-            defaults: defaults
+            defaults: defaults,
+            menuBarVisibilityProvider: menuBarVisibilityProvider,
+            menuBarVisibilitySetter: menuBarVisibilitySetter
         )
         let hostingController = NSHostingController(rootView: rootView)
         self.hostingController = hostingController
@@ -205,7 +213,9 @@ final class UnifiedWindowController: NSWindowController {
             modesViewModel: modesViewModel,
             microphoneFooterViewModel: microphoneFooterViewModel,
             permissionService: permissionService,
-            defaults: defaults
+            defaults: defaults,
+            menuBarVisibilityProvider: menuBarVisibilityProvider,
+            menuBarVisibilitySetter: menuBarVisibilitySetter
         )
     }
 
