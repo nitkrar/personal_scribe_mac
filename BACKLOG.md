@@ -325,6 +325,19 @@ Hold-start pushes `.holdToRecord` directly to the view model via side-channel (`
 
 ---
 
+### #077 — AI Models tab shows non-ASR descriptors that fail on download
+
+`bug` · `P2` · `done` · `phase: 3` · `area: settings, models`
+*Updated 2026-04-25*
+
+Resolved by **#024.10** — `AIModelsTab` now sections by `ModelKind` and filters `ForEach` to `ModelKind.allCases.filter(\.isEnabled)`, which is only `.asr` today. Per-kind rows inside each section come from `service.enabledModels(kind:)`. Non-ASR descriptors (streaming EOU, Qwen3, diarization) stay in the catalog for when #078 wires adapters, but don't surface in the tab until their kind flips to `isEnabled`.
+
+Qwen3 f32/int8 rows (which have `kind: .asr`) still surface today and would fail download at the `FluidAudioRuntimeVariant` gate if tapped — the filter is by kind, not engine. The narrow filter (engine-level) lands with #078 Stage A when the Qwen3 adapter exists.
+
+**Legacy:** session-generated 2026-04-25 from #024.6 catalog expansion follow-up.
+
+---
+
 ## Features
 
 ### #011 — Per-row delete on transcription history
@@ -511,12 +524,39 @@ FTS5 + embedding lookup over transcripts/notes. Needs embeddings schema (migrati
 
 ### #024 — Model Stage B: per-row delete button
 
-`feature` · `P2` · `open` · `phase: 3` · `area: models, settings`
-*Updated 2026-04-21*
+`feature` · `P2` · `done` · `phase: 3` · `area: models, settings`
+*Updated 2026-04-25*
 
-`ModelRow` delete action → `ModelBoundTranscriberProvider.removeDownloadedFiles(_:)`. Confirmation sheet required. Refuse delete of active model with explanation. Surface per-model disk usage.
+Per-row delete on the AI Models tab plus the ModelRow redesign + activate/download semantic split + catalog metadata refresh that fell out of dogfooding the delete flow.
 
-**Legacy:** `backlog/model-download-ux-bug-research.md` Stage B
+**Scope locked 2026-04-24:** simple delete icon, no confirmation, no active-model block, no last-model rule. Disk usage shown inline. Pre-dogfood disposable.
+
+**Implementation surface**
+1. `ModelBoundTranscriberProvider.removeDownloadedFiles(_:)` — fs delete + cache reset.
+2. `DefaultModelService.removeDownloaded(_:)` — public service method, publishes `.notDownloaded` after fs delete.
+3. `ModelRow` redesign — replaced `Active` / `Set Active` / `Download` text buttons with a green-or-grey activity dot + compact `Activate` text button + trailing SF-Symbol icon button (`arrow.down.circle` ↔ `trash` based on `.notDownloaded` ↔ `.ready`). Inline disk size next to the short description. Transient phases keep the `StatusPill`.
+4. AI Models tab wiring + Modes tab filter to hide modes whose voice model isn't on disk.
+
+**Cleanup work that fell out of dogfooding**
+- Separate `setActive` (pure persist+assign) from `download(_:)` (pure download with internal progress ingest). Modes tab + AI Models tab call the right method.
+- `onSetActive` prewarm hook so activating a model immediately prepares it instead of surprising the user with a download on next launch.
+- Settings tab uses a segmented `Picker` not `TabView`; added `.onChange(of: selectedSubTab)` to call `service.refresh()` on every re-entry to AI Models so out-of-band CLI deletes flip the row.
+- Catalog metadata refresh — sizes corrected against HF tree API (110m: 407→217 MB, v3: 700→461 MB), v3 revision pinned, `repoFolderName` field added so the on-disk folder is sourced from FluidAudio's `Repo.folderName` not our `descriptor.id`.
+- Catalog expansion — Streaming EOU (160/320/1280 ms), Qwen3 ASR (f32 + int8), speaker diarization. New `ModelKind` enum + `TranscriptionEngine` cases. Metadata-only — adapters not wired (see follow-up tickets).
+
+**Legacy:** `plans/_legacy/backlog/model-download-ux-bug-research.md` Stage B
+
+**Changelog**
+- 2026-04-24 `73c0ba9` step #024.1 — `ModelBoundTranscriberProvider.removeDownloadedFiles` (fs delete + cache reset). 1 test.
+- 2026-04-24 `829b776` step #024.2 — `DefaultModelService.removeDownloaded` + ModelRow redesign. 1 test + UI smoke.
+- 2026-04-24 `98cf401` step #024.3 — split `setActive` from `download(_:)`. ModesTab filters non-downloaded modes.
+- 2026-04-24 `d7da8f9` step #024.4 — Retry button rewired to `onDownload`; setActive test tightened (flipped stub + restored `$activeDescriptor` publication assertion); dropped dead `FakeModelService.downloadRequests`.
+- 2026-04-25 `376f2ed` step #024.5 — `repoFolderName` field; sizes refreshed; v3 revision pinned `775be920…`.
+- 2026-04-25 `0c55b16` step #024.6 — catalog expansion (6 new descriptors). New `ModelKind` + `TranscriptionEngine` cases.
+- 2026-04-25 `e8cb597` step #024.7 — `onSetActive` prewarm wired; Settings tab `.onChange` refresh on AI Models re-entry. 1 test.
+- 2026-04-25 `e73afa4` + `5014bbb` step #024.10 — per-kind active model state. `ModelKind.isEnabled` + `.displayName`; `Preference<[ModelKind: String]>` storage (replaces `Preference<ActiveModelDescriptor>`); `setActive(_ descriptor:)` evicts same-kind entries; `activeDescriptor(for:)` + `enabledModels(kind:)` API. Deletes: `ActiveModelDescriptor`, `ModelService` protocol, `AppKitActiveModeProvider`, `FakeModelService` + tests. Renames: `DefaultModelService` → `ActiveModelService` + test suite. `AIModelsTab` sections by kind. Resolves #077.
+- Filtered suite passes clean across all sub-steps.
+- Runtime verification deferred to next DMG rebuild — visual redesign + tab-switch refresh + activate prewarm.
 
 ---
 
@@ -670,6 +710,34 @@ Prefix a recording with a short tag word ("reminder", "email Alice", "todo") tha
 Separate hotkey from quick mode. EOU 120M partials render in the overlay pill only (no paste during streaming); v3 batch re-transcribes on stop to produce the final pasted text. ~850MB ANE footprint while active. English-only. Precondition for #057 (app-context rules).
 
 **Legacy:** `plans/_legacy/BACKLOG_pre_migration.md` → "Streaming dictation mode"
+
+---
+
+### #078 — Adapter layer for non-`parakeetTDT` model families
+
+`feature` · `P0` · `open` · `phase: 4` · `area: transcription, models, architecture`
+*Updated 2026-04-25*
+
+#024.6 added catalog metadata for Streaming EOU (parakeet-realtime-eou-120m), Qwen3 ASR (0.6B f32 + int8), and speaker diarization. None of these have transcriber adapters in `PersonalScribeTranscription`. Today our only adapter is `ModelAwareFluidAudioInferenceClient` wrapping FluidAudio's `AsrManager`. Each new family lives in a different FluidAudio manager class:
+
+- Streaming EOU → `StreamingEouAsrManager` (chunked, EOU-detecting).
+- Qwen3 ASR → `Qwen3AsrManager` (transformer, multilingual, Whisper-style mel frontend).
+- Diarization → `OfflineDiarizerManager` (pyannote segmentation + WeSpeaker-v2).
+
+Each needs:
+1. A `Transcribing`-conforming wrapper (or, for diarization, a new protocol — diarization output is speaker turns, not text).
+2. An entry in `FluidAudioRuntimeVariant` (or a new variant enum if the existing one gets too parakeet-specific).
+3. A composition-root wiring path in `AppComposition` so the right inference client is constructed for the active descriptor's `engine`.
+4. Pipeline routing: `SessionPipelineOrchestrator` may need branch logic per engine (e.g. streaming partials vs. batch finals).
+
+P0 because catalog rows for non-ASR families are visible in Settings today (#077 is the cosmetic fix); without adapters, any user click on those rows fails.
+
+**Suggested staging**
+- Stage A — Qwen3 ASR adapter only. Highest user value (16 languages).
+- Stage B — Streaming EOU adapter (precondition for #056 streaming dictation mode).
+- Stage C — Diarization (precondition for #058 / #061 meeting features).
+
+**Legacy:** session-generated 2026-04-25 from #024.6 catalog expansion follow-up.
 
 ---
 
