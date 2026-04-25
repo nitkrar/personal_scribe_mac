@@ -4,40 +4,41 @@ import PersonalScribeSession
 
 /// Settings > AI Models tab.
 ///
-/// Stage A (step 3.2): renders a row per registered voice model with a
-/// live download/ready chip driven by
-/// `DefaultModelService.downloadStates`. Replaces the pre-3.2 inert tab
-/// that hardcoded `StatusPill(status: .ready, label: "Current")`
-/// regardless of disk reality.
-///
-/// The tab deliberately keeps a single `SettingsSection` header ("Voice
-/// models") so Stage B can add a second "AI models" section without
-/// restructuring the view. Delete / disk-space precheck / AI-model rows
-/// are Stage B (deferred — see `plans/backlog/model-download-ux-bug-research.md`).
+/// Renders one `SettingsSection` per enabled `ModelKind` (#024.10),
+/// with live download/ready chips driven by
+/// `ActiveModelService.downloadStates`. Today only `.asr` is enabled;
+/// future kinds (streaming ASR, diarization, …) light up as the
+/// corresponding adapters land (#078).
 @MainActor
 public struct AIModelsTab: View {
-    @ObservedObject private var service: DefaultModelService
+    @ObservedObject private var service: ActiveModelService
 
-    public init(service: DefaultModelService = AppComposition.modelService) {
+    public init(service: ActiveModelService = AppComposition.modelService) {
         self.service = service
     }
 
     public var body: some View {
         SettingsTabContainer {
-            SettingsSection(
-                title: "Voice models",
-                description: "Voice-to-text models. Active mark follows Modes tab selection."
-            ) {
-                VStack(spacing: SettingsLayout.itemSpacing) {
-                    ForEach(service.registeredModels, id: \.id) { descriptor in
-                        ModelRow(
-                            descriptor: descriptor,
-                            state: service.downloadStates[descriptor.id],
-                            isActive: service.activeDescriptor.voiceModel.id == descriptor.id,
-                            onActivate: { activate(descriptor) },
-                            onDownload: { download(descriptor) },
-                            onDelete: { delete(descriptor) }
-                        )
+            // #024.10: one `SettingsSection` per enabled `ModelKind`.
+            // Today only `.asr` is enabled — non-asr kinds (streaming
+            // ASR, diarization, …) stay hidden until adapters land
+            // (#078 follow-up). Section header uses `kind.displayName`.
+            ForEach(enabledKinds, id: \.self) { kind in
+                SettingsSection(
+                    title: kind.displayName,
+                    description: descriptionForSection(kind: kind)
+                ) {
+                    VStack(spacing: SettingsLayout.itemSpacing) {
+                        ForEach(service.enabledModels(kind: kind), id: \.id) { descriptor in
+                            ModelRow(
+                                descriptor: descriptor,
+                                state: service.downloadStates[descriptor.id],
+                                isActive: service.activeDescriptor(for: descriptor.kind)?.id == descriptor.id,
+                                onActivate: { activate(descriptor) },
+                                onDownload: { download(descriptor) },
+                                onDelete: { delete(descriptor) }
+                            )
+                        }
                     }
                 }
             }
@@ -52,14 +53,21 @@ public struct AIModelsTab: View {
         }
     }
 
-    private func activate(_ descriptor: ModelDescriptor) {
-        let target = ActiveModelDescriptor(
-            voiceModel: descriptor,
-            aiModelID: service.activeDescriptor.aiModelID
-        )
-        Task { @MainActor in
-            try? await service.setActive(target)
+    private var enabledKinds: [ModelKind] {
+        ModelKind.allCases.filter(\.isEnabled)
+    }
+
+    private func descriptionForSection(kind: ModelKind) -> String {
+        switch kind {
+        case .asr:
+            return "Voice-to-text models. Active mark follows Modes tab selection."
+        case .streamingASR, .vad, .diarization, .tts:
+            return ""
         }
+    }
+
+    private func activate(_ descriptor: ModelDescriptor) {
+        service.setActive(descriptor)
     }
 
     private func delete(_ descriptor: ModelDescriptor) {

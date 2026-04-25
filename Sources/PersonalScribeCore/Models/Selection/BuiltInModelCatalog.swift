@@ -248,13 +248,4 @@ public enum BuiltInModelCatalog {
         qwen3AsrInt8,
         speakerDiarization,
     ]
-
-    public static let defaultActiveDescriptor = ActiveModelDescriptor(
-        voiceModel: parakeetTDT06Bv2,
-        aiModelID: nil
-    )
-
-    public static func descriptor(for id: String) -> ModelDescriptor? {
-        registeredModels.first { $0.id == id }
-    }
 }

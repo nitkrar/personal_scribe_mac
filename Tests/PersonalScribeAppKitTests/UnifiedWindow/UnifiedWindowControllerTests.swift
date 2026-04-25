@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import PersonalScribeAudio
 import PersonalScribeCore
+@testable import PersonalScribeSession
 import XCTest
 @testable import PersonalScribeAppKit
 
@@ -117,12 +118,23 @@ final class UnifiedWindowControllerTests: XCTestCase {
 
     @MainActor
     private static func makeController() -> UnifiedWindowController {
-        UnifiedWindowController(
-            defaults: ephemeralDefaults(),
+        let defaults = ephemeralDefaults()
+        let modelService = ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
+                defaults: defaults
+            ),
+            isDownloaded: { _ in false },
+            download: { _, _ in }
+        )
+        return UnifiedWindowController(
+            defaults: defaults,
             transcriptReader: StubTranscriptReader(),
             metricsReader: StubMetricsReader(),
             permissionService: StubPermissionService(),
-            inputDeviceProvider: NoOpAudioInputDeviceProvider()
+            inputDeviceProvider: NoOpAudioInputDeviceProvider(),
+            modelService: modelService
         )
     }
 

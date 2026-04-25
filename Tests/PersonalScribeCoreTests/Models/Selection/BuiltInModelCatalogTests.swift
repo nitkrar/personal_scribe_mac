@@ -2,18 +2,24 @@ import XCTest
 @testable import PersonalScribeCore
 
 final class BuiltInModelCatalogTests: XCTestCase {
-    func testRegisteredModelsContainV2V3And110MDescriptors() {
+    func testRegisteredModelsContainExpectedASRAndPlaceholderDescriptors() {
+        // Refactor #024.10: the catalog now ships 9 descriptors across
+        // 4 kinds. ASR rows surface in the AI Models tab today;
+        // streaming / qwen3 / diarization rows are placeholders for
+        // future adapters (#078).
         XCTAssertEqual(
             BuiltInModelCatalog.registeredModels.map(\.id),
             [
                 BuiltInModelCatalog.parakeetTDT06Bv2.id,
                 BuiltInModelCatalog.parakeetTDTCTC110M.id,
                 BuiltInModelCatalog.parakeetTDT06Bv3.id,
+                BuiltInModelCatalog.parakeetEou160ms.id,
+                BuiltInModelCatalog.parakeetEou320ms.id,
+                BuiltInModelCatalog.parakeetEou1280ms.id,
+                BuiltInModelCatalog.qwen3AsrF32.id,
+                BuiltInModelCatalog.qwen3AsrInt8.id,
+                BuiltInModelCatalog.speakerDiarization.id,
             ]
-        )
-        XCTAssertEqual(
-            BuiltInModelCatalog.descriptor(for: BuiltInModelCatalog.parakeetTDT06Bv3.id),
-            BuiltInModelCatalog.parakeetTDT06Bv3
         )
     }
 
@@ -30,14 +36,6 @@ final class BuiltInModelCatalogTests: XCTestCase {
                 "parakeet_vocab.json",
             ]
         )
-    }
-
-    func testDefaultActiveDescriptorFallsBackToPinnedV2Descriptor() {
-        XCTAssertEqual(
-            BuiltInModelCatalog.defaultActiveDescriptor.voiceModel,
-            BuiltInModelCatalog.parakeetTDT06Bv2
-        )
-        XCTAssertNil(BuiltInModelCatalog.defaultActiveDescriptor.aiModelID)
     }
 
     // MARK: - #007 — descriptive metadata for Settings AI Models tab
@@ -66,12 +64,20 @@ final class BuiltInModelCatalogTests: XCTestCase {
         }
     }
 
-    /// Every registered model must carry averageWER + rtfx so the
-    /// computed-relative presenter can rank models without nil-fallback
-    /// branches. Sourced from the HF Open ASR leaderboard — see the
-    /// per-descriptor citation in `BuiltInModelCatalog.swift`.
-    func testAllRegisteredModelsCarryPublishedBenchmarks() {
-        for descriptor in BuiltInModelCatalog.registeredModels {
+    /// Every enabled-kind model (today: `.asr`) must carry averageWER
+    /// + rtfx so the computed-relative presenter can rank models
+    /// without nil-fallback branches. Sourced from the HF Open ASR
+    /// leaderboard — see the per-descriptor citation in
+    /// `BuiltInModelCatalog.swift`. Non-enabled kinds (#024.10) ship
+    /// without benchmarks today; they don't surface in the AI Models
+    /// tab so the popover never reads their metrics.
+    func testAllEnabledModelsCarryPublishedBenchmarks() {
+        let enabledDescriptors = BuiltInModelCatalog.registeredModels
+            .filter { $0.kind.isEnabled }
+        // Sanity: refactor invariant — `.asr` is enabled today, so
+        // there must be at least one descriptor here.
+        XCTAssertFalse(enabledDescriptors.isEmpty)
+        for descriptor in enabledDescriptors {
             XCTAssertNotNil(
                 descriptor.performance.averageWER,
                 "\(descriptor.id) missing averageWER"

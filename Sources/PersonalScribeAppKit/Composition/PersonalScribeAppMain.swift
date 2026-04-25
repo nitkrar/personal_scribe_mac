@@ -171,7 +171,6 @@ struct PersonalScribeAppMain: App {
             )
         }()
         let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader()
-        let appKitActiveModeProvider = AppComposition.activeModeProvider
         let modelService = AppComposition.modelService
         // Shared input-device provider — one `AVFoundationInputDeviceProvider`
         // instance backs both the menu-bar Microphone submenu AND the
@@ -195,15 +194,16 @@ struct PersonalScribeAppMain: App {
                     permissionService: appPermissionService,
                     inputDeviceProvider: inputDeviceProvider,
                     modes: ModeRegistry.all,
-                    activeModeProvider: { appKitActiveModeProvider.currentActiveMode() },
-                    activeModeStream: { appKitActiveModeProvider.activeModeStream() },
+                    modelService: modelService,
                     setActiveMode: { mode in
-                        do {
-                            try await modelService.setActive(modelService.descriptor(for: mode))
-                        } catch {
+                        guard let descriptor = modelService.registeredModels.first(
+                            where: { $0.id == mode.voiceModelID }
+                        ) else {
                             PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
-                                .error("Failed to set active mode '\(mode.id)'", error: error)
+                                .error("Failed to set active mode '\(mode.id)': voice model id '\(mode.voiceModelID)' not registered")
+                            return
                         }
+                        modelService.setActive(descriptor)
                     },
                     menuBarVisibilityProvider: {
                         statusItemHostRef?.isMenuBarVisible ?? true
@@ -262,12 +262,14 @@ struct PersonalScribeAppMain: App {
             inputDeviceProvider: inputDeviceProvider,
             modes: ModeRegistry.all,
             setActiveMode: { mode in
-                do {
-                    try await modelService.setActive(modelService.descriptor(for: mode))
-                } catch {
+                guard let descriptor = modelService.registeredModels.first(
+                    where: { $0.id == mode.voiceModelID }
+                ) else {
                     PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
-                        .error("Failed to set active mode '\(mode.id)' from menu-bar submenu", error: error)
+                        .error("Failed to set active mode '\(mode.id)' from menu-bar submenu: voice model id '\(mode.voiceModelID)' not registered")
+                    return
                 }
+                modelService.setActive(descriptor)
             },
             prequitHandler: {
                 // Stop an active recording before terminate so

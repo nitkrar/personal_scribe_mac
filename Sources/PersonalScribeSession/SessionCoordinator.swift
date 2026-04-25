@@ -6,7 +6,7 @@ import PersonalScribeVAD
 public actor SessionCoordinator {
     private let capture: any AudioCapturing
     private let fixedTranscriber: (any Transcribing)?
-    private let modelService: (any ModelService)?
+    private let modelService: ActiveModelService?
     private let transcriberProvider: (any ModelBoundTranscriberProviding)?
     private let transcriptRepository: TranscriptRepository?
     private let logger: PersonalScribeLogger
@@ -57,7 +57,7 @@ public actor SessionCoordinator {
 
     public init(
         capture: any AudioCapturing,
-        modelService: any ModelService,
+        modelService: ActiveModelService,
         transcriberProvider: any ModelBoundTranscriberProviding,
         logger: PersonalScribeLogger,
         transcriptRepository: TranscriptRepository? = nil,
@@ -405,7 +405,7 @@ private struct CoordinatorPipelineCapture: AudioCapturing {
 
 private actor CoordinatorPipelineTranscriber: Transcribing {
     private let fixedTranscriber: (any Transcribing)?
-    private let modelService: (any ModelService)?
+    private let modelService: ActiveModelService?
     private let transcriberProvider: (any ModelBoundTranscriberProviding)?
     private let logger: PersonalScribeLogger
     private let progressBroadcaster = SessionDownloadProgressBroadcaster()
@@ -424,7 +424,7 @@ private actor CoordinatorPipelineTranscriber: Transcribing {
     }
 
     init(
-        modelService: any ModelService,
+        modelService: ActiveModelService,
         transcriberProvider: any ModelBoundTranscriberProviding,
         logger: PersonalScribeLogger
     ) {
@@ -509,11 +509,18 @@ private actor CoordinatorPipelineTranscriber: Transcribing {
 
     private func activeVoiceModel() async -> ModelDescriptor {
         guard let modelService else {
-            preconditionFailure("SessionCoordinator model-service path requires a ModelService")
+            preconditionFailure("SessionCoordinator model-service path requires an ActiveModelService")
         }
 
         return await MainActor.run {
-            modelService.activeDescriptor.voiceModel
+            // Recording pipeline always uses the `.asr` slot. Other
+            // kinds (.streamingASR, .diarization, …) are placeholders
+            // for future pipelines and never feed `transcribe(_:)`
+            // today. Fallback to the catalog's pinned baseline if
+            // nothing is active for `.asr` (e.g. user evicted the
+            // entry without selecting a replacement).
+            modelService.activeDescriptor(for: .asr)
+                ?? BuiltInModelCatalog.parakeetTDT06Bv2
         }
     }
 

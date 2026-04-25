@@ -7,15 +7,15 @@ import XCTest
 /// TDD coverage for Stage A step 3.1 — the service-owned `downloadStates`
 /// stream that Settings surfaces (AIModelsTab) subscribe to.
 ///
-/// These tests drive `DefaultModelService.setActive` with a scripted
+/// These tests drive `ActiveModelService.setActive` with a scripted
 /// download handler and assert the published `[String: ModelDownloadState]`
 /// dictionary transitions through the expected phases in order. They fail
 /// on the pre-3.1 service because `setActive`'s `{ _ in }` no-op handler
 /// dropped every progress tick.
 @MainActor
-final class DefaultModelServiceDownloadStateTests: XCTestCase {
+final class ActiveModelServiceDownloadStateTests: XCTestCase {
     private func isolatedDefaults() -> UserDefaults {
-        let suiteName = "PersonalScribeTests.DefaultModelServiceDownloadState.\(UUID().uuidString)"
+        let suiteName = "PersonalScribeTests.ActiveModelServiceDownloadState.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         addTeardownBlock {
@@ -370,24 +370,24 @@ final class DefaultModelServiceDownloadStateTests: XCTestCase {
         ) async throws -> Void,
         modelsDirectoryProvider: (@Sendable () -> URL?)? = nil,
         diskSpaceProvider: (@Sendable (URL) -> Int64?)? = nil
-    ) -> DefaultModelService {
+    ) -> ActiveModelService {
         let defaults = isolatedDefaults()
-        let preference = Preference<ActiveModelDescriptor>(
-            key: DefaultModelService.preferenceKey,
-            default: BuiltInModelCatalog.defaultActiveDescriptor,
+        let preference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [:],
             defaults: defaults
         )
         if let modelsDirectoryProvider, let diskSpaceProvider {
-            return DefaultModelService(
-                selectionPreference: preference,
+            return ActiveModelService(
+                activeIDsPreference: preference,
                 isDownloaded: isDownloaded,
                 download: download,
                 modelsDirectoryProvider: modelsDirectoryProvider,
                 diskSpaceProvider: diskSpaceProvider
             )
         }
-        return DefaultModelService(
-            selectionPreference: preference,
+        return ActiveModelService(
+            activeIDsPreference: preference,
             isDownloaded: isDownloaded,
             download: download
         )

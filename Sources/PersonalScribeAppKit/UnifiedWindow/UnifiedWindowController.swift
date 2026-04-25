@@ -1,5 +1,6 @@
 import AppKit
 import PersonalScribeCore
+import PersonalScribeSession
 import SwiftUI
 
 /// NSWindowController for the unified NavigationSplitView window.
@@ -37,8 +38,7 @@ final class UnifiedWindowController: NSWindowController {
         permissionService: any PermissionService,
         inputDeviceProvider: any AudioInputDeviceProviding,
         modes: [ModeDescriptor] = ModeRegistry.all,
-        activeModeProvider: @escaping @MainActor () -> ModeDescriptor? = { nil },
-        activeModeStream: (@MainActor () -> AsyncStream<ModeDescriptor?>)? = nil,
+        modelService: ActiveModelService,
         setActiveMode: (@MainActor (ModeDescriptor) async -> Void)? = nil,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
@@ -52,8 +52,7 @@ final class UnifiedWindowController: NSWindowController {
         self.transcriptionsViewModel = TranscriptionsTabViewModel(reader: transcriptReader)
         self.modesViewModel = ModesTabViewModel(
             modes: modes,
-            activeModeProvider: activeModeProvider,
-            activeModeStream: activeModeStream,
+            modelService: modelService,
             setActiveHandler: setActiveMode
         )
         self.microphoneFooterViewModel = MicrophoneFooterViewModel(

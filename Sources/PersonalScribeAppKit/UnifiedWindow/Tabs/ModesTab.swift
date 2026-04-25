@@ -21,11 +21,11 @@ import SwiftUI
 @MainActor
 struct ModesTab: View {
     @ObservedObject private var viewModel: ModesTabViewModel
-    @ObservedObject private var modelService: DefaultModelService
+    @ObservedObject private var modelService: ActiveModelService
 
     init(
         viewModel: ModesTabViewModel,
-        modelService: DefaultModelService = AppComposition.modelService
+        modelService: ActiveModelService = AppComposition.modelService
     ) {
         self.viewModel = viewModel
         self.modelService = modelService
@@ -38,9 +38,11 @@ struct ModesTab: View {
 
             VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
                 // #024 follow-up: only show modes whose voice model is
-                // on disk. Modes pointing at not-downloaded voice models
-                // are hidden so `setActive` never fires on a missing
-                // model. User downloads via the AI Models tab first.
+                // on disk and whose `kind` is enabled today. Modes
+                // pointing at not-downloaded or non-enabled voice
+                // models are hidden so `setActive` never fires on a
+                // missing model. User downloads via the AI Models tab
+                // first.
                 ForEach(downloadedModes) { mode in
                     ModeCard(
                         modeName: mode.name,
@@ -58,8 +60,10 @@ struct ModesTab: View {
     }
 
     private var downloadedModes: [ModeDescriptor] {
-        viewModel.modes.filter { mode in
-            modelService.downloadStates[mode.voiceModelID]?.phase == .ready
+        let enabledASRIDs = Set(modelService.enabledModels(kind: .asr).map(\.id))
+        return viewModel.modes.filter { mode in
+            enabledASRIDs.contains(mode.voiceModelID) &&
+                modelService.downloadStates[mode.voiceModelID]?.phase == .ready
         }
     }
 
@@ -70,7 +74,7 @@ struct ModesTab: View {
     // the legacy surface is retired (PHASE_2_unified_ui.md Step 2.10).
 
     private func voiceModelName(for mode: ModeDescriptor) -> String {
-        BuiltInModelCatalog.descriptor(for: mode.voiceModelID)?.displayName
+        modelService.registeredModels.first { $0.id == mode.voiceModelID }?.displayName
             ?? mode.voiceModelID
     }
 

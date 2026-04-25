@@ -27,8 +27,23 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
             )
         )
         let modelService = await MainActor.run {
-            StubModelService(
-                activeDescriptor: ActiveModelDescriptor(voiceModel: firstDescriptor)
+            // Real `ActiveModelService` constructed with closure
+            // handlers — same pattern as `ActiveModelServiceTests`.
+            // The protocol-based `StubModelService` was dropped in
+            // #024.10 along with the `ModelService` protocol itself.
+            let suiteName = "PersonalScribeTests.SessionCoordinatorModelSelection.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suiteName)!
+            defaults.removePersistentDomain(forName: suiteName)
+            let preference = Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
+                defaults: defaults
+            )
+            preference.persist([.asr: firstDescriptor.id])
+            return ActiveModelService(
+                activeIDsPreference: preference,
+                isDownloaded: { _ in true },
+                download: { _, _ in }
             )
         }
         let coordinator = SessionCoordinator(
@@ -53,7 +68,9 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
         }
 
         await coordinator.toggle()
-        try await modelService.setActiveVoiceModel(secondDescriptor.id)
+        await MainActor.run {
+            modelService.setActive(secondDescriptor)
+        }
         await coordinator.toggle()
 
         let firstStates = try await withTimeout(.seconds(1)) {
@@ -129,59 +146,11 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
     private struct TimeoutError: Error {}
 }
 
-@MainActor
-private final class StubModelService: ModelService {
-    let registeredModels: [ModelDescriptor]
-    @Published private(set) var activeDescriptor: ActiveModelDescriptor
-
-    init(
-        registeredModels: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
-        activeDescriptor: ActiveModelDescriptor
-    ) {
-        self.registeredModels = registeredModels
-        self.activeDescriptor = activeDescriptor
-    }
-
-    func descriptor(for mode: ModeDescriptor) -> ActiveModelDescriptor {
-        let voiceModel = registeredModels.first { $0.id == mode.voiceModelID }
-            ?? BuiltInModelCatalog.defaultActiveDescriptor.voiceModel
-        return ActiveModelDescriptor(voiceModel: voiceModel, aiModelID: mode.aiModelID)
-    }
-
-    func setActive(_ descriptor: ActiveModelDescriptor) async throws {
-        guard let canonical = registeredModels.first(where: { $0.id == descriptor.voiceModel.id }) else {
-            throw ModelSelectionError.unknownVoiceModelID(descriptor.voiceModel.id)
-        }
-
-        activeDescriptor = ActiveModelDescriptor(
-            voiceModel: canonical,
-            aiModelID: descriptor.aiModelID
-        )
-    }
-
-    func setActiveVoiceModel(_ id: String) async throws {
-        guard let voiceModel = registeredModels.first(where: { $0.id == id }) else {
-            throw ModelSelectionError.unknownVoiceModelID(id)
-        }
-
-        activeDescriptor = ActiveModelDescriptor(
-            voiceModel: voiceModel,
-            aiModelID: activeDescriptor.aiModelID
-        )
-    }
-
-    func isDownloaded(_ descriptor: ModelDescriptor) -> Bool {
-        true
-    }
-
-    func download(_ descriptor: ModelDescriptor) async throws {}
-}
-
 private struct StubModelBoundTranscriberProvider: ModelBoundTranscriberProviding {
     let transcribersByID: [String: any Transcribing]
 
     func transcriber(for descriptor: ModelDescriptor) -> any Transcribing {
-        transcribersByID[descriptor.id] ?? transcribersByID[BuiltInModelCatalog.defaultActiveDescriptor.voiceModel.id]!
+        transcribersByID[descriptor.id] ?? transcribersByID[BuiltInModelCatalog.parakeetTDT06Bv2.id]!
     }
 }
 

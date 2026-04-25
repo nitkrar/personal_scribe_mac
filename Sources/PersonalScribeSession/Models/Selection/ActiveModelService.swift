@@ -2,9 +2,21 @@ import Combine
 import Foundation
 import PersonalScribeCore
 
+/// Per-`ModelKind` active-model state holder.
+///
+/// Phase-3 step #024.10 refactor: replaces the prior single-value
+/// `ActiveModelDescriptor` with a per-kind `[ModelKind: String]` map
+/// (model id values, looked up against `registeredModels`). The
+/// recording pipeline always reads `.asr`; future adapters (streaming
+/// ASR, diarization, TTS) read their own kind.
 @MainActor
-public final class DefaultModelService: ModelService {
-    public static let preferenceKey = "ActiveModelDescriptor"
+public final class ActiveModelService: ObservableObject {
+    /// UserDefaults key for the per-kind active-model id map. The pre-
+    /// refactor `ActiveModelDescriptor` key (`"ActiveModelDescriptor"`)
+    /// is intentionally orphaned — pre-dogfood, no migration. Fresh
+    /// installs (and existing dogfood machines) seed via the RAM-aware
+    /// default below.
+    public static let preferenceKey = "ActiveModelIDs"
 
     /// Headroom on top of `ModelDescriptor.approximateSizeBytes` to
     /// cover the staging directory + CoreML compilation. Keep in sync
@@ -31,10 +43,10 @@ public final class DefaultModelService: ModelService {
     }
 
     public let registeredModels: [ModelDescriptor]
-    @Published public private(set) var activeDescriptor: ActiveModelDescriptor
+    @Published public private(set) var activeModelIDs: [ModelKind: String]
     @Published public private(set) var downloadStates: [String: ModelDownloadState]
 
-    private let selectionPreference: Preference<ActiveModelDescriptor>
+    private let activeIDsPreference: Preference<[ModelKind: String]>
     private let isDownloadedHandler: @Sendable (ModelDescriptor) -> Bool
     private let downloadHandler: @Sendable (
         ModelDescriptor,
@@ -50,10 +62,6 @@ public final class DefaultModelService: ModelService {
     /// model is warmed at activate-time rather than on next app launch.
     /// Optional + nullable by default — tests that don't care about
     /// post-setActive side effects don't need to wire anything.
-    /// `setActive` runs on `MainActor` (this class is MainActor-isolated)
-    /// so the closure is invoked on MainActor without explicit isolation
-    /// in the type — adding `@MainActor` would conflict with the actor
-    /// of any nested `await` (e.g. SessionCoordinator).
     public var onSetActive: (@Sendable () async -> Void)?
 
     public convenience init(
@@ -74,18 +82,15 @@ public final class DefaultModelService: ModelService {
             lightweight: BuiltInModelCatalog.parakeetTDTCTC110M,
             baseline: BuiltInModelCatalog.parakeetTDT06Bv2
         )
-        let recommendedDefault = ActiveModelDescriptor(
-            voiceModel: recommendedVoiceModel,
-            aiModelID: BuiltInModelCatalog.defaultActiveDescriptor.aiModelID
-        )
-        let selectionPreference = Preference<ActiveModelDescriptor>(
+        let recommendedDefault: [ModelKind: String] = [.asr: recommendedVoiceModel.id]
+        let activeIDsPreference = Preference<[ModelKind: String]>(
             key: Self.preferenceKey,
             default: recommendedDefault,
             defaults: defaults
         )
 
         self.init(
-            selectionPreference: selectionPreference,
+            activeIDsPreference: activeIDsPreference,
             registeredModels: BuiltInModelCatalog.registeredModels,
             isDownloaded: { descriptor in
                 provider.isDownloaded(descriptor)
@@ -103,7 +108,7 @@ public final class DefaultModelService: ModelService {
     }
 
     init(
-        selectionPreference: Preference<ActiveModelDescriptor>,
+        activeIDsPreference: Preference<[ModelKind: String]>,
         registeredModels: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
         isDownloaded: @escaping @Sendable (ModelDescriptor) -> Bool,
         download: @escaping @Sendable (
@@ -115,7 +120,7 @@ public final class DefaultModelService: ModelService {
         diskSpaceProvider: @escaping @Sendable (URL) -> Int64? = { _ in nil },
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
     ) {
-        self.selectionPreference = selectionPreference
+        self.activeIDsPreference = activeIDsPreference
         self.registeredModels = registeredModels
         self.isDownloadedHandler = isDownloaded
         self.downloadHandler = download
@@ -123,9 +128,9 @@ public final class DefaultModelService: ModelService {
         self.modelsDirectoryProvider = modelsDirectoryProvider
         self.diskSpaceProvider = diskSpaceProvider
         self.logger = logger
-        self._activeDescriptor = Published(
-            initialValue: Self.resolveInitialDescriptor(
-                selectionPreference: selectionPreference,
+        self._activeModelIDs = Published(
+            initialValue: Self.resolveInitialActiveIDs(
+                activeIDsPreference: activeIDsPreference,
                 registeredModels: registeredModels,
                 logger: logger
             )
@@ -138,44 +143,31 @@ public final class DefaultModelService: ModelService {
         )
     }
 
-    public func descriptor(for mode: ModeDescriptor) -> ActiveModelDescriptor {
-        let voiceModel = registeredModels.first { $0.id == mode.voiceModelID }
-            ?? Self.defaultDescriptor(from: registeredModels).voiceModel
-        return ActiveModelDescriptor(
-            voiceModel: voiceModel,
-            aiModelID: mode.aiModelID
-        )
+    /// Look up the currently-active descriptor for `kind`. Returns nil
+    /// when nothing is active for that kind.
+    public func activeDescriptor(for kind: ModelKind) -> ModelDescriptor? {
+        guard let id = activeModelIDs[kind] else { return nil }
+        return registeredModels.first { $0.id == id }
     }
 
-    /// Persist `descriptor` as the active selection and assign it to
-    /// `activeDescriptor`. Never downloads. The UI gates `setActive`
-    /// behind "model is downloaded" (Modes tab hides non-downloaded
-    /// modes; AI Models tab only shows Activate on `.ready` rows), so
-    /// callers reaching this method can assume the underlying voice
-    /// model is already on disk. If it isn't, the next `prepare()` on
-    /// the transcriber will fetch via FluidAudio's own path — this
-    /// method has no opinion on that.
-    ///
-    /// After persist+assign, fires `onSetActive` so the composition
-    /// root can prewarm the new model's transcriber. Without the
-    /// prewarm, the new model's first `prepare()` runs on the next
-    /// hotkey press (or app launch) — which surfaces FluidAudio's
-    /// auxiliary downloads at a moment the user didn't initiate.
-    public func setActive(_ descriptor: ActiveModelDescriptor) async throws {
-        let canonical = try canonicalDescriptor(for: descriptor)
-        selectionPreference.persist(canonical)
-        activeDescriptor = canonical
-        await onSetActive?()
+    /// Activate `descriptor` for its `kind`. Evicts any previously
+    /// active descriptor of the same kind. Persists.
+    public func setActive(_ descriptor: ModelDescriptor) {
+        var updated = activeModelIDs
+        updated[descriptor.kind] = descriptor.id
+        activeModelIDs = updated
+        activeIDsPreference.persist(updated)
+        Task { @MainActor [weak self] in
+            await self?.onSetActive?()
+        }
     }
 
-    public func setActiveVoiceModel(_ id: String) async throws {
-        let voiceModel = try canonicalVoiceModel(for: id)
-        try await setActive(
-            ActiveModelDescriptor(
-                voiceModel: voiceModel,
-                aiModelID: activeDescriptor.aiModelID
-            )
-        )
+    /// Filter `registeredModels` for UI. Returns only descriptors whose
+    /// kind is enabled today. Optional `kind:` narrows further.
+    public func enabledModels(kind: ModelKind? = nil) -> [ModelDescriptor] {
+        registeredModels.filter { d in
+            d.kind.isEnabled && (kind == nil || d.kind == kind)
+        }
     }
 
     public func isDownloaded(_ descriptor: ModelDescriptor) -> Bool {
@@ -285,7 +277,7 @@ public final class DefaultModelService: ModelService {
     }
 }
 
-private extension DefaultModelService {
+private extension ActiveModelService {
     /// Stage B — disk-space precheck.
     ///
     /// Compares `descriptor.approximateSizeBytes + downloadDiskSpaceBufferBytes`
@@ -385,15 +377,6 @@ private extension DefaultModelService {
         return states
     }
 
-    func canonicalDescriptor(
-        for descriptor: ActiveModelDescriptor
-    ) throws -> ActiveModelDescriptor {
-        ActiveModelDescriptor(
-            voiceModel: try canonicalVoiceModel(for: descriptor.voiceModel.id),
-            aiModelID: descriptor.aiModelID
-        )
-    }
-
     func canonicalVoiceModel(for id: String) throws -> ModelDescriptor {
         guard let descriptor = registeredModels.first(where: { $0.id == id }) else {
             throw ModelSelectionError.unknownVoiceModelID(id)
@@ -401,49 +384,33 @@ private extension DefaultModelService {
         return descriptor
     }
 
-    static func resolveInitialDescriptor(
-        selectionPreference: Preference<ActiveModelDescriptor>,
+    /// Read the persisted active-id map and prune any entries that no
+    /// longer reference a registered model. If pruning happens, the
+    /// preference is rewritten so the next launch sees the cleaned map.
+    static func resolveInitialActiveIDs(
+        activeIDsPreference: Preference<[ModelKind: String]>,
         registeredModels: [ModelDescriptor],
         logger: PersonalScribeLogger
-    ) -> ActiveModelDescriptor {
-        let stored = selectionPreference.resolve()
+    ) -> [ModelKind: String] {
+        let stored = activeIDsPreference.resolve()
+        let registeredIDs = Set(registeredModels.map(\.id))
 
-        guard let canonicalVoiceModel = registeredModels.first(where: { $0.id == stored.voiceModel.id }) else {
-            logger.error(
-                "Stored model selection no longer registered: \(stored.voiceModel.id)",
-                error: ModelSelectionError.storedSelectionNoLongerRegistered(stored.voiceModel.id)
-            )
-            let fallback = defaultDescriptor(from: registeredModels)
-            selectionPreference.persist(fallback)
-            return fallback
+        var cleaned: [ModelKind: String] = [:]
+        for (kind, id) in stored {
+            if registeredIDs.contains(id) {
+                cleaned[kind] = id
+            } else {
+                logger.error(
+                    "Stored active-model id no longer registered for \(kind.rawValue): \(id)",
+                    error: ModelSelectionError.storedSelectionNoLongerRegistered(id)
+                )
+            }
         }
 
-        let canonical = ActiveModelDescriptor(
-            voiceModel: canonicalVoiceModel,
-            aiModelID: stored.aiModelID
-        )
-
-        if canonical != stored {
-            selectionPreference.persist(canonical)
+        if cleaned != stored {
+            activeIDsPreference.persist(cleaned)
         }
 
-        return canonical
-    }
-
-    static func defaultDescriptor(from registeredModels: [ModelDescriptor]) -> ActiveModelDescriptor {
-        if let descriptor = registeredModels.first(
-            where: { $0.id == BuiltInModelCatalog.defaultActiveDescriptor.voiceModel.id }
-        ) {
-            return ActiveModelDescriptor(
-                voiceModel: descriptor,
-                aiModelID: BuiltInModelCatalog.defaultActiveDescriptor.aiModelID
-            )
-        }
-
-        if let descriptor = registeredModels.first {
-            return ActiveModelDescriptor(voiceModel: descriptor)
-        }
-
-        return BuiltInModelCatalog.defaultActiveDescriptor
+        return cleaned
     }
 }

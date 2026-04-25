@@ -5,9 +5,9 @@ import XCTest
 @testable import PersonalScribeSession
 
 @MainActor
-final class DefaultModelServiceTests: XCTestCase {
+final class ActiveModelServiceTests: XCTestCase {
     private func isolatedDefaults() -> UserDefaults {
-        let suiteName = "PersonalScribeTests.DefaultModelService.\(UUID().uuidString)"
+        let suiteName = "PersonalScribeTests.ActiveModelService.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         addTeardownBlock {
@@ -16,75 +16,59 @@ final class DefaultModelServiceTests: XCTestCase {
         return defaults
     }
 
-    func testInvalidStoredSelectionFallsBackToDefaultDescriptor() {
+    /// Stored ids referencing models no longer in the registry must
+    /// be pruned at init — fresh launch sees only canonical entries.
+    func testInvalidStoredSelectionPrunesOnInit() {
         let defaults = isolatedDefaults()
-        let preference = Preference<ActiveModelDescriptor>(
-            key: DefaultModelService.preferenceKey,
-            default: BuiltInModelCatalog.defaultActiveDescriptor,
+        let preference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [:],
             defaults: defaults
         )
-        let retiredModel = ModelDescriptor(
-            id: "retired-model",
-            displayName: "Retired",
-            shortDescription: "Test fixture.",
-            architecture: "Test",
-            repository: "FluidInference/retired-model-coreml",
-            revision: "deadbeef",
-            requiredRelativePaths: ["parakeet_vocab.json"],
-            approximateSizeBytes: 1,
-            engine: .parakeetTDT
-        )
-        preference.persist(
-            ActiveModelDescriptor(
-                voiceModel: retiredModel,
-                aiModelID: "assistant"
-            )
-        )
+        preference.persist([.asr: "retired-model"])
 
-        let service = DefaultModelService(
-            selectionPreference: preference,
+        let service = ActiveModelService(
+            activeIDsPreference: preference,
             isDownloaded: { _ in true },
             download: { _, _ in }
         )
 
-        XCTAssertEqual(service.activeDescriptor, BuiltInModelCatalog.defaultActiveDescriptor)
-        XCTAssertEqual(preference.resolve(), BuiltInModelCatalog.defaultActiveDescriptor)
+        XCTAssertNil(service.activeDescriptor(for: .asr))
+        XCTAssertEqual(preference.resolve(), [:])
     }
 
-    /// `setActive` is a pure persist+assign after #024 follow-up — it
-    /// never calls the download handler. The UI gates `setActive`
-    /// behind "model is downloaded" (Modes tab hides non-downloaded
-    /// modes; AI Models tab only shows Activate on `.ready` rows).
+    /// `setActive` is a pure persist+assign — it never calls the
+    /// download handler. The UI gates `setActive` behind "model is
+    /// downloaded" (Modes tab hides non-downloaded modes; AI Models
+    /// tab only shows Activate on `.ready` rows).
     ///
     /// Invariants pinned:
-    /// 1. `isDownloaded: { _ in false }` — exercises the branch the
-    ///    pre-#024.3 chain short-circuited *out of*; the old
-    ///    "download if missing" path would have invoked the handler
-    ///    here. Flipping the stub makes the "no download handler"
-    ///    assertion load-bearing instead of vacuous.
-    /// 2. `$activeDescriptor` must publish the change — observers like
-    ///    `AppKitActiveModeProvider` subscribe to the publisher, not
-    ///    the current value.
-    func testSetActiveVoiceModelPersistsAndAssignsWithoutCallingDownloadHandler() async throws {
+    /// 1. `isDownloaded: { _ in false }` — flipping the stub makes the
+    ///    "no download handler" assertion load-bearing instead of
+    ///    vacuous.
+    /// 2. `$activeModelIDs` must publish the change — observers (e.g.
+    ///    `ModesTabViewModel`'s Combine sink) subscribe to the
+    ///    publisher, not the current value.
+    func testSetActivePersistsAndAssignsWithoutCallingDownloadHandler() async throws {
         let defaults = isolatedDefaults()
-        let preference = Preference<ActiveModelDescriptor>(
-            key: DefaultModelService.preferenceKey,
-            default: BuiltInModelCatalog.defaultActiveDescriptor,
+        let preference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [:],
             defaults: defaults
         )
         let target = BuiltInModelCatalog.parakeetTDTCTC110M
         let recorder = DownloadRecorder()
-        let service = DefaultModelService(
-            selectionPreference: preference,
+        let service = ActiveModelService(
+            activeIDsPreference: preference,
             isDownloaded: { _ in false },
             download: { descriptor, _ in
                 await recorder.record(descriptor)
             }
         )
 
-        let publications = Task { () -> ActiveModelDescriptor? in
+        let publications = Task { () -> [ModelKind: String]? in
             var seen = 0
-            for await value in service.$activeDescriptor.values {
+            for await value in service.$activeModelIDs.values {
                 seen += 1
                 if seen == 2 {
                     return value
@@ -94,36 +78,15 @@ final class DefaultModelServiceTests: XCTestCase {
         }
         await Task.yield()
 
-        try await service.setActiveVoiceModel(target.id)
+        service.setActive(target)
 
         let published = await publications.value
         let recordedDescriptors = await recorder.recordedDescriptors()
 
         XCTAssertTrue(recordedDescriptors.isEmpty, "setActive must not invoke the download handler")
-        XCTAssertEqual(published?.voiceModel.id, target.id, "setActive must publish through $activeDescriptor")
-        XCTAssertEqual(service.activeDescriptor.voiceModel.id, target.id)
-        XCTAssertEqual(preference.resolve().voiceModel.id, target.id)
-    }
-
-    func testSetActiveVoiceModelRejectsUnknownIdentifier() async {
-        let service = DefaultModelService(
-            selectionPreference: Preference<ActiveModelDescriptor>(
-                key: DefaultModelService.preferenceKey,
-                default: BuiltInModelCatalog.defaultActiveDescriptor,
-                defaults: isolatedDefaults()
-            ),
-            isDownloaded: { _ in true },
-            download: { _, _ in }
-        )
-
-        do {
-            try await service.setActiveVoiceModel("missing-model")
-            XCTFail("Expected setActiveVoiceModel to throw for an unknown model identifier")
-        } catch let error as ModelSelectionError {
-            XCTAssertEqual(error, .unknownVoiceModelID("missing-model"))
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
+        XCTAssertEqual(published?[.asr], target.id, "setActive must publish through $activeModelIDs")
+        XCTAssertEqual(service.activeDescriptor(for: .asr)?.id, target.id)
+        XCTAssertEqual(preference.resolve()[.asr], target.id)
     }
 
     func testIsDownloadedReturnsTrueForRegisteredDescriptorAndFalseForUnknownDescriptor() {
@@ -150,10 +113,10 @@ final class DefaultModelServiceTests: XCTestCase {
             approximateSizeBytes: 0,
             engine: .parakeetTDT
         )
-        let service = DefaultModelService(
-            selectionPreference: Preference<ActiveModelDescriptor>(
-                key: DefaultModelService.preferenceKey,
-                default: BuiltInModelCatalog.defaultActiveDescriptor,
+        let service = ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
                 defaults: isolatedDefaults()
             ),
             isDownloaded: { descriptor in
@@ -180,10 +143,10 @@ final class DefaultModelServiceTests: XCTestCase {
             engine: .parakeetTDT
         )
         let descriptorRecorder = LockedDescriptorRecorder()
-        let service = DefaultModelService(
-            selectionPreference: Preference<ActiveModelDescriptor>(
-                key: DefaultModelService.preferenceKey,
-                default: BuiltInModelCatalog.defaultActiveDescriptor,
+        let service = ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
                 defaults: isolatedDefaults()
             ),
             isDownloaded: { _ in false },
@@ -200,10 +163,10 @@ final class DefaultModelServiceTests: XCTestCase {
     }
 
     func testDownloadPropagatesHandlerError() async {
-        let service = DefaultModelService(
-            selectionPreference: Preference<ActiveModelDescriptor>(
-                key: DefaultModelService.preferenceKey,
-                default: BuiltInModelCatalog.defaultActiveDescriptor,
+        let service = ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
                 defaults: isolatedDefaults()
             ),
             isDownloaded: { _ in false },
@@ -231,13 +194,13 @@ final class DefaultModelServiceTests: XCTestCase {
     /// persisted.
     func testEightGiBMachineOnFreshInstallUsesLightweightDefault() {
         let defaults = isolatedDefaults()
-        let service = DefaultModelService(
+        let service = ActiveModelService(
             defaults: defaults,
             physicalMemoryBytes: 8 * 1024 * 1024 * 1024
         )
 
         XCTAssertEqual(
-            service.activeDescriptor.voiceModel.id,
+            service.activeDescriptor(for: .asr)?.id,
             BuiltInModelCatalog.parakeetTDTCTC110M.id
         )
     }
@@ -247,13 +210,13 @@ final class DefaultModelServiceTests: XCTestCase {
     /// machines" invariant.
     func testSixteenGiBMachineOnFreshInstallUsesBaselineDefault() {
         let defaults = isolatedDefaults()
-        let service = DefaultModelService(
+        let service = ActiveModelService(
             defaults: defaults,
             physicalMemoryBytes: 16 * 1024 * 1024 * 1024
         )
 
         XCTAssertEqual(
-            service.activeDescriptor.voiceModel.id,
+            service.activeDescriptor(for: .asr)?.id,
             BuiltInModelCatalog.parakeetTDT06Bv2.id
         )
     }
@@ -263,27 +226,21 @@ final class DefaultModelServiceTests: XCTestCase {
     /// Guards "user choice always wins after first launch."
     func testPersistedSelectionWinsOverRAMProbe() {
         let defaults = isolatedDefaults()
-        // Persist v2 as the user's selection.
-        let preference = Preference<ActiveModelDescriptor>(
-            key: DefaultModelService.preferenceKey,
-            default: BuiltInModelCatalog.defaultActiveDescriptor,
+        let preference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [:],
             defaults: defaults
         )
-        preference.persist(
-            ActiveModelDescriptor(
-                voiceModel: BuiltInModelCatalog.parakeetTDT06Bv2,
-                aiModelID: nil
-            )
-        )
+        preference.persist([.asr: BuiltInModelCatalog.parakeetTDT06Bv2.id])
 
         // 8 GB — RAM probe would otherwise route to CTC-110M.
-        let service = DefaultModelService(
+        let service = ActiveModelService(
             defaults: defaults,
             physicalMemoryBytes: 8 * 1024 * 1024 * 1024
         )
 
         XCTAssertEqual(
-            service.activeDescriptor.voiceModel.id,
+            service.activeDescriptor(for: .asr)?.id,
             BuiltInModelCatalog.parakeetTDT06Bv2.id
         )
     }
@@ -307,10 +264,10 @@ final class DefaultModelServiceTests: XCTestCase {
             approximateSizeBytes: 0,
             engine: .parakeetTDT
         )
-        let service = DefaultModelService(
-            selectionPreference: Preference<ActiveModelDescriptor>(
-                key: DefaultModelService.preferenceKey,
-                default: BuiltInModelCatalog.defaultActiveDescriptor,
+        let service = ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
                 defaults: isolatedDefaults()
             ),
             isDownloaded: { descriptor in descriptor.id == target.id },
@@ -339,49 +296,79 @@ final class DefaultModelServiceTests: XCTestCase {
     /// activate moment.
     func testSetActiveFiresOnSetActiveHandler() async throws {
         let target = BuiltInModelCatalog.parakeetTDTCTC110M
-        let service = DefaultModelService(
-            selectionPreference: Preference<ActiveModelDescriptor>(
-                key: DefaultModelService.preferenceKey,
-                default: BuiltInModelCatalog.defaultActiveDescriptor,
+        let service = ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
                 defaults: isolatedDefaults()
             ),
             isDownloaded: { _ in true },
             download: { _, _ in }
         )
         let counter = LockedSetActiveCounter()
+        let firedExpectation = expectation(description: "onSetActive fires")
         service.onSetActive = {
             counter.increment()
+            firedExpectation.fulfill()
         }
 
-        try await service.setActiveVoiceModel(target.id)
+        service.setActive(target)
 
+        await fulfillment(of: [firedExpectation], timeout: 1)
         XCTAssertEqual(counter.value, 1)
     }
 
-    func testDescriptorForModeFallsBackToDefaultVoiceModelAndPreservesAISelection() {
-        let service = DefaultModelService(
-            selectionPreference: Preference<ActiveModelDescriptor>(
-                key: DefaultModelService.preferenceKey,
-                default: BuiltInModelCatalog.defaultActiveDescriptor,
+    // MARK: - #024.10 — per-kind active state
+
+    /// Pin the per-kind invariant: setting two `.asr` descriptors back-
+    /// to-back evicts the first; setting a `.streamingASR` descriptor
+    /// leaves `.asr` untouched and adds a separate slot.
+    func testSetActiveStoresPerKindAndEvictsSameKind() {
+        let v2 = BuiltInModelCatalog.parakeetTDT06Bv2
+        let v3 = BuiltInModelCatalog.parakeetTDT06Bv3
+        let streamingDescriptor = ModelDescriptor(
+            id: "test-streaming-descriptor",
+            displayName: "Streaming Test",
+            kind: .streamingASR,
+            shortDescription: "Synthetic streaming descriptor for the per-kind eviction test.",
+            architecture: "Test",
+            repository: "FluidInference/test-streaming",
+            revision: "test",
+            requiredRelativePaths: [],
+            approximateSizeBytes: 0,
+            engine: .parakeetEOU
+        )
+        let service = ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
                 defaults: isolatedDefaults()
             ),
+            registeredModels: BuiltInModelCatalog.registeredModels + [streamingDescriptor],
             isDownloaded: { _ in true },
             download: { _, _ in }
         )
 
-        let mode = ModeDescriptor(
-            id: "notes",
-            name: "Notes",
-            voiceModelID: "missing-model",
-            aiModelID: "gpt-5"
-        )
-        let resolved = service.descriptor(for: mode)
+        service.setActive(v2)
+        XCTAssertEqual(service.activeDescriptor(for: .asr)?.id, v2.id)
 
+        service.setActive(v3)
         XCTAssertEqual(
-            resolved.voiceModel.id,
-            BuiltInModelCatalog.defaultActiveDescriptor.voiceModel.id
+            service.activeDescriptor(for: .asr)?.id,
+            v3.id,
+            "Setting another .asr descriptor must evict the prior .asr entry"
         )
-        XCTAssertEqual(resolved.aiModelID, "gpt-5")
+
+        service.setActive(streamingDescriptor)
+        XCTAssertEqual(
+            service.activeDescriptor(for: .asr)?.id,
+            v3.id,
+            "Setting a .streamingASR descriptor must NOT touch the .asr slot"
+        )
+        XCTAssertEqual(
+            service.activeDescriptor(for: .streamingASR)?.id,
+            streamingDescriptor.id
+        )
     }
 }
 
@@ -425,23 +412,6 @@ private final class LockedSetActiveCounter: @unchecked Sendable {
     }
 
     var value: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return storage
-    }
-}
-
-private final class LockedProgressRecorder: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: [ModelDownloadProgress] = []
-
-    func record(_ snapshot: ModelDownloadProgress) {
-        lock.lock()
-        defer { lock.unlock() }
-        storage.append(snapshot)
-    }
-
-    var snapshots: [ModelDownloadProgress] {
         lock.lock()
         defer { lock.unlock() }
         return storage

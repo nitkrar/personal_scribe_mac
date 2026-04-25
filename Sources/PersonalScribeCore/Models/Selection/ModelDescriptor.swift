@@ -32,6 +32,30 @@ public enum ModelKind: String, Sendable, Equatable, CaseIterable, Codable {
     case vad
     case diarization
     case tts
+
+    /// Whether this kind has a working transcriber adapter today. The
+    /// AI Models tab filters non-enabled kinds out so users can't
+    /// activate a row that would fail at download / runtime. Flip a
+    /// case to `true` once the corresponding adapter lands (#078).
+    public var isEnabled: Bool {
+        switch self {
+        case .asr: return true
+        case .streamingASR, .vad, .diarization, .tts: return false
+        }
+    }
+
+    /// Human-readable label used as the section header in the AI
+    /// Models tab. Plural form because each section shows the list of
+    /// models for that kind.
+    public var displayName: String {
+        switch self {
+        case .asr: return "Voice models"
+        case .streamingASR: return "Streaming ASR"
+        case .vad: return "Voice activity detection"
+        case .diarization: return "Diarization"
+        case .tts: return "Text-to-speech"
+        }
+    }
 }
 
 /// Published benchmark metrics for a registered model. Sourced from
