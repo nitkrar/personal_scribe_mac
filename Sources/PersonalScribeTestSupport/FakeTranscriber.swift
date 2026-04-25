@@ -1,7 +1,7 @@
 import Foundation
 import PersonalScribeCore
 
-public actor FakeTranscriber: Transcribing {
+public actor FakeTranscriber: Transcriber {
     private let result: TranscriptionResult
     private let prepareError: PersonalScribeError?
     private let transcribeError: PersonalScribeError?

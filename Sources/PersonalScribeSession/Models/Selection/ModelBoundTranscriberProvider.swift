@@ -28,7 +28,7 @@ public final class ModelBoundTranscriberProvider: ModelBoundTranscriberProviding
         self.transcriberFactory = transcriberFactory
     }
 
-    public func transcriber(for descriptor: ModelDescriptor) -> any Transcribing {
+    public func transcriber(for descriptor: ModelDescriptor) -> any Transcriber {
         resolvedTranscriber(for: descriptor)
     }
 

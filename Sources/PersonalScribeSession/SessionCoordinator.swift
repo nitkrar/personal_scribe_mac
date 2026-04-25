@@ -5,7 +5,7 @@ import PersonalScribeVAD
 
 public actor SessionCoordinator {
     private let capture: any AudioCapturer
-    private let fixedTranscriber: (any Transcribing)?
+    private let fixedTranscriber: (any Transcriber)?
     private let modelService: ActiveModelService?
     private let transcriberProvider: (any ModelBoundTranscriberProviding)?
     private let transcriptRepository: TranscriptRepository?
@@ -25,7 +25,7 @@ public actor SessionCoordinator {
 
     public init(
         capture: any AudioCapturer,
-        transcriber: any Transcribing,
+        transcriber: any Transcriber,
         logger: PersonalScribeLogger,
         transcriptRepository: TranscriptRepository? = nil,
         vadProvider: (any VadProviding)? = nil,
@@ -403,18 +403,18 @@ private struct CoordinatorPipelineCapture: AudioCapturer {
     }
 }
 
-private actor CoordinatorPipelineTranscriber: Transcribing {
-    private let fixedTranscriber: (any Transcribing)?
+private actor CoordinatorPipelineTranscriber: Transcriber {
+    private let fixedTranscriber: (any Transcriber)?
     private let modelService: ActiveModelService?
     private let transcriberProvider: (any ModelBoundTranscriberProviding)?
     private let logger: PersonalScribeLogger
     private let progressBroadcaster = SessionDownloadProgressBroadcaster()
 
-    private var recordingSessionTranscriber: (any Transcribing)?
+    private var recordingSessionTranscriber: (any Transcriber)?
     private var progressObservationTask: Task<Void, Never>?
 
     init(
-        fixedTranscriber: any Transcribing,
+        fixedTranscriber: any Transcriber,
         logger: PersonalScribeLogger
     ) {
         self.fixedTranscriber = fixedTranscriber
@@ -464,7 +464,7 @@ private actor CoordinatorPipelineTranscriber: Transcribing {
         return try await transcriber.transcribe(stream: stream)
     }
 
-    private func resolvedTranscriberForPreparation() async -> any Transcribing {
+    private func resolvedTranscriberForPreparation() async -> any Transcriber {
         if let recordingSessionTranscriber {
             observeDownloadProgress(for: recordingSessionTranscriber)
             return recordingSessionTranscriber
@@ -473,7 +473,7 @@ private actor CoordinatorPipelineTranscriber: Transcribing {
         return await resolvedActiveTranscriber()
     }
 
-    private func resolveRecordingSessionTranscriber() async -> any Transcribing {
+    private func resolveRecordingSessionTranscriber() async -> any Transcriber {
         if let fixedTranscriber {
             recordingSessionTranscriber = fixedTranscriber
             observeDownloadProgress(for: fixedTranscriber)
@@ -487,7 +487,7 @@ private actor CoordinatorPipelineTranscriber: Transcribing {
         return transcriber
     }
 
-    private func transcriberForStopPath() async -> any Transcribing {
+    private func transcriberForStopPath() async -> any Transcriber {
         if let recordingSessionTranscriber {
             return recordingSessionTranscriber
         }
@@ -495,7 +495,7 @@ private actor CoordinatorPipelineTranscriber: Transcribing {
         return await resolvedActiveTranscriber()
     }
 
-    private func resolvedActiveTranscriber() async -> any Transcribing {
+    private func resolvedActiveTranscriber() async -> any Transcriber {
         if let fixedTranscriber {
             observeDownloadProgress(for: fixedTranscriber)
             return fixedTranscriber
@@ -526,7 +526,7 @@ private actor CoordinatorPipelineTranscriber: Transcribing {
 
     private func resolvedModelBoundTranscriber(
         for descriptor: ModelDescriptor
-    ) -> any Transcribing {
+    ) -> any Transcriber {
         guard let transcriberProvider else {
             preconditionFailure("SessionCoordinator model-service path requires a transcriber provider")
         }
@@ -534,7 +534,7 @@ private actor CoordinatorPipelineTranscriber: Transcribing {
         return transcriberProvider.transcriber(for: descriptor)
     }
 
-    private func observeDownloadProgress(for transcriber: any Transcribing) {
+    private func observeDownloadProgress(for transcriber: any Transcriber) {
         progressObservationTask?.cancel()
         let broadcaster = progressBroadcaster
 

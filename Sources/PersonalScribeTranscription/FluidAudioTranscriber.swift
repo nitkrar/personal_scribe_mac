@@ -3,7 +3,7 @@ import FluidAudio
 import os.signpost
 import PersonalScribeCore
 
-public actor FluidAudioTranscriber: Transcribing {
+public actor FluidAudioTranscriber: Transcriber {
     private let inference: any FluidAudioInferencing
     private let logger: PersonalScribeLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
