@@ -15,7 +15,7 @@ import Foundation
 /// Persisted under `UserDefaults` key `"AutoPasteEnabled"`. Default
 /// `true` — preserves pre-#072 paste-at-cursor behavior for fresh
 /// installs. `object(forKey:)` probe distinguishes unset from explicit
-/// false, matching `BackgroundModePreference`'s pattern.
+/// false, matching `BackgroundLaunchPreference`'s pattern.
 public enum AutoPasteEnabledPreference {
     public static let userDefaultsKey = "AutoPasteEnabled"
 

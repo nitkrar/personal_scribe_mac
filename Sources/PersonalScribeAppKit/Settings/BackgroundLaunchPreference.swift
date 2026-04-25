@@ -29,7 +29,7 @@ import Foundation
 /// Persisted under `UserDefaults` key `"BackgroundMode"` (unprefixed —
 /// bundle-scoped already, per the project's `PreferenceMigrator`
 /// UserDefaults key policy).
-public enum BackgroundModePreference {
+public enum BackgroundLaunchPreference {
     /// UserDefaults key. Unprefixed by design — bundle-scoped already.
     public static let userDefaultsKey = "BackgroundMode"
 

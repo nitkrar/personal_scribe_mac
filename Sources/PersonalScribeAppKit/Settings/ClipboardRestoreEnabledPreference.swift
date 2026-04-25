@@ -22,7 +22,7 @@ import Foundation
 /// "preserve pre-recording clipboard" convenience opt in.
 ///
 /// `object(forKey:)` probe distinguishes unset from explicit false,
-/// matching `AutoPasteEnabledPreference` / `BackgroundModePreference`.
+/// matching `AutoPasteEnabledPreference` / `BackgroundLaunchPreference`.
 public enum ClipboardRestoreEnabledPreference {
     public static let userDefaultsKey = "ClipboardRestoreEnabled"
 

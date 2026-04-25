@@ -309,7 +309,7 @@ struct PersonalScribeAppMain: App {
         // mode, flip to `.accessory` here. Changes only take effect on
         // relaunch (the Settings toggle does not flip live — see
         // `GeneralTabViewModel.setBackgroundMode`).
-        if BackgroundModePreference.resolve(from: defaults) {
+        if BackgroundLaunchPreference.resolve(from: defaults) {
             NSApp.setActivationPolicy(.accessory)
         }
 

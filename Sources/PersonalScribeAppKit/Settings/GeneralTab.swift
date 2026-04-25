@@ -641,7 +641,7 @@ final class GeneralTabViewModel: ObservableObject {
         // (`SystemLaunchAtLoginService`) reads SMAppService.mainApp.status
         // — .enabled means the app is registered to launch at login.
         self.launchAtLogin = launchAtLoginService.isEnabled
-        self.backgroundMode = BackgroundModePreference.resolve(from: defaults)
+        self.backgroundMode = BackgroundLaunchPreference.resolve(from: defaults)
         self.autoPasteEnabled = AutoPasteEnabledPreference.resolve(from: defaults)
         self.clipboardRestoreEnabled = ClipboardRestoreEnabledPreference.resolve(from: defaults)
         self.muteOutputWhileRecording = MuteOutputWhileRecordingPreference.resolve(from: defaults)
@@ -796,7 +796,7 @@ final class GeneralTabViewModel: ObservableObject {
     /// in via this setter.
     func setBackgroundMode(_ enabled: Bool) {
         backgroundMode = enabled
-        BackgroundModePreference.persist(enabled, to: defaults)
+        BackgroundLaunchPreference.persist(enabled, to: defaults)
         backgroundModeRestartRequired = true
     }
 
