@@ -47,7 +47,7 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
             )
         }
         let coordinator = SessionCoordinator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             modelService: modelService,
             transcriberProvider: StubModelBoundTranscriberProvider(
                 transcribersByID: [

@@ -13,7 +13,7 @@ enum DevelopmentComposition {
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
     ) -> SessionCoordinator {
         SessionCoordinator(
-            capture: FakeAudioCapturing(
+            capture: FakeAudioCapturer(
                 buffers: buffers,
                 error: captureError
             ),

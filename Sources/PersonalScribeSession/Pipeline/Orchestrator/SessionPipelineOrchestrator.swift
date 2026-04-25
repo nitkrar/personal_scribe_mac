@@ -3,7 +3,7 @@ import PersonalScribeCore
 import PersonalScribeVAD
 
 public actor SessionPipelineOrchestrator: SessionPipelining {
-    private let capture: any AudioCapturing
+    private let capture: any AudioCapturer
     private let transcriber: any Transcribing
     private let logger: PersonalScribeLogger
     private let postProcessingPipeline: any PostProcessingPipeline
@@ -68,7 +68,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private var nextRevision = 0
 
     public init(
-        capture: any AudioCapturing,
+        capture: any AudioCapturer,
         transcriber: any Transcribing,
         transcriptRepository: TranscriptRepository? = nil,
         logger: PersonalScribeLogger,
@@ -102,7 +102,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     init(
-        capture: any AudioCapturing,
+        capture: any AudioCapturer,
         transcriber: any Transcribing,
         logger: PersonalScribeLogger,
         postProcessingPipeline: any PostProcessingPipeline,

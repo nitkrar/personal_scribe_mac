@@ -18,7 +18,7 @@ final class SessionCoordinatorAudioLevelTests: XCTestCase {
         // cached initial level (0.0) on subscription, which we discard
         // below. Using distinct non-zero values keeps the assertion crisp.
         let canned: [Float] = [0.15, 0.25, 0.5, 0.75, 0.95]
-        let capture = FakeAudioCapturing(
+        let capture = FakeAudioCapturer(
             buffers: [buffer],
             levels: canned
         )
@@ -65,7 +65,7 @@ final class SessionCoordinatorAudioLevelTests: XCTestCase {
             timestamp: ContinuousClock().now
         )
         let canned: [Float] = [0.1, 0.2, 0.3]
-        let capture = FakeAudioCapturing(
+        let capture = FakeAudioCapturer(
             buffers: [buffer],
             levels: canned
         )

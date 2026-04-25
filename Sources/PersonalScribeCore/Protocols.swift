@@ -2,7 +2,7 @@ import Foundation
 
 /// The dynamic runtime error surfaced by the returned stream is always `PersonalScribeError`,
 /// even though the generic error type is `Error`.
-public protocol AudioCapturing: Sendable {
+public protocol AudioCapturer: Sendable {
     func start() async throws -> AsyncThrowingStream<PCMBuffer, Error>
     func stop() async
 
@@ -18,7 +18,7 @@ public protocol AudioCapturing: Sendable {
     func audioLevelStream() async -> AsyncStream<Float>
 }
 
-extension AudioCapturing {
+extension AudioCapturer {
     /// Default no-op implementation so existing conformers (test doubles,
     /// future fakes) do not have to expose a meter.
     public func audioLevelStream() async -> AsyncStream<Float> {

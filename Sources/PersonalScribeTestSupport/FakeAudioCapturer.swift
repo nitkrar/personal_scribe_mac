@@ -1,7 +1,7 @@
 import Foundation
 import PersonalScribeCore
 
-public actor FakeAudioCapturing: AudioCapturing {
+public actor FakeAudioCapturer: AudioCapturer {
     private let buffers: [PCMBuffer]
     private var programmedError: PersonalScribeError?
     private let delayPerBuffer: Duration?

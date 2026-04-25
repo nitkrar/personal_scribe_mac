@@ -341,7 +341,7 @@ final class MenuBarSceneModelTests: XCTestCase {
     func testStartObservingTracksPreparationProgressLifecycle() async throws {
         let transcriber = ProgressReportingTranscriber(result: makeResult())
         let coordinator = SessionCoordinator(
-            capture: FakeAudioCapturing(),
+            capture: FakeAudioCapturer(),
             transcriber: transcriber,
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
         )
@@ -421,7 +421,7 @@ final class MenuBarSceneModelTests: XCTestCase {
 
     private func makeCoordinator() throws -> SessionCoordinator {
         SessionCoordinator(
-            capture: FakeAudioCapturing(buffers: [try makeBuffer()]),
+            capture: FakeAudioCapturer(buffers: [try makeBuffer()]),
             transcriber: FakeTranscriber(result: makeResult()),
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
         )

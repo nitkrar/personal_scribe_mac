@@ -5,7 +5,7 @@ import PersonalScribeTestSupport
 
 final class SessionCoordinatorErrorTests: XCTestCase {
     func testCaptureFailureMapsToErrorAndNextToggleRetries() async throws {
-        let capture = FakeAudioCapturing(error: .audioEngineFailure)
+        let capture = FakeAudioCapturer(error: .audioEngineFailure)
         let transcriber = FakeTranscriber(
             result: .init(
                 text: "retry",
@@ -59,7 +59,7 @@ final class SessionCoordinatorErrorTests: XCTestCase {
             channelCount: 1,
             timestamp: ContinuousClock().now
         )
-        let capture = FakeAudioCapturing(buffers: [shortBuffer])
+        let capture = FakeAudioCapturer(buffers: [shortBuffer])
         let transcriber = FakeTranscriber(
             result: .init(
                 text: "should not be called",
@@ -111,7 +111,7 @@ final class SessionCoordinatorErrorTests: XCTestCase {
             samples: Array(repeating: 0, count: 16_000),
             timestamp: ContinuousClock().now
         )
-        let capture = FakeAudioCapturing(buffers: [buffer])
+        let capture = FakeAudioCapturer(buffers: [buffer])
         let transcriber = FakeTranscriber(
             result: .init(
                 text: "hello",
@@ -212,7 +212,7 @@ final class SessionCoordinatorErrorTests: XCTestCase {
 
     private struct TimeoutError: Error {}
 
-    private actor FailingOnStopCapture: AudioCapturing {
+    private actor FailingOnStopCapture: AudioCapturer {
         private let buffer: PCMBuffer
         private let error: PersonalScribeError
         private var continuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?

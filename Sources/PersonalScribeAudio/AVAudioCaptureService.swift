@@ -2,10 +2,10 @@ import AVFoundation
 import Foundation
 import PersonalScribeCore
 
-/// Production `AudioCapturing` conformer. Owns one AVAudioEngine at a time,
+/// Production `AudioCapturer` conformer. Owns one AVAudioEngine at a time,
 /// enforces single-active-capture, and yields 16 kHz mono Float32 `PCMBuffer`
 /// values until `stop()` (or a runtime error) terminates the stream exactly once.
-public actor AVAudioCaptureService: AudioCapturing {
+public actor AVAudioCaptureService: AudioCapturer {
     public init(
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.audio),
         inputDeviceProvider: any AudioInputDeviceProviding = NoOpAudioInputDeviceProvider(),

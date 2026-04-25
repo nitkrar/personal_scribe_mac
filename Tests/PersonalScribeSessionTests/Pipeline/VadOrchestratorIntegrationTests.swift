@@ -8,7 +8,7 @@ import PersonalScribeTestSupport
 final class VadOrchestratorIntegrationTests: XCTestCase {
 
     func testRecordingModeAsksVadProviderAndFiresHandlerOnSpeechEnded() async throws {
-        let capture = FakeAudioCapturing(
+        let capture = FakeAudioCapturer(
             buffers: try Self.makeBuffers(count: 3),
             delayPerBuffer: .milliseconds(20)
         )
@@ -39,7 +39,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
     }
 
     func testHoldRecordingSkipsVadEntirely() async throws {
-        let capture = FakeAudioCapturing(
+        let capture = FakeAudioCapturer(
             buffers: try Self.makeBuffers(count: 3),
             delayPerBuffer: .milliseconds(10)
         )
@@ -77,7 +77,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         // consumeCaptureStream is intact, the session transitions out of
         // `.recording` within the deadline. If it regresses to inline-await,
         // the session is stuck and the deadline fires.
-        let capture = FakeAudioCapturing(
+        let capture = FakeAudioCapturer(
             buffers: try Self.makeBuffers(count: 3),
             delayPerBuffer: .milliseconds(20)
         )
@@ -105,7 +105,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         // Stage B warn-enabled path: speechEnded → grace window (shortened to
         // 50ms in tests) → handler fires once. Asserts the full grace-window
         // lifecycle end-to-end. Production default is 3.0s.
-        let capture = FakeAudioCapturing(
+        let capture = FakeAudioCapturer(
             buffers: try Self.makeBuffers(count: 3),
             delayPerBuffer: .milliseconds(10)
         )
@@ -149,7 +149,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         // Stage B: during a pending grace window, a `.speechResumed` event
         // from the VAD session must cancel the timer. Handler never fires;
         // session stays recording.
-        let capture = FakeAudioCapturing(
+        let capture = FakeAudioCapturer(
             buffers: try Self.makeBuffers(count: 3),
             delayPerBuffer: .milliseconds(10)
         )
@@ -202,7 +202,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         // ingests #4, #5 return nil (overrun). Grace is long enough
         // (1s) that the second pending stays open by the time we
         // sample the snapshot.
-        let capture = FakeAudioCapturing(
+        let capture = FakeAudioCapturer(
             buffers: try Self.makeBuffers(count: 5),
             delayPerBuffer: .milliseconds(10)
         )
@@ -252,7 +252,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         // Codex review #7: grace-cleared + `.error` must land in the same
         // snapshot mutation. Observers must never see an intermediate
         // `.recording + !vadAutoStopGracePending` snapshot.
-        let capture = FakeAudioCapturing(
+        let capture = FakeAudioCapturer(
             buffers: try Self.makeBuffers(count: 1),
             error: .resampleFailure,
             delayPerBuffer: .milliseconds(10)
@@ -310,7 +310,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
     }
 
     func testDisabledPreferenceSkipsVadEntirely() async throws {
-        let capture = FakeAudioCapturing(
+        let capture = FakeAudioCapturer(
             buffers: try Self.makeBuffers(count: 3),
             delayPerBuffer: .milliseconds(10)
         )
@@ -339,7 +339,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeOrchestrator(
-        capture: any AudioCapturing,
+        capture: any AudioCapturer,
         vadProvider: any VadProviding,
         vadPreferences: any VadPreferencesReading,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds

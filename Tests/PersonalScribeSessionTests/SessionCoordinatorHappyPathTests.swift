@@ -19,7 +19,7 @@ final class SessionCoordinatorHappyPathTests: XCTestCase {
             samples: Array(repeating: 0, count: 16_000),
             timestamp: ContinuousClock().now
         )
-        let capture = FakeAudioCapturing(buffers: [buffer])
+        let capture = FakeAudioCapturer(buffers: [buffer])
         let transcriber = FakeTranscriber(
             result: .init(
                 text: "hello",

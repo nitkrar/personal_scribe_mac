@@ -25,7 +25,7 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
             timestamp: ContinuousClock().now
         )
         let coordinator = SessionCoordinator(
-            capture: FakeAudioCapturing(buffers: [shortBuffer]),
+            capture: FakeAudioCapturer(buffers: [shortBuffer]),
             transcriber: FakeTranscriber(
                 result: .init(
                     text: "hello",
@@ -307,7 +307,7 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
         )
 
         return SessionCoordinator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: FakeTranscriber(
                 result: .init(
                     text: "hello",

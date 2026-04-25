@@ -4,7 +4,7 @@ import PersonalScribeCore
 import PersonalScribeVAD
 
 public actor SessionCoordinator {
-    private let capture: any AudioCapturing
+    private let capture: any AudioCapturer
     private let fixedTranscriber: (any Transcribing)?
     private let modelService: ActiveModelService?
     private let transcriberProvider: (any ModelBoundTranscriberProviding)?
@@ -24,7 +24,7 @@ public actor SessionCoordinator {
     private var audioLevelTask: Task<Void, Never>?
 
     public init(
-        capture: any AudioCapturing,
+        capture: any AudioCapturer,
         transcriber: any Transcribing,
         logger: PersonalScribeLogger,
         transcriptRepository: TranscriptRepository? = nil,
@@ -56,7 +56,7 @@ public actor SessionCoordinator {
     }
 
     public init(
-        capture: any AudioCapturing,
+        capture: any AudioCapturer,
         modelService: ActiveModelService,
         transcriberProvider: any ModelBoundTranscriberProviding,
         logger: PersonalScribeLogger,
@@ -310,7 +310,7 @@ public actor SessionCoordinator {
     }
 
     private static func makePipeline(
-        capture: any AudioCapturing,
+        capture: any AudioCapturer,
         pipelineTranscriber: CoordinatorPipelineTranscriber,
         transcriptRepository: TranscriptRepository?,
         logger: PersonalScribeLogger,
@@ -376,12 +376,12 @@ public actor SessionCoordinator {
     }
 }
 
-private struct CoordinatorPipelineCapture: AudioCapturing {
-    private let base: any AudioCapturing
+private struct CoordinatorPipelineCapture: AudioCapturer {
+    private let base: any AudioCapturer
     private let pipelineTranscriber: CoordinatorPipelineTranscriber
 
     init(
-        base: any AudioCapturing,
+        base: any AudioCapturer,
         pipelineTranscriber: CoordinatorPipelineTranscriber
     ) {
         self.base = base

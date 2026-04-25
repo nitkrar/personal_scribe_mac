@@ -22,7 +22,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         let sink = TestPipelineOutputSink()
         let context = makeContext(streamingOutputEnabled: true)
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: FakeTranscriber(
                 result: TranscriptionResult(
                     text: "um hello uh world",
@@ -110,7 +110,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
     func testCaptureFailurePublishesTypedStageFailureAndNextToggleRetries() async throws {
         let sink = TestPipelineOutputSink()
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(error: .audioEngineFailure),
+            capture: FakeAudioCapturer(error: .audioEngineFailure),
             transcriber: FakeTranscriber(
                 result: TranscriptionResult(
                     text: "retry",
@@ -163,7 +163,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             )
         )
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [shortBuffer]),
+            capture: FakeAudioCapturer(buffers: [shortBuffer]),
             transcriber: transcriber
         )
 
@@ -204,7 +204,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let sink = TestPipelineOutputSink()
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: FakeTranscriber(
                 result: TranscriptionResult(
                     text: "hello",
@@ -254,7 +254,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             try makeBuffer(sampleCount: 1_600, sampleValue: 0.3),
         ]
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(
+            capture: FakeAudioCapturer(
                 buffers: buffers,
                 delayPerBuffer: .milliseconds(100)
             )
@@ -308,7 +308,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             )
         )
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: transcriber
         )
 
@@ -343,7 +343,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             )
         )
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: transcriber
         )
 
@@ -376,7 +376,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let canned: [Float] = [0.15, 0.25, 0.5, 0.75, 0.95]
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer], levels: canned),
+            capture: FakeAudioCapturer(buffers: [buffer], levels: canned),
             transcriber: FakeTranscriber(
                 result: TranscriptionResult(
                     text: "",
@@ -410,7 +410,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let canned: [Float] = [0.1, 0.2, 0.3]
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer], levels: canned),
+            capture: FakeAudioCapturer(buffers: [buffer], levels: canned),
             transcriber: FakeTranscriber(
                 result: TranscriptionResult(
                     text: "",
@@ -488,7 +488,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         let repository = try makeRepository(in: temporaryDirectory)
         let buffer = try makeBuffer(sampleCount: 16_000)
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: FakeTranscriber(
                 result: TranscriptionResult(
                     text: "hello",
@@ -516,7 +516,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
     func testPostProcessingFailurePublishesTypedStageFailure() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: FakeTranscriber(
                 result: TranscriptionResult(
                     text: "hello",
@@ -545,7 +545,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let sink = TestPipelineOutputSink()
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: FakeTranscriber(
                 result: TranscriptionResult(
                     text: "hello",
@@ -579,7 +579,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let sink = TestPipelineOutputSink(failurePoint: .final)
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: FakeTranscriber(
                 result: TranscriptionResult(
                     text: "hello",
@@ -613,7 +613,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
     func testStartHoldCaptureFromIdlePublishesHoldRecordingThenTranscribesOnStop() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: FakeTranscriber(
                 result: TranscriptionResult(
                     text: "hello from hold",
@@ -704,7 +704,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
         let sink = TestPipelineOutputSink()
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: transcriber,
             outputSink: sink
         )
@@ -753,7 +753,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             tracker: tracker
         )
         let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturing(buffers: [buffer]),
+            capture: FakeAudioCapturer(buffers: [buffer]),
             transcriber: transcriber
         )
 
@@ -792,7 +792,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
     /// it.
     func testCancelCapturePathNeverPublishesTranscribing() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000)
-        let orchestrator = makeOrchestrator(capture: FakeAudioCapturing(buffers: [buffer]))
+        let orchestrator = makeOrchestrator(capture: FakeAudioCapturer(buffers: [buffer]))
 
         let stream = await orchestrator.snapshotStream()
         let observed = Task { () -> [SessionState] in
@@ -828,7 +828,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
     }
 
     private func makeOrchestrator(
-        capture: any AudioCapturing = FakeAudioCapturing(),
+        capture: any AudioCapturer = FakeAudioCapturer(),
         transcriber: any Transcribing = FakeTranscriber(
             result: TranscriptionResult(
                 text: "",
@@ -1218,7 +1218,7 @@ private actor TranscriberTracker {
 /// Used by the `#071` race-fix test: `start()` blocks until `release()`
 /// is called, letting the test inspect orchestrator state while capture
 /// is still being awaited.
-private actor HangingStartCapture: AudioCapturing {
+private actor HangingStartCapture: AudioCapturer {
     private var waiters: [CheckedContinuation<AsyncThrowingStream<PCMBuffer, Error>, Error>] = []
     private var released = false
 
