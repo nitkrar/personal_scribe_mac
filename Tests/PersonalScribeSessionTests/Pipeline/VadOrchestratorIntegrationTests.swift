@@ -187,6 +187,67 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         )
     }
 
+    /// Bug fix regression guard: after a `.speechResumed` cancels a
+    /// pending grace, VAD must re-arm so a subsequent `.speechEnded`
+    /// triggers a new grace cycle. Pre-fix, `resolveGracePending(.cancelled)`
+    /// transitioned phase to `.resolved` — which the
+    /// `consumeCaptureStream` gate (`if case .resolved = gracePhase
+    /// { continue }`) interpreted as "session done, skip VAD forever".
+    /// The result was: silence → VAD pending → user speaks → cancelled
+    /// → user goes silent again → VAD never fires. Post-fix, the
+    /// cancelled branch transitions to `.idle` so the next silence
+    /// starts a fresh grace.
+    func testSpeechResumedReArmsVadForSubsequentSpeechEnded() async throws {
+        // 5 buffers at 10ms each → ingests #1, #2, #3 fire the script;
+        // ingests #4, #5 return nil (overrun). Grace is long enough
+        // (1s) that the second pending stays open by the time we
+        // sample the snapshot.
+        let capture = FakeAudioCapturing(
+            buffers: try Self.makeBuffers(count: 5),
+            delayPerBuffer: .milliseconds(10)
+        )
+        let provider = ScriptedVadProvider(
+            events: [.speechEnded, .speechResumed, .speechEnded]
+        )
+        let prefs = ScriptedVadPreferences(
+            value: VadPreferences(
+                autoStopEnabled: true,
+                silenceThresholdSeconds: 2.5,
+                showStoppingWarning: true
+            )
+        )
+        let handlerCalls = HandlerCallCounter()
+        let orchestrator = makeOrchestrator(
+            capture: capture,
+            vadProvider: provider,
+            vadPreferences: prefs,
+            graceDurationSeconds: 1.0
+        )
+        await orchestrator.setAutoStopHandler { await handlerCalls.increment() }
+
+        await orchestrator.toggleCapture()
+        // Wait for all 5 buffers to flow + the third speechEnded to
+        // start a new grace window. ~80ms is enough at 10ms/buffer
+        // plus some scheduling slack.
+        try await waitUntil(.milliseconds(500)) {
+            let snapshot = await orchestrator.snapshot()
+            return snapshot.vadAutoStopGracePending
+                && snapshot.vadAutoStopFireToken == nil
+        }
+
+        let snapshot = await orchestrator.snapshot()
+        // Pre-fix: the third `.speechEnded` was skipped at the
+        // `gracePhase == .resolved` gate, so pending stays false.
+        // Post-fix: the cancelled branch transitioned to `.idle`,
+        // so the third event re-armed grace.
+        XCTAssertTrue(
+            snapshot.vadAutoStopGracePending,
+            "VAD must re-arm after speechResumed: expected a new grace window for the second silence"
+        )
+        let callCount = await handlerCalls.count
+        XCTAssertEqual(callCount, 0, "neither grace window completes its timer in this short test")
+    }
+
     func testErrorDuringGraceClearsGraceInSamePublish() async throws {
         // Codex review #7: grace-cleared + `.error` must land in the same
         // snapshot mutation. Observers must never see an intermediate

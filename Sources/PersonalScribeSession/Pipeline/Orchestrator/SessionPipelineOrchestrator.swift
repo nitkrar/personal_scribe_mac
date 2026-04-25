@@ -714,9 +714,18 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         Task { await handler() }
     }
 
-    /// Single transition gate for `pending → resolved`. Actor-isolated so
+    /// Single transition gate for `pending → next phase`. Actor-isolated so
     /// timer-elapsed and cleanup paths can race safely — the token check
     /// at the top drops stale invocations.
+    ///
+    /// Phase transitions:
+    /// * `.timerElapsed` → `.resolved` (auto-stop fired; recording is
+    ///   ending so VAD ingestion stops via the `if case .resolved` gate
+    ///   in `consumeCaptureStream`).
+    /// * `.cancelled` → `.idle` (user resumed speaking; the recording
+    ///   continues, so VAD must re-arm to detect the next silence
+    ///   window. Bug fix: previously set `.resolved` here too, which
+    ///   permanently disabled VAD for the rest of the session).
     private func resolveGracePending(token: UUID, trigger: GraceResolveTrigger) async {
         guard case .pending(let currentToken, let handler, let timerTask, _) = gracePhase,
               currentToken == token
@@ -724,9 +733,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             return
         }
         timerTask.cancel()
-        gracePhase = .resolved
         switch trigger {
         case .timerElapsed:
+            gracePhase = .resolved
             let fireToken = UUID()
             publish { snapshot in
                 snapshot.vadAutoStopGracePending = false
@@ -735,6 +744,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             }
             Task { await handler() }
         case .cancelled:
+            gracePhase = .idle
             publish { snapshot in
                 snapshot.vadAutoStopGracePending = false
                 snapshot.vadAutoStopGraceDeadline = nil
