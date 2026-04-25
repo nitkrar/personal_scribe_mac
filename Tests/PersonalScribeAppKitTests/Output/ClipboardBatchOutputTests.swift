@@ -318,7 +318,13 @@ final class ClipboardBatchOutputTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "transcript")
 
         // Simulate something else writing to the clipboard before the timer
-        // fires — e.g., a second recording landing Transcript B.
+        // fires — e.g., a second recording landing Transcript B. The
+        // `clearContents()` call is required to bump `NSPasteboard.changeCount`
+        // — bare `setString` after a previous `setString` of the same type
+        // does not advance the count, so the changeCount-based token guard
+        // would not detect the foreign write. Real foreign apps go through
+        // `declareTypes`/`clearContents` before writing.
+        pasteboard.clearContents()
         _ = pasteboard.setString("something else landed", forType: .string)
 
         // Timer fires.
