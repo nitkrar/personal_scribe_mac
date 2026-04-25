@@ -1,4 +1,5 @@
 import PersonalScribeCore
+import PersonalScribeSession
 import SwiftUI
 
 @MainActor
@@ -42,6 +43,18 @@ public struct SettingsTab: View {
                         )
                     )
                 }
+            }
+        }
+        // Settings uses a segmented `Picker` + `switch`, not SwiftUI's
+        // `TabView`. The conditional render means `.onAppear` on
+        // AIModelsTab does NOT reliably fire on every tab switch —
+        // SwiftUI may keep the inactive view's state and skip the
+        // appear hook. We observe the navigation state directly here
+        // so the AI Models row reflects on-disk truth (e.g. after a
+        // CLI `rm -rf .../models/<id>`) on every re-entry.
+        .onChange(of: selectedSubTab) { _, new in
+            if new == .aiModels {
+                AppComposition.modelService.refresh()
             }
         }
     }

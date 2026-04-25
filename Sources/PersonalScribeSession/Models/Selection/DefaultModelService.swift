@@ -45,6 +45,17 @@ public final class DefaultModelService: ModelService {
     private let diskSpaceProvider: @Sendable (URL) -> Int64?
     private let logger: PersonalScribeLogger
 
+    /// Hook fired after `setActive` succeeds. The composition root wires
+    /// it to `SessionCoordinator.prepareTranscriber()` so the new active
+    /// model is warmed at activate-time rather than on next app launch.
+    /// Optional + nullable by default — tests that don't care about
+    /// post-setActive side effects don't need to wire anything.
+    /// `setActive` runs on `MainActor` (this class is MainActor-isolated)
+    /// so the closure is invoked on MainActor without explicit isolation
+    /// in the type — adding `@MainActor` would conflict with the actor
+    /// of any nested `await` (e.g. SessionCoordinator).
+    public var onSetActive: (@Sendable () async -> Void)?
+
     public convenience init(
         storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
         defaults: UserDefaults = .standard,
@@ -144,10 +155,17 @@ public final class DefaultModelService: ModelService {
     /// model is already on disk. If it isn't, the next `prepare()` on
     /// the transcriber will fetch via FluidAudio's own path — this
     /// method has no opinion on that.
+    ///
+    /// After persist+assign, fires `onSetActive` so the composition
+    /// root can prewarm the new model's transcriber. Without the
+    /// prewarm, the new model's first `prepare()` runs on the next
+    /// hotkey press (or app launch) — which surfaces FluidAudio's
+    /// auxiliary downloads at a moment the user didn't initiate.
     public func setActive(_ descriptor: ActiveModelDescriptor) async throws {
         let canonical = try canonicalDescriptor(for: descriptor)
         selectionPreference.persist(canonical)
         activeDescriptor = canonical
+        await onSetActive?()
     }
 
     public func setActiveVoiceModel(_ id: String) async throws {

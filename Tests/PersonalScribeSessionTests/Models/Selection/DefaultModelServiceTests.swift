@@ -331,6 +331,33 @@ final class DefaultModelServiceTests: XCTestCase {
         XCTAssertEqual(service.downloadStates[target.id]?.fractionCompleted, 0)
     }
 
+    /// `setActive` must fire `onSetActive` after persist+assign so the
+    /// composition root can prewarm the new model's transcriber.
+    /// Without this, FluidAudio's auxiliary downloads (e.g. the 110m
+    /// hybrid's CTC head fetch) land on the next prepare — usually
+    /// the next app launch — instead of at the user-initiated
+    /// activate moment.
+    func testSetActiveFiresOnSetActiveHandler() async throws {
+        let target = BuiltInModelCatalog.parakeetTDTCTC110M
+        let service = DefaultModelService(
+            selectionPreference: Preference<ActiveModelDescriptor>(
+                key: DefaultModelService.preferenceKey,
+                default: BuiltInModelCatalog.defaultActiveDescriptor,
+                defaults: isolatedDefaults()
+            ),
+            isDownloaded: { _ in true },
+            download: { _, _ in }
+        )
+        let counter = LockedSetActiveCounter()
+        service.onSetActive = {
+            counter.increment()
+        }
+
+        try await service.setActiveVoiceModel(target.id)
+
+        XCTAssertEqual(counter.value, 1)
+    }
+
     func testDescriptorForModeFallsBackToDefaultVoiceModelAndPreservesAISelection() {
         let service = DefaultModelService(
             selectionPreference: Preference<ActiveModelDescriptor>(
@@ -381,6 +408,23 @@ private final class LockedDescriptorRecorder: @unchecked Sendable {
     }
 
     var descriptors: [ModelDescriptor] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}
+
+private final class LockedSetActiveCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = 0
+
+    func increment() {
+        lock.lock()
+        defer { lock.unlock() }
+        storage += 1
+    }
+
+    var value: Int {
         lock.lock()
         defer { lock.unlock() }
         return storage

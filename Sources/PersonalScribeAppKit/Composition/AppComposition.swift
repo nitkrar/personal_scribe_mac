@@ -80,7 +80,7 @@ public enum AppComposition {
         )
         let transcriberProvider = ModelBoundTranscriberProvider()
 
-        return SessionCoordinator(
+        let coordinator = SessionCoordinator(
             capture: capture,
             modelService: modelService,
             transcriberProvider: transcriberProvider,
@@ -89,7 +89,34 @@ public enum AppComposition {
             vadProvider: vadProvider,
             vadPreferences: vadPreferences
         )
+
+        wirePostSetActivePrewarm(modelService: modelService, coordinator: coordinator)
+
+        return coordinator
     }()
+
+    /// Wire `modelService.onSetActive` to `coordinator.prepareTranscriber()`
+    /// so an explicit Activate flips the transcriber prep at activate-time.
+    /// Pulled out of the `sessionCoordinator` lazy initializer to keep the
+    /// closure-isolation chain simple under Swift 6 strict concurrency
+    /// (assigning a `@Sendable` closure that awaits an actor inside a
+    /// MainActor static-let initializer trips the "main-actor + actor"
+    /// isolation conflict; doing it from a plain function side-steps that).
+    private static func wirePostSetActivePrewarm(
+        modelService: DefaultModelService,
+        coordinator: SessionCoordinator
+    ) {
+        modelService.onSetActive = { [weak coordinator] in
+            do {
+                try await coordinator?.prepareTranscriber()
+            } catch is CancellationError {
+                return
+            } catch {
+                PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+                    .error("Post-setActive prewarm failed", error: error)
+            }
+        }
+    }
 
     public static func makeSessionCoordinator() -> SessionCoordinator {
         sessionCoordinator
