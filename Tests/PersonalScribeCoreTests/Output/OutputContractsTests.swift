@@ -3,8 +3,8 @@ import XCTest
 
 @MainActor
 final class OutputContractsTests: XCTestCase {
-    func testOutputModeHasBatchAndStreaming() {
-        XCTAssertEqual(OutputMode.allCases, [.batch, .streaming])
+    func testPipelineShapeHasBatchAndStreaming() {
+        XCTAssertEqual(PipelineShape.allCases, [.batch, .streaming])
     }
 
     func testOutputTargetCasesStayLocked() {
