@@ -15,8 +15,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
     private let openURL: @MainActor (URL) -> Void
     private let inputDeviceProvider: any AudioInputDeviceProviding
-    private let modes: [ModeDescriptor]
-    private let setActiveMode: @MainActor (ModeDescriptor) async -> Void
+    private let modes: [WorkflowMode]
+    private let setActiveMode: @MainActor (WorkflowMode) async -> Void
     private let prequitHandler: @MainActor () async -> Void
     private let logger: PersonalScribeLogger
 
@@ -35,8 +35,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
-        modes: [ModeDescriptor] = ModeRegistry.all,
-        setActiveMode: @escaping @MainActor (ModeDescriptor) async -> Void = { _ in },
+        modes: [WorkflowMode] = ModeRegistry.all,
+        setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {},
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
     ) {
@@ -73,8 +73,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
-        modes: [ModeDescriptor] = ModeRegistry.all,
-        setActiveMode: @escaping @MainActor (ModeDescriptor) async -> Void = { _ in },
+        modes: [WorkflowMode] = ModeRegistry.all,
+        setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {},
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
     ) {
@@ -389,8 +389,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     /// Mode-submenu row handler (#068). `representedObject` carries the
-    /// `ModeDescriptor.id` string; we resolve it back to the matching
-    /// `ModeDescriptor` from `modes` and hand it to `setActiveMode`.
+    /// `WorkflowMode.id` string; we resolve it back to the matching
+    /// `WorkflowMode` from `modes` and hand it to `setActiveMode`.
     /// The AppStore snapshot's `activeMode` flip then triggers
     /// `handleSnapshotChange` → `rebuildMenu`, which refreshes the
     /// checkmark and parent title.

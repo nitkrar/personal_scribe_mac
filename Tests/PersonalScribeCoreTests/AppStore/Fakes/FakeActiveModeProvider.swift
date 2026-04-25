@@ -2,18 +2,18 @@ import Foundation
 import PersonalScribeCore
 
 final class FakeActiveModeProvider: @unchecked Sendable, AppStoreActiveModeProviding {
-    private var currentMode: ModeDescriptor?
-    private var continuations: [UUID: AsyncStream<ModeDescriptor?>.Continuation] = [:]
+    private var currentMode: WorkflowMode?
+    private var continuations: [UUID: AsyncStream<WorkflowMode?>.Continuation] = [:]
 
-    init(initialActiveMode: ModeDescriptor? = nil) {
+    init(initialActiveMode: WorkflowMode? = nil) {
         currentMode = initialActiveMode
     }
 
-    func currentActiveMode() -> ModeDescriptor? {
+    func currentActiveMode() -> WorkflowMode? {
         currentMode
     }
 
-    func activeModeStream() -> AsyncStream<ModeDescriptor?> {
+    func activeModeStream() -> AsyncStream<WorkflowMode?> {
         let id = UUID()
 
         return AsyncStream { continuation in
@@ -25,7 +25,7 @@ final class FakeActiveModeProvider: @unchecked Sendable, AppStoreActiveModeProvi
         }
     }
 
-    func emit(_ mode: ModeDescriptor?) {
+    func emit(_ mode: WorkflowMode?) {
         currentMode = mode
         for continuation in continuations.values {
             continuation.yield(mode)

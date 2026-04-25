@@ -867,7 +867,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
     }
 
     private func makeContext(streamingOutputEnabled: Bool) -> PipelineContextSnapshot {
-        let mode = ModeDescriptor(
+        let mode = WorkflowMode(
             id: "dictation-plus",
             name: "Dictation Plus",
             voiceModelID: "voice.default",

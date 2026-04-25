@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ModeDescriptor: Sendable, Equatable, Identifiable {
+public struct WorkflowMode: Sendable, Equatable, Identifiable {
     public let id: String
     public let name: String
     public let voiceModelID: String
@@ -23,15 +23,15 @@ public struct ModeDescriptor: Sendable, Equatable, Identifiable {
 }
 
 public enum ModeRegistry {
-    public static let dictation = ModeDescriptor(
+    public static let dictation = WorkflowMode(
         id: "dictation",
         name: "Dictation",
         voiceModelID: BuiltInModelCatalog.defaultModelId
     )
 
-    public static let all: [ModeDescriptor] = [dictation]
+    public static let all: [WorkflowMode] = [dictation]
 
-    public static func descriptor(for id: String) -> ModeDescriptor? {
+    public static func descriptor(for id: String) -> WorkflowMode? {
         all.first { $0.id == id }
     }
 

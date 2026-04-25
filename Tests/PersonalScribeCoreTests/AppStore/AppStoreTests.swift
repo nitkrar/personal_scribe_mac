@@ -413,8 +413,8 @@ final class AppStoreTests: XCTestCase {
         )
     }
 
-    private func makeMode(id: String, name: String) -> ModeDescriptor {
-        ModeDescriptor(
+    private func makeMode(id: String, name: String) -> WorkflowMode {
+        WorkflowMode(
             id: id,
             name: name,
             voiceModelID: "voice-\(id)"

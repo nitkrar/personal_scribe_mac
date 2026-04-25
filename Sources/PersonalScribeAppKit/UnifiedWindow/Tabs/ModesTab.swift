@@ -59,7 +59,7 @@ struct ModesTab: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var downloadedModes: [ModeDescriptor] {
+    private var downloadedModes: [WorkflowMode] {
         let enabledASRIDs = Set(modelService.enabledModels(kind: .asr).map(\.id))
         return viewModel.modes.filter { mode in
             enabledASRIDs.contains(mode.voiceModelID) &&
@@ -73,12 +73,12 @@ struct ModesTab: View {
     // formatting so the unified-window surface reads identically until
     // the legacy surface is retired (PHASE_2_unified_ui.md Step 2.10).
 
-    private func voiceModelName(for mode: ModeDescriptor) -> String {
+    private func voiceModelName(for mode: WorkflowMode) -> String {
         modelService.registeredModels.first { $0.id == mode.voiceModelID }?.displayName
             ?? mode.voiceModelID
     }
 
-    private func aiModelPresetName(for mode: ModeDescriptor) -> String {
+    private func aiModelPresetName(for mode: WorkflowMode) -> String {
         mode.aiModelID ?? "No AI"
     }
 }

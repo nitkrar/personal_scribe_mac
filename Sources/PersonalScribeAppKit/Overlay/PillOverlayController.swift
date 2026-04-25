@@ -467,11 +467,11 @@ private final class LegacyPillOverlayPermissionService: PermissionService, @unch
 }
 
 private struct LegacyPillOverlayActiveModeProvider: AppStoreActiveModeProviding {
-    func currentActiveMode() -> ModeDescriptor? {
+    func currentActiveMode() -> WorkflowMode? {
         nil
     }
 
-    func activeModeStream() -> AsyncStream<ModeDescriptor?> {
+    func activeModeStream() -> AsyncStream<WorkflowMode?> {
         AsyncStream { continuation in
             continuation.yield(nil)
             continuation.finish()

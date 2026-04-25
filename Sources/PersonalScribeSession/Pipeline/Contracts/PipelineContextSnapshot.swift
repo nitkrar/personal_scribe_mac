@@ -1,13 +1,13 @@
 import PersonalScribeCore
 
 public struct PipelineContextSnapshot: Sendable, Equatable {
-    public let activeMode: ModeDescriptor?
+    public let activeMode: WorkflowMode?
     public let activeAIModelID: String?
     public let systemPrompt: String?
     public let streamingOutputEnabled: Bool
 
     public init(
-        activeMode: ModeDescriptor? = nil,
+        activeMode: WorkflowMode? = nil,
         activeAIModelID: String? = nil,
         systemPrompt: String? = nil,
         streamingOutputEnabled: Bool

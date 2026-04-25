@@ -220,7 +220,7 @@ public enum AppComposition {
 
 /// Thin `AppStoreActiveModeProviding` adapter over `ActiveModelService`.
 /// Translates the service's per-kind `[ModelKind: String]` map back
-/// into a `ModeDescriptor?` via the registered `ModeRegistry` — the
+/// into a `WorkflowMode?` via the registered `ModeRegistry` — the
 /// `AppStore` consumes mode descriptors, not model ids.
 ///
 /// Added in #024.10 alongside the protocol-drop (`ModelService`) and
@@ -244,11 +244,11 @@ public struct ServiceBackedActiveModeProvider: AppStoreActiveModeProviding, @unc
         self.state = state
     }
 
-    public func currentActiveMode() -> ModeDescriptor? {
+    public func currentActiveMode() -> WorkflowMode? {
         state.loadCurrentMode()
     }
 
-    public func activeModeStream() -> AsyncStream<ModeDescriptor?> {
+    public func activeModeStream() -> AsyncStream<WorkflowMode?> {
         let state = self.state
         let id = UUID()
 
@@ -267,7 +267,7 @@ public struct ServiceBackedActiveModeProvider: AppStoreActiveModeProviding, @unc
     /// nil today — modes don't yet pin AI presets).
     private static func modeDescriptor(
         for activeIDs: [ModelKind: String]
-    ) -> ModeDescriptor? {
+    ) -> WorkflowMode? {
         guard let activeASRID = activeIDs[.asr] else { return nil }
         return ModeRegistry.all.first {
             $0.voiceModelID == activeASRID && $0.aiModelID == nil
@@ -277,22 +277,22 @@ public struct ServiceBackedActiveModeProvider: AppStoreActiveModeProviding, @unc
 
 private final class StateBox: @unchecked Sendable {
     private let lock = NSLock()
-    private var currentMode: ModeDescriptor?
-    private var continuations: [UUID: AsyncStream<ModeDescriptor?>.Continuation] = [:]
+    private var currentMode: WorkflowMode?
+    private var continuations: [UUID: AsyncStream<WorkflowMode?>.Continuation] = [:]
     private var observation: AnyCancellable?
 
-    init(currentMode: ModeDescriptor?) {
+    init(currentMode: WorkflowMode?) {
         self.currentMode = currentMode
     }
 
-    func loadCurrentMode() -> ModeDescriptor? {
+    func loadCurrentMode() -> WorkflowMode? {
         lock.lock()
         defer { lock.unlock() }
         return currentMode
     }
 
     func register(
-        _ continuation: AsyncStream<ModeDescriptor?>.Continuation,
+        _ continuation: AsyncStream<WorkflowMode?>.Continuation,
         id: UUID
     ) {
         lock.lock()
@@ -307,7 +307,7 @@ private final class StateBox: @unchecked Sendable {
         lock.unlock()
     }
 
-    func publish(_ mode: ModeDescriptor?) {
+    func publish(_ mode: WorkflowMode?) {
         lock.lock()
         currentMode = mode
         for continuation in continuations.values {
