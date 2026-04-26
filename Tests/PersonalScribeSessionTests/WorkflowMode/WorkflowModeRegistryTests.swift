@@ -129,6 +129,89 @@ final class WorkflowModeRegistryTests: XCTestCase {
         XCTAssertEqual(registry.allModes.map(\.id), ["dictation"])
     }
 
+    // MARK: - mutateActiveOrFork
+
+    func testMutateActiveOrForkOnBuiltInForksToCustomAndSwitchesActive() throws {
+        let store = InMemoryWorkflowModeStore()
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+        XCTAssertEqual(registry.activeMode.id, "dictation")
+
+        let result = try registry.mutateActiveOrFork { mode in
+            // Append .vad to capture controllers (simulates Settings
+            // toggling Auto-stop on).
+            mode = WorkflowMode(
+                id: mode.id,
+                name: mode.name,
+                pipelineShape: mode.pipelineShape,
+                processors: mode.processors,
+                captureControllers: [
+                    .vad(
+                        silenceThreshold: .setting(PreferenceKeys.vadSilenceThreshold),
+                        showWarning: .setting(PreferenceKeys.vadShowStoppingWarning),
+                        showAutoStoppedNotification: .setting(
+                            PreferenceKeys.vadShowAutoStoppedNotification
+                        )
+                    ),
+                ] + mode.captureControllers,
+                outputSinks: mode.outputSinks
+            )
+        }
+
+        XCTAssertEqual(result.id, "dictation-custom")
+        XCTAssertEqual(result.name, "Dictation (custom)")
+        XCTAssertEqual(registry.activeMode.id, "dictation-custom")
+        XCTAssertEqual(registry.allModes.count, 2)
+        // First capture controller is now .vad.
+        if case .vad = result.captureControllers.first {
+            // ok
+        } else {
+            XCTFail("Expected .vad to be first capture controller, got \(result.captureControllers)")
+        }
+    }
+
+    func testMutateActiveOrForkOnCustomMutatesInPlaceWithoutForking() throws {
+        let custom = WorkflowMode(
+            id: "med-notes",
+            name: "Medical Notes",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste]
+        )
+        let store = InMemoryWorkflowModeStore(
+            initial: WorkflowModeDocument(
+                activeModeID: "med-notes",
+                customModes: [custom]
+            )
+        )
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+
+        let result = try registry.mutateActiveOrFork { mode in
+            // Strip frontmostPaste (simulates Auto-paste toggle off).
+            mode = WorkflowMode(
+                id: mode.id,
+                name: mode.name,
+                pipelineShape: mode.pipelineShape,
+                processors: mode.processors,
+                captureControllers: mode.captureControllers,
+                outputSinks: mode.outputSinks.filter { sink in
+                    if case .frontmostPaste = sink { return false }
+                    return true
+                }
+            )
+        }
+
+        XCTAssertEqual(result.id, "med-notes")
+        XCTAssertEqual(registry.allModes.count, 2) // dictation + med-notes
+        XCTAssertTrue(result.outputSinks.isEmpty)
+    }
+
     // MARK: - Helpers
 
     /// Custom mode that mirrors the built-in dictation shape but with a

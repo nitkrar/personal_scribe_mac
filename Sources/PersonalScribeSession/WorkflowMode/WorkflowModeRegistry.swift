@@ -109,6 +109,64 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
         return mode
     }
 
+    /// Mutate the currently-active recipe. If the active mode is a
+    /// built-in (read-only), fork into a custom mode with the
+    /// `forkSuffix` appended to its name and a unique ID, apply the
+    /// mutation, and switch active. If the active mode is already
+    /// custom, mutate it in place. Validates the result before
+    /// persisting.
+    ///
+    /// Per L27 — the entry point for Settings toggles that need to
+    /// modify active recipe state (VAD inclusion, paste inclusion,
+    /// clipboard restore parameter override). The GeneralTab toggle
+    /// bridge is a follow-up; this method is the registry-side seam.
+    @discardableResult
+    public func mutateActiveOrFork(
+        forkSuffix: String = " (custom)",
+        _ block: (inout WorkflowMode) -> Void
+    ) throws -> WorkflowMode {
+        try lock.withLock {
+            let current = resolveActiveLocked()
+            let isBuiltIn = Self.builtInModes.contains(where: { $0.id == current.id })
+
+            if isBuiltIn {
+                // Fork: derive a new custom mode from the built-in.
+                let newID = uniqueCustomIDLocked(base: "\(current.id)-custom")
+                var working = WorkflowMode(
+                    id: newID,
+                    name: "\(current.name)\(forkSuffix)",
+                    pipelineShape: current.pipelineShape,
+                    processors: current.processors,
+                    captureControllers: current.captureControllers,
+                    outputSinks: current.outputSinks
+                )
+                block(&working)
+                try WorkflowModeValidator.validate(
+                    working,
+                    availableKinds: availableKindsProvider()
+                )
+                document.customModes.append(working)
+                document.activeModeID = working.id
+                try store.save(document)
+                return working
+            }
+
+            // Mutate in place — find the custom entry by ID.
+            guard let index = document.customModes.firstIndex(where: { $0.id == current.id }) else {
+                throw WorkflowModeRegistryError.unknownMode(current.id)
+            }
+            var working = document.customModes[index]
+            block(&working)
+            try WorkflowModeValidator.validate(
+                working,
+                availableKinds: availableKindsProvider()
+            )
+            document.customModes[index] = working
+            try store.save(document)
+            return working
+        }
+    }
+
     /// Remove a custom mode by ID. If the deleted mode was active, the
     /// active selection falls back to the built-in `.dictation`.
     public func deleteCustom(id: String) throws {
@@ -135,6 +193,24 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
             return builtIn
         }
         return document.customModes.first(where: { $0.id == id })
+    }
+
+    /// Generate a custom-mode ID that doesn't collide with built-in or
+    /// existing custom IDs. Used by `mutateActiveOrFork` when forking
+    /// from a built-in.
+    private func uniqueCustomIDLocked(base: String) -> String {
+        let existing = Set(Self.builtInModes.map(\.id) + document.customModes.map(\.id))
+        if !existing.contains(base) {
+            return base
+        }
+        var counter = 2
+        while true {
+            let candidate = "\(base)-\(counter)"
+            if !existing.contains(candidate) {
+                return candidate
+            }
+            counter += 1
+        }
     }
 }
 
