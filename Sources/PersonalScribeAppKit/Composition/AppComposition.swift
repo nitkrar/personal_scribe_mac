@@ -76,6 +76,56 @@ public enum AppComposition {
     /// calls `current()` once per session start.
     public static let vadPreferences: any VadPreferencesReading = UserDefaultsVadPreferencesReader()
 
+    /// #078.31a — Disk-backed `WorkflowModeStore` for `workflow-modes.json`.
+    /// Sits at composition root so the registry, migrator, and any future
+    /// Modes-tab editor share the same persistence seam.
+    public static let workflowModeStore: any WorkflowModeStoring = WorkflowModeStore()
+
+    /// #078.31a — Registry feeding the active workflow mode + custom-mode list.
+    /// Replaces `ServiceBackedActiveModeProvider` as the source of truth for
+    /// active-mode state (per L21). `availableKindsProvider` queries
+    /// `ActiveModelService` for the kinds with active descriptors so the
+    /// validator can reject modes whose required Kind has no active model.
+    public static let workflowModeRegistry: WorkflowModeRegistry = {
+        // Closure runs in `@Sendable` context; the registry's mutators
+        // (setActive, saveCustom) are only called from MainActor-bound
+        // call sites in this app (SessionCoordinator is @MainActor),
+        // so `assumeIsolated` is safe here.
+        let kindsProvider: @Sendable () -> Set<ModelKind> = {
+            MainActor.assumeIsolated {
+                Set(ModelKind.allCases.filter { kind in
+                    modelService.activeDescriptor(for: kind) != nil
+                })
+            }
+        }
+        do {
+            let registry = try WorkflowModeRegistry(
+                store: workflowModeStore,
+                availableKindsProvider: kindsProvider
+            )
+            // Run legacy-toggle migration once at first composition.
+            // Idempotent via `LegacyToggleMigrationApplied_v1` flag.
+            try LegacyToggleMigrator(registry: registry).runIfNeeded()
+            return registry
+        } catch {
+            // Fallback: in-memory registry so the app still launches.
+            // Logged for diagnosis; built-in dictation still works.
+            PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+                .error("WorkflowModeRegistry init failed", error: error)
+            // swiftlint:disable:next force_try
+            return try! WorkflowModeRegistry(
+                store: InMemoryWorkflowModeStore(),
+                availableKindsProvider: { Set(ModelKind.allCases) }
+            )
+        }
+    }()
+
+    /// #078.31a — New typed-accessor processor provider, alongside the
+    /// legacy `ModelBoundTranscriberProvider`. The legacy provider is still
+    /// wired into the AI Models tab download path; the new provider feeds
+    /// the orchestrator's recipe-driven dispatch (per L24).
+    public static let processorProvider: any ModelBoundProcessorProviding = ModelBoundProcessorProvider()
+
     public static let sessionCoordinator: SessionCoordinator = {
         let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
         let capture = AVAudioCaptureService(
@@ -92,7 +142,15 @@ public enum AppComposition {
             logger: logger,
             transcriptRepository: transcriptRepository,
             vadProvider: vadProvider,
-            vadPreferences: vadPreferences
+            vadPreferences: vadPreferences,
+            workflowModeRegistry: workflowModeRegistry,
+            availableKindsProvider: {
+                MainActor.assumeIsolated {
+                    Set(ModelKind.allCases.filter { kind in
+                        modelService.activeDescriptor(for: kind) != nil
+                    })
+                }
+            }
         )
 
         wirePostSetActivePrewarm(modelService: modelService, coordinator: coordinator)
