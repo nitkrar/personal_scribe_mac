@@ -30,8 +30,8 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
             let diarizer = self.diarizer
             let transcriber = self.transcriber
             let task = Task {
-                async let prepareDiarizer = diarizer.prepare()
-                async let prepareTranscriber = transcriber.prepare()
+                async let prepareDiarizer: Void = diarizer.prepare()
+                async let prepareTranscriber: Void = transcriber.prepare()
                 try await prepareDiarizer
                 try await prepareTranscriber
             }
