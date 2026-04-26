@@ -3,11 +3,11 @@ import PersonalScribeCore
 
 struct AdapterRecord: Sendable {
     let descriptorID: String
-    let transcriber: (any Transcriber2)?
+    let transcriber: (any Transcriber)?
     let streamingTranscriber: (any StreamingTranscriber)?
     let diarizer: (any SpeakerDiarizer)?
 
-    init(descriptorID: String, transcriber: any Transcriber2) {
+    init(descriptorID: String, transcriber: any Transcriber) {
         self.descriptorID = descriptorID
         self.transcriber = transcriber
         self.streamingTranscriber = nil

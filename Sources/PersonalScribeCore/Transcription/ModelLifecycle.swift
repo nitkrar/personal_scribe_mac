@@ -5,7 +5,7 @@ import Foundation
 /// future processor that loads a model from disk.
 ///
 /// Per #078 L3 / L13: this protocol exists so the three role-specific
-/// output protocols (`Transcriber2`, `StreamingTranscriber`,
+/// output protocols (`Transcriber`, `StreamingTranscriber`,
 /// `SpeakerDiarizer`) can compose `prepare()` and
 /// `modelDownloadProgress()` without each redeclaring them. The
 /// `ModelBoundProcessorProvider` (#078 L7 / L24) routes

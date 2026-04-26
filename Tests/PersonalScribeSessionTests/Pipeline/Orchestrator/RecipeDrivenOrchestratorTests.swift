@@ -122,7 +122,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
 
     // MARK: - Dispatch: ProcessorOutput sum-type cases
 
-    /// `BoundProcessor.transcriber(...)` runs the bound `Transcriber2`
+    /// `BoundProcessor.transcriber(...)` runs the bound `Transcriber`
     /// adapter on the buffered audio; the orchestrator dispatches the
     /// `.text(TranscriptionResult)` case into the legacy post-process /
     /// persist / output path.
@@ -333,7 +333,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
 
 // MARK: - Test stubs
 
-private actor StubBoundTranscriber: Transcriber2 {
+private actor StubBoundTranscriber: Transcriber {
     nonisolated let capabilities = TranscriberCapabilities()
     private let result: TranscriptionResult
     private var calls = 0

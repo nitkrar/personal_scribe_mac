@@ -40,7 +40,7 @@ final class AdapterRecordTests: XCTestCase {
         let descriptor = BuiltInModelCatalog.parakeetTDT06Bv2
         let record = AdapterRecord(
             descriptorID: descriptor.id,
-            transcriber: StubTranscriber2()
+            transcriber: StubTranscriber()
         )
 
         XCTAssertEqual(record.descriptorID, descriptor.id)
@@ -53,7 +53,7 @@ final class AdapterRecordTests: XCTestCase {
         let records = [
             AdapterRecord(
                 descriptorID: "batch",
-                transcriber: StubTranscriber2()
+                transcriber: StubTranscriber()
             ),
             AdapterRecord(
                 descriptorID: "streaming",
@@ -106,7 +106,7 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
             adapterFactory: { descriptor in
                 AdapterRecord(
                     descriptorID: descriptor.id,
-                    transcriber: MarkerTranscriber2()
+                    transcriber: MarkerTranscriber()
                 )
             }
         )
@@ -127,7 +127,7 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
             adapterFactory: { descriptor in
                 AdapterRecord(
                     descriptorID: descriptor.id,
-                    transcriber: MarkerTranscriber2()
+                    transcriber: MarkerTranscriber()
                 )
             }
         )
@@ -187,7 +187,7 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
                     batchCallCount.increment()
                     return AdapterRecord(
                         descriptorID: descriptor.id,
-                        transcriber: MarkerTranscriber2()
+                        transcriber: MarkerTranscriber()
                     )
                 case streamingDescriptor.id:
                     streamingCallCount.increment()
@@ -205,7 +205,7 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
                     XCTFail("Unexpected descriptor: \(descriptor.id)")
                     return AdapterRecord(
                         descriptorID: descriptor.id,
-                        transcriber: MarkerTranscriber2()
+                        transcriber: MarkerTranscriber()
                     )
                 }
             }
@@ -252,7 +252,7 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
     }
 }
 
-private struct StubTranscriber2: Transcriber2 {
+private struct StubTranscriber: Transcriber {
     let capabilities = TranscriberCapabilities()
 
     func prepare() async throws {}
@@ -310,7 +310,7 @@ private struct StubSpeakerDiarizer: SpeakerDiarizer {
     }
 }
 
-private final class MarkerTranscriber2: @unchecked Sendable, Transcriber2 {
+private final class MarkerTranscriber: @unchecked Sendable, Transcriber {
     let capabilities = TranscriberCapabilities()
 
     func prepare() async throws {}
@@ -377,8 +377,8 @@ private final class StubModelBoundProcessorProvider: @unchecked Sendable, ModelB
         self.isDownloadedValue = isDownloadedValue
     }
 
-    func transcriber(for descriptor: ModelDescriptor) throws -> any Transcriber2 {
-        StubTranscriber2()
+    func transcriber(for descriptor: ModelDescriptor) throws -> any Transcriber {
+        StubTranscriber()
     }
 
     func streamingTranscriber(for descriptor: ModelDescriptor) throws -> any StreamingTranscriber {

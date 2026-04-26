@@ -2,7 +2,7 @@ import XCTest
 @testable import PersonalScribeCore
 
 /// #078.1 — `ModelLifecycle` is the shared lifecycle protocol the new
-/// output protocols (`Transcriber2`, `StreamingTranscriber`,
+/// output protocols (`Transcriber`, `StreamingTranscriber`,
 /// `SpeakerDiarizer`) compose. These tests pin the surface so the
 /// composition contract stays small (only `prepare` + progress) and
 /// stays Sendable for the strict-concurrency boundary the provider

@@ -6,16 +6,14 @@ import Foundation
 /// declares which optional `TranscriptionResult` metadata the
 /// adapter populates.
 ///
-/// Naming: the `2` suffix is **temporary**. This protocol lands
-/// alongside today's legacy `Transcriber` (Sources/PersonalScribeCore/
-/// Protocols.swift) so trunk stays buildable through the parallel-
-/// build phase. At Phase G cutover (#078.30a) the legacy `Transcriber`
-/// is renamed to `LegacyTranscriber` and `Transcriber2` is renamed to
-/// `Transcriber`.
+/// Phase G cutover (#078.30a) renamed the legacy `Transcriber`
+/// protocol (Sources/PersonalScribeCore/Protocols.swift) to
+/// `LegacyTranscriber` and promoted this protocol to the canonical
+/// `Transcriber` name.
 ///
 /// Conformers in #078: `FluidAudioParakeetTranscriberAdapter` and
 /// `FluidAudioQwenTranscriberAdapter` (Phase D).
-public protocol Transcriber2: ModelLifecycle, Sendable {
+public protocol Transcriber: ModelLifecycle, Sendable {
     /// What this transcriber surfaces on the optional metadata
     /// fields of `TranscriptionResult`. Features query this before
     /// exposing UI that depends on per-token timings or confidence.

@@ -2,7 +2,7 @@ import FluidAudio
 import Foundation
 import PersonalScribeCore
 
-public actor FluidAudioParakeetTranscriberAdapter: Transcriber2 {
+public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
     public nonisolated let capabilities = TranscriberCapabilities(
         providesTokenTimings: true,
         providesConfidence: true,

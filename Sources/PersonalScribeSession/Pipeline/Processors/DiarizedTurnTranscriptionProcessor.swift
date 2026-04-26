@@ -3,7 +3,7 @@ import PersonalScribeCore
 
 public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Processor {
     private let diarizer: any SpeakerDiarizer
-    private let transcriber: any Transcriber2
+    private let transcriber: any Transcriber
     private let lock = NSLock()
 
     private var hasPreparedModel = false
@@ -11,7 +11,7 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
 
     public init(
         diarizer: any SpeakerDiarizer,
-        transcriber: any Transcriber2
+        transcriber: any Transcriber
     ) {
         self.diarizer = diarizer
         self.transcriber = transcriber

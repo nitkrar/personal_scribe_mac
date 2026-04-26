@@ -829,7 +829,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
     private func makeOrchestrator(
         capture: any AudioCapturer = FakeAudioCapturer(),
-        transcriber: any Transcriber = FakeTranscriber(
+        transcriber: any LegacyTranscriber = FakeTranscriber(
             result: TranscriptionResult(
                 text: "",
                 audioDuration: .seconds(1),
@@ -1054,7 +1054,7 @@ private enum OutputFailure: Error, CustomStringConvertible, Sendable {
     }
 }
 
-private actor CountingTranscriber: Transcriber {
+private actor CountingTranscriber: LegacyTranscriber {
     private let result: TranscriptionResult
     private var calls = 0
 
@@ -1094,7 +1094,7 @@ private actor CountingTranscriber: Transcriber {
     }
 }
 
-private actor SlowPrepareTranscriber: Transcriber {
+private actor SlowPrepareTranscriber: LegacyTranscriber {
     private let result: TranscriptionResult
     private var didStartPrepare = false
     private var prepareContinuation: CheckedContinuation<Void, Never>?
@@ -1163,7 +1163,7 @@ private actor SlowPrepareTranscriber: Transcriber {
     }
 }
 
-private struct TrackedTranscriber: Transcriber {
+private struct TrackedTranscriber: LegacyTranscriber {
     let result: TranscriptionResult
     let progressEvents: [ModelDownloadProgress]
     let tracker: TranscriberTracker

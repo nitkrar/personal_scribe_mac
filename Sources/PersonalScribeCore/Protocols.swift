@@ -28,7 +28,7 @@ extension AudioCapturer {
     }
 }
 
-public protocol Transcriber: Sendable {
+public protocol LegacyTranscriber: Sendable {
     func prepare() async throws
     func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress>
     func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult

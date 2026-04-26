@@ -7,7 +7,7 @@ protocol FluidAudioQwenManaging: Sendable {
     func transcribe(audioSamples: [Float]) async throws -> String
 }
 
-public actor FluidAudioQwenTranscriberAdapter: Transcriber2 {
+public actor FluidAudioQwenTranscriberAdapter: Transcriber {
     public nonisolated let capabilities = TranscriberCapabilities()
 
     private let descriptor: ModelDescriptor

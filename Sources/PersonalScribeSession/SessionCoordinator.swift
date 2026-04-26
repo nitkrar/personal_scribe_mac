@@ -5,7 +5,7 @@ import PersonalScribeVAD
 
 public actor SessionCoordinator {
     private let capture: any AudioCapturer
-    private let fixedTranscriber: (any Transcriber)?
+    private let fixedTranscriber: (any LegacyTranscriber)?
     private let modelService: ActiveModelService?
     private let transcriberProvider: (any ModelBoundTranscriberProviding)?
     private let transcriptRepository: TranscriptRepository?
@@ -33,7 +33,7 @@ public actor SessionCoordinator {
 
     public init(
         capture: any AudioCapturer,
-        transcriber: any Transcriber,
+        transcriber: any LegacyTranscriber,
         logger: PersonalScribeLogger,
         transcriptRepository: TranscriptRepository? = nil,
         vadProvider: (any VadProviding)? = nil,
@@ -447,18 +447,18 @@ private struct CoordinatorPipelineCapture: AudioCapturer {
     }
 }
 
-private actor CoordinatorPipelineTranscriber: Transcriber {
-    private let fixedTranscriber: (any Transcriber)?
+private actor CoordinatorPipelineTranscriber: LegacyTranscriber {
+    private let fixedTranscriber: (any LegacyTranscriber)?
     private let modelService: ActiveModelService?
     private let transcriberProvider: (any ModelBoundTranscriberProviding)?
     private let logger: PersonalScribeLogger
     private let progressBroadcaster = SessionDownloadProgressBroadcaster()
 
-    private var recordingSessionTranscriber: (any Transcriber)?
+    private var recordingSessionTranscriber: (any LegacyTranscriber)?
     private var progressObservationTask: Task<Void, Never>?
 
     init(
-        fixedTranscriber: any Transcriber,
+        fixedTranscriber: any LegacyTranscriber,
         logger: PersonalScribeLogger
     ) {
         self.fixedTranscriber = fixedTranscriber
@@ -508,7 +508,7 @@ private actor CoordinatorPipelineTranscriber: Transcriber {
         return try await transcriber.transcribe(stream: stream)
     }
 
-    private func resolvedTranscriberForPreparation() async -> any Transcriber {
+    private func resolvedTranscriberForPreparation() async -> any LegacyTranscriber {
         if let recordingSessionTranscriber {
             observeDownloadProgress(for: recordingSessionTranscriber)
             return recordingSessionTranscriber
@@ -517,7 +517,7 @@ private actor CoordinatorPipelineTranscriber: Transcriber {
         return await resolvedActiveTranscriber()
     }
 
-    private func resolveRecordingSessionTranscriber() async -> any Transcriber {
+    private func resolveRecordingSessionTranscriber() async -> any LegacyTranscriber {
         if let fixedTranscriber {
             recordingSessionTranscriber = fixedTranscriber
             observeDownloadProgress(for: fixedTranscriber)
@@ -531,7 +531,7 @@ private actor CoordinatorPipelineTranscriber: Transcriber {
         return transcriber
     }
 
-    private func transcriberForStopPath() async -> any Transcriber {
+    private func transcriberForStopPath() async -> any LegacyTranscriber {
         if let recordingSessionTranscriber {
             return recordingSessionTranscriber
         }
@@ -539,7 +539,7 @@ private actor CoordinatorPipelineTranscriber: Transcriber {
         return await resolvedActiveTranscriber()
     }
 
-    private func resolvedActiveTranscriber() async -> any Transcriber {
+    private func resolvedActiveTranscriber() async -> any LegacyTranscriber {
         if let fixedTranscriber {
             observeDownloadProgress(for: fixedTranscriber)
             return fixedTranscriber
@@ -570,7 +570,7 @@ private actor CoordinatorPipelineTranscriber: Transcriber {
 
     private func resolvedModelBoundTranscriber(
         for descriptor: ModelDescriptor
-    ) -> any Transcriber {
+    ) -> any LegacyTranscriber {
         guard let transcriberProvider else {
             preconditionFailure("SessionCoordinator model-service path requires a transcriber provider")
         }
@@ -578,7 +578,7 @@ private actor CoordinatorPipelineTranscriber: Transcriber {
         return transcriberProvider.transcriber(for: descriptor)
     }
 
-    private func observeDownloadProgress(for transcriber: any Transcriber) {
+    private func observeDownloadProgress(for transcriber: any LegacyTranscriber) {
         progressObservationTask?.cancel()
         let broadcaster = progressBroadcaster
 

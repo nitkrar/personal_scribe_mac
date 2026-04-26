@@ -11,7 +11,7 @@ import Foundation
 /// `AsyncThrowingStream<StreamingTranscriptionEvent, Error>` shape
 /// declared here.
 public protocol StreamingTranscriber: ModelLifecycle, Sendable {
-    /// Capabilities surface — same shape as `Transcriber2.capabilities`
+    /// Capabilities surface — same shape as `Transcriber.capabilities`
     /// per L9 (three role protocols, no polymorphic unification, but
     /// each declares its own optional metadata story).
     var capabilities: TranscriberCapabilities { get }

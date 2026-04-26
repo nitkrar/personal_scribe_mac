@@ -13,7 +13,7 @@ import Foundation
 /// Cases:
 /// - `.transcriber(kind:)` — batch ASR processor; consumes a finalized
 ///   audio buffer, emits a single `TranscriptionResult`. The bound
-///   adapter conforms `Transcriber2`.
+///   adapter conforms `Transcriber`.
 /// - `.streamingTranscriber(kind:)` — chunked streaming ASR; consumes
 ///   an audio stream, emits `StreamingTranscriptionEvent` events. The
 ///   bound adapter conforms `StreamingTranscriber`. Validator pins
@@ -21,7 +21,7 @@ import Foundation
 /// - `.diarizedTurns(diarizerKind:transcriberKind:)` — fused processor
 ///   that diarizes, slices per-turn audio, and ASRs each finalized
 ///   turn end-to-end. The bound adapters conform `SpeakerDiarizer` and
-///   `Transcriber2`. Validator pins `transcriberKind ∈ {.asr, .streamingASR}`.
+///   `Transcriber`. Validator pins `transcriberKind ∈ {.asr, .streamingASR}`.
 public enum ProcessorSpec: Codable, Equatable, Sendable {
     case transcriber(kind: ModelKind)
     case streamingTranscriber(kind: ModelKind)

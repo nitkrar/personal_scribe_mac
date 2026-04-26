@@ -3,7 +3,7 @@ import Foundation
 import os.signpost
 import PersonalScribeCore
 
-public actor ModelAwareFluidAudioTranscriber: Transcriber {
+public actor ModelAwareFluidAudioTranscriber: LegacyTranscriber {
     private let descriptor: ModelDescriptor
     private let runtimeVariantResult: Result<FluidAudioRuntimeVariant, ModelSelectionError>
     private let storageLocator: any StorageLocator

@@ -66,7 +66,7 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
         self.adapterFactory = adapterFactory
     }
 
-    public func transcriber(for descriptor: ModelDescriptor) throws -> any Transcriber2 {
+    public func transcriber(for descriptor: ModelDescriptor) throws -> any Transcriber {
         let canonical = try canonicalDescriptor(for: descriptor)
         let record = try resolvedRecord(for: canonical)
         guard let transcriber = record.transcriber else {
@@ -389,7 +389,7 @@ private final class ProcessorProviderStubAdapterSupport: @unchecked Sendable {
 
 private final class FluidAudioParakeetTranscriberAdapter:
     @unchecked Sendable,
-    Transcriber2,
+    Transcriber,
     ModelArtifactDownloadManaging
 {
     let capabilities = TranscriberCapabilities(
@@ -436,7 +436,7 @@ private final class FluidAudioParakeetTranscriberAdapter:
 
 private final class FluidAudioQwenTranscriberAdapter:
     @unchecked Sendable,
-    Transcriber2,
+    Transcriber,
     ModelArtifactDownloadManaging
 {
     let capabilities = TranscriberCapabilities()

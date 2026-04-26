@@ -1,14 +1,14 @@
 import XCTest
 @testable import PersonalScribeCore
 
-/// #078.4 — `Transcriber2` is the new batch ASR protocol. Tests pin
+/// #078.4 — `Transcriber` is the new batch ASR protocol. Tests pin
 /// composition with `ModelLifecycle` (L13), the `capabilities`
 /// accessor (L11), and the batch `transcribe(_:)` signature.
-final class Transcriber2ContractTests: XCTestCase {
+final class TranscriberContractTests: XCTestCase {
 
     // MARK: - Test fixtures
 
-    private struct StubTranscriber: Transcriber2 {
+    private struct StubTranscriber: Transcriber {
         let capabilities: TranscriberCapabilities
         let pinnedResult: TranscriptionResult
 
@@ -34,8 +34,8 @@ final class Transcriber2ContractTests: XCTestCase {
 
     // MARK: - Tests
 
-    func testTranscriber2ComposesModelLifecycle() async throws {
-        // A `Transcriber2` value must also be usable through the
+    func testTranscriberComposesModelLifecycle() async throws {
+        // A `Transcriber` value must also be usable through the
         // `ModelLifecycle` existential. If composition is dropped,
         // the upcast fails to compile (oracle for L13).
         let stub = StubTranscriber(
@@ -59,7 +59,7 @@ final class Transcriber2ContractTests: XCTestCase {
         XCTAssertEqual(emitted, 0, "Stub finishes the stream immediately")
     }
 
-    func testTranscriber2RequiresCapabilities() {
+    func testTranscriberRequiresCapabilities() {
         // The protocol mandates a `capabilities` accessor (L11). The
         // stub must surface the value the test injected.
         let parakeetLike = TranscriberCapabilities(
@@ -80,7 +80,7 @@ final class Transcriber2ContractTests: XCTestCase {
         XCTAssertEqual(stub.capabilities, parakeetLike)
     }
 
-    func testTranscriber2TranscribeReturnsTranscriptionResult() async throws {
+    func testTranscriberTranscribeReturnsTranscriptionResult() async throws {
         // Batch `transcribe(_:)` returns `TranscriptionResult`. The
         // pinned value flows through the protocol method.
         let pinned = TranscriptionResult(

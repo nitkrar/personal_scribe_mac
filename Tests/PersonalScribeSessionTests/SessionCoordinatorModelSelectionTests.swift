@@ -147,14 +147,14 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
 }
 
 private struct StubModelBoundTranscriberProvider: ModelBoundTranscriberProviding {
-    let transcribersByID: [String: any Transcriber]
+    let transcribersByID: [String: any LegacyTranscriber]
 
-    func transcriber(for descriptor: ModelDescriptor) -> any Transcriber {
+    func transcriber(for descriptor: ModelDescriptor) -> any LegacyTranscriber {
         transcribersByID[descriptor.id] ?? transcribersByID[BuiltInModelCatalog.parakeetTDT06Bv2.id]!
     }
 }
 
-private actor RecordingTranscriber: Transcriber {
+private actor RecordingTranscriber: LegacyTranscriber {
     private let result: TranscriptionResult
     private(set) var prepareCallCount = 0
     private(set) var transcribeCallCount = 0

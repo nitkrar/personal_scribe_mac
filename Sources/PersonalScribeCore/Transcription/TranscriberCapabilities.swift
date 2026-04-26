@@ -1,6 +1,6 @@
 import Foundation
 
-/// What a `Transcriber2` (or `StreamingTranscriber`) advertises about
+/// What a `Transcriber` (or `StreamingTranscriber`) advertises about
 /// the optional metadata it can populate on a `TranscriptionResult`.
 ///
 /// Per #078 L11 + synthesis decision #1: features that depend on

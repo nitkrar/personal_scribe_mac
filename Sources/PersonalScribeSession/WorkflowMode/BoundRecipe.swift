@@ -41,9 +41,9 @@ public struct BoundRecipe: Sendable {
 /// adapter references suitable for the orchestrator's per-output
 /// dispatch.
 public enum BoundProcessor: Sendable {
-    case transcriber(any Transcriber2)
+    case transcriber(any Transcriber)
     case streamingTranscriber(any StreamingTranscriber)
-    case diarizedTurns(diarizer: any SpeakerDiarizer, transcriber: any Transcriber2)
+    case diarizedTurns(diarizer: any SpeakerDiarizer, transcriber: any Transcriber)
 }
 
 /// Resolved capture-controller config. VAD parameters resolved eagerly

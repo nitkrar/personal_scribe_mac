@@ -253,7 +253,7 @@ private final class StubSpeakerDiarizer: @unchecked Sendable, SpeakerDiarizer {
     }
 }
 
-private final class RecordingTranscriber: @unchecked Sendable, Transcriber2 {
+private final class RecordingTranscriber: @unchecked Sendable, Transcriber {
     let capabilities = TranscriberCapabilities()
 
     private let progressSnapshots: [ModelDownloadProgress]

@@ -568,7 +568,7 @@ private final class FakePermissionService: PermissionService {
     }
 }
 
-private final class ProgressReportingTranscriber: @unchecked Sendable, Transcriber {
+private final class ProgressReportingTranscriber: @unchecked Sendable, LegacyTranscriber {
     private let lock = NSLock()
     private let relay = ProgressRelay()
     private let result: TranscriptionResult

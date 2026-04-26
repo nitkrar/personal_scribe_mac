@@ -140,10 +140,10 @@ final class RecipeBuilderTests: XCTestCase {
 /// descriptors passed to each accessor.
 private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchecked Sendable {
     private let lock = NSLock()
-    private var transcribers: [String: any Transcriber2] = [:]
+    private var transcribers: [String: any Transcriber] = [:]
     private(set) var transcriberRequests: [ModelDescriptor] = []
 
-    func transcriber(for descriptor: ModelDescriptor) throws -> any Transcriber2 {
+    func transcriber(for descriptor: ModelDescriptor) throws -> any Transcriber {
         lock.withLock {
             transcriberRequests.append(descriptor)
             if let existing = transcribers[descriptor.id] {
@@ -173,7 +173,7 @@ private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchec
     func removeDownloadedFiles(_ descriptor: ModelDescriptor) throws {}
 }
 
-private actor StubTranscriber: Transcriber2 {
+private actor StubTranscriber: Transcriber {
     nonisolated let capabilities = TranscriberCapabilities()
     func prepare() async throws {}
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
