@@ -1,0 +1,46 @@
+import XCTest
+@testable import PersonalScribeCore
+
+/// #078.7 — `TranscriptionEngine.kind` is the computed-from-engine
+/// view of `ModelKind` per L2. The four hardcoded mapping tests are
+/// the load-bearing oracle for "engine→kind dispatch is correct."
+/// The catalog-convention test is a consistency check between the
+/// stored `kind` field on every catalog descriptor and the
+/// engine-derived value (the stored field is removed at Phase H.6
+/// — the consistency check loses its bite then; the four hardcoded
+/// tests retain it).
+final class TranscriptionEngineKindTests: XCTestCase {
+
+    func testParakeetTDTMapsToAsr() {
+        XCTAssertEqual(TranscriptionEngine.parakeetTDT.kind, .asr)
+    }
+
+    func testParakeetEOUMapsToStreamingASR() {
+        XCTAssertEqual(TranscriptionEngine.parakeetEOU.kind, .streamingASR)
+    }
+
+    func testQwen3ASRMapsToAsr() {
+        XCTAssertEqual(TranscriptionEngine.qwen3ASR.kind, .asr)
+    }
+
+    func testDiarizationMapsToDiarization() {
+        XCTAssertEqual(TranscriptionEngine.diarization.kind, .diarization)
+    }
+
+    func testEngineKindMappingMatchesCatalogConvention() {
+        // Convention-consistency check: every catalog descriptor's
+        // stored `kind` must equal `engine.kind`. Holds while the
+        // stored field exists (today and through Phase G); becomes
+        // tautological / loses bite once Phase H.6 deletes the
+        // stored field. The four hardcoded mapping tests above are
+        // the behavioral oracle that survives the deletion.
+        for descriptor in BuiltInModelCatalog.registeredModels {
+            XCTAssertEqual(
+                descriptor.kind,
+                descriptor.engine.kind,
+                "Catalog descriptor \(descriptor.id): stored kind \(descriptor.kind) "
+                + "does not match engine.kind \(descriptor.engine.kind)"
+            )
+        }
+    }
+}
