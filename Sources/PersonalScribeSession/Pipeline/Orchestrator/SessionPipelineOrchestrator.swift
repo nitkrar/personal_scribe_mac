@@ -19,6 +19,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// they take effect on the next session. Documented for users in the
     /// Settings card copy.
     private let vadPreferences: (any VadPreferencesReading)?
+    /// #078.29 — optional eager-bound recipe (per L25). When present,
+    /// the orchestrator drives VAD wiring + processor dispatch off the
+    /// recipe; legacy `vadPreferences` and `transcriber` are ignored
+    /// for the duration of the session. When nil, the legacy path
+    /// runs unchanged. Set once at construction; immutable for the
+    /// pipeline's lifetime so mid-session active-mode/active-model
+    /// changes never affect an in-flight session.
+    private let boundRecipe: BoundRecipe?
     /// Installed by `SessionCoordinator` via `setAutoStopHandler(_:)` after
     /// init. Fires from `consumeCaptureStream` via a detached Task so the
     /// capture consumer can keep draining buffers — inline await would
@@ -77,6 +85,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         contextProvider: any PipelineContextProviding,
         vadProvider: (any VadProviding)? = nil,
         vadPreferences: (any VadPreferencesReading)? = nil,
+        boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
     ) {
         let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
@@ -97,6 +106,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             persistenceHandler: persistenceHandler,
             vadProvider: vadProvider,
             vadPreferences: vadPreferences,
+            boundRecipe: boundRecipe,
             graceDurationSeconds: graceDurationSeconds
         )
     }
@@ -111,6 +121,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?,
         vadProvider: (any VadProviding)? = nil,
         vadPreferences: (any VadPreferencesReading)? = nil,
+        boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
     ) {
         let initialContext = contextProvider.currentContext()
@@ -123,6 +134,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.persistenceHandler = persistenceHandler
         self.vadProvider = vadProvider
         self.vadPreferences = vadPreferences
+        self.boundRecipe = boundRecipe
         self.graceDurationSeconds = graceDurationSeconds
         self.activeContext = initialContext
         self.currentSnapshot = SessionSnapshot()
@@ -476,7 +488,12 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
 
         do {
-            let rawResult = try await runTranscription(stream: makeReplayStream(from: replayBuffers))
+            let rawResult: TranscriptionResult
+            if boundRecipe != nil {
+                rawResult = try await runBoundProcessing(replayBuffers: replayBuffers)
+            } else {
+                rawResult = try await runTranscription(stream: makeReplayStream(from: replayBuffers))
+            }
             let rawProgress = nextTranscriptProgress(
                 text: rawResult.text,
                 isFinal: true,
@@ -565,6 +582,125 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
+    /// #078.29 — recipe-driven transcription path. Dispatches per
+    /// `BoundProcessor` case (per L20 + Phase E sum-type
+    /// `ProcessorOutput`). Returns the aggregated `TranscriptionResult`
+    /// that the legacy post-processing / persistence / output sink
+    /// path consumes unchanged.
+    ///
+    /// Today's recipes have exactly one processor; the orchestrator
+    /// uses the first entry. Multi-processor recipes (e.g. ASR +
+    /// voice-ID labelling) land in a follow-up step.
+    private func runBoundProcessing(
+        replayBuffers: [PCMBuffer]
+    ) async throws -> TranscriptionResult {
+        guard let recipe = boundRecipe, let processor = recipe.processors.first else {
+            throw makeStageFailure(
+                stage: .transcription,
+                error: PersonalScribeError.invalidState,
+                fallback: .transcriptionFailure
+            )
+        }
+
+        do {
+            switch processor {
+            case .transcriber(let transcriber):
+                let coalesced = try Self.coalesce(replayBuffers)
+                return try await transcriber.transcribe(coalesced)
+
+            case .streamingTranscriber(let streamingTranscriber):
+                return try await runBoundStreamingTranscription(
+                    streamingTranscriber: streamingTranscriber,
+                    replayBuffers: replayBuffers
+                )
+
+            case .diarizedTurns(let diarizer, let perTurnTranscriber):
+                let fusion = DiarizedTurnTranscriptionProcessor(
+                    diarizer: diarizer,
+                    transcriber: perTurnTranscriber
+                )
+                let coalesced = try Self.coalesce(replayBuffers)
+                let output = try await fusion.process(audio: coalesced, priors: [])
+                return try Self.unwrapTextOutput(output)
+            }
+        } catch let failure as PipelineStageFailure {
+            throw failure
+        } catch {
+            throw makeStageFailure(stage: .transcription, error: error, fallback: .transcriptionFailure)
+        }
+    }
+
+    /// Stream the replay buffers through a `StreamingTranscriber`,
+    /// collect events, and return the terminal `.finalized` result.
+    /// Per L26 partial events are not surfaced through the orchestrator
+    /// today (that integration lands when streaming-output sinks land);
+    /// the orchestrator uses the final aggregated result so the
+    /// existing post-process / persist path stays linear.
+    private func runBoundStreamingTranscription(
+        streamingTranscriber: any StreamingTranscriber,
+        replayBuffers: [PCMBuffer]
+    ) async throws -> TranscriptionResult {
+        let replay = makeReplayStream(from: replayBuffers)
+        let events = streamingTranscriber.transcribe(stream: replay)
+        var finalResult: TranscriptionResult?
+        var lastText: String = ""
+        for try await event in events {
+            switch event {
+            case .partial(let text), .endOfUtterance(let text):
+                lastText = text
+            case .finalized(let result):
+                finalResult = result
+            }
+        }
+        if let finalResult {
+            return finalResult
+        }
+        // Fallback: no `.finalized` arrived — synthesize a TranscriptionResult
+        // from the last partial / EOU text plus the buffered audio duration.
+        let bufferedDuration = replayBuffers.reduce(Duration.zero) { $0 + $1.duration }
+        return TranscriptionResult(
+            text: lastText,
+            audioDuration: bufferedDuration,
+            processingDuration: .zero
+        )
+    }
+
+    /// Combine a sequence of `PCMBuffer`s with matching format into a
+    /// single buffer. Required by the `.transcriber` and
+    /// `.diarizedTurns` recipe paths because their adapters consume a
+    /// batch buffer (not a stream). Throws when buffers disagree on
+    /// `sampleRate` or `channelCount`.
+    private static func coalesce(_ buffers: [PCMBuffer]) throws -> PCMBuffer {
+        guard let first = buffers.first else {
+            return try PCMBuffer(samples: [], timestamp: ContinuousClock().now)
+        }
+        var combinedSamples: [Float] = []
+        combinedSamples.reserveCapacity(buffers.reduce(0) { $0 + $1.samples.count })
+        for buffer in buffers {
+            guard buffer.sampleRate == first.sampleRate,
+                  buffer.channelCount == first.channelCount
+            else {
+                throw PersonalScribeError.resampleFailure
+            }
+            combinedSamples.append(contentsOf: buffer.samples)
+        }
+        return try PCMBuffer(
+            samples: combinedSamples,
+            sampleRate: first.sampleRate,
+            channelCount: first.channelCount,
+            timestamp: first.timestamp
+        )
+    }
+
+    private static func unwrapTextOutput(_ output: ProcessorOutput) throws -> TranscriptionResult {
+        if case .text(let result) = output {
+            return result
+        }
+        // Diarized fusion processor always emits `.text`; any other case
+        // is a contract violation.
+        throw PersonalScribeError.invalidState
+    }
+
     private func runPostProcessing(
         _ text: String,
         context: PostProcessingContext
@@ -639,7 +775,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         // handle can silent-sink the one shot. Mid-session preference flips do
         // not rescue the current recording (documented UX). Hold-mode sessions
         // skip VAD entirely (release is the stop signal).
-        let vadPrefs = vadPreferences?.current()
+        //
+        // #078.29: when a `BoundRecipe` is set, VAD config comes from the
+        // recipe's `BoundCaptureController.vad(...)` entry (per L25 — the
+        // recipe builder eager-resolved the parameters). The legacy
+        // `vadPreferences` reader is ignored for the duration of the
+        // session: the recipe wins. No `.vad` controller in the recipe →
+        // no VAD wiring at all.
+        let vadPrefs = resolvedVadPreferencesForSession()
         let vadHandler = onAutoStopRequested
         let vadHandle = await makeVadSessionHandleIfApplicable(prefs: vadPrefs, handler: vadHandler)
 
@@ -677,6 +820,34 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         } catch {
             handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
         }
+    }
+
+    /// #078.29 — pick VAD config for this session. Recipe wins when
+    /// present: the recipe's `.vad` capture controller's bound
+    /// parameters become a `VadPreferences` snapshot for the existing
+    /// VAD wiring path. No `.vad` controller → returns nil (skip VAD
+    /// entirely; legacy `vadPreferences` reader is also ignored). When
+    /// no recipe is bound, fall back to the legacy reader so existing
+    /// callers see no behavior change.
+    private func resolvedVadPreferencesForSession() -> VadPreferences? {
+        if let recipe = boundRecipe {
+            for controller in recipe.captureControllers {
+                if case .vad(
+                    let silenceThreshold,
+                    let showWarning,
+                    let showAutoStoppedNotification
+                ) = controller {
+                    return VadPreferences(
+                        autoStopEnabled: true,
+                        silenceThresholdSeconds: silenceThreshold,
+                        showStoppingWarning: showWarning,
+                        showAutoStoppedNotification: showAutoStoppedNotification
+                    )
+                }
+            }
+            return nil
+        }
+        return vadPreferences?.current()
     }
 
     private func makeVadSessionHandleIfApplicable(
