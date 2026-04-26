@@ -20,13 +20,16 @@ final class ModelBoundProcessorProvidingTests: XCTestCase {
 
         XCTAssertTrue(provider.isDownloaded(descriptor))
 
-        var emitted: [ModelDownloadProgress.Phase] = []
+        final class PhaseBox: @unchecked Sendable {
+            var values: [ModelDownloadProgress.Phase] = []
+        }
+        let emitted = PhaseBox()
         try await provider.download(descriptor) { progress in
-            emitted.append(progress.phase)
+            emitted.values.append(progress.phase)
         }
         try provider.removeDownloadedFiles(descriptor)
 
-        XCTAssertEqual(emitted, [.finished])
+        XCTAssertEqual(emitted.values, [.finished])
         XCTAssertEqual(provider.downloadedDescriptorIDs, [descriptor.id])
         XCTAssertEqual(provider.removedDescriptorIDs, [descriptor.id])
     }
