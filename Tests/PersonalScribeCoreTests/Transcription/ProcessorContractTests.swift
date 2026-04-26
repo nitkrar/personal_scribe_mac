@@ -133,9 +133,11 @@ final class ProcessorContractTests: XCTestCase {
         ]
         let output = try await processor.process(audio: try makeBuffer(), priors: priors)
 
-        XCTAssertTrue(await probe.didPrepare())
+        let didPrepare = await probe.didPrepare()
+        XCTAssertTrue(didPrepare)
         XCTAssertEqual(progressEventCount, 0)
-        XCTAssertEqual(await probe.priorCount(), 1)
+        let priorCount = await probe.priorCount()
+        XCTAssertEqual(priorCount, 1)
 
         switch output {
         case .text(let result):

@@ -229,7 +229,7 @@ private extension DiarizedTurnTranscriptionProcessor {
     static func flattenedTokenTimings(
         from turnResults: [TurnTranscription]
     ) -> [TokenTiming] {
-        turnResults.flatMap { turnResult in
+        turnResults.flatMap { turnResult -> [TokenTiming] in
             guard let tokenTimings = turnResult.result.tokenTimings else {
                 return []
             }
