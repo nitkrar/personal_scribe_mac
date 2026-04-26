@@ -39,8 +39,8 @@ public enum ModelKind: String, Sendable, Equatable, CaseIterable, Codable {
     /// case to `true` once the corresponding adapter lands (#078).
     public var isEnabled: Bool {
         switch self {
-        case .asr: return true
-        case .streamingASR, .vad, .diarization, .tts: return false
+        case .asr, .streamingASR, .diarization: return true
+        case .vad, .tts: return false
         }
     }
 
