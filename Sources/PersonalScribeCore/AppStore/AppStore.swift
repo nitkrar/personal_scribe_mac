@@ -382,6 +382,8 @@ public final class AppStore: ObservableObject {
             return "Cancelled"
         case .invalidState:
             return "Session error"
+        case .invalidActiveMode:
+            return "Selected mode is invalid"
         }
     }
 }
