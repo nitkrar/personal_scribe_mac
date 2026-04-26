@@ -13,6 +13,14 @@ public actor SessionCoordinator {
     private let signposter = OSSignposter(subsystem: PersonalScribeLogger.subsystem, category: "prepare")
     private let pipeline: SessionPipelineOrchestrator
     private let pipelineTranscriber: CoordinatorPipelineTranscriber
+    /// #078.28 — optional registry for re-validating the active recipe
+    /// at session start. Nil for legacy callers that don't yet wire the
+    /// recipe-driven path; in that case validation is skipped.
+    private let workflowModeRegistry: WorkflowModeRegistry?
+    /// Snapshot of currently-available `ModelKind` values for recipe
+    /// validation. Called once per `startIfIdle`/`startHoldIfIdle`. Nil
+    /// when no registry is wired.
+    private let availableKindsProvider: (@Sendable () -> Set<ModelKind>)?
 
     // Step 2.10: additive audio-level multiplexing. Subscribes to the capture
     // service's per-session level stream and fans values out to all
@@ -29,7 +37,9 @@ public actor SessionCoordinator {
         logger: PersonalScribeLogger,
         transcriptRepository: TranscriptRepository? = nil,
         vadProvider: (any VadProviding)? = nil,
-        vadPreferences: (any VadPreferencesReading)? = nil
+        vadPreferences: (any VadPreferencesReading)? = nil,
+        workflowModeRegistry: WorkflowModeRegistry? = nil,
+        availableKindsProvider: (@Sendable () -> Set<ModelKind>)? = nil
     ) {
         let pipelineTranscriber = CoordinatorPipelineTranscriber(
             fixedTranscriber: transcriber,
@@ -42,6 +52,8 @@ public actor SessionCoordinator {
         self.transcriptRepository = transcriptRepository
         self.logger = logger
         self.pipelineTranscriber = pipelineTranscriber
+        self.workflowModeRegistry = workflowModeRegistry
+        self.availableKindsProvider = availableKindsProvider
         self.pipeline = Self.makePipeline(
             capture: capture,
             pipelineTranscriber: pipelineTranscriber,
@@ -62,7 +74,9 @@ public actor SessionCoordinator {
         logger: PersonalScribeLogger,
         transcriptRepository: TranscriptRepository? = nil,
         vadProvider: (any VadProviding)? = nil,
-        vadPreferences: (any VadPreferencesReading)? = nil
+        vadPreferences: (any VadPreferencesReading)? = nil,
+        workflowModeRegistry: WorkflowModeRegistry? = nil,
+        availableKindsProvider: (@Sendable () -> Set<ModelKind>)? = nil
     ) {
         let pipelineTranscriber = CoordinatorPipelineTranscriber(
             modelService: modelService,
@@ -76,6 +90,8 @@ public actor SessionCoordinator {
         self.transcriptRepository = transcriptRepository
         self.logger = logger
         self.pipelineTranscriber = pipelineTranscriber
+        self.workflowModeRegistry = workflowModeRegistry
+        self.availableKindsProvider = availableKindsProvider
         self.pipeline = Self.makePipeline(
             capture: capture,
             pipelineTranscriber: pipelineTranscriber,
@@ -119,6 +135,10 @@ public actor SessionCoordinator {
             return
         }
 
+        if await !validateActiveRecipeForSessionStart() {
+            return
+        }
+
         await performStart()
     }
 
@@ -129,6 +149,10 @@ public actor SessionCoordinator {
     /// state. See `#071`.
     public func startHoldIfIdle() async {
         guard await currentDisplayState() == .idle else {
+            return
+        }
+
+        if await !validateActiveRecipeForSessionStart() {
             return
         }
 
@@ -253,6 +277,26 @@ public actor SessionCoordinator {
 
     private func removeAudioLevelContinuation(id: UUID) {
         audioLevelContinuations[id] = nil
+    }
+
+    /// #078.28 — re-validate the registry's active recipe against the
+    /// currently-available `ModelKind` set right before starting a
+    /// session (per L15). Returns `true` to proceed; `false` after
+    /// publishing `.invalidActiveMode` to abort. When no registry is
+    /// wired (legacy callers) the check is a no-op pass-through.
+    private func validateActiveRecipeForSessionStart() async -> Bool {
+        guard let registry = workflowModeRegistry else {
+            return true
+        }
+        let availableKinds = availableKindsProvider?() ?? Set(ModelKind.allCases)
+        do {
+            _ = try registry.validateActiveForSessionStart(availableKinds: availableKinds)
+            return true
+        } catch {
+            logger.error("Active workflow mode failed validation at session start", error: error)
+            await pipeline.publishSessionStartError(.invalidActiveMode)
+            return false
+        }
     }
 
     private func performStart() async {

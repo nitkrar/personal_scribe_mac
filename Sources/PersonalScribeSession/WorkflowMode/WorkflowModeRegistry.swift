@@ -85,6 +85,30 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
         }
     }
 
+    /// Re-validate the currently-active mode against a fresh
+    /// `availableKinds` snapshot (per L15, #078.28). Called by
+    /// `SessionCoordinator` immediately before starting capture so a
+    /// model that became unavailable since `setActive(...)` ran (e.g.
+    /// the user deleted it from AI Models tab) is caught before audio
+    /// flows.
+    ///
+    /// - Parameter availableKinds: kinds for which `ActiveModelService`
+    ///   currently has an active descriptor. Passed in by the caller
+    ///   so this stays a pure validator (no `ActiveModelService`
+    ///   coupling here).
+    /// - Returns: the validated active mode, ready to be passed to
+    ///   `RecipeBuilder`.
+    /// - Throws: `WorkflowModeValidationError` on the first rule
+    ///   violation. Caller surfaces a descriptive error and aborts the
+    ///   session.
+    public func validateActiveForSessionStart(
+        availableKinds: Set<ModelKind>
+    ) throws -> RecipeWorkflowMode {
+        let mode = activeMode
+        try WorkflowModeValidator.validate(mode, availableKinds: availableKinds)
+        return mode
+    }
+
     /// Remove a custom mode by ID. If the deleted mode was active, the
     /// active selection falls back to the built-in `.dictation`.
     public func deleteCustom(id: String) throws {

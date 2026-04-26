@@ -198,6 +198,21 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.onAutoStopRequested = handler
     }
 
+    /// #078.28 — publish a session-start failure to the snapshot stream
+    /// without ever transitioning through `.capturing`. Used by
+    /// `SessionCoordinator` when active-recipe re-validation fails: the
+    /// pipeline never starts, but observers (pill, ResponseCard) still
+    /// see the error rendered through the same `.error(...)` channel
+    /// they already drive off.
+    public func publishSessionStartError(_ error: PersonalScribeError) {
+        let failure = PipelineStageFailure(
+            stage: .capture,
+            detail: String(describing: error),
+            mappedError: error
+        )
+        handleStageFailure(failure)
+    }
+
     public func snapshot() -> SessionSnapshot {
         currentSnapshot
     }

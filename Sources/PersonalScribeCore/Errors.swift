@@ -8,6 +8,11 @@ public enum PersonalScribeError: Error, Sendable, Equatable {
     case transcriptionFailure
     case cancelled
     case invalidState
+    /// #078.28: the active workflow recipe failed validation at session
+    /// start (per L15). Surfaced when `WorkflowModeRegistry`
+    /// `.validateActiveForSessionStart(...)` throws — the coordinator
+    /// aborts the session without starting capture.
+    case invalidActiveMode
 }
 
 extension PersonalScribeError: LocalizedError {
@@ -27,6 +32,8 @@ extension PersonalScribeError: LocalizedError {
             "The operation was cancelled."
         case .invalidState:
             "The session entered an invalid state."
+        case .invalidActiveMode:
+            "The active workflow mode is not valid for the current model state."
         }
     }
 
@@ -46,6 +53,8 @@ extension PersonalScribeError: LocalizedError {
             "The operation was stopped before it finished."
         case .invalidState:
             "A shared component detected an impossible transition or misuse."
+        case .invalidActiveMode:
+            "The active mode references a model kind that is not currently available."
         }
     }
 
@@ -63,6 +72,8 @@ extension PersonalScribeError: LocalizedError {
             "Retry the operation if you still need it."
         case .invalidState:
             "Reset the session and try again."
+        case .invalidActiveMode:
+            "Pick a different mode in Settings, or download the model the active mode requires."
         }
     }
 }
