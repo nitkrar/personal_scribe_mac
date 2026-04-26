@@ -76,11 +76,16 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
 
         let result = try await adapter.transcribe(audio)
 
-        XCTAssertEqual(await manager.loadCallCount(), 1)
-        XCTAssertEqual(await manager.loadedVersions(), [.tdtCtc110m])
-        XCTAssertEqual(await manager.loadedDirectories(), [expectedModelDirectory])
-        XCTAssertEqual(await manager.transcribeCallCount(), 1)
-        XCTAssertEqual(await manager.lastSamples(), audio.samples)
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(loadCount, 1)
+        let loadedVersions = await manager.loadedVersions()
+        XCTAssertEqual(loadedVersions, [.tdtCtc110m])
+        let loadedDirs = await manager.loadedDirectories()
+        XCTAssertEqual(loadedDirs, [expectedModelDirectory])
+        let transcribeCount = await manager.transcribeCallCount()
+        XCTAssertEqual(transcribeCount, 1)
+        let lastSamples = await manager.lastSamples()
+        XCTAssertEqual(lastSamples, audio.samples)
 
         XCTAssertEqual(result.text, "Ninimma")
         XCTAssertEqual(result.audioDuration, audio.duration)

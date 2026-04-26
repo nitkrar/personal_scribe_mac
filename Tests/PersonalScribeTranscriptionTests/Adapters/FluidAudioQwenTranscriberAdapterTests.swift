@@ -39,9 +39,12 @@ final class FluidAudioQwenTranscriberAdapterTests: PersonalScribeTranscriptionFi
             .standardizedFileURL
 
         XCTAssertEqual(adapter.capabilities, TranscriberCapabilities())
-        XCTAssertEqual(await manager.loadDirectories(), [expectedDirectory])
-        XCTAssertEqual(await manager.loadCallCount(), 1)
-        XCTAssertEqual(await manager.transcribedSamples(), [audio.samples])
+        let loadDirs = await manager.loadDirectories()
+        XCTAssertEqual(loadDirs, [expectedDirectory])
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(loadCount, 1)
+        let samples = await manager.transcribedSamples()
+        XCTAssertEqual(samples, [audio.samples])
 
         XCTAssertEqual(result.text, "hello from qwen")
         XCTAssertEqual(result.audioDuration, audio.duration)

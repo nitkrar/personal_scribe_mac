@@ -128,7 +128,7 @@ extension FluidAudioParakeetTranscriberAdapter {
         expectedBytes: nil
     )
 
-    static func resolveRuntimeVariant(
+    private static func resolveRuntimeVariant(
         for descriptor: ModelDescriptor
     ) -> Result<RuntimeVariant, ModelSelectionError> {
         do {
@@ -140,11 +140,11 @@ extension FluidAudioParakeetTranscriberAdapter {
         }
     }
 
-    func resolvedRuntimeVariant() throws -> RuntimeVariant {
+    private func resolvedRuntimeVariant() throws -> RuntimeVariant {
         try runtimeVariantResult.get()
     }
 
-    func performPrepare(runtimeVariant: RuntimeVariant) async throws {
+    private func performPrepare(runtimeVariant: RuntimeVariant) async throws {
         let modelDirectory = try modelDirectory()
         let startedAt = ContinuousClock.now
         let progressBroadcaster = self.progressBroadcaster
@@ -201,7 +201,7 @@ extension FluidAudioParakeetTranscriberAdapter {
         )
     }
 
-    static func averageConfidence(from tokenTimings: [TokenTiming]?) -> Float? {
+    static func averageConfidence(from tokenTimings: [PersonalScribeCore.TokenTiming]?) -> Float? {
         guard let tokenTimings else {
             return nil
         }
@@ -257,7 +257,7 @@ struct FluidAudioParakeetManagerResult: Sendable, Equatable {
     let text: String
     let processingDuration: Duration?
     let confidence: Float?
-    let tokenTimings: [TokenTiming]?
+    let tokenTimings: [PersonalScribeCore.TokenTiming]?
     let performanceMetrics: TranscriberPerformanceMetrics?
     let ctcDetectedTerms: [String]?
     let ctcAppliedTerms: [String]?
@@ -266,7 +266,7 @@ struct FluidAudioParakeetManagerResult: Sendable, Equatable {
         text: String,
         processingDuration: Duration? = nil,
         confidence: Float? = nil,
-        tokenTimings: [TokenTiming]? = nil,
+        tokenTimings: [PersonalScribeCore.TokenTiming]? = nil,
         performanceMetrics: TranscriberPerformanceMetrics? = nil,
         ctcDetectedTerms: [String]? = nil,
         ctcAppliedTerms: [String]? = nil
@@ -346,7 +346,7 @@ private enum FluidAudioParakeetResultExtractor {
         )
     }
 
-    private static func tokenTimings(from source: Any) -> [TokenTiming]? {
+    private static func tokenTimings(from source: Any) -> [PersonalScribeCore.TokenTiming]? {
         guard
             let rawTokenCollection = directValue(
                 forLabels: ["tokenTimings", "tokens", "timings", "tokenTimestamps"],
@@ -356,7 +356,7 @@ private enum FluidAudioParakeetResultExtractor {
             return nil
         }
 
-        let timings = collectionValues(from: rawTokenCollection).compactMap { item -> TokenTiming? in
+        let timings = collectionValues(from: rawTokenCollection).compactMap { item -> PersonalScribeCore.TokenTiming? in
             let token = stringValue(forLabels: ["token", "text", "value"], in: item)
             let start = durationValue(
                 forLabels: ["start", "startTime", "startOffset", "startSeconds"],
@@ -375,7 +375,7 @@ private enum FluidAudioParakeetResultExtractor {
             let resolvedStart = start ?? .zero
             let resolvedEnd = end ?? duration.map { resolvedStart + $0 } ?? resolvedStart
 
-            return TokenTiming(
+            return PersonalScribeCore.TokenTiming(
                 token: token,
                 start: resolvedStart,
                 end: resolvedEnd,
@@ -472,7 +472,7 @@ private enum FluidAudioParakeetResultExtractor {
 
     private static func directValue(forLabels labels: [String], in source: Any) -> Any? {
         let mirror = Mirror(reflecting: source)
-        let normalizedLabels = Set(labels.map(\.lowercased))
+        let normalizedLabels = Set(labels.map { $0.lowercased() })
 
         for child in mirror.children {
             guard let label = child.label?.lowercased() else {

@@ -59,9 +59,11 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(await manager.loadModelCallCount(), 1)
+        let loadCount = await manager.loadModelCallCount()
+        XCTAssertEqual(loadCount, 1)
+        let loadedDirs = await manager.loadedDirectories()
         XCTAssertEqual(
-            await manager.loadedDirectories(),
+            loadedDirs,
             [
                 rootDirectory
                     .appendingPathComponent(ManagedDirectory.models.pathComponent, isDirectory: true)

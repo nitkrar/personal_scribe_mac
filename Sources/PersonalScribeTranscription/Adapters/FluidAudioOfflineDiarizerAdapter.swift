@@ -12,7 +12,7 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
 
-    public init(
+    public convenience init(
         descriptor: ModelDescriptor,
         storageLocator: any StorageLocator = AppConfig.liveStorageLocator()
     ) {
