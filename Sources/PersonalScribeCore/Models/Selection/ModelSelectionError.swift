@@ -4,6 +4,7 @@ public enum ModelSelectionError: Error, Sendable, Equatable {
     case unknownVoiceModelID(String)
     case descriptorNotRegistered(id: String)
     case storedSelectionNoLongerRegistered(String)
+    case unsupportedKind(expected: ModelKind, actual: ModelKind)
     /// Raised by the disk-space precheck in `DefaultModelService`
     /// before a download is started. `required` is the model's
     /// `approximateSizeBytes` plus the staging buffer; `available`
@@ -21,6 +22,8 @@ extension ModelSelectionError: LocalizedError {
             "Model descriptor is not registered: \(id)"
         case .storedSelectionNoLongerRegistered(let id):
             "Stored voice model is no longer registered: \(id)"
+        case .unsupportedKind(let expected, let actual):
+            "Requested processor for kind \(expected.rawValue), but descriptor uses \(actual.rawValue)."
         case .insufficientDiskSpace(let required, let available):
             Self.formatInsufficientDiskSpaceDescription(required: required, available: available)
         }
@@ -34,6 +37,8 @@ extension ModelSelectionError: LocalizedError {
             "Use a descriptor from the built-in model catalog before creating a transcriber."
         case .storedSelectionNoLongerRegistered:
             "Reset the active model selection to a registered built-in descriptor."
+        case .unsupportedKind:
+            "Use the accessor that matches the descriptor's model kind."
         case .insufficientDiskSpace:
             "Free up space on the volume holding your models directory and try again."
         }
