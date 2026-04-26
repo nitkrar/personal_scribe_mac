@@ -32,6 +32,49 @@ final class ModelBoundProcessorProvidingTests: XCTestCase {
     }
 }
 
+final class AdapterRecordTests: XCTestCase {
+    func testRecordHoldsThreeOptionalsForOneDescriptor() {
+        let descriptor = BuiltInModelCatalog.parakeetTDT06Bv2
+        let record = AdapterRecord(
+            descriptorID: descriptor.id,
+            transcriber: StubTranscriber2()
+        )
+
+        XCTAssertEqual(record.descriptorID, descriptor.id)
+        XCTAssertNotNil(record.transcriber)
+        XCTAssertNil(record.streamingTranscriber)
+        XCTAssertNil(record.diarizer)
+    }
+
+    func testRecordExposesUniformLifecycleAcrossThreeAdapterTypes() async throws {
+        let records = [
+            AdapterRecord(
+                descriptorID: "batch",
+                transcriber: StubTranscriber2()
+            ),
+            AdapterRecord(
+                descriptorID: "streaming",
+                streamingTranscriber: StubStreamingTranscriber()
+            ),
+            AdapterRecord(
+                descriptorID: "diarizer",
+                diarizer: StubSpeakerDiarizer()
+            ),
+        ]
+
+        for record in records {
+            let lifecycle: any ModelLifecycle = record.lifecycle
+            try await lifecycle.prepare()
+
+            var emitted = 0
+            for await _ in lifecycle.modelDownloadProgress() {
+                emitted += 1
+            }
+            XCTAssertEqual(emitted, 0)
+        }
+    }
+}
+
 private struct StubTranscriber2: Transcriber2 {
     let capabilities = TranscriberCapabilities()
 
