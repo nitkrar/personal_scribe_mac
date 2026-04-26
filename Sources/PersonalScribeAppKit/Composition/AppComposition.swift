@@ -87,16 +87,16 @@ public enum AppComposition {
     /// `ActiveModelService` for the kinds with active descriptors so the
     /// validator can reject modes whose required Kind has no active model.
     public static let workflowModeRegistry: WorkflowModeRegistry = {
-        // Closure runs in `@Sendable` context; the registry's mutators
-        // (setActive, saveCustom) are only called from MainActor-bound
-        // call sites in this app (SessionCoordinator is @MainActor),
-        // so `assumeIsolated` is safe here.
+        // Initial fix per Phase G runtime crash: SessionCoordinator is
+        // an actor (NOT @MainActor), so the registry's
+        // availableKindsProvider runs on a non-MainActor context and
+        // cannot use `MainActor.assumeIsolated` to reach
+        // `modelService.activeDescriptor`. Falling back to "all enabled
+        // kinds" (skips the kind-availability rule of validation).
+        // Tightening this — passing the actual per-kind active set
+        // without the MainActor hop — is filed as a follow-up.
         let kindsProvider: @Sendable () -> Set<ModelKind> = {
-            MainActor.assumeIsolated {
-                Set(ModelKind.allCases.filter { kind in
-                    modelService.activeDescriptor(for: kind) != nil
-                })
-            }
+            Set(ModelKind.allCases.filter(\.isEnabled))
         }
         do {
             let registry = try WorkflowModeRegistry(
@@ -145,11 +145,7 @@ public enum AppComposition {
             vadPreferences: vadPreferences,
             workflowModeRegistry: workflowModeRegistry,
             availableKindsProvider: {
-                MainActor.assumeIsolated {
-                    Set(ModelKind.allCases.filter { kind in
-                        modelService.activeDescriptor(for: kind) != nil
-                    })
-                }
+                Set(ModelKind.allCases.filter(\.isEnabled))
             }
         )
 
