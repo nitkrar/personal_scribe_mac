@@ -413,8 +413,8 @@ final class AppStoreTests: XCTestCase {
         )
     }
 
-    private func makeMode(id: String, name: String) -> WorkflowMode {
-        WorkflowMode(
+    private func makeMode(id: String, name: String) -> LegacyWorkflowMode {
+        LegacyWorkflowMode(
             id: id,
             name: name,
             voiceModelID: "voice-\(id)"

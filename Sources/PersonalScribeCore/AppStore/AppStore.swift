@@ -163,7 +163,7 @@ public final class AppStore: ObservableObject {
         rederivePillVisibility()
     }
 
-    private func handleActiveModeChange(_ activeMode: WorkflowMode?) {
+    private func handleActiveModeChange(_ activeMode: LegacyWorkflowMode?) {
         updateSnapshot { snapshot in
             snapshot.activeMode = activeMode
         }

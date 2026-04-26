@@ -40,7 +40,7 @@ final class WorkflowModeStoreTests: XCTestCase {
         let original = WorkflowModeDocument(
             activeModeID: "dictation",
             customModes: [
-                RecipeWorkflowMode(
+                WorkflowMode(
                     id: "med-notes",
                     name: "Medical Notes",
                     pipelineShape: .batch,
@@ -92,7 +92,7 @@ final class WorkflowModeStoreTests: XCTestCase {
             store: store1,
             availableKindsProvider: { [.asr] }
         )
-        let custom = RecipeWorkflowMode(
+        let custom = WorkflowMode(
             id: "med-notes",
             name: "Medical Notes",
             pipelineShape: .batch,

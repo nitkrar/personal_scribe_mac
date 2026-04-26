@@ -13,10 +13,10 @@ import PersonalScribeCore
 /// supplied via a closure so the registry stays decoupled from
 /// `ActiveModelService`.
 ///
-/// Built-in modes: only `RecipeWorkflowMode.dictation` today. New
+/// Built-in modes: only `WorkflowMode.dictation` today. New
 /// built-ins land as additions to `builtInModes` here, not via the store.
 public final class WorkflowModeRegistry: @unchecked Sendable {
-    public static let builtInModes: [RecipeWorkflowMode] = [.dictation]
+    public static let builtInModes: [WorkflowMode] = [.dictation]
 
     private let lock = NSLock()
     private let store: any WorkflowModeStoring
@@ -33,7 +33,7 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
     }
 
     /// All modes the user can pick from: built-ins + custom.
-    public var allModes: [RecipeWorkflowMode] {
+    public var allModes: [WorkflowMode] {
         lock.withLock {
             Self.builtInModes + document.customModes
         }
@@ -42,7 +42,7 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
     /// Currently-active mode. Falls back to the built-in `.dictation`
     /// if no `activeModeID` is persisted, or if the persisted ID no
     /// longer resolves to a known mode.
-    public var activeMode: RecipeWorkflowMode {
+    public var activeMode: WorkflowMode {
         lock.withLock {
             resolveActiveLocked()
         }
@@ -67,7 +67,7 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
     /// Save (insert or update) a custom mode. Validates before writing.
     /// Built-in IDs cannot be overwritten — throws
     /// `.builtInIDReserved(...)`.
-    public func saveCustom(_ mode: RecipeWorkflowMode) throws {
+    public func saveCustom(_ mode: WorkflowMode) throws {
         try lock.withLock {
             if Self.builtInModes.contains(where: { $0.id == mode.id }) {
                 throw WorkflowModeRegistryError.builtInIDReserved(mode.id)
@@ -103,7 +103,7 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
     ///   session.
     public func validateActiveForSessionStart(
         availableKinds: Set<ModelKind>
-    ) throws -> RecipeWorkflowMode {
+    ) throws -> WorkflowMode {
         let mode = activeMode
         try WorkflowModeValidator.validate(mode, availableKinds: availableKinds)
         return mode
@@ -115,7 +115,7 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
         try lock.withLock {
             document.customModes.removeAll { $0.id == id }
             if document.activeModeID == id {
-                document.activeModeID = RecipeWorkflowMode.dictation.id
+                document.activeModeID = WorkflowMode.dictation.id
             }
             try store.save(document)
         }
@@ -123,14 +123,14 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
 
     // MARK: - Internals (lock-held)
 
-    private func resolveActiveLocked() -> RecipeWorkflowMode {
+    private func resolveActiveLocked() -> WorkflowMode {
         if let id = document.activeModeID, let mode = resolveModeLocked(id: id) {
             return mode
         }
         return .dictation
     }
 
-    private func resolveModeLocked(id: String) -> RecipeWorkflowMode? {
+    private func resolveModeLocked(id: String) -> WorkflowMode? {
         if let builtIn = Self.builtInModes.first(where: { $0.id == id }) {
             return builtIn
         }

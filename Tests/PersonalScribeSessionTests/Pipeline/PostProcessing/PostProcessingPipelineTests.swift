@@ -62,7 +62,7 @@ final class PostProcessingPipelineTests: XCTestCase {
     }
 
     private func makeContext() -> PostProcessingContext {
-        let mode = WorkflowMode(
+        let mode = LegacyWorkflowMode(
             id: "dictation-plus",
             name: "Dictation Plus",
             voiceModelID: "voice.default",

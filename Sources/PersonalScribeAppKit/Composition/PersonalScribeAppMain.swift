@@ -436,8 +436,8 @@ final class StatusItemControllerHost: ObservableObject {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
         },
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
-        modes: [WorkflowMode] = ModeRegistry.all,
-        setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
+        modes: [LegacyWorkflowMode] = ModeRegistry.all,
+        setActiveMode: @escaping @MainActor (LegacyWorkflowMode) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {}
     ) {
         self.controller = StatusItemController(

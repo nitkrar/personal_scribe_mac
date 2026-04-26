@@ -1,7 +1,7 @@
 import XCTest
 @testable import PersonalScribeCore
 
-final class WorkflowModeTests: XCTestCase {
+final class LegacyWorkflowModeTests: XCTestCase {
     func testDefaultRegistryContainsDictation() {
         XCTAssertEqual(ModeRegistry.all, [ModeRegistry.dictation])
         XCTAssertEqual(ModeRegistry.dictation.name, "Dictation")

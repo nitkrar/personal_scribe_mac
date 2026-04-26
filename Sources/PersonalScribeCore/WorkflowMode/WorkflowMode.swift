@@ -14,19 +14,16 @@ import Foundation
 /// the validator (#078.13) cross-checks against the processor list (a
 /// streaming transcriber processor requires `.streaming`).
 ///
-/// Naming: `RecipeWorkflowMode` is **temporary**. Today's legacy
-/// `WorkflowMode` (`Sources/PersonalScribeCore/WorkflowMode.swift` —
-/// `{id, name, voiceModelID, aiModelID, systemPrompt}`) lives
-/// alongside this type through Phase G to keep trunk buildable. At
-/// Phase G cutover (#078.30b) the legacy type is renamed to
-/// `LegacyWorkflowMode` and `RecipeWorkflowMode` is renamed to
-/// `WorkflowMode`.
+/// Phase G cutover (#078.30b) renamed the legacy `WorkflowMode`
+/// (`{id, name, voiceModelID, aiModelID, systemPrompt}`) to
+/// `LegacyWorkflowMode` and promoted this recipe-driven type to the
+/// canonical `WorkflowMode` name.
 ///
 /// Codable: serialised as part of `WorkflowModeDocument` (#078.12) on
 /// `workflow-modes.json` in `AppConfig.baseDirectory()`.
 ///
 /// `Identifiable` so Modes-tab UI bindings work directly off `id`.
-public struct RecipeWorkflowMode: Codable, Equatable, Identifiable, Sendable {
+public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let name: String
     public let pipelineShape: PipelineShape
@@ -55,12 +52,12 @@ public struct RecipeWorkflowMode: Codable, Equatable, Identifiable, Sendable {
     /// Default Dictation recipe — batch ASR, manual-hotkey capture,
     /// clipboard + paste + history sinks. Mirrors the user-visible
     /// behavior of today's `ModeRegistry.dictation` legacy
-    /// `WorkflowMode`. The `.clipboard` restore-enabled parameter
+    /// `LegacyWorkflowMode`. The `.clipboard` restore-enabled parameter
     /// defers to the global `ClipboardRestoreEnabled` preference; the
     /// VAD capture controller is **not** included here — VAD enters
     /// the recipe only when the user has the "Auto-stop after silence"
     /// toggle on (Phase F migration, #078.26).
-    public static let dictation = RecipeWorkflowMode(
+    public static let dictation = WorkflowMode(
         id: "dictation",
         name: "Dictation",
         pipelineShape: .batch,

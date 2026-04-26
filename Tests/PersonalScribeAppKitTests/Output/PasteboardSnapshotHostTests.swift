@@ -250,8 +250,8 @@ private final class FakePermissionService: PermissionService {
 }
 
 private final class FakeActiveModeProvider: @unchecked Sendable, AppStoreActiveModeProviding {
-    func currentActiveMode() -> WorkflowMode? { nil }
-    func activeModeStream() -> AsyncStream<WorkflowMode?> {
+    func currentActiveMode() -> LegacyWorkflowMode? { nil }
+    func activeModeStream() -> AsyncStream<LegacyWorkflowMode?> {
         AsyncStream { continuation in continuation.finish() }
     }
 }

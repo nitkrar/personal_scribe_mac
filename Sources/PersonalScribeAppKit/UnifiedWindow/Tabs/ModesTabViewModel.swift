@@ -22,20 +22,20 @@ import PersonalScribeSession
 @MainActor
 public final class ModesTabViewModel: ObservableObject {
     /// All modes to render as cards in the tab.
-    @Published public private(set) var modes: [WorkflowMode]
+    @Published public private(set) var modes: [LegacyWorkflowMode]
 
     /// Identifier of the currently-active mode, if any. Drives the
     /// green-dot / active-state indicator on each card.
     @Published public private(set) var activeModeID: String?
 
     private let modelService: ActiveModelService?
-    private let setActiveHandler: (@MainActor (WorkflowMode) async -> Void)?
+    private let setActiveHandler: (@MainActor (LegacyWorkflowMode) async -> Void)?
     private var cancellables: Set<AnyCancellable> = []
 
     public init(
-        modes: [WorkflowMode] = ModeRegistry.all,
+        modes: [LegacyWorkflowMode] = ModeRegistry.all,
         modelService: ActiveModelService? = nil,
-        setActiveHandler: (@MainActor (WorkflowMode) async -> Void)? = nil
+        setActiveHandler: (@MainActor (LegacyWorkflowMode) async -> Void)? = nil
     ) {
         self.modes = modes
         self.modelService = modelService
@@ -71,7 +71,7 @@ public final class ModesTabViewModel: ObservableObject {
     }
 
     /// `true` if `mode` matches the currently-active mode id.
-    public func isActive(_ mode: WorkflowMode) -> Bool {
+    public func isActive(_ mode: LegacyWorkflowMode) -> Bool {
         guard let activeModeID else { return false }
         return mode.id == activeModeID
     }
@@ -80,13 +80,13 @@ public final class ModesTabViewModel: ObservableObject {
     /// service's `$activeModelIDs` publisher then pushes the new id
     /// back through the Combine subscription, keeping the tab in
     /// lock-step.
-    public func setActive(_ mode: WorkflowMode) async {
+    public func setActive(_ mode: LegacyWorkflowMode) async {
         guard let setActiveHandler else { return }
         await setActiveHandler(mode)
     }
 
     private static func deriveActiveModeID(
-        modes: [WorkflowMode],
+        modes: [LegacyWorkflowMode],
         modelService: ActiveModelService?
     ) -> String? {
         guard

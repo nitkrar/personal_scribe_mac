@@ -46,7 +46,7 @@ struct StatusItemMenuModel: Equatable {
     }
 
     /// One row inside a `.modeSubmenu(...)`. `modeID` is the
-    /// `WorkflowMode.id` payload forwarded to the `setActiveMode`
+    /// `LegacyWorkflowMode.id` payload forwarded to the `setActiveMode`
     /// closure when the user selects a row.
     struct ModeSubmenuChild: Equatable {
         let modeID: String
@@ -110,7 +110,7 @@ struct StatusItemMenuModel: Equatable {
         /// to `AudioInputDeviceProviding.selectDevice(id:)`.
         case selectAudioInputDevice
         /// Dispatch id for Mode-submenu rows (#068). The payload
-        /// (`WorkflowMode.id`) travels on the `ModeSubmenuChild`,
+        /// (`LegacyWorkflowMode.id`) travels on the `ModeSubmenuChild`,
         /// not through this enum — the controller hands the id to
         /// the injected `setActiveMode` closure.
         case selectMode
@@ -154,7 +154,7 @@ struct StatusItemMenuModel: Equatable {
         isOnboardingComplete: Bool = true,
         inputDevices: [AudioInputDevice] = [],
         currentInputDeviceID: String? = nil,
-        modes: [WorkflowMode] = [],
+        modes: [LegacyWorkflowMode] = [],
         currentModeID: String? = nil
     ) -> StatusItemMenuModel {
         _ = isOnboardingComplete

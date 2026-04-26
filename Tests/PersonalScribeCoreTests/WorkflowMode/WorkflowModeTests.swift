@@ -2,16 +2,17 @@ import Foundation
 import XCTest
 @testable import PersonalScribeCore
 
-/// #078.11 — `RecipeWorkflowMode` lands alongside the legacy
-/// `WorkflowMode` (NOT touched). Tests pin the three-role-list shape,
-/// the dictation built-in default, and Codable round-trip.
-final class RecipeWorkflowModeTests: XCTestCase {
+/// #078.11 — recipe-driven `WorkflowMode` (renamed from
+/// `RecipeWorkflowMode` at #078.30b cutover). Tests pin the
+/// three-role-list shape, the dictation built-in default, and
+/// Codable round-trip.
+final class WorkflowModeTests: XCTestCase {
 
     func testRecipeHoldsThreeRoleLists() {
         // The recipe carries three independently-typed lists per L20.
         // Constructing one with explicit lists and reading them back
         // pins the role separation.
-        let recipe = RecipeWorkflowMode(
+        let recipe = WorkflowMode(
             id: "test-recipe",
             name: "Test Recipe",
             pipelineShape: .batch,
@@ -30,7 +31,7 @@ final class RecipeWorkflowModeTests: XCTestCase {
     }
 
     func testDictationDefaultIsBatchPipelineWithTranscriberAndClipboardSink() {
-        let dictation = RecipeWorkflowMode.dictation
+        let dictation = WorkflowMode.dictation
 
         XCTAssertEqual(dictation.id, "dictation")
         XCTAssertEqual(dictation.pipelineShape, .batch)
@@ -58,13 +59,13 @@ final class RecipeWorkflowModeTests: XCTestCase {
     }
 
     func testRecipeCodableRoundTrip() throws {
-        let original = RecipeWorkflowMode.dictation
+        let original = WorkflowMode.dictation
 
         let encoder = JSONEncoder()
         let decoder = JSONDecoder()
 
         let data = try encoder.encode(original)
-        let decoded = try decoder.decode(RecipeWorkflowMode.self, from: data)
+        let decoded = try decoder.decode(WorkflowMode.self, from: data)
 
         XCTAssertEqual(decoded, original)
     }

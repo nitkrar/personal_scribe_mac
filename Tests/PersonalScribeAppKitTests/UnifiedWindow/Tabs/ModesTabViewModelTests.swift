@@ -10,19 +10,19 @@ import PersonalScribeCore
 final class ModesTabViewModelTests: XCTestCase {
     // MARK: - Fixtures
 
-    private static let dictationMode = WorkflowMode(
+    private static let dictationMode = LegacyWorkflowMode(
         id: "dictation",
         name: "Dictation",
         voiceModelID: BuiltInModelCatalog.parakeetTDT06Bv2.id
     )
 
-    private static let lightweightMode = WorkflowMode(
+    private static let lightweightMode = LegacyWorkflowMode(
         id: "lightweight",
         name: "Lightweight",
         voiceModelID: BuiltInModelCatalog.parakeetTDTCTC110M.id
     )
 
-    private static let allModes: [WorkflowMode] = [
+    private static let allModes: [LegacyWorkflowMode] = [
         dictationMode,
         lightweightMode,
     ]

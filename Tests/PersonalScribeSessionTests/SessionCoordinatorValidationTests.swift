@@ -28,7 +28,7 @@ final class SessionCoordinatorValidationTests: XCTestCase {
 
         // Registry seeded with a custom mode that requires .streamingASR
         // but only .asr is available — validation must fail.
-        let needsStreaming = RecipeWorkflowMode(
+        let needsStreaming = WorkflowMode(
             id: "needs-streaming",
             name: "Needs streaming",
             pipelineShape: .streaming,
@@ -176,7 +176,7 @@ final class SessionCoordinatorValidationTests: XCTestCase {
     /// Direct unit on the registry: throws when the active mode's
     /// referenced kind is not in `availableKinds`.
     func testRegistryValidateActiveThrowsOnMissingKind() throws {
-        let custom = RecipeWorkflowMode(
+        let custom = WorkflowMode(
             id: "needs-streaming",
             name: "Needs streaming",
             pipelineShape: .streaming,

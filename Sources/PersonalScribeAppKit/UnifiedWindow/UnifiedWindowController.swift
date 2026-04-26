@@ -37,9 +37,9 @@ final class UnifiedWindowController: NSWindowController {
         metricsReader: any MetricsReading,
         permissionService: any PermissionService,
         inputDeviceProvider: any AudioInputDeviceProviding,
-        modes: [WorkflowMode] = ModeRegistry.all,
+        modes: [LegacyWorkflowMode] = ModeRegistry.all,
         modelService: ActiveModelService,
-        setActiveMode: (@MainActor (WorkflowMode) async -> Void)? = nil,
+        setActiveMode: (@MainActor (LegacyWorkflowMode) async -> Void)? = nil,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {

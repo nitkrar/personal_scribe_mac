@@ -50,7 +50,7 @@ final class WorkflowModeRegistryTests: XCTestCase {
     }
 
     func testSetActiveRejectsModeWithUnavailableKind() throws {
-        let custom = RecipeWorkflowMode(
+        let custom = WorkflowMode(
             id: "needs-streaming",
             name: "Needs streaming",
             pipelineShape: .streaming,
@@ -137,8 +137,8 @@ final class WorkflowModeRegistryTests: XCTestCase {
     private static func makeCustomDictation(
         id: String,
         name: String = "Custom Dictation"
-    ) -> RecipeWorkflowMode {
-        RecipeWorkflowMode(
+    ) -> WorkflowMode {
+        WorkflowMode(
             id: id,
             name: name,
             pipelineShape: .batch,

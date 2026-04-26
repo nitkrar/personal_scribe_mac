@@ -10,7 +10,7 @@ final class WorkflowModeValidatorTests: XCTestCase {
     // MARK: - Rule-level tests
 
     func testEmptyProcessorsListIsInvalid() {
-        let recipe = RecipeWorkflowMode(
+        let recipe = WorkflowMode(
             id: "empty",
             name: "Empty",
             pipelineShape: .batch,
@@ -34,7 +34,7 @@ final class WorkflowModeValidatorTests: XCTestCase {
 
     func testStreamingTranscriberRequiresStreamingShape() {
         // Streaming processor declared with batch shape — must fail.
-        let recipe = RecipeWorkflowMode(
+        let recipe = WorkflowMode(
             id: "mismatched",
             name: "Mismatched",
             pipelineShape: .batch,
@@ -59,7 +59,7 @@ final class WorkflowModeValidatorTests: XCTestCase {
     func testDiarizedTurnsRequiresAsrOrStreamingAsrTranscriberKind() {
         // Diarized turns with a non-ASR transcriber kind (e.g. .vad)
         // must fail with the dedicated error.
-        let recipe = RecipeWorkflowMode(
+        let recipe = WorkflowMode(
             id: "bad-diarized",
             name: "Bad Diarized",
             pipelineShape: .batch,
@@ -90,7 +90,7 @@ final class WorkflowModeValidatorTests: XCTestCase {
 
     func testValidDictationRecipePassesValidation() throws {
         try WorkflowModeValidator.validate(
-            RecipeWorkflowMode.dictation,
+            WorkflowMode.dictation,
             availableKinds: [.asr]
         )
     }
@@ -98,7 +98,7 @@ final class WorkflowModeValidatorTests: XCTestCase {
     func testValidMeetingRecipePassesValidation() throws {
         // Meeting-style recipe: batch pipeline, diarized turns
         // processor (diarization + ASR), VAD capture, history sink.
-        let meeting = RecipeWorkflowMode(
+        let meeting = WorkflowMode(
             id: "meeting",
             name: "Meeting",
             pipelineShape: .batch,

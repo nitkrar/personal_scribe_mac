@@ -1,7 +1,7 @@
 import Foundation
 import PersonalScribeCore
 
-/// Runtime-bound view of a `RecipeWorkflowMode` (#078.27).
+/// Runtime-bound view of a `WorkflowMode` (#078.27).
 ///
 /// Produced by `RecipeBuilder` at session start. Holds **resolved**
 /// adapter instances + parameter values, eager per L25: descriptor

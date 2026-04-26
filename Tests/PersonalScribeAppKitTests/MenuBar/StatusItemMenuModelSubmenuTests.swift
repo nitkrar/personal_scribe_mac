@@ -222,7 +222,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
     func testModeSubmenuPresentWithChildrenAndActiveCheckmark() {
         let modes = [
             ModeRegistry.dictation,
-            WorkflowMode(id: "command", name: "Command", voiceModelID: "v"),
+            LegacyWorkflowMode(id: "command", name: "Command", voiceModelID: "v"),
         ]
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,

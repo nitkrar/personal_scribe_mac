@@ -13,7 +13,7 @@ import Foundation
 /// - `activeModeID: String?` — id of the currently-active recipe.
 ///   `nil` means "no preference yet" — registry resolves to the
 ///   built-in `dictation` default.
-/// - `customModes: [RecipeWorkflowMode]` — user-defined recipes.
+/// - `customModes: [WorkflowMode]` — user-defined recipes.
 ///   Built-in recipes are not persisted here; they live in code.
 ///
 /// Defaults: `init()` produces a fresh document with
@@ -25,12 +25,12 @@ public struct WorkflowModeDocument: Codable, Equatable, Sendable {
 
     public var schemaVersion: Int
     public var activeModeID: String?
-    public var customModes: [RecipeWorkflowMode]
+    public var customModes: [WorkflowMode]
 
     public init(
         schemaVersion: Int = WorkflowModeDocument.currentSchemaVersion,
         activeModeID: String? = nil,
-        customModes: [RecipeWorkflowMode] = []
+        customModes: [WorkflowMode] = []
     ) {
         self.schemaVersion = schemaVersion
         self.activeModeID = activeModeID
@@ -54,7 +54,7 @@ public struct WorkflowModeDocument: Codable, Equatable, Sendable {
         // older / hand-edited documents decode-friendly without
         // forcing the registry to special-case the missing key.
         self.customModes = try container.decodeIfPresent(
-            [RecipeWorkflowMode].self,
+            [WorkflowMode].self,
             forKey: .customModes
         ) ?? []
     }

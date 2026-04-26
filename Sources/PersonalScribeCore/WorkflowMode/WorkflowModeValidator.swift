@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pure-function central validator for `RecipeWorkflowMode` (per #078
+/// Pure-function central validator for `WorkflowMode` (per #078
 /// L15). Fires at three sites: recipe save (registry), recipe build
 /// (`RecipeBuilder`), and session start (`SessionCoordinator`).
 ///
@@ -31,7 +31,7 @@ public enum WorkflowModeValidator {
     ///     an active descriptor. Passed in by the caller so this
     ///     function stays pure / testable.
     public static func validate(
-        _ mode: RecipeWorkflowMode,
+        _ mode: WorkflowMode,
         availableKinds: Set<ModelKind>
     ) throws {
         // Rule 1: non-empty processors.

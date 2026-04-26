@@ -12,7 +12,7 @@ final class WorkflowModeDocumentTests: XCTestCase {
         let original = WorkflowModeDocument(
             schemaVersion: 1,
             activeModeID: "dictation",
-            customModes: [RecipeWorkflowMode.dictation]
+            customModes: [WorkflowMode.dictation]
         )
 
         let encoder = JSONEncoder()

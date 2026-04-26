@@ -5,7 +5,7 @@ import Foundation
 /// wrapper around the existing `Preference<Value>` mechanism: the same
 /// `String` UserDefaults key, the same hardcoded `default` fallback, the
 /// same Codable resolver via `PreferenceCodec`. The wrapper exists so
-/// recipes (`RecipeWorkflowMode`) can serialise `{source: "setting",
+/// recipes (`WorkflowMode`) can serialise `{source: "setting",
 /// key: "..."}` per L22 without baking a `Preference` instance into the
 /// recipe — settings are referred to by key, not by binding.
 ///

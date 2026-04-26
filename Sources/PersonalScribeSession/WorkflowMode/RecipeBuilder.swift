@@ -1,7 +1,7 @@
 import Foundation
 import PersonalScribeCore
 
-/// Builds a `BoundRecipe` from a `RecipeWorkflowMode` at session start.
+/// Builds a `BoundRecipe` from a `WorkflowMode` at session start.
 ///
 /// Per L25 (eager descriptor binding):
 /// - `ActiveModelService.activeDescriptor(for: kind)` resolves once
@@ -33,7 +33,7 @@ public final class RecipeBuilder {
         self.defaults = defaults
     }
 
-    public func build(_ mode: RecipeWorkflowMode) throws -> BoundRecipe {
+    public func build(_ mode: WorkflowMode) throws -> BoundRecipe {
         let processors = try mode.processors.map { try buildProcessor($0) }
         let captureControllers = mode.captureControllers.map { buildCaptureController($0) }
         let outputSinks = mode.outputSinks.map { buildOutputSink($0) }

@@ -5,7 +5,7 @@ import PersonalScribeCore
 /// (`VadAutoStopEnabled`, `AutoPasteEnabled`) into the recipe model
 /// per L18 + L27.
 ///
-/// Why this exists: the built-in `RecipeWorkflowMode.dictation` has
+/// Why this exists: the built-in `WorkflowMode.dictation` has
 /// **no `VadController`** and includes `.frontmostPaste`. Today's users
 /// have legacy `VadAutoStopEnabled = true` (default), so they expect
 /// VAD on. Without migration, post-#078 they'd silently lose VAD —
@@ -64,7 +64,7 @@ public final class LegacyToggleMigrator: @unchecked Sendable {
 
     // MARK: - Internals
 
-    private func makeMigratedDictation(legacy: LegacyToggleSnapshot) -> RecipeWorkflowMode {
+    private func makeMigratedDictation(legacy: LegacyToggleSnapshot) -> WorkflowMode {
         var captureControllers: [CaptureControllerSpec] = []
         if legacy.vadAutoStopEnabled {
             captureControllers.append(
@@ -87,7 +87,7 @@ public final class LegacyToggleMigrator: @unchecked Sendable {
         }
         outputSinks.append(.transcriptHistorySQLite)
 
-        return RecipeWorkflowMode(
+        return WorkflowMode(
             id: Self.migratedModeID,
             name: Self.migratedModeName,
             pipelineShape: .batch,
@@ -117,7 +117,7 @@ public struct LegacyToggleSnapshot: Equatable, Sendable {
         )
     }
 
-    /// Built-in `RecipeWorkflowMode.dictation` has NO VAD and paste IS
+    /// Built-in `WorkflowMode.dictation` has NO VAD and paste IS
     /// enabled. State that doesn't match that needs a forked recipe.
     public var differsFromBuiltInDictation: Bool {
         vadAutoStopEnabled != false || autoPasteEnabled != true

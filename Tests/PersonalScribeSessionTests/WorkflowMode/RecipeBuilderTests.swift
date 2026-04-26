@@ -67,7 +67,7 @@ final class RecipeBuilderTests: XCTestCase {
 
         // Recipe with VAD: silence threshold via setting (resolves to
         // 2.5s from defaults), showWarning via override (forces true).
-        let mode = RecipeWorkflowMode(
+        let mode = WorkflowMode(
             id: "vad-mode",
             name: "VAD Mode",
             pipelineShape: .batch,
