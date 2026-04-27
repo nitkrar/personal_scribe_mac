@@ -18,14 +18,16 @@ public struct GeneralTab: View {
         launchAtLoginService: any LaunchAtLoginServicing = SystemLaunchAtLoginService(),
         onHotkeyUpdate: @escaping @MainActor (HotkeyPreference) -> Void = { preference in
             AppComposition.hotkeyMonitor.updateRecordingHotkey(preference)
-        }
+        },
+        workflowModeRegistry: WorkflowModeRegistry = AppComposition.workflowModeRegistry
     ) {
         _viewModel = StateObject(
             wrappedValue: GeneralTabViewModel(
                 defaults: defaults,
                 menuBarVisibilityProvider: menuBarVisibilityProvider,
                 menuBarVisibilitySetter: menuBarVisibilitySetter,
-                launchAtLoginService: launchAtLoginService
+                launchAtLoginService: launchAtLoginService,
+                workflowModeRegistry: workflowModeRegistry
             )
         )
         _shortcutsViewModel = StateObject(
@@ -608,6 +610,14 @@ final class GeneralTabViewModel: ObservableObject {
     private let systemIsDarkProvider: @MainActor () -> Bool
     private var effectiveAppearanceObservation: NSKeyValueObservation?
     private let launchAtLoginService: any LaunchAtLoginServicing
+    /// Per #078.33 / L27: the three structural toggles (Auto-paste,
+    /// Auto-stop after silence, Restore clipboard) bridge the legacy
+    /// `UserDefaults` write to a recipe mutation on the active
+    /// workflow mode. Optional so existing callers and tests that
+    /// don't exercise the bridge keep compiling; production wiring
+    /// (`AppComposition`) always supplies it. When `nil`, setters
+    /// degrade to the pre-bridge UserDefaults-only behavior.
+    private let workflowModeRegistry: WorkflowModeRegistry?
 
     init(
         defaults: UserDefaults = .standard,
@@ -618,12 +628,14 @@ final class GeneralTabViewModel: ObservableObject {
                 from: [.aqua, .darkAqua]
             ) == .darkAqua
         },
-        launchAtLoginService: any LaunchAtLoginServicing = SystemLaunchAtLoginService()
+        launchAtLoginService: any LaunchAtLoginServicing = SystemLaunchAtLoginService(),
+        workflowModeRegistry: WorkflowModeRegistry? = nil
     ) {
         self.defaults = defaults
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.systemIsDarkProvider = systemIsDarkProvider
         self.launchAtLoginService = launchAtLoginService
+        self.workflowModeRegistry = workflowModeRegistry
         self.pillVisibilityMode = PillVisibility.resolve(from: defaults)
         // Snapshot-at-init: isMenuBarVisible is NOT re-read while the
         // Settings window is open. The General tab is the sole mutator
@@ -711,11 +723,53 @@ final class GeneralTabViewModel: ObservableObject {
     func setAutoPasteEnabled(_ enabled: Bool) {
         autoPasteEnabled = enabled
         AutoPasteEnabledPreference.persist(enabled, to: defaults)
+
+        mutateActiveRecipe { mode in
+            var sinks = mode.outputSinks.filter { sink in
+                if case .frontmostPaste = sink { return false }
+                return true
+            }
+            if enabled {
+                if let clipboardIdx = sinks.firstIndex(where: { sink in
+                    if case .clipboard = sink { return true }
+                    return false
+                }) {
+                    sinks.insert(.frontmostPaste, at: clipboardIdx + 1)
+                } else {
+                    sinks.append(.frontmostPaste)
+                }
+            }
+            return WorkflowMode(
+                id: mode.id,
+                name: mode.name,
+                pipelineShape: mode.pipelineShape,
+                processors: mode.processors,
+                captureControllers: mode.captureControllers,
+                outputSinks: sinks
+            )
+        }
     }
 
     func setClipboardRestoreEnabled(_ enabled: Bool) {
         clipboardRestoreEnabled = enabled
         ClipboardRestoreEnabledPreference.persist(enabled, to: defaults)
+
+        mutateActiveRecipe { mode in
+            let newSinks = mode.outputSinks.map { sink -> OutputSinkSpec in
+                if case .clipboard = sink {
+                    return .clipboard(restoreEnabled: .override(enabled))
+                }
+                return sink
+            }
+            return WorkflowMode(
+                id: mode.id,
+                name: mode.name,
+                pipelineShape: mode.pipelineShape,
+                processors: mode.processors,
+                captureControllers: mode.captureControllers,
+                outputSinks: newSinks
+            )
+        }
     }
 
     func setMuteOutputWhileRecording(_ enabled: Bool) {
@@ -732,6 +786,57 @@ final class GeneralTabViewModel: ObservableObject {
     func setVadAutoStopEnabled(_ enabled: Bool) {
         vadAutoStopEnabled = enabled
         VadAutoStopEnabledPreference.persist(enabled, to: defaults)
+
+        mutateActiveRecipe { mode in
+            var controllers = mode.captureControllers.filter { controller in
+                if case .vad = controller { return false }
+                return true
+            }
+            if enabled {
+                controllers.insert(
+                    .vad(
+                        silenceThreshold: .setting(PreferenceKeys.vadSilenceThreshold),
+                        showWarning: .setting(PreferenceKeys.vadShowStoppingWarning),
+                        showAutoStoppedNotification: .setting(
+                            PreferenceKeys.vadShowAutoStoppedNotification
+                        )
+                    ),
+                    at: 0
+                )
+            }
+            return WorkflowMode(
+                id: mode.id,
+                name: mode.name,
+                pipelineShape: mode.pipelineShape,
+                processors: mode.processors,
+                captureControllers: controllers,
+                outputSinks: mode.outputSinks
+            )
+        }
+    }
+
+    /// Per L27: applies a recipe-level mutation to the active workflow
+    /// mode. If the active mode is a built-in (read-only), the registry
+    /// forks it into a custom mode named `"<name> (custom)"` and switches
+    /// active. If already custom, mutates in place. Both paths persist
+    /// the result via the registry's store.
+    ///
+    /// Errors from the registry (validator rejections, store I/O) are
+    /// swallowed — the legacy `UserDefaults` write that the caller
+    /// already performed is the safety net for fail-soft toggle UX. Any
+    /// recipe-state divergence is a follow-up beyond #078.33.
+    private func mutateActiveRecipe(_ block: (WorkflowMode) -> WorkflowMode) {
+        guard let registry = workflowModeRegistry else { return }
+        do {
+            try registry.mutateActiveOrFork { mode in
+                mode = block(mode)
+            }
+        } catch {
+            // Fail-soft. UserDefaults dual-write keeps the toggle's
+            // user-visible behavior intact even when the recipe path
+            // can't be persisted (e.g. validator rejection or store
+            // I/O failure under disk pressure).
+        }
     }
 
     func setVadSilenceThresholdSeconds(_ seconds: Double) {

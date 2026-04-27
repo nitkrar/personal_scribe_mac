@@ -276,3 +276,39 @@ summary caption at the bottom that adapts to toggle state.
 - **MV-072-8 — Restore default bump:** fresh install (delete
   `UserDefaults` for `PasteRestoreDelaySeconds`). Open Settings, flip
   Restore ON. Slider sits at `3.0`s — not the pre-#072 `0.5`s default.
+
+## #078.33 — GeneralTab toggles bridge to WorkflowModeRegistry
+
+L27 wiring: each of the three structural toggles in General mutates the
+active workflow recipe in addition to the legacy `UserDefaults` write.
+First touch on the built-in `Dictation` mode forks it into a custom
+copy named `Dictation (custom)` (or `Dictation (migrated)` if the
+legacy migrator already forked); subsequent touches mutate the active
+custom mode in place.
+
+- **MV-078-33-1 — Auto-paste OFF removes paste from active recipe:**
+  flip Auto-paste OFF. Start a recording, stop with focus in TextEdit.
+  No transcript appears in TextEdit; clipboard holds the transcript.
+  Open Settings → Modes (when Modes editor lands) — confirm a
+  `Dictation (custom)` entry exists distinct from `Dictation`.
+  Quitting and relaunching preserves the ON/OFF choice (recipe is
+  saved to `workflow-modes.json`).
+- **MV-078-33-2 — Auto-stop after silence ON adds VAD to recipe:**
+  flip Auto-stop after silence ON. Start a recording, hold silent for
+  the configured threshold. Recording auto-stops without manual
+  hotkey press. Flip OFF — silence no longer auto-stops; only manual
+  hotkey / pill click stops recording. Threshold slider, "Warn before
+  stopping", and "Show stop notification" continue to act as global
+  settings (the recipe references them via `.setting(...)`).
+- **MV-078-33-3 — Restore clipboard rewrites parameter to override:**
+  flip Restore clipboard OFF. Quit and relaunch. The toggle remains
+  OFF — the recipe holds `Parameter.override(false)` for the
+  clipboard sink, locking the value regardless of any future global
+  default. Flip ON; same persistence guarantee at `Parameter.override(true)`.
+- **MV-078-33-4 — Fail-soft when registry rejects mutation:** the
+  registry validator only checks processors and pipeline shape;
+  toggling Auto-paste / Auto-stop / Restore should never fail
+  validation. If a future change breaks this assumption, the legacy
+  `UserDefaults` write still lands and the toggle visibly reflects
+  the user's intent — the recipe path is fail-soft (errors swallowed
+  in `mutateActiveRecipe`).
