@@ -3,6 +3,11 @@ import Foundation
 import PersonalScribeCore
 
 protocol FluidAudioQwenManaging: Sendable {
+    func downloadIfNeeded(
+        to directory: URL,
+        variant: Qwen3AsrVariant,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws
     func loadModels(from directory: URL) async throws
     func transcribe(audioSamples: [Float]) async throws -> String
 }
@@ -48,10 +53,16 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
         }
 
         let directory = try modelDirectory()
+        let variant = try Self.resolveVariant(for: descriptor.id)
         progressBroadcaster.update(Self.loadingSnapshot)
 
         let manager = self.manager
         let task = Task {
+            try await manager.downloadIfNeeded(
+                to: directory,
+                variant: variant,
+                progressHandler: nil
+            )
             try await manager.loadModels(from: directory)
         }
         prepareTask = task
@@ -63,6 +74,36 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
             progressBroadcaster.update(Self.finishedSnapshot)
         } catch {
             prepareTask = nil
+            progressBroadcaster.update(Self.idleSnapshot)
+            throw PersonalScribeError.modelLoadFailure
+        }
+    }
+
+    public func downloadIfNeeded() async throws {
+        let directory = try modelDirectory()
+        let variant = try Self.resolveVariant(for: descriptor.id)
+        progressBroadcaster.update(Self.loadingSnapshot)
+
+        let broadcaster = progressBroadcaster
+        let progressHandler: DownloadUtils.ProgressHandler = { snapshot in
+            broadcaster.update(
+                ModelDownloadProgress(
+                    phase: .loading,
+                    fractionCompleted: snapshot.fractionCompleted,
+                    receivedBytes: 0,
+                    expectedBytes: nil
+                )
+            )
+        }
+
+        do {
+            try await manager.downloadIfNeeded(
+                to: directory,
+                variant: variant,
+                progressHandler: progressHandler
+            )
+            progressBroadcaster.update(Self.finishedSnapshot)
+        } catch {
             progressBroadcaster.update(Self.idleSnapshot)
             throw PersonalScribeError.modelLoadFailure
         }
@@ -124,6 +165,17 @@ private extension FluidAudioQwenTranscriberAdapter {
         return UnsupportedFluidAudioQwenManager()
     }
 
+    static func resolveVariant(for id: String) throws -> Qwen3AsrVariant {
+        switch id {
+        case BuiltInModelCatalog.qwen3AsrF32.id:
+            return .f32
+        case BuiltInModelCatalog.qwen3AsrInt8.id:
+            return .int8
+        default:
+            throw ModelSelectionError.unknownVoiceModelID(id)
+        }
+    }
+
     func modelDirectory() throws -> URL {
         try storageLocator.ensureDirectoriesExist()
 
@@ -145,6 +197,18 @@ private extension FluidAudioQwenTranscriberAdapter {
 private actor LiveFluidAudioQwenManager: FluidAudioQwenManaging {
     private let manager = Qwen3AsrManager()
 
+    func downloadIfNeeded(
+        to directory: URL,
+        variant: Qwen3AsrVariant,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws {
+        _ = try await Qwen3AsrModels.download(
+            variant: variant,
+            to: directory,
+            progressHandler: progressHandler
+        )
+    }
+
     func loadModels(from directory: URL) async throws {
         try await manager.loadModels(from: directory)
     }
@@ -157,6 +221,17 @@ private actor LiveFluidAudioQwenManager: FluidAudioQwenManaging {
 private actor UnsupportedFluidAudioQwenManager: FluidAudioQwenManaging {
     enum UnsupportedOSError: Error {
         case requiresMacOS15
+    }
+
+    func downloadIfNeeded(
+        to directory: URL,
+        variant: Qwen3AsrVariant,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws {
+        _ = directory
+        _ = variant
+        _ = progressHandler
+        throw UnsupportedOSError.requiresMacOS15
     }
 
     func loadModels(from directory: URL) async throws {

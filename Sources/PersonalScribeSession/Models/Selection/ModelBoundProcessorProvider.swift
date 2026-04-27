@@ -123,13 +123,14 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
         let record = try resolvedRecord(for: canonical)
         let lifecycle = record.lifecycle
 
-        // Real adapters drive the actual download from inside `prepare()`,
-        // emitting progress via `modelDownloadProgress()` (a hot
-        // AsyncStream). Bridge the stream to the callback API for the
-        // duration of prepare, then synthesize a terminal `.finished`
-        // so callers see a completion event regardless of whether the
-        // adapter fired one (real adapters skip emission when artifacts
-        // are already valid).
+        // Real adapters drive the actual download from inside
+        // `downloadIfNeeded()` — disk-only, no manager load, no RAM
+        // tax for a model the user may never activate. Progress flows
+        // via `modelDownloadProgress()` (a hot AsyncStream). Bridge
+        // the stream to the callback API for the duration, then
+        // synthesize a terminal `.finished` so callers see a
+        // completion event regardless of whether the adapter fired one
+        // (real adapters skip emission when artifacts are already valid).
         let progressStream = lifecycle.modelDownloadProgress()
         let forwarder = Task {
             for await snapshot in progressStream {
@@ -139,7 +140,7 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
         }
         defer { forwarder.cancel() }
 
-        try await lifecycle.prepare()
+        try await lifecycle.downloadIfNeeded()
 
         progress(ModelDownloadProgress(
             phase: .finished,
@@ -155,6 +156,15 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
         let fileManager = FileManager.default
         if fileManager.fileExists(atPath: directory.path) {
             try fileManager.removeItem(at: directory)
+        }
+        lock.withLock {
+            records[canonical.id] = nil
+        }
+    }
+
+    public func evict(_ descriptor: ModelDescriptor) {
+        guard let canonical = registeredDescriptorsByID[descriptor.id] else {
+            return
         }
         lock.withLock {
             records[canonical.id] = nil

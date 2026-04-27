@@ -71,6 +71,23 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
         }
     }
 
+    public func downloadIfNeeded() async throws {
+        guard descriptor.engine == .diarization else {
+            throw PersonalScribeError.modelLoadFailure
+        }
+        try storageLocator.ensureDirectoriesExist()
+        let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
+
+        progressBroadcaster.update(Self.loadingSnapshot)
+        do {
+            try await manager.downloadIfNeeded(to: modelsRoot, progressHandler: nil)
+            progressBroadcaster.update(Self.finishedSnapshot)
+        } catch {
+            progressBroadcaster.update(Self.idleSnapshot)
+            throw PersonalScribeError.modelLoadFailure
+        }
+    }
+
     public func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         progressBroadcaster.stream()
     }
@@ -135,9 +152,9 @@ private extension FluidAudioOfflineDiarizerAdapter {
         try storageLocator.ensureDirectoriesExist()
         // `OfflineDiarizerManager` expects the models root directory and
         // appends FluidAudio's diarizer repo folder internally.
-        try await manager.prepareModels(
-            directory: storageLocator.url(for: .models).standardizedFileURL
-        )
+        let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
+        try await manager.downloadIfNeeded(to: modelsRoot, progressHandler: nil)
+        try await manager.prepareModels(directory: modelsRoot)
     }
 
     static func collectSamples(
@@ -191,6 +208,10 @@ private extension FluidAudioOfflineDiarizerAdapter {
 
 protocol FluidAudioOfflineDiarizerManaging: Sendable {
     func prepareModels(directory: URL?) async throws
+    func downloadIfNeeded(
+        to directory: URL,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws
     func process(audio: [Float]) async throws -> DiarizationResult
 }
 
@@ -206,6 +227,18 @@ private final class PrivateFluidAudioOfflineDiarizerManager:
 
     func prepareModels(directory: URL?) async throws {
         try await manager.prepareModels(directory: directory)
+    }
+
+    func downloadIfNeeded(
+        to directory: URL,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws {
+        try await DownloadUtils.downloadRepo(
+            .diarizer,
+            to: directory,
+            variant: "offline",
+            progressHandler: progressHandler
+        )
     }
 
     func process(audio: [Float]) async throws -> DiarizationResult {

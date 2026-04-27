@@ -97,6 +97,75 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(result.ctcAppliedTerms, ["Ninimma"])
     }
 
+    func testDownloadIfNeededCallsManagerDownloadButNotLoad() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let expectedParentDirectory = storageLocator
+            .url(for: .models)
+            .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
+            .standardizedFileURL
+            .deletingLastPathComponent()
+
+        let manager = StubFluidAudioParakeetManager()
+        let adapter = FluidAudioParakeetTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.downloadIfNeeded()
+
+        // After downloadIfNeeded runs, subscribing to the progress stream
+        // yields the latched snapshot — which should now be .finished.
+        var collected: [ModelDownloadProgress] = []
+        let stream = adapter.modelDownloadProgress()
+        for await snapshot in stream {
+            collected.append(snapshot)
+            break
+        }
+
+        let downloadCount = await manager.downloadIfNeededCallCount()
+        XCTAssertEqual(downloadCount, 1)
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(loadCount, 0)
+        let transcribeCount = await manager.transcribeCallCount()
+        XCTAssertEqual(transcribeCount, 0)
+
+        let downloadDirs = await manager.downloadIfNeededDirectories()
+        XCTAssertEqual(downloadDirs, [expectedParentDirectory])
+
+        XCTAssertEqual(collected.last?.phase, .finished)
+    }
+
+    func testPrepareCallsDownloadIfNeededAndLoadModel() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let expectedLeafDirectory = storageLocator
+            .url(for: .models)
+            .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
+            .standardizedFileURL
+        let expectedParentDirectory = expectedLeafDirectory.deletingLastPathComponent()
+
+        let manager = StubFluidAudioParakeetManager()
+        let adapter = FluidAudioParakeetTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.prepare()
+
+        let downloadCount = await manager.downloadIfNeededCallCount()
+        XCTAssertEqual(downloadCount, 1)
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(loadCount, 1)
+
+        let downloadDirs = await manager.downloadIfNeededDirectories()
+        XCTAssertEqual(downloadDirs, [expectedParentDirectory])
+        let loadedDirs = await manager.loadedDirectories()
+        XCTAssertEqual(loadedDirs, [expectedLeafDirectory])
+    }
+
     private func temporaryRootDirectory() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -136,6 +205,8 @@ private struct TestStorageLocator: StorageLocator {
 
 private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
     private let result: FluidAudioParakeetManagerResult
+    private var downloadIfNeededCallCountStorage = 0
+    private var downloadIfNeededDirectoriesStorage: [URL] = []
     private var loadCallCountStorage = 0
     private var loadedVersionsStorage: [AsrModelVersion] = []
     private var loadedDirectoriesStorage: [URL] = []
@@ -149,6 +220,16 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
         )
     ) {
         self.result = result
+    }
+
+    func downloadIfNeeded(
+        to directory: URL,
+        version: AsrModelVersion,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws {
+        _ = progressHandler
+        downloadIfNeededCallCountStorage += 1
+        downloadIfNeededDirectoriesStorage.append(directory)
     }
 
     func loadModel(
@@ -166,6 +247,14 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
         transcribeCallCountStorage += 1
         lastSamplesStorage = samples
         return result
+    }
+
+    func downloadIfNeededCallCount() -> Int {
+        downloadIfNeededCallCountStorage
+    }
+
+    func downloadIfNeededDirectories() -> [URL] {
+        downloadIfNeededDirectoriesStorage
     }
 
     func loadCallCount() -> Int {

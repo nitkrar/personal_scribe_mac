@@ -372,6 +372,85 @@ final class ActiveModelServiceTests: XCTestCase {
             streamingDescriptor.id
         )
     }
+
+    /// Phase 3 of the download/load split. When the user activates a
+    /// new descriptor for a kind, the previously-active descriptor's
+    /// adapter must be evicted from the provider's cache so its
+    /// loaded CoreML weights are released. Without this, switching
+    /// between models leaks RAM (the prior model's manager stays
+    /// resident for the rest of the app session).
+    func testSetActiveEvictsPreviouslyActiveDescriptorOfSameKind() {
+        let v2 = BuiltInModelCatalog.parakeetTDT06Bv2
+        let v3 = BuiltInModelCatalog.parakeetTDT06Bv3
+        let evictRecorder = LockedDescriptorRecorder()
+        let service = ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
+                defaults: isolatedDefaults()
+            ),
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            evict: { descriptor in evictRecorder.record(descriptor) }
+        )
+
+        // First activation has no previous — must NOT call evict.
+        service.setActive(v2)
+        XCTAssertTrue(
+            evictRecorder.descriptors.isEmpty,
+            "First setActive (no prior) must not evict spuriously"
+        )
+
+        // Switch — must evict v2.
+        service.setActive(v3)
+        XCTAssertEqual(evictRecorder.descriptors, [v2])
+
+        // Re-set same descriptor — must NOT evict (no actual switch).
+        service.setActive(v3)
+        XCTAssertEqual(
+            evictRecorder.descriptors,
+            [v2],
+            "Re-setActive with the same descriptor must not call evict"
+        )
+    }
+
+    /// Adjacent invariant: switching kinds (e.g. activating a
+    /// streamingASR descriptor) must not evict the existing `.asr`
+    /// descriptor — those are separate slots in the per-kind map.
+    func testSetActiveOfDifferentKindDoesNotEvictOtherKindActive() {
+        let v3 = BuiltInModelCatalog.parakeetTDT06Bv3
+        let streamingDescriptor = ModelDescriptor(
+            id: "test-streaming-evict",
+            displayName: "Streaming Evict Test",
+            shortDescription: "Synthetic descriptor pinning the cross-kind no-evict invariant.",
+            architecture: "Test",
+            repository: "FluidInference/test-streaming-evict",
+            revision: "test",
+            requiredRelativePaths: [],
+            approximateSizeBytes: 0,
+            engine: .parakeetEOU
+        )
+        let evictRecorder = LockedDescriptorRecorder()
+        let service = ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
+                defaults: isolatedDefaults()
+            ),
+            registeredModels: BuiltInModelCatalog.registeredModels + [streamingDescriptor],
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            evict: { descriptor in evictRecorder.record(descriptor) }
+        )
+
+        service.setActive(v3)
+        service.setActive(streamingDescriptor)
+
+        XCTAssertTrue(
+            evictRecorder.descriptors.isEmpty,
+            "Activating a different-kind descriptor must not evict the existing kind's active descriptor"
+        )
+    }
 }
 
 private actor DownloadRecorder {

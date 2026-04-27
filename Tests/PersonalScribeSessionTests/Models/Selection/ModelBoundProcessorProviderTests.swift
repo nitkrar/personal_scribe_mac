@@ -372,6 +372,7 @@ private final class StubModelBoundProcessorProvider: @unchecked Sendable, ModelB
     private let isDownloadedValue: Bool
     private(set) var downloadedDescriptorIDs: [String] = []
     private(set) var removedDescriptorIDs: [String] = []
+    private(set) var evictedDescriptorIDs: [String] = []
 
     init(isDownloadedValue: Bool = false) {
         self.isDownloadedValue = isDownloadedValue
@@ -410,6 +411,10 @@ private final class StubModelBoundProcessorProvider: @unchecked Sendable, ModelB
 
     func removeDownloadedFiles(_ descriptor: ModelDescriptor) throws {
         removedDescriptorIDs.append(descriptor.id)
+    }
+
+    func evict(_ descriptor: ModelDescriptor) {
+        evictedDescriptorIDs.append(descriptor.id)
     }
 }
 

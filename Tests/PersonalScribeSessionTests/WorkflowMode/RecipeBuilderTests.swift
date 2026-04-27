@@ -171,6 +171,8 @@ private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchec
     ) async throws {}
 
     func removeDownloadedFiles(_ descriptor: ModelDescriptor) throws {}
+
+    func evict(_ descriptor: ModelDescriptor) {}
 }
 
 private actor StubTranscriber: Transcriber {

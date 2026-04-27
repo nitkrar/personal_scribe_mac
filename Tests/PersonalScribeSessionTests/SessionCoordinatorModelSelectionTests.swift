@@ -177,6 +177,8 @@ private struct FakeModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
     ) async throws {}
 
     func removeDownloadedFiles(_ descriptor: ModelDescriptor) throws {}
+
+    func evict(_ descriptor: ModelDescriptor) {}
 }
 
 private actor RecordingTranscriber: Transcriber {

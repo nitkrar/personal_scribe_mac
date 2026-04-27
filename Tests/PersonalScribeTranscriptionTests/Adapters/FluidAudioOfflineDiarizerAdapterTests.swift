@@ -66,6 +66,52 @@ final class FluidAudioOfflineDiarizerAdapterTests: PersonalScribeTranscriptionFi
         XCTAssertEqual(processedAudio, [[0.1, 0.2, 0.3, 0.4]])
     }
 
+    func testDownloadIfNeededCallsManagerDownloadButNotPrepareModels() async throws {
+        let storageLocator = AppConfig.liveStorageLocator()
+        let manager = StubOfflineDiarizerManager(result: DiarizationResult(segments: []))
+        let adapter = FluidAudioOfflineDiarizerAdapter(
+            descriptor: BuiltInModelCatalog.speakerDiarization,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.downloadIfNeeded()
+
+        let downloadCount = await manager.downloadCallCount()
+        let prepareCount = await manager.prepareModelsCallCount()
+        XCTAssertEqual(downloadCount, 1)
+        XCTAssertEqual(prepareCount, 0)
+
+        let downloadDirectories = await manager.downloadDirectories()
+        XCTAssertEqual(
+            downloadDirectories,
+            [storageLocator.url(for: .models).standardizedFileURL]
+        )
+    }
+
+    func testPrepareCallsDownloadIfNeededBeforePrepareModels() async throws {
+        let storageLocator = AppConfig.liveStorageLocator()
+        let manager = StubOfflineDiarizerManager(result: DiarizationResult(segments: []))
+        let adapter = FluidAudioOfflineDiarizerAdapter(
+            descriptor: BuiltInModelCatalog.speakerDiarization,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.prepare()
+
+        let downloadCount = await manager.downloadCallCount()
+        let prepareCount = await manager.prepareModelsCallCount()
+        XCTAssertEqual(downloadCount, 1)
+        XCTAssertEqual(prepareCount, 1)
+
+        let downloadDirectories = await manager.downloadDirectories()
+        XCTAssertEqual(
+            downloadDirectories,
+            [storageLocator.url(for: .models).standardizedFileURL]
+        )
+    }
+
     private func collectEvents(
         from stream: AsyncStream<SpeakerDiarizationEvent>
     ) async -> [SpeakerDiarizationEvent] {
@@ -80,6 +126,7 @@ final class FluidAudioOfflineDiarizerAdapterTests: PersonalScribeTranscriptionFi
 private actor StubOfflineDiarizerManager: FluidAudioOfflineDiarizerManaging {
     private(set) var preparedDirectories: [URL?] = []
     private(set) var processedAudio: [[Float]] = []
+    private var downloadDirectoriesStorage: [URL] = []
 
     private let result: DiarizationResult
 
@@ -91,8 +138,27 @@ private actor StubOfflineDiarizerManager: FluidAudioOfflineDiarizerManaging {
         preparedDirectories.append(directory?.standardizedFileURL)
     }
 
+    func downloadIfNeeded(
+        to directory: URL,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws {
+        downloadDirectoriesStorage.append(directory.standardizedFileURL)
+    }
+
     func process(audio: [Float]) async throws -> DiarizationResult {
         processedAudio.append(audio)
         return result
+    }
+
+    func downloadDirectories() -> [URL] {
+        downloadDirectoriesStorage
+    }
+
+    func downloadCallCount() -> Int {
+        downloadDirectoriesStorage.count
+    }
+
+    func prepareModelsCallCount() -> Int {
+        preparedDirectories.count
     }
 }

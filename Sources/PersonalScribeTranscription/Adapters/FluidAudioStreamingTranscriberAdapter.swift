@@ -47,9 +47,11 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
 
         let manager = try resolvedManager()
         let modelDirectory = try self.modelDirectory()
+        let parentDirectory = modelDirectory.deletingLastPathComponent()
 
         let task = Task {
             self.progressBroadcaster.update(Self.loadingSnapshot)
+            try await manager.downloadIfNeeded(to: parentDirectory, progressHandler: nil)
             try await manager.loadModels(modelDir: modelDirectory)
         }
         prepareTask = task
@@ -61,6 +63,20 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
             progressBroadcaster.update(Self.finishedSnapshot)
         } catch {
             prepareTask = nil
+            progressBroadcaster.update(Self.idleSnapshot)
+            throw PersonalScribeError.modelLoadFailure
+        }
+    }
+
+    public func downloadIfNeeded() async throws {
+        let manager = try resolvedManager()
+        let parentDirectory = try modelDirectory().deletingLastPathComponent()
+
+        progressBroadcaster.update(Self.loadingSnapshot)
+        do {
+            try await manager.downloadIfNeeded(to: parentDirectory, progressHandler: nil)
+            progressBroadcaster.update(Self.finishedSnapshot)
+        } catch {
             progressBroadcaster.update(Self.idleSnapshot)
             throw PersonalScribeError.modelLoadFailure
         }
@@ -88,10 +104,27 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
     }
 }
 
-extension StreamingEouAsrManager: FluidAudioStreamingEouManaging {}
+extension StreamingEouAsrManager: FluidAudioStreamingEouManaging {
+    func downloadIfNeeded(
+        to directory: URL,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws {
+        let repo: Repo
+        switch chunkSize {
+        case .ms160: repo = .parakeetEou160
+        case .ms320: repo = .parakeetEou320
+        case .ms1280: repo = .parakeetEou1280
+        }
+        try await DownloadUtils.downloadRepo(repo, to: directory, progressHandler: progressHandler)
+    }
+}
 
 protocol FluidAudioStreamingEouManaging: Actor, Sendable {
     func loadModels(modelDir: URL) async throws
+    func downloadIfNeeded(
+        to directory: URL,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws
     func setEouCallback(_ callback: @escaping EouCallback)
     func setPartialCallback(_ callback: @escaping PartialCallback)
     func process(audioBuffer: AVAudioPCMBuffer) async throws -> String

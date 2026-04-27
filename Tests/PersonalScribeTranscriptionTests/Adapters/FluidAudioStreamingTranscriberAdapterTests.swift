@@ -81,6 +81,62 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
             XCTFail("Expected finalized event, got \(events[0])")
         }
     }
+
+    func testDownloadIfNeededCallsManagerDownloadButNotLoadModels() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetEou160ms
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let manager = StubFluidAudioStreamingManager()
+        let adapter = FluidAudioStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.downloadIfNeeded()
+
+        let downloadCount = await manager.downloadCallCount()
+        XCTAssertEqual(downloadCount, 1)
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(loadCount, 0)
+
+        let leafDirectory = storageLocator
+            .url(for: .models)
+            .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
+            .standardizedFileURL
+        let expectedParent = leafDirectory.deletingLastPathComponent()
+        let downloadDirs = await manager.downloadDirectories()
+        XCTAssertEqual(downloadDirs, [expectedParent])
+    }
+
+    func testPrepareCallsDownloadIfNeededBeforeLoadModels() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetEou160ms
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let manager = StubFluidAudioStreamingManager()
+        let adapter = FluidAudioStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.prepare()
+
+        let downloadCount = await manager.downloadCallCount()
+        XCTAssertEqual(downloadCount, 1)
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(loadCount, 1)
+
+        let leafDirectory = storageLocator
+            .url(for: .models)
+            .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
+            .standardizedFileURL
+        let expectedParent = leafDirectory.deletingLastPathComponent()
+        let downloadDirs = await manager.downloadDirectories()
+        XCTAssertEqual(downloadDirs, [expectedParent])
+        let loadedDirs = await manager.loadedDirectories()
+        XCTAssertEqual(loadedDirs, [leafDirectory])
+    }
 }
 
 private extension FluidAudioStreamingTranscriberAdapterTests {
@@ -152,6 +208,7 @@ private actor StubFluidAudioStreamingManager: FluidAudioStreamingEouManaging {
     private let finalText: String
     private var loadedDirectoriesStorage: [URL] = []
     private var loadModelCallCountStorage = 0
+    private var downloadDirectoriesStorage: [URL] = []
 
     init(
         scriptedProcessActions: [[ScriptedAction]] = [],
@@ -159,6 +216,13 @@ private actor StubFluidAudioStreamingManager: FluidAudioStreamingEouManaging {
     ) {
         self.scriptedProcessActions = scriptedProcessActions
         self.finalText = finalText
+    }
+
+    func downloadIfNeeded(
+        to directory: URL,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws {
+        downloadDirectoriesStorage.append(directory)
     }
 
     func loadModels(modelDir: URL) async throws {
@@ -198,7 +262,19 @@ private actor StubFluidAudioStreamingManager: FluidAudioStreamingEouManaging {
         loadModelCallCountStorage
     }
 
+    func loadCallCount() -> Int {
+        loadModelCallCountStorage
+    }
+
     func loadedDirectories() -> [URL] {
         loadedDirectoriesStorage
+    }
+
+    func downloadDirectories() -> [URL] {
+        downloadDirectoriesStorage
+    }
+
+    func downloadCallCount() -> Int {
+        downloadDirectoriesStorage.count
     }
 }

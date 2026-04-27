@@ -53,6 +53,7 @@ public final class ActiveModelService: ObservableObject {
         @escaping @Sendable (ModelDownloadProgress) -> Void
     ) async throws -> Void
     private let removeDownloadedHandler: @Sendable (ModelDescriptor) throws -> Void
+    private let evictHandler: @Sendable (ModelDescriptor) -> Void
     private let modelsDirectoryProvider: @Sendable () -> URL?
     private let diskSpaceProvider: @Sendable (URL) -> Int64?
     private let logger: PersonalScribeLogger
@@ -101,6 +102,9 @@ public final class ActiveModelService: ObservableObject {
             removeDownloaded: { descriptor in
                 try provider.removeDownloadedFiles(descriptor)
             },
+            evict: { descriptor in
+                provider.evict(descriptor)
+            },
             modelsDirectoryProvider: { storageLocator.url(for: .models) },
             diskSpaceProvider: Self.liveDiskSpaceProvider,
             logger: logger
@@ -116,6 +120,7 @@ public final class ActiveModelService: ObservableObject {
             @escaping @Sendable (ModelDownloadProgress) -> Void
         ) async throws -> Void,
         removeDownloaded: @escaping @Sendable (ModelDescriptor) throws -> Void = { _ in },
+        evict: @escaping @Sendable (ModelDescriptor) -> Void = { _ in },
         modelsDirectoryProvider: @escaping @Sendable () -> URL? = { nil },
         diskSpaceProvider: @escaping @Sendable (URL) -> Int64? = { _ in nil },
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
@@ -125,6 +130,7 @@ public final class ActiveModelService: ObservableObject {
         self.isDownloadedHandler = isDownloaded
         self.downloadHandler = download
         self.removeDownloadedHandler = removeDownloaded
+        self.evictHandler = evict
         self.modelsDirectoryProvider = modelsDirectoryProvider
         self.diskSpaceProvider = diskSpaceProvider
         self.logger = logger
@@ -151,12 +157,22 @@ public final class ActiveModelService: ObservableObject {
     }
 
     /// Activate `descriptor` for its `kind`. Evicts any previously
-    /// active descriptor of the same kind. Persists.
+    /// active descriptor of the same kind from the provider's adapter
+    /// cache so its loaded CoreML weights are released. Persists.
+    /// Fires `onSetActive` so the composition root can prepare/warm
+    /// the new active descriptor's adapter (load weights at activate
+    /// time rather than at download time — see #078 follow-up).
     public func setActive(_ descriptor: ModelDescriptor) {
+        let previousID = activeModelIDs[descriptor.kind]
         var updated = activeModelIDs
         updated[descriptor.kind] = descriptor.id
         activeModelIDs = updated
         activeIDsPreference.persist(updated)
+        if let previousID, previousID != descriptor.id,
+           let previous = registeredModels.first(where: { $0.id == previousID })
+        {
+            evictHandler(previous)
+        }
         Task { @MainActor [weak self] in
             await self?.onSetActive?()
         }

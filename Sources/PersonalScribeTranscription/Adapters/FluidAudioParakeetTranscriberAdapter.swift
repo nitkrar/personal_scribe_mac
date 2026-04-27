@@ -67,6 +67,27 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
         }
     }
 
+    public func downloadIfNeeded() async throws {
+        let runtimeVariant = try resolvedRuntimeVariant()
+        let leafDirectory = try modelDirectory()
+        let parentDirectory = leafDirectory.deletingLastPathComponent()
+
+        do {
+            try await manager.downloadIfNeeded(
+                to: parentDirectory,
+                version: runtimeVariant.asrModelVersion,
+                progressHandler: { snapshot in
+                    self.progressBroadcaster.update(Self.map(snapshot))
+                }
+            )
+        } catch {
+            progressBroadcaster.update(Self.idleSnapshot)
+            throw PersonalScribeError.modelLoadFailure
+        }
+
+        progressBroadcaster.update(Self.finishedSnapshot(from: progressBroadcaster.currentSnapshot))
+    }
+
     public nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         progressBroadcaster.stream()
     }
@@ -146,10 +167,18 @@ extension FluidAudioParakeetTranscriberAdapter {
 
     private func performPrepare(runtimeVariant: RuntimeVariant) async throws {
         let modelDirectory = try modelDirectory()
+        let parentDirectory = modelDirectory.deletingLastPathComponent()
         let startedAt = ContinuousClock.now
         let progressBroadcaster = self.progressBroadcaster
 
         do {
+            try await manager.downloadIfNeeded(
+                to: parentDirectory,
+                version: runtimeVariant.asrModelVersion,
+                progressHandler: { snapshot in
+                    self.progressBroadcaster.update(Self.map(snapshot))
+                }
+            )
             try await manager.loadModel(
                 from: modelDirectory,
                 version: runtimeVariant.asrModelVersion,
@@ -244,6 +273,12 @@ extension FluidAudioParakeetTranscriberAdapter {
 }
 
 protocol FluidAudioParakeetManaging: Sendable {
+    func downloadIfNeeded(
+        to directory: URL,
+        version: AsrModelVersion,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws
+
     func loadModel(
         from directory: URL,
         version: AsrModelVersion,
@@ -289,6 +324,18 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
         managerFactory: @escaping @Sendable () -> AsrManager = { AsrManager(config: .default) }
     ) {
         self.managerFactory = managerFactory
+    }
+
+    func downloadIfNeeded(
+        to directory: URL,
+        version: AsrModelVersion,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws {
+        _ = try await AsrModels.download(
+            to: directory,
+            version: version,
+            progressHandler: progressHandler
+        )
     }
 
     func loadModel(
