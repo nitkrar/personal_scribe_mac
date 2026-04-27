@@ -245,9 +245,26 @@ public final class ActiveModelService: ObservableObject {
     /// any policy. Active selection is intentionally left untouched; if
     /// the deleted model happened to be active, the next `setActive`
     /// will re-download it via the normal path.
+    ///
+    /// On removal failure (e.g. files held open by the active adapter,
+    /// permission denied), publishes a `.failed(message:)` state so the
+    /// row chip surfaces the error before re-throwing. Without that
+    /// publish, the silent `try?` at the call site leaves the user with
+    /// no feedback when delete fails.
     public func removeDownloaded(_ descriptor: ModelDescriptor) throws {
         let canonical = try canonicalVoiceModel(for: descriptor.id)
-        try removeDownloadedHandler(canonical)
+        do {
+            try removeDownloadedHandler(canonical)
+        } catch {
+            publishDownloadState(
+                ModelDownloadState(
+                    descriptorId: canonical.id,
+                    phase: .failed(message: "Delete failed: \(error.localizedDescription)"),
+                    fractionCompleted: 0
+                )
+            )
+            throw error
+        }
         publishDownloadState(
             ModelDownloadState(
                 descriptorId: canonical.id,

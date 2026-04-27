@@ -206,12 +206,21 @@ struct ModelRow: View {
             .accessibilityLabel("Download \(descriptor.displayName)")
             .help("Download \(descriptor.displayName)")
         case .ready:
-            Button(action: onDelete) {
-                Image(systemName: "trash")
+            // Hide Delete on the active model — its CoreML weights are
+            // memory-mapped, so `removeItem` can fail or leave inodes
+            // dangling for the running adapter. The user must switch
+            // active first (which triggers Phase 3 eviction), then
+            // delete is safe.
+            if isActive {
+                EmptyView()
+            } else {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Delete \(descriptor.displayName)")
+                .help("Delete \(descriptor.displayName)")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Delete \(descriptor.displayName)")
-            .help("Delete \(descriptor.displayName)")
         case .downloading, .loading, .failed:
             EmptyView()
         }
