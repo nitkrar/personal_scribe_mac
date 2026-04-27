@@ -39,6 +39,11 @@ def main():
     parser.add_argument(
         "--no-test", action="store_true", help="skip the swift test step"
     )
+    parser.add_argument(
+        "--no-package",
+        action="store_true",
+        help="skip the scripts/package.py -ir -c release step",
+    )
     args = parser.parse_args()
 
     quoted_path = shlex.quote(args.path)
@@ -71,6 +76,10 @@ def main():
     if not args.no_test:
         step("swift test")
         ssh(args.host, f"cd {quoted_path} && swift test")
+
+    if not args.no_package:
+        step("package.py -ir -c release")
+        ssh(args.host, f"cd {quoted_path} && scripts/package.py -ir -c release")
 
     print("\nAll steps passed.")
 
