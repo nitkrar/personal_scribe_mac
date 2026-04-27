@@ -31,7 +31,6 @@ public enum BuiltInModelCatalog {
         // the `-coreml` suffix from `name`). Verified against
         // `FluidAudio/Sources/FluidAudio/ModelNames.swift` switch.
         repoFolderName: "parakeet-tdt-0.6b-v2",
-        kind: .asr,
         shortDescription: "High-accuracy default — balanced RAM and speed.",
         architecture: "FastConformer-TDT",
         repository: "FluidInference/parakeet-tdt-0.6b-v2-coreml",
@@ -68,7 +67,6 @@ public enum BuiltInModelCatalog {
         // `"parakeet-tdt-ctc-110m"` — drops the `-coreml` suffix the
         // repo name carries on HF).
         repoFolderName: "parakeet-tdt-ctc-110m",
-        kind: .asr,
         shortDescription: "Lightweight — faster, lower accuracy, minimal RAM.",
         architecture: "Hybrid FastConformer-TDT-CTC",
         repository: "FluidInference/parakeet-tdt-ctc-110m-coreml",
@@ -100,7 +98,6 @@ public enum BuiltInModelCatalog {
         // `Repo.parakeet.folderName` — default rule strips `-coreml`
         // from `parakeet-tdt-0.6b-v3-coreml`.
         repoFolderName: "parakeet-tdt-0.6b-v3",
-        kind: .asr,
         shortDescription: "Multilingual (25 European languages) — same compute as v2.",
         architecture: "FastConformer-TDT",
         repository: "FluidInference/parakeet-tdt-0.6b-v3-coreml",
@@ -146,7 +143,6 @@ public enum BuiltInModelCatalog {
         id: "parakeet-realtime-eou-120m-160ms",
         displayName: "Parakeet Realtime EOU 120M (160ms)",
         repoFolderName: "parakeet-eou-streaming/160ms",
-        kind: .streamingASR,
         shortDescription: "Streaming ASR with 160ms chunks — lowest latency.",
         architecture: "Streaming FastConformer-TDT + EOU head",
         repository: "FluidInference/parakeet-realtime-eou-120m-coreml",
@@ -164,7 +160,6 @@ public enum BuiltInModelCatalog {
         id: "parakeet-realtime-eou-120m-320ms",
         displayName: "Parakeet Realtime EOU 120M (320ms)",
         repoFolderName: "parakeet-eou-streaming/320ms",
-        kind: .streamingASR,
         shortDescription: "Streaming ASR with 320ms chunks — balanced.",
         architecture: "Streaming FastConformer-TDT + EOU head",
         repository: "FluidInference/parakeet-realtime-eou-120m-coreml",
@@ -182,7 +177,6 @@ public enum BuiltInModelCatalog {
         id: "parakeet-realtime-eou-120m-1280ms",
         displayName: "Parakeet Realtime EOU 120M (1280ms)",
         repoFolderName: "parakeet-eou-streaming/1280ms",
-        kind: .streamingASR,
         shortDescription: "Streaming ASR with 1280ms chunks — highest quality.",
         architecture: "Streaming FastConformer-TDT + EOU head",
         repository: "FluidInference/parakeet-realtime-eou-120m-coreml",
@@ -214,7 +208,6 @@ public enum BuiltInModelCatalog {
         id: "qwen3-asr-0.6b-f32",
         displayName: "Qwen3 ASR 0.6B (f32)",
         repoFolderName: "qwen3-asr-0.6b/f32",
-        kind: .asr,
         shortDescription: "Multilingual ASR (16 languages) — full precision.",
         architecture: "Qwen3 transformer ASR",
         repository: "FluidInference/qwen3-asr-0.6b-coreml",
@@ -232,7 +225,6 @@ public enum BuiltInModelCatalog {
         id: "qwen3-asr-0.6b-int8",
         displayName: "Qwen3 ASR 0.6B (int8)",
         repoFolderName: "qwen3-asr-0.6b/int8",
-        kind: .asr,
         shortDescription: "Multilingual ASR (16 languages) — int8 quantized.",
         architecture: "Qwen3 transformer ASR (int8)",
         repository: "FluidInference/qwen3-asr-0.6b-coreml",
@@ -256,7 +248,6 @@ public enum BuiltInModelCatalog {
         id: "speaker-diarization",
         displayName: "Speaker Diarization",
         repoFolderName: "speaker-diarization",
-        kind: .diarization,
         shortDescription: "Pyannote segmentation + WeSpeaker-v2 embedding.",
         architecture: "Pyannote 3.1 + WeSpeaker-v2",
         repository: "FluidInference/speaker-diarization-coreml",

@@ -104,9 +104,9 @@ public struct ModelDescriptor: Sendable, Equatable {
     /// matches what we wrote. Drift here causes silent re-downloads.
     /// Source: `FluidAudio/Sources/FluidAudio/ModelNames.swift` `folderName` switch.
     public let repoFolderName: String
-    /// Broad capability category — used by the Settings UI to filter
-    /// which models surface in the AI Models tab (today: `.asr` only).
-    public let kind: ModelKind
+    /// Broad capability category — derived from `engine` per L2 of #078.
+    /// Single source of truth: change the engine, the kind follows.
+    public var kind: ModelKind { engine.kind }
     /// One-line inline description shown under `displayName` in the
     /// Settings → AI Models row. Keep ≤70 chars so it fits on one line
     /// at the default settings content width (620pt) without
@@ -158,7 +158,6 @@ public struct ModelDescriptor: Sendable, Equatable {
         // entries should pass FluidAudio's `Repo.folderName`
         // explicitly.
         repoFolderName: String? = nil,
-        kind: ModelKind = .asr,
         shortDescription: String,
         architecture: String,
         repository: String,
@@ -175,7 +174,6 @@ public struct ModelDescriptor: Sendable, Equatable {
         self.id = id
         self.displayName = displayName
         self.repoFolderName = repoFolderName ?? id
-        self.kind = kind
         self.shortDescription = shortDescription
         self.architecture = architecture
         self.repository = repository

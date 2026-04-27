@@ -5,7 +5,10 @@ extension ModelDescriptor: Codable {
         case id
         case displayName
         case repoFolderName
-        case kind
+        // `kind` removed from stored fields per #078.37 (L2). Decoder
+        // ignores it on read for back-compat with persisted blobs;
+        // encoder never emits it. The computed `kind: engine.kind`
+        // accessor on `ModelDescriptor` is the single source of truth.
         case shortDescription
         case architecture
         case repository
@@ -30,7 +33,6 @@ extension ModelDescriptor: Codable {
             // `repoFolderName` defaults to `id` to preserve old persisted
             // blobs; canonical override happens via the catalog lookup.
             repoFolderName: try container.decodeIfPresent(String.self, forKey: .repoFolderName) ?? id,
-            kind: try container.decodeIfPresent(ModelKind.self, forKey: .kind) ?? .asr,
             shortDescription: try container.decodeIfPresent(String.self, forKey: .shortDescription) ?? "",
             architecture: try container.decodeIfPresent(String.self, forKey: .architecture) ?? "",
             repository: try container.decode(String.self, forKey: .repository),
@@ -47,7 +49,6 @@ extension ModelDescriptor: Codable {
         try container.encode(id, forKey: .id)
         try container.encode(displayName, forKey: .displayName)
         try container.encode(repoFolderName, forKey: .repoFolderName)
-        try container.encode(kind, forKey: .kind)
         try container.encode(shortDescription, forKey: .shortDescription)
         try container.encode(architecture, forKey: .architecture)
         try container.encode(repository, forKey: .repository)

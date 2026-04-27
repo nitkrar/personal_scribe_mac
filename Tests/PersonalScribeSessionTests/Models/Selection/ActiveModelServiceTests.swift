@@ -329,7 +329,6 @@ final class ActiveModelServiceTests: XCTestCase {
         let streamingDescriptor = ModelDescriptor(
             id: "test-streaming-descriptor",
             displayName: "Streaming Test",
-            kind: .streamingASR,
             shortDescription: "Synthetic streaming descriptor for the per-kind eviction test.",
             architecture: "Test",
             repository: "FluidInference/test-streaming",
