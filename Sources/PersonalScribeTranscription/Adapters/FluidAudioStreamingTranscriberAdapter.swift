@@ -72,9 +72,13 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
         let manager = try resolvedManager()
         let parentDirectory = try modelDirectory().deletingLastPathComponent()
 
-        progressBroadcaster.update(Self.loadingSnapshot)
+        progressBroadcaster.update(Self.downloadingSnapshot)
+        let broadcaster = progressBroadcaster
+        let progressHandler: DownloadUtils.ProgressHandler = { snapshot in
+            broadcaster.update(Self.map(snapshot))
+        }
         do {
-            try await manager.downloadIfNeeded(to: parentDirectory, progressHandler: nil)
+            try await manager.downloadIfNeeded(to: parentDirectory, progressHandler: progressHandler)
             progressBroadcaster.update(Self.finishedSnapshot)
         } catch {
             progressBroadcaster.update(Self.idleSnapshot)
@@ -139,6 +143,32 @@ private extension FluidAudioStreamingTranscriberAdapter {
         receivedBytes: 0,
         expectedBytes: nil
     )
+
+    static let downloadingSnapshot = ModelDownloadProgress(
+        phase: .downloading,
+        fractionCompleted: 0,
+        receivedBytes: 0,
+        expectedBytes: nil
+    )
+
+    /// Map FluidAudio's download phase to our chip-driving phase.
+    /// `.listing`/`.downloading` → `.downloading` (progress bar);
+    /// `.compiling` → `.loading`.
+    static func map(_ snapshot: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
+        let phase: ModelDownloadProgress.Phase
+        switch snapshot.phase {
+        case .listing, .downloading:
+            phase = .downloading
+        case .compiling:
+            phase = .loading
+        }
+        return ModelDownloadProgress(
+            phase: phase,
+            fractionCompleted: snapshot.fractionCompleted,
+            receivedBytes: 0,
+            expectedBytes: nil
+        )
+    }
 
     static let loadingSnapshot = ModelDownloadProgress(
         phase: .loading,

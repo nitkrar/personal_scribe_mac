@@ -82,18 +82,11 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
     public func downloadIfNeeded() async throws {
         let directory = try modelDirectory()
         let variant = try Self.resolveVariant(for: descriptor.id)
-        progressBroadcaster.update(Self.loadingSnapshot)
+        progressBroadcaster.update(Self.downloadingSnapshot)
 
         let broadcaster = progressBroadcaster
         let progressHandler: DownloadUtils.ProgressHandler = { snapshot in
-            broadcaster.update(
-                ModelDownloadProgress(
-                    phase: .loading,
-                    fractionCompleted: snapshot.fractionCompleted,
-                    receivedBytes: 0,
-                    expectedBytes: nil
-                )
-            )
+            broadcaster.update(Self.map(snapshot))
         }
 
         do {
@@ -150,12 +143,39 @@ private extension FluidAudioQwenTranscriberAdapter {
         expectedBytes: nil
     )
 
+    static let downloadingSnapshot = ModelDownloadProgress(
+        phase: .downloading,
+        fractionCompleted: 0,
+        receivedBytes: 0,
+        expectedBytes: nil
+    )
+
     static let finishedSnapshot = ModelDownloadProgress(
         phase: .finished,
         fractionCompleted: 1,
         receivedBytes: 0,
         expectedBytes: nil
     )
+
+    /// Map FluidAudio's download phase to our chip-driving phase.
+    /// `.listing` and `.downloading` surface as `.downloading` (chip
+    /// shows progress bar). `.compiling` surfaces as `.loading`
+    /// (CoreML compile after the network bytes have landed).
+    static func map(_ snapshot: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
+        let phase: ModelDownloadProgress.Phase
+        switch snapshot.phase {
+        case .listing, .downloading:
+            phase = .downloading
+        case .compiling:
+            phase = .loading
+        }
+        return ModelDownloadProgress(
+            phase: phase,
+            fractionCompleted: snapshot.fractionCompleted,
+            receivedBytes: 0,
+            expectedBytes: nil
+        )
+    }
 
     static func makeLiveManager() -> any FluidAudioQwenManaging {
         if #available(macOS 15, *) {
