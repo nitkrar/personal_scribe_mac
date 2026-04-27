@@ -37,9 +37,9 @@ final class UnifiedWindowController: NSWindowController {
         metricsReader: any MetricsReading,
         permissionService: any PermissionService,
         inputDeviceProvider: any AudioInputDeviceProviding,
-        modes: [LegacyWorkflowMode] = ModeRegistry.all,
+        modes: [WorkflowMode] = WorkflowModeRegistry.builtInModes,
         modelService: ActiveModelService,
-        setActiveMode: (@MainActor (LegacyWorkflowMode) async -> Void)? = nil,
+        setActiveMode: (@MainActor (WorkflowMode) async -> Void)? = nil,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
@@ -52,7 +52,7 @@ final class UnifiedWindowController: NSWindowController {
         self.transcriptionsViewModel = TranscriptionsTabViewModel(reader: transcriptReader)
         self.modesViewModel = ModesTabViewModel(
             modes: modes,
-            modelService: modelService,
+            registry: AppComposition.workflowModeRegistry,
             setActiveHandler: setActiveMode
         )
         self.microphoneFooterViewModel = MicrophoneFooterViewModel(

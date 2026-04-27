@@ -62,7 +62,7 @@ public final class PillOverlayController: ObservableObject {
                 progressPublisher: preparationProgressPublisher
             ),
             permissions: LegacyPillOverlayPermissionService(),
-            activeModeSource: LegacyPillOverlayActiveModeProvider(),
+            workflowModeRegistry: AppComposition.workflowModeRegistry,
             visibilityModeSource: visibilityModeBridge
         )
         appStore.start()
@@ -466,15 +466,3 @@ private final class LegacyPillOverlayPermissionService: PermissionService, @unch
     }
 }
 
-private struct LegacyPillOverlayActiveModeProvider: AppStoreActiveModeProviding {
-    func currentActiveMode() -> LegacyWorkflowMode? {
-        nil
-    }
-
-    func activeModeStream() -> AsyncStream<LegacyWorkflowMode?> {
-        AsyncStream { continuation in
-            continuation.yield(nil)
-            continuation.finish()
-        }
-    }
-}

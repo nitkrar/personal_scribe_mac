@@ -1,7 +1,9 @@
 import Foundation
 import PersonalScribeCore
 
-public actor FakeTranscriber: LegacyTranscriber {
+public actor FakeTranscriber: Transcriber {
+    public nonisolated let capabilities: TranscriberCapabilities
+
     private let result: TranscriptionResult
     private let prepareError: PersonalScribeError?
     private let transcribeError: PersonalScribeError?
@@ -11,12 +13,14 @@ public actor FakeTranscriber: LegacyTranscriber {
         result: TranscriptionResult,
         prepareError: PersonalScribeError? = nil,
         transcribeError: PersonalScribeError? = nil,
-        delay: Duration? = nil
+        delay: Duration? = nil,
+        capabilities: TranscriberCapabilities = TranscriberCapabilities()
     ) {
         self.result = result
         self.prepareError = prepareError
         self.transcribeError = transcribeError
         self.delay = delay
+        self.capabilities = capabilities
     }
 
     public func prepare() async throws {
@@ -42,20 +46,6 @@ public actor FakeTranscriber: LegacyTranscriber {
         }
 
         return result
-    }
-
-    public func transcribe(stream: AsyncThrowingStream<PCMBuffer, Error>) async throws -> TranscriptionResult {
-        do {
-            for try await _ in stream {}
-        } catch let error as PersonalScribeError {
-            throw error
-        } catch {
-            throw PersonalScribeError.transcriptionFailure
-        }
-
-        return try await transcribe(
-            PCMBuffer(samples: [], timestamp: ContinuousClock().now)
-        )
     }
 
     private func maybeDelay() async throws {

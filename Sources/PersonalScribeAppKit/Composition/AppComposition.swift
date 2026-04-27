@@ -46,14 +46,6 @@ public enum AppComposition {
         )
     }()
 
-    /// Bridge `ActiveModelService.$activeModelIDs` (Combine, MainActor)
-    /// to `AppStoreActiveModeProviding` (AsyncStream-based) so the
-    /// central `AppStore` can observe active-mode flips. Computed
-    /// lazily off the shared `modelService`.
-    public static let activeModeProvider: any AppStoreActiveModeProviding = {
-        ServiceBackedActiveModeProvider(modelService: modelService)
-    }()
-
     /// VAD provider — nil if the bundled Silero `.mlmodelc` resource failed
     /// to resolve (dev / shipping error). Failure is silent: the orchestrator
     /// treats nil identically to the "feature disabled" path, so recording
@@ -120,10 +112,9 @@ public enum AppComposition {
         }
     }()
 
-    /// #078.31a — New typed-accessor processor provider, alongside the
-    /// legacy `ModelBoundTranscriberProvider`. The legacy provider is still
-    /// wired into the AI Models tab download path; the new provider feeds
-    /// the orchestrator's recipe-driven dispatch (per L24).
+    /// #078.31a — typed-accessor processor provider feeds both
+    /// `ActiveModelService.download` and the orchestrator's
+    /// recipe-driven dispatch (via `RecipeBuilder`, per L24).
     public static let processorProvider: any ModelBoundProcessorProviding = ModelBoundProcessorProvider()
 
     public static let sessionCoordinator: SessionCoordinator = {
@@ -133,16 +124,14 @@ public enum AppComposition {
             inputDeviceProvider: AVFoundationInputDeviceProvider(defaults: .standard),
             shouldMuteOutput: { MuteOutputWhileRecordingPreference.resolve() }
         )
-        let transcriberProvider = ModelBoundTranscriberProvider()
 
         let coordinator = SessionCoordinator(
             capture: capture,
             modelService: modelService,
-            transcriberProvider: transcriberProvider,
+            processorProvider: processorProvider,
             logger: logger,
             transcriptRepository: transcriptRepository,
             vadProvider: vadProvider,
-            vadPreferences: vadPreferences,
             workflowModeRegistry: workflowModeRegistry,
             availableKindsProvider: {
                 Set(ModelKind.allCases.filter(\.isEnabled))
@@ -272,119 +261,3 @@ public enum AppComposition {
     }
 }
 
-/// Thin `AppStoreActiveModeProviding` adapter over `ActiveModelService`.
-/// Translates the service's per-kind `[ModelKind: String]` map back
-/// into a `LegacyWorkflowMode?` via the registered `ModeRegistry` — the
-/// `AppStore` consumes mode descriptors, not model ids.
-///
-/// Added in #024.10 alongside the protocol-drop (`ModelService`) and
-/// `AppKitActiveModeProvider` deletion. Sits at the AppKit layer so
-/// the shared `AppStore` (PersonalScribeCore) doesn't have to depend
-/// on `PersonalScribeSession.ActiveModelService`. The struct itself
-/// is `Sendable` (lock-protected `StateBox`) — only the `init` runs on
-/// `MainActor` because `ActiveModelService` is `MainActor`-isolated.
-public struct ServiceBackedActiveModeProvider: AppStoreActiveModeProviding, @unchecked Sendable {
-    private let state: StateBox
-
-    @MainActor
-    public init(modelService: ActiveModelService) {
-        let state = StateBox(
-            currentMode: Self.modeDescriptor(for: modelService.activeModelIDs)
-        )
-        let observation = modelService.$activeModelIDs.sink { [weak state] activeIDs in
-            state?.publish(Self.modeDescriptor(for: activeIDs))
-        }
-        state.storeObservation(observation)
-        self.state = state
-    }
-
-    public func currentActiveMode() -> LegacyWorkflowMode? {
-        state.loadCurrentMode()
-    }
-
-    public func activeModeStream() -> AsyncStream<LegacyWorkflowMode?> {
-        let state = self.state
-        let id = UUID()
-
-        return AsyncStream { continuation in
-            state.register(continuation, id: id)
-            continuation.onTermination = { _ in
-                state.removeContinuation(id: id)
-            }
-        }
-    }
-
-    /// Match a registered mode by `(voiceModelID, aiModelID)` against
-    /// the `.asr` slot in the active-id map. ModeRegistry contains
-    /// every mode the user can pick; the active mode is the one whose
-    /// voice model id equals the active `.asr` id (and aiModelID is
-    /// nil today — modes don't yet pin AI presets).
-    private static func modeDescriptor(
-        for activeIDs: [ModelKind: String]
-    ) -> LegacyWorkflowMode? {
-        guard let activeASRID = activeIDs[.asr] else { return nil }
-        return ModeRegistry.all.first {
-            $0.voiceModelID == activeASRID && $0.aiModelID == nil
-        }
-    }
-}
-
-private final class StateBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var currentMode: LegacyWorkflowMode?
-    private var continuations: [UUID: AsyncStream<LegacyWorkflowMode?>.Continuation] = [:]
-    private var observation: AnyCancellable?
-
-    init(currentMode: LegacyWorkflowMode?) {
-        self.currentMode = currentMode
-    }
-
-    func loadCurrentMode() -> LegacyWorkflowMode? {
-        lock.lock()
-        defer { lock.unlock() }
-        return currentMode
-    }
-
-    func register(
-        _ continuation: AsyncStream<LegacyWorkflowMode?>.Continuation,
-        id: UUID
-    ) {
-        lock.lock()
-        continuations[id] = continuation
-        continuation.yield(currentMode)
-        lock.unlock()
-    }
-
-    func removeContinuation(id: UUID) {
-        lock.lock()
-        continuations[id] = nil
-        lock.unlock()
-    }
-
-    func publish(_ mode: LegacyWorkflowMode?) {
-        lock.lock()
-        currentMode = mode
-        for continuation in continuations.values {
-            continuation.yield(mode)
-        }
-        lock.unlock()
-    }
-
-    func storeObservation(_ observation: AnyCancellable) {
-        lock.lock()
-        self.observation = observation
-        lock.unlock()
-    }
-
-    deinit {
-        lock.lock()
-        let continuations = Array(continuations.values)
-        let observation = self.observation
-        lock.unlock()
-
-        observation?.cancel()
-        for continuation in continuations {
-            continuation.finish()
-        }
-    }
-}

@@ -6,13 +6,12 @@ final class AppStoreTests: XCTestCase {
     func testSnapshotRepublishesSessionStateAndModelDownloadProgress() async {
         let session = FakeAppStoreSessionProvider()
         let permissions = FakePermissionService()
-        let activeModeProvider = FakeActiveModeProvider()
         let visibilityModeProvider = FakeVisibilityModeProvider()
         let clock = ManualAppStoreClock()
         let store = makeStore(
             session: session,
             permissions: permissions,
-            activeModeProvider: activeModeProvider,
+            registry: makeRegistry(),
             visibilityModeProvider: visibilityModeProvider,
             clock: clock
         )
@@ -63,7 +62,7 @@ final class AppStoreTests: XCTestCase {
         let store = makeStore(
             session: session,
             permissions: FakePermissionService(),
-            activeModeProvider: FakeActiveModeProvider(),
+            registry: makeRegistry(),
             visibilityModeProvider: FakeVisibilityModeProvider(),
             clock: ManualAppStoreClock()
         )
@@ -89,7 +88,7 @@ final class AppStoreTests: XCTestCase {
         let store = makeStore(
             session: session,
             permissions: permissions,
-            activeModeProvider: FakeActiveModeProvider(),
+            registry: makeRegistry(),
             visibilityModeProvider: FakeVisibilityModeProvider(),
             clock: ManualAppStoreClock()
         )
@@ -111,30 +110,31 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.permissions, refreshedStatuses)
     }
 
-    func testActiveModeChangesRepublishSnapshot() async {
-        let activeModeProvider = FakeActiveModeProvider()
-        let dictation = makeMode(id: "dictation", name: "Dictation")
+    func testActiveModeChangesRepublishSnapshot() async throws {
+        // #078.36: AppStore consumes WorkflowModeRegistry directly.
+        // Pre-populate a custom mode + flip active via setActive.
+        let registry = makeRegistry()
         let coding = makeMode(id: "coding", name: "Coding")
+        try registry.saveCustom(coding)
         let store = makeStore(
             session: FakeAppStoreSessionProvider(),
             permissions: FakePermissionService(),
-            activeModeProvider: activeModeProvider,
+            registry: registry,
             visibilityModeProvider: FakeVisibilityModeProvider(),
             clock: ManualAppStoreClock()
         )
 
-        activeModeProvider.emit(dictation)
         store.start()
         await waitUntil {
-            store.snapshot.activeMode == dictation
+            store.snapshot.activeMode?.id == WorkflowMode.dictation.id
         }
 
-        activeModeProvider.emit(coding)
+        try registry.setActive(id: "coding")
         await waitUntil {
-            store.snapshot.activeMode == coding
+            store.snapshot.activeMode?.id == "coding"
         }
 
-        XCTAssertEqual(store.snapshot.activeMode, coding)
+        XCTAssertEqual(store.snapshot.activeMode?.id, "coding")
     }
 
     func testVisibilityModeChangesRecomputePillVisibility() async {
@@ -142,7 +142,7 @@ final class AppStoreTests: XCTestCase {
         let store = makeStore(
             session: FakeAppStoreSessionProvider(),
             permissions: FakePermissionService(),
-            activeModeProvider: FakeActiveModeProvider(),
+            registry: makeRegistry(),
             visibilityModeProvider: visibilityModeProvider,
             clock: ManualAppStoreClock()
         )
@@ -170,7 +170,7 @@ final class AppStoreTests: XCTestCase {
         let store = makeStore(
             session: session,
             permissions: FakePermissionService(),
-            activeModeProvider: FakeActiveModeProvider(),
+            registry: makeRegistry(),
             visibilityModeProvider: FakeVisibilityModeProvider(),
             clock: ManualAppStoreClock()
         )
@@ -224,7 +224,7 @@ final class AppStoreTests: XCTestCase {
         let store = makeStore(
             session: session,
             permissions: FakePermissionService(),
-            activeModeProvider: FakeActiveModeProvider(),
+            registry: makeRegistry(),
             visibilityModeProvider: FakeVisibilityModeProvider(),
             clock: clock
         )
@@ -261,7 +261,7 @@ final class AppStoreTests: XCTestCase {
         let store = AppStore(
             session: session,
             permissions: FakePermissionService(),
-            activeModeSource: FakeActiveModeProvider(),
+            workflowModeRegistry: makeRegistry(),
             visibilityModeSource: visibilityModeProvider,
             clock: clock
         )
@@ -307,7 +307,7 @@ final class AppStoreTests: XCTestCase {
         let store = makeStore(
             session: session,
             permissions: FakePermissionService(),
-            activeModeProvider: FakeActiveModeProvider(),
+            registry: makeRegistry(),
             visibilityModeProvider: FakeVisibilityModeProvider(),
             clock: clock
         )
@@ -333,7 +333,7 @@ final class AppStoreTests: XCTestCase {
         let store = makeStore(
             session: session,
             permissions: FakePermissionService(),
-            activeModeProvider: FakeActiveModeProvider(),
+            registry: makeRegistry(),
             visibilityModeProvider: FakeVisibilityModeProvider(),
             clock: clock
         )
@@ -367,7 +367,7 @@ final class AppStoreTests: XCTestCase {
         let store = makeStore(
             session: session,
             permissions: FakePermissionService(),
-            activeModeProvider: FakeActiveModeProvider(),
+            registry: makeRegistry(),
             visibilityModeProvider: FakeVisibilityModeProvider(),
             clock: clock
         )
@@ -400,24 +400,35 @@ final class AppStoreTests: XCTestCase {
     private func makeStore(
         session: FakeAppStoreSessionProvider,
         permissions: FakePermissionService,
-        activeModeProvider: FakeActiveModeProvider,
+        registry: WorkflowModeRegistry,
         visibilityModeProvider: FakeVisibilityModeProvider,
         clock: ManualAppStoreClock
     ) -> AppStore {
         AppStore(
             session: session,
             permissions: permissions,
-            activeModeSource: activeModeProvider,
+            workflowModeRegistry: registry,
             visibilityModeSource: visibilityModeProvider,
             clock: clock
         )
     }
 
-    private func makeMode(id: String, name: String) -> LegacyWorkflowMode {
-        LegacyWorkflowMode(
+    private func makeRegistry() -> WorkflowModeRegistry {
+        // swiftlint:disable:next force_try
+        try! WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(),
+            availableKindsProvider: { Set(ModelKind.allCases) }
+        )
+    }
+
+    private func makeMode(id: String, name: String) -> WorkflowMode {
+        WorkflowMode(
             id: id,
             name: name,
-            voiceModelID: "voice-\(id)"
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste]
         )
     }
 

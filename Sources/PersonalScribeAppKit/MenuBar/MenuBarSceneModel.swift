@@ -70,7 +70,7 @@ final class MenuBarSceneModel: ObservableObject {
         let appStore = AppStore(
             session: coordinator.appStoreSessionProvider(),
             permissions: appStorePermissionService,
-            activeModeSource: AppComposition.activeModeProvider,
+            workflowModeRegistry: AppComposition.workflowModeRegistry,
             visibilityModeSource: AppKitVisibilityModeProvider()
         )
         appStore.start()

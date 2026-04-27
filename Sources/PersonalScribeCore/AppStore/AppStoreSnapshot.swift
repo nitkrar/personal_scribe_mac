@@ -3,7 +3,7 @@ import Foundation
 public struct AppStoreSnapshot: Sendable, Equatable {
     public var session: SessionSnapshot
     public var permissions: [Permission: PermissionStatus]
-    public var activeMode: LegacyWorkflowMode?
+    public var activeMode: WorkflowMode?
     public var pillVisibility: PillVisibilityState
     public var lastTranscriptionResult: TranscriptionResult?
     public var currentRecordingDuration: Duration?
@@ -11,7 +11,7 @@ public struct AppStoreSnapshot: Sendable, Equatable {
     public init(
         session: SessionSnapshot,
         permissions: [Permission: PermissionStatus],
-        activeMode: LegacyWorkflowMode?,
+        activeMode: WorkflowMode?,
         pillVisibility: PillVisibilityState,
         lastTranscriptionResult: TranscriptionResult?,
         currentRecordingDuration: Duration?

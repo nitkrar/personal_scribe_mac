@@ -568,7 +568,8 @@ private final class FakePermissionService: PermissionService {
     }
 }
 
-private final class ProgressReportingTranscriber: @unchecked Sendable, LegacyTranscriber {
+private final class ProgressReportingTranscriber: @unchecked Sendable, Transcriber {
+    let capabilities = TranscriberCapabilities()
     private let lock = NSLock()
     private let relay = ProgressRelay()
     private let result: TranscriptionResult
@@ -614,11 +615,6 @@ private final class ProgressReportingTranscriber: @unchecked Sendable, LegacyTra
 
     func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
         result
-    }
-
-    func transcribe(stream: AsyncThrowingStream<PCMBuffer, Error>) async throws -> TranscriptionResult {
-        for try await _ in stream {}
-        return result
     }
 
     func emit(_ progress: ModelDownloadProgress) {

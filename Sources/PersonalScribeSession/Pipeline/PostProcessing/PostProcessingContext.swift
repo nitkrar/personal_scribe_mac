@@ -2,7 +2,7 @@ import PersonalScribeCore
 
 public struct PostProcessingContext: Sendable, Equatable {
     public let recordingDuration: Duration
-    public let activeMode: LegacyWorkflowMode?
+    public let activeMode: WorkflowMode?
     public let activeAIModelID: String?
     public let systemPrompt: String?
     public let segments: [TranscriptionResult.Segment]
@@ -10,7 +10,7 @@ public struct PostProcessingContext: Sendable, Equatable {
 
     public init(
         recordingDuration: Duration,
-        activeMode: LegacyWorkflowMode? = nil,
+        activeMode: WorkflowMode? = nil,
         activeAIModelID: String? = nil,
         systemPrompt: String? = nil,
         segments: [TranscriptionResult.Segment] = [],

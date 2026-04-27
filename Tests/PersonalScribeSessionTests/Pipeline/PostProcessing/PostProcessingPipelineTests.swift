@@ -62,18 +62,14 @@ final class PostProcessingPipelineTests: XCTestCase {
     }
 
     private func makeContext() -> PostProcessingContext {
-        let mode = LegacyWorkflowMode(
-            id: "dictation-plus",
-            name: "Dictation Plus",
-            voiceModelID: "voice.default",
-            aiModelID: "gpt-5.4",
-            systemPrompt: "Polish the final transcript."
-        )
+        // #078.31a: activeMode field now carries the new `WorkflowMode`
+        // shape. The legacy aiModelID + systemPrompt remain as
+        // separate context fields.
         return PostProcessingContext(
             recordingDuration: .seconds(1),
-            activeMode: mode,
-            activeAIModelID: mode.aiModelID,
-            systemPrompt: mode.systemPrompt,
+            activeMode: WorkflowMode.dictation,
+            activeAIModelID: "gpt-5.4",
+            systemPrompt: "Polish the final transcript.",
             segments: [
                 .init(text: "hello world", start: .zero, end: .seconds(1)),
             ],

@@ -4,7 +4,6 @@ import PersonalScribeVAD
 
 public actor SessionPipelineOrchestrator: SessionPipelining {
     private let capture: any AudioCapturer
-    private let transcriber: any LegacyTranscriber
     private let logger: PersonalScribeLogger
     private let postProcessingPipeline: any PostProcessingPipeline
     private let outputSink: any PipelineOutputSink
@@ -14,19 +13,17 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// OR the bundled model failed to load and the provider elected to go silent.
     /// Orchestrator treats either case identically: no VAD monitoring.
     private let vadProvider: (any VadProviding)?
-    /// Preference reader called ONCE per session start (in `consumeCaptureStream`).
-    /// Mid-session preference changes do not apply to the current recording;
-    /// they take effect on the next session. Documented for users in the
-    /// Settings card copy.
-    private let vadPreferences: (any VadPreferencesReading)?
-    /// #078.29 — optional eager-bound recipe (per L25). When present,
-    /// the orchestrator drives VAD wiring + processor dispatch off the
-    /// recipe; legacy `vadPreferences` and `transcriber` are ignored
-    /// for the duration of the session. When nil, the legacy path
-    /// runs unchanged. Set once at construction; immutable for the
-    /// pipeline's lifetime so mid-session active-mode/active-model
-    /// changes never affect an in-flight session.
-    private let boundRecipe: BoundRecipe?
+    /// #078.29 — eager-bound recipe (per L25). Set per-session by
+    /// `SessionCoordinator.bindRecipeForNextSession(_:)` immediately
+    /// before each `toggleCapture` / `startHoldCapture`. Remains stable
+    /// for the duration of an in-flight session: mid-session active-mode
+    /// / active-model changes only land on the NEXT session start.
+    private var boundRecipe: BoundRecipe?
+    /// #078.29 — observation Task that forwards the current bound
+    /// recipe's processor download progress to
+    /// `snapshot.modelDownloadProgress`. Cancelled + replaced when a
+    /// new recipe binds.
+    private var progressForwardingTask: Task<Void, Never>?
     /// Installed by `SessionCoordinator` via `setAutoStopHandler(_:)` after
     /// init. Fires from `consumeCaptureStream` via a detached Task so the
     /// capture consumer can keep draining buffers — inline await would
@@ -77,14 +74,12 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
     public init(
         capture: any AudioCapturer,
-        transcriber: any LegacyTranscriber,
         transcriptRepository: TranscriptRepository? = nil,
         logger: PersonalScribeLogger,
         postProcessingPipeline: any PostProcessingPipeline = DefaultPostProcessingPipeline(),
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
         vadProvider: (any VadProviding)? = nil,
-        vadPreferences: (any VadPreferencesReading)? = nil,
         boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
     ) {
@@ -98,14 +93,12 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
         self.init(
             capture: capture,
-            transcriber: transcriber,
             logger: logger,
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
             contextProvider: contextProvider,
             persistenceHandler: persistenceHandler,
             vadProvider: vadProvider,
-            vadPreferences: vadPreferences,
             boundRecipe: boundRecipe,
             graceDurationSeconds: graceDurationSeconds
         )
@@ -113,41 +106,70 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
     init(
         capture: any AudioCapturer,
-        transcriber: any LegacyTranscriber,
         logger: PersonalScribeLogger,
         postProcessingPipeline: any PostProcessingPipeline,
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?,
         vadProvider: (any VadProviding)? = nil,
-        vadPreferences: (any VadPreferencesReading)? = nil,
         boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
     ) {
         let initialContext = contextProvider.currentContext()
         self.capture = capture
-        self.transcriber = transcriber
         self.logger = logger
         self.postProcessingPipeline = postProcessingPipeline
         self.outputSink = outputSink
         self.contextProvider = contextProvider
         self.persistenceHandler = persistenceHandler
         self.vadProvider = vadProvider
-        self.vadPreferences = vadPreferences
         self.boundRecipe = boundRecipe
         self.graceDurationSeconds = graceDurationSeconds
         self.activeContext = initialContext
         self.currentSnapshot = SessionSnapshot()
-        Task { [weak self] in
-            for await progress in transcriber.modelDownloadProgress() {
-                guard let self else {
-                    return
-                }
+    }
 
-                await self.publish { snapshot in
+    /// #078.29 — bind a fresh recipe ahead of the next session.
+    /// `SessionCoordinator` calls this immediately before
+    /// `toggleCapture` / `startHoldCapture`. Cancels any prior
+    /// progress-forwarding Task and starts observing the new recipe's
+    /// processor download progress (which lands in
+    /// `snapshot.modelDownloadProgress` for UI consumers).
+    public func bindRecipeForNextSession(_ recipe: BoundRecipe) {
+        boundRecipe = recipe
+        progressForwardingTask?.cancel()
+        progressForwardingTask = makeProgressForwardingTask(for: recipe)
+    }
+
+    private func makeProgressForwardingTask(for recipe: BoundRecipe) -> Task<Void, Never>? {
+        guard let lifecycle = Self.lifecycleForObservation(in: recipe) else {
+            return nil
+        }
+        return Task { [weak self] in
+            for await progress in lifecycle.modelDownloadProgress() {
+                if Task.isCancelled { return }
+                await self?.publish { snapshot in
                     snapshot.modelDownloadProgress = Self.normalizeModelDownloadProgress(progress)
                 }
             }
+        }
+    }
+
+    /// Pick the lifecycle whose progress feeds the snapshot. Today's
+    /// recipes have one processor; the asr-side processor (the
+    /// transcriber) is the canonical UI signal. Multi-processor recipes
+    /// (diarized fusion) report via the per-turn transcriber.
+    private static func lifecycleForObservation(in recipe: BoundRecipe) -> (any ModelLifecycle)? {
+        guard let processor = recipe.processors.first else {
+            return nil
+        }
+        switch processor {
+        case .transcriber(let transcriber):
+            return transcriber
+        case .streamingTranscriber(let streamingTranscriber):
+            return streamingTranscriber
+        case .diarizedTurns(_, let transcriber):
+            return transcriber
         }
     }
 
@@ -197,7 +219,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     public func prepareTranscriber() async throws {
-        try await transcriber.prepare()
+        guard let recipe = boundRecipe else {
+            return
+        }
+        try await Self.prepareAllProcessors(in: recipe)
     }
 
     /// Install the closure called when VAD fires `.speechEnded`. `SessionCoordinator`
@@ -255,10 +280,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 }
             }
         }
-    }
-
-    public func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        transcriber.modelDownloadProgress()
     }
 
     func latestStageFailureForTesting() -> PipelineStageFailure? {
@@ -488,12 +509,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
 
         do {
-            let rawResult: TranscriptionResult
-            if boundRecipe != nil {
-                rawResult = try await runBoundProcessing(replayBuffers: replayBuffers)
-            } else {
-                rawResult = try await runTranscription(stream: makeReplayStream(from: replayBuffers))
-            }
+            let rawResult = try await runBoundProcessing(replayBuffers: replayBuffers)
             let rawProgress = nextTranscriptProgress(
                 text: rawResult.text,
                 isFinal: true,
@@ -569,16 +585,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             handleStageFailure(failure)
         } catch {
             handleStageFailure(makeStageFailure(stage: .transcription, error: error, fallback: .transcriptionFailure))
-        }
-    }
-
-    private func runTranscription(
-        stream: AsyncThrowingStream<PCMBuffer, Error>
-    ) async throws -> TranscriptionResult {
-        do {
-            return try await transcriber.transcribe(stream: stream)
-        } catch {
-            throw makeStageFailure(stage: .transcription, error: error, fallback: .transcriptionFailure)
         }
     }
 
@@ -776,12 +782,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         // not rescue the current recording (documented UX). Hold-mode sessions
         // skip VAD entirely (release is the stop signal).
         //
-        // #078.29: when a `BoundRecipe` is set, VAD config comes from the
-        // recipe's `BoundCaptureController.vad(...)` entry (per L25 — the
-        // recipe builder eager-resolved the parameters). The legacy
-        // `vadPreferences` reader is ignored for the duration of the
-        // session: the recipe wins. No `.vad` controller in the recipe →
-        // no VAD wiring at all.
+        // #078.29: VAD config comes from the bound recipe's
+        // `BoundCaptureController.vad(...)` entry (per L25 — the
+        // recipe builder eager-resolved the parameters). No `.vad`
+        // controller in the recipe → no VAD wiring at all.
         let vadPrefs = resolvedVadPreferencesForSession()
         let vadHandler = onAutoStopRequested
         let vadHandle = await makeVadSessionHandleIfApplicable(prefs: vadPrefs, handler: vadHandler)
@@ -822,32 +826,29 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
-    /// #078.29 — pick VAD config for this session. Recipe wins when
-    /// present: the recipe's `.vad` capture controller's bound
-    /// parameters become a `VadPreferences` snapshot for the existing
-    /// VAD wiring path. No `.vad` controller → returns nil (skip VAD
-    /// entirely; legacy `vadPreferences` reader is also ignored). When
-    /// no recipe is bound, fall back to the legacy reader so existing
-    /// callers see no behavior change.
+    /// #078.29 — pick VAD config for this session from the bound
+    /// recipe's `.vad` capture controller. No `.vad` controller (or
+    /// no bound recipe) → returns nil and the orchestrator skips VAD
+    /// monitoring entirely.
     private func resolvedVadPreferencesForSession() -> VadPreferences? {
-        if let recipe = boundRecipe {
-            for controller in recipe.captureControllers {
-                if case .vad(
-                    let silenceThreshold,
-                    let showWarning,
-                    let showAutoStoppedNotification
-                ) = controller {
-                    return VadPreferences(
-                        autoStopEnabled: true,
-                        silenceThresholdSeconds: silenceThreshold,
-                        showStoppingWarning: showWarning,
-                        showAutoStoppedNotification: showAutoStoppedNotification
-                    )
-                }
-            }
+        guard let recipe = boundRecipe else {
             return nil
         }
-        return vadPreferences?.current()
+        for controller in recipe.captureControllers {
+            if case .vad(
+                let silenceThreshold,
+                let showWarning,
+                let showAutoStoppedNotification
+            ) = controller {
+                return VadPreferences(
+                    autoStopEnabled: true,
+                    silenceThresholdSeconds: silenceThreshold,
+                    showStoppingWarning: showWarning,
+                    showAutoStoppedNotification: showAutoStoppedNotification
+                )
+            }
+        }
+        return nil
     }
 
     private func makeVadSessionHandleIfApplicable(
@@ -1025,7 +1026,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     private func prepareTranscriberInBackground() {
-        let transcriber = transcriber
+        guard let recipe = boundRecipe else {
+            return
+        }
         let logger = logger
 
         // `.userInitiated` (was `.background`) so the scheduler runs
@@ -1037,11 +1040,29 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         // (session-start race).
         Task.detached(priority: .userInitiated) {
             do {
-                try await transcriber.prepare()
+                try await Self.prepareAllProcessors(in: recipe)
             } catch is CancellationError {
                 return
             } catch {
-                logger.error("Background transcriber preparation failed", error: error)
+                logger.error("Background recipe preparation failed", error: error)
+            }
+        }
+    }
+
+    /// Sequentially prepare every processor referenced by `recipe`.
+    /// Each adapter's `prepare()` coalesces repeat calls; sequential
+    /// ordering keeps coremldata.bin contention low on first-launch
+    /// downloads.
+    private static func prepareAllProcessors(in recipe: BoundRecipe) async throws {
+        for processor in recipe.processors {
+            switch processor {
+            case .transcriber(let transcriber):
+                try await transcriber.prepare()
+            case .streamingTranscriber(let streamingTranscriber):
+                try await streamingTranscriber.prepare()
+            case .diarizedTurns(let diarizer, let transcriber):
+                try await diarizer.prepare()
+                try await transcriber.prepare()
             }
         }
     }

@@ -281,22 +281,19 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
     ) -> SessionPipelineOrchestrator {
-        SessionPipelineOrchestrator(
+        // #078.29: orchestrator init dropped `transcriber:` and
+        // `vadPreferences:` — recipe carries both. The legacy fallback
+        // `vadPreferences` arg here stays for symmetry but is ignored
+        // post-cutover.
+        _ = vadPreferences
+        return SessionPipelineOrchestrator(
             capture: capture,
-            transcriber: FakeTranscriber(
-                result: TranscriptionResult(
-                    text: "should not be used when recipe is set",
-                    audioDuration: .seconds(1),
-                    processingDuration: .zero
-                )
-            ),
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
             outputSink: outputSink,
             contextProvider: StaticPipelineContextProvider(
                 context: PipelineContextSnapshot(streamingOutputEnabled: false)
             ),
             vadProvider: vadProvider,
-            vadPreferences: vadPreferences,
             boundRecipe: boundRecipe,
             graceDurationSeconds: graceDurationSeconds
         )

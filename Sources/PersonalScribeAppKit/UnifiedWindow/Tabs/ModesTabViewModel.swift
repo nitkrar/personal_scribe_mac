@@ -5,96 +5,64 @@ import PersonalScribeSession
 
 /// View model for the unified-window Modes tab (M3.4).
 ///
-/// Owns the list of available modes plus a published `activeModeID`
-/// derived from the injected `ActiveModelService`'s `.asr` slot. Kept
-/// UI-free so it can be exercised directly by XCTest — see
-/// `ModesTabViewModelTests`.
+/// Owns the list of available modes (sourced from the registry's
+/// `allModes`) plus a published `activeModeID` driven by the
+/// `WorkflowModeRegistry`'s active-mode stream.
 ///
-/// Reference: `plans/App UI design/Claude_Final_Bundle_Prompt.md` §3C —
-/// "List of available modes (Dictation, Command, Notes) as cards. Show
-/// active state with a green dot."
-///
-/// Phase-3 step #024.10: previously took an `activeModeProvider` /
-/// `activeModeStream` closure pair sourced from the deleted
-/// `AppKitActiveModeProvider`. Now reads the central
-/// `ActiveModelService` directly and tracks `$activeModelIDs` via
-/// Combine so the green dot follows AI Models tab activations live.
+/// #078.36: previously took an `ActiveModelService` and matched modes
+/// to the active asr id by `voiceModelID`. Post-cutover, modes
+/// reference Kinds (per L23) rather than concrete voice-model ids;
+/// active-mode tracking moves to the registry directly.
 @MainActor
 public final class ModesTabViewModel: ObservableObject {
     /// All modes to render as cards in the tab.
-    @Published public private(set) var modes: [LegacyWorkflowMode]
+    @Published public private(set) var modes: [WorkflowMode]
 
-    /// Identifier of the currently-active mode, if any. Drives the
-    /// green-dot / active-state indicator on each card.
-    @Published public private(set) var activeModeID: String?
+    /// Identifier of the currently-active mode. Drives the green-dot /
+    /// active-state indicator on each card.
+    @Published public private(set) var activeModeID: String
 
-    private let modelService: ActiveModelService?
-    private let setActiveHandler: (@MainActor (LegacyWorkflowMode) async -> Void)?
-    private var cancellables: Set<AnyCancellable> = []
+    private let registry: WorkflowModeRegistry?
+    private let setActiveHandler: (@MainActor (WorkflowMode) async -> Void)?
+    private var observationTask: Task<Void, Never>?
 
     public init(
-        modes: [LegacyWorkflowMode] = ModeRegistry.all,
-        modelService: ActiveModelService? = nil,
-        setActiveHandler: (@MainActor (LegacyWorkflowMode) async -> Void)? = nil
+        modes: [WorkflowMode] = WorkflowModeRegistry.builtInModes,
+        registry: WorkflowModeRegistry? = nil,
+        setActiveHandler: (@MainActor (WorkflowMode) async -> Void)? = nil
     ) {
         self.modes = modes
-        self.modelService = modelService
+        self.registry = registry
         self.setActiveHandler = setActiveHandler
-        self.activeModeID = Self.deriveActiveModeID(
-            modes: modes,
-            modelService: modelService
-        )
+        self.activeModeID = registry?.activeMode.id ?? WorkflowMode.dictation.id
 
-        if let modelService {
-            modelService.$activeModelIDs
-                .sink { [weak self] activeIDs in
+        if let registry {
+            let stream = registry.activeModeStream()
+            observationTask = Task { [weak self] in
+                for await mode in stream {
                     guard let self else { return }
-                    let asrID = activeIDs[.asr]
-                    self.activeModeID = self.modes.first { $0.voiceModelID == asrID }?.id
+                    await MainActor.run {
+                        self.activeModeID = mode.id
+                    }
                 }
-                .store(in: &cancellables)
+            }
         }
     }
 
-    /// Re-read the underlying service and republish `activeModeID` if
-    /// it changed. Callsites should invoke this when the underlying
-    /// active-mode source is known to have changed (e.g. on view
-    /// appearance).
-    public func refreshActiveMode() {
-        let newID = Self.deriveActiveModeID(
-            modes: modes,
-            modelService: modelService
-        )
-        if newID != activeModeID {
-            activeModeID = newID
-        }
+    deinit {
+        observationTask?.cancel()
     }
 
     /// `true` if `mode` matches the currently-active mode id.
-    public func isActive(_ mode: LegacyWorkflowMode) -> Bool {
-        guard let activeModeID else { return false }
-        return mode.id == activeModeID
+    public func isActive(_ mode: WorkflowMode) -> Bool {
+        mode.id == activeModeID
     }
 
     /// Flip the active mode via the injected `setActiveHandler`. The
-    /// service's `$activeModelIDs` publisher then pushes the new id
-    /// back through the Combine subscription, keeping the tab in
-    /// lock-step.
-    public func setActive(_ mode: LegacyWorkflowMode) async {
+    /// registry's `activeModeStream()` then pushes the new id back
+    /// through the observation loop, keeping the tab in lock-step.
+    public func setActive(_ mode: WorkflowMode) async {
         guard let setActiveHandler else { return }
         await setActiveHandler(mode)
-    }
-
-    private static func deriveActiveModeID(
-        modes: [LegacyWorkflowMode],
-        modelService: ActiveModelService?
-    ) -> String? {
-        guard
-            let modelService,
-            let activeASRID = modelService.activeDescriptor(for: .asr)?.id
-        else {
-            return nil
-        }
-        return modes.first { $0.voiceModelID == activeASRID }?.id
     }
 }

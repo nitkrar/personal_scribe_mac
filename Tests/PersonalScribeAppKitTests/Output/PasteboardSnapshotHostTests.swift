@@ -55,10 +55,15 @@ final class PasteboardSnapshotHostTests: XCTestCase {
     ) async -> (AppStore, FakeSessionProvider, PillOverlayViewModel, PasteboardSnapshotService, PasteboardSnapshotHost) {
         let sessionProvider = FakeSessionProvider()
         let permissionService = FakePermissionService()
+        // swiftlint:disable:next force_try
+        let registry = try! WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(),
+            availableKindsProvider: { Set(ModelKind.allCases) }
+        )
         let appStore = AppStore(
             session: sessionProvider,
             permissions: permissionService,
-            activeModeSource: FakeActiveModeProvider(),
+            workflowModeRegistry: registry,
             visibilityModeSource: FakeVisibilityModeProvider()
         )
         let viewModel = PillOverlayViewModel()
@@ -246,13 +251,6 @@ private final class FakePermissionService: PermissionService {
 
     func systemSettingsDeepLink(for permission: Permission) -> URL {
         URL(string: "https://example.invalid/\(permission.rawValue)")!
-    }
-}
-
-private final class FakeActiveModeProvider: @unchecked Sendable, AppStoreActiveModeProviding {
-    func currentActiveMode() -> LegacyWorkflowMode? { nil }
-    func activeModeStream() -> AsyncStream<LegacyWorkflowMode?> {
-        AsyncStream { continuation in continuation.finish() }
     }
 }
 

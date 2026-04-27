@@ -5,14 +5,19 @@ import PersonalScribeVAD
 
 public actor SessionCoordinator {
     private let capture: any AudioCapturer
-    private let fixedTranscriber: (any LegacyTranscriber)?
+    /// #078.31a — fixed recipe used by the test-init path. Production
+    /// callers leave this nil and supply `processorProvider` +
+    /// `workflowModeRegistry` instead.
+    private let fixedRecipe: BoundRecipe?
     private let modelService: ActiveModelService?
-    private let transcriberProvider: (any ModelBoundTranscriberProviding)?
+    /// #078.31a — typed-accessor processor provider (replaces legacy
+    /// `transcriberProvider`). Used together with `workflowModeRegistry`
+    /// to build a `BoundRecipe` per session via `RecipeBuilder`.
+    private let processorProvider: (any ModelBoundProcessorProviding)?
     private let transcriptRepository: TranscriptRepository?
     private let logger: PersonalScribeLogger
     private let signposter = OSSignposter(subsystem: PersonalScribeLogger.subsystem, category: "prepare")
     private let pipeline: SessionPipelineOrchestrator
-    private let pipelineTranscriber: CoordinatorPipelineTranscriber
     /// #078.28 — optional registry for re-validating the active recipe
     /// at session start. Nil for legacy callers that don't yet wire the
     /// recipe-driven path; in that case validation is skipped.
@@ -31,74 +36,72 @@ public actor SessionCoordinator {
     private var currentAudioLevel: Float = 0.0
     private var audioLevelTask: Task<Void, Never>?
 
+    /// Test-only init. Wraps `transcriber` as the asr processor of a
+    /// built-in batch dictation recipe and binds that recipe to every
+    /// session. Useful for state-machine + orchestrator-flow tests
+    /// that don't need to exercise registry + active-model resolution.
     public init(
         capture: any AudioCapturer,
-        transcriber: any LegacyTranscriber,
+        transcriber: any Transcriber,
         logger: PersonalScribeLogger,
         transcriptRepository: TranscriptRepository? = nil,
         vadProvider: (any VadProviding)? = nil,
-        vadPreferences: (any VadPreferencesReading)? = nil,
         workflowModeRegistry: WorkflowModeRegistry? = nil,
         availableKindsProvider: (@Sendable () -> Set<ModelKind>)? = nil
     ) {
-        let pipelineTranscriber = CoordinatorPipelineTranscriber(
-            fixedTranscriber: transcriber,
-            logger: logger
-        )
         self.capture = capture
-        self.fixedTranscriber = transcriber
+        self.fixedRecipe = BoundRecipe(
+            recipeID: "dictation",
+            recipeName: "Dictation",
+            pipelineShape: .batch,
+            processors: [.transcriber(transcriber)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste]
+        )
         self.modelService = nil
-        self.transcriberProvider = nil
+        self.processorProvider = nil
         self.transcriptRepository = transcriptRepository
         self.logger = logger
-        self.pipelineTranscriber = pipelineTranscriber
         self.workflowModeRegistry = workflowModeRegistry
         self.availableKindsProvider = availableKindsProvider
         self.pipeline = Self.makePipeline(
             capture: capture,
-            pipelineTranscriber: pipelineTranscriber,
             transcriptRepository: transcriptRepository,
             logger: logger,
-            vadProvider: vadProvider,
-            vadPreferences: vadPreferences
+            vadProvider: vadProvider
         )
         Task { [weak self] in
             await self?.installAutoStopHandler()
         }
     }
 
+    /// Production init. Builds a fresh `BoundRecipe` per session via
+    /// `RecipeBuilder` over the supplied registry + active-model state
+    /// (per #078.31a "swap provider injection"). Replaces the legacy
+    /// `transcriberProvider:` arg.
     public init(
         capture: any AudioCapturer,
         modelService: ActiveModelService,
-        transcriberProvider: any ModelBoundTranscriberProviding,
+        processorProvider: any ModelBoundProcessorProviding,
         logger: PersonalScribeLogger,
         transcriptRepository: TranscriptRepository? = nil,
         vadProvider: (any VadProviding)? = nil,
-        vadPreferences: (any VadPreferencesReading)? = nil,
-        workflowModeRegistry: WorkflowModeRegistry? = nil,
-        availableKindsProvider: (@Sendable () -> Set<ModelKind>)? = nil
+        workflowModeRegistry: WorkflowModeRegistry,
+        availableKindsProvider: @escaping @Sendable () -> Set<ModelKind>
     ) {
-        let pipelineTranscriber = CoordinatorPipelineTranscriber(
-            modelService: modelService,
-            transcriberProvider: transcriberProvider,
-            logger: logger
-        )
         self.capture = capture
-        self.fixedTranscriber = nil
+        self.fixedRecipe = nil
         self.modelService = modelService
-        self.transcriberProvider = transcriberProvider
+        self.processorProvider = processorProvider
         self.transcriptRepository = transcriptRepository
         self.logger = logger
-        self.pipelineTranscriber = pipelineTranscriber
         self.workflowModeRegistry = workflowModeRegistry
         self.availableKindsProvider = availableKindsProvider
         self.pipeline = Self.makePipeline(
             capture: capture,
-            pipelineTranscriber: pipelineTranscriber,
             transcriptRepository: transcriptRepository,
             logger: logger,
-            vadProvider: vadProvider,
-            vadPreferences: vadPreferences
+            vadProvider: vadProvider
         )
         Task { [weak self] in
             await self?.installAutoStopHandler()
@@ -263,16 +266,42 @@ public actor SessionCoordinator {
         await pipeline.snapshot().lastCompletedResult
     }
 
-    /// Idempotent passthrough for eager model preparation; `prepare()` coalesces repeated calls.
+    /// Idempotent passthrough for eager model preparation; each
+    /// processor's `prepare()` coalesces repeat calls. Builds a recipe
+    /// from the current active mode and binds it before delegating to
+    /// the pipeline so the recipe path observes the right processor.
     public func prepareTranscriber() async throws {
         let intervalName: StaticString = "SessionCoordinator.prepareTranscriber"
         let state = signposter.beginInterval(intervalName)
         defer { signposter.endInterval(intervalName, state) }
+        guard let recipe = try await resolveRecipe() else {
+            return
+        }
+        await pipeline.bindRecipeForNextSession(recipe)
         try await pipeline.prepareTranscriber()
     }
 
+    /// #078.29: orchestrator no longer surfaces a top-level
+    /// `modelDownloadProgress()` — progress lands on
+    /// `snapshot.modelDownloadProgress` and the snapshot stream
+    /// carries it. This bridge exposes the same stream shape for any
+    /// caller that prefers a typed progress AsyncStream.
     public func modelDownloadProgress() async -> AsyncStream<ModelDownloadProgress> {
-        await pipeline.modelDownloadProgress()
+        let snapshotStream = await pipeline.snapshotStream()
+        return AsyncStream { continuation in
+            let bridgeTask = Task {
+                for await snapshot in snapshotStream {
+                    if Task.isCancelled { return }
+                    if let progress = snapshot.modelDownloadProgress {
+                        continuation.yield(progress)
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in
+                bridgeTask.cancel()
+            }
+        }
     }
 
     private func removeAudioLevelContinuation(id: UUID) {
@@ -300,6 +329,7 @@ public actor SessionCoordinator {
     }
 
     private func performStart() async {
+        await bindRecipeBeforeStart()
         await performToggle()
     }
 
@@ -313,12 +343,53 @@ public actor SessionCoordinator {
     }
 
     private func performHoldStart() async {
+        await bindRecipeBeforeStart()
         await startAudioLevelRelayIfNeeded()
         await pipeline.startHoldCapture()
     }
 
     private func performCancel() async {
         await pipeline.cancelCapture()
+    }
+
+    /// Build + bind the recipe for this session per #078.29's
+    /// "WorkflowModeRegistry.activeMode() is read once at session
+    /// start." On build failure publishes `.invalidActiveMode` so
+    /// observers see the same error shape as the L15 validation path.
+    private func bindRecipeBeforeStart() async {
+        let recipe: BoundRecipe?
+        do {
+            recipe = try await resolveRecipe()
+        } catch {
+            logger.error("Failed to build session recipe", error: error)
+            await pipeline.publishSessionStartError(.invalidActiveMode)
+            return
+        }
+        guard let recipe else { return }
+        await pipeline.bindRecipeForNextSession(recipe)
+    }
+
+    /// Resolve the recipe to bind: either the test-only fixed recipe,
+    /// or build via `RecipeBuilder` against the current active mode.
+    /// Returns nil only when neither path is wired (legacy state).
+    private func resolveRecipe() async throws -> BoundRecipe? {
+        if let fixedRecipe {
+            return fixedRecipe
+        }
+        guard let registry = workflowModeRegistry,
+              let modelService,
+              let processorProvider
+        else {
+            return nil
+        }
+        return try await MainActor.run {
+            let mode = registry.activeMode
+            let builder = RecipeBuilder(
+                modelService: modelService,
+                processorProvider: processorProvider
+            )
+            return try builder.build(mode)
+        }
     }
 
     private func startAudioLevelRelayIfNeeded() async {
@@ -355,18 +426,12 @@ public actor SessionCoordinator {
 
     private static func makePipeline(
         capture: any AudioCapturer,
-        pipelineTranscriber: CoordinatorPipelineTranscriber,
         transcriptRepository: TranscriptRepository?,
         logger: PersonalScribeLogger,
-        vadProvider: (any VadProviding)?,
-        vadPreferences: (any VadPreferencesReading)?
+        vadProvider: (any VadProviding)?
     ) -> SessionPipelineOrchestrator {
         SessionPipelineOrchestrator(
-            capture: CoordinatorPipelineCapture(
-                base: capture,
-                pipelineTranscriber: pipelineTranscriber
-            ),
-            transcriber: pipelineTranscriber,
+            capture: capture,
             logger: logger,
             postProcessingPipeline: CoordinatorPostProcessingPipeline(),
             outputSink: CoordinatorPipelineOutputSink(),
@@ -375,8 +440,7 @@ public actor SessionCoordinator {
                 transcriptRepository: transcriptRepository,
                 logger: logger
             ),
-            vadProvider: vadProvider,
-            vadPreferences: vadPreferences
+            vadProvider: vadProvider
         )
     }
 
@@ -416,180 +480,6 @@ public actor SessionCoordinator {
             return .idle
         case .idle, .capturing, .holdRecording, .transcribing, .error:
             return state
-        }
-    }
-}
-
-private struct CoordinatorPipelineCapture: AudioCapturer {
-    private let base: any AudioCapturer
-    private let pipelineTranscriber: CoordinatorPipelineTranscriber
-
-    init(
-        base: any AudioCapturer,
-        pipelineTranscriber: CoordinatorPipelineTranscriber
-    ) {
-        self.base = base
-        self.pipelineTranscriber = pipelineTranscriber
-    }
-
-    func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
-        let stream = try await base.start()
-        await pipelineTranscriber.beginRecordingSession()
-        return stream
-    }
-
-    func stop() async {
-        await base.stop()
-    }
-
-    func audioLevelStream() async -> AsyncStream<Float> {
-        await base.audioLevelStream()
-    }
-}
-
-private actor CoordinatorPipelineTranscriber: LegacyTranscriber {
-    private let fixedTranscriber: (any LegacyTranscriber)?
-    private let modelService: ActiveModelService?
-    private let transcriberProvider: (any ModelBoundTranscriberProviding)?
-    private let logger: PersonalScribeLogger
-    private let progressBroadcaster = SessionDownloadProgressBroadcaster()
-
-    private var recordingSessionTranscriber: (any LegacyTranscriber)?
-    private var progressObservationTask: Task<Void, Never>?
-
-    init(
-        fixedTranscriber: any LegacyTranscriber,
-        logger: PersonalScribeLogger
-    ) {
-        self.fixedTranscriber = fixedTranscriber
-        self.modelService = nil
-        self.transcriberProvider = nil
-        self.logger = logger
-    }
-
-    init(
-        modelService: ActiveModelService,
-        transcriberProvider: any ModelBoundTranscriberProviding,
-        logger: PersonalScribeLogger
-    ) {
-        self.fixedTranscriber = nil
-        self.modelService = modelService
-        self.transcriberProvider = transcriberProvider
-        self.logger = logger
-    }
-
-    func beginRecordingSession() async {
-        let transcriber = await resolveRecordingSessionTranscriber()
-        observeDownloadProgress(for: transcriber)
-    }
-
-    func prepare() async throws {
-        let transcriber = await resolvedTranscriberForPreparation()
-        try await transcriber.prepare()
-    }
-
-    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        progressBroadcaster.stream()
-    }
-
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        let transcriber = await transcriberForStopPath()
-        defer {
-            recordingSessionTranscriber = nil
-        }
-        return try await transcriber.transcribe(audio)
-    }
-
-    func transcribe(stream: AsyncThrowingStream<PCMBuffer, Error>) async throws -> TranscriptionResult {
-        let transcriber = await transcriberForStopPath()
-        defer {
-            recordingSessionTranscriber = nil
-        }
-        return try await transcriber.transcribe(stream: stream)
-    }
-
-    private func resolvedTranscriberForPreparation() async -> any LegacyTranscriber {
-        if let recordingSessionTranscriber {
-            observeDownloadProgress(for: recordingSessionTranscriber)
-            return recordingSessionTranscriber
-        }
-
-        return await resolvedActiveTranscriber()
-    }
-
-    private func resolveRecordingSessionTranscriber() async -> any LegacyTranscriber {
-        if let fixedTranscriber {
-            recordingSessionTranscriber = fixedTranscriber
-            observeDownloadProgress(for: fixedTranscriber)
-            return fixedTranscriber
-        }
-
-        let descriptor = await activeVoiceModel()
-        let transcriber = resolvedModelBoundTranscriber(for: descriptor)
-        recordingSessionTranscriber = transcriber
-        observeDownloadProgress(for: transcriber)
-        return transcriber
-    }
-
-    private func transcriberForStopPath() async -> any LegacyTranscriber {
-        if let recordingSessionTranscriber {
-            return recordingSessionTranscriber
-        }
-
-        return await resolvedActiveTranscriber()
-    }
-
-    private func resolvedActiveTranscriber() async -> any LegacyTranscriber {
-        if let fixedTranscriber {
-            observeDownloadProgress(for: fixedTranscriber)
-            return fixedTranscriber
-        }
-
-        let descriptor = await activeVoiceModel()
-        let transcriber = resolvedModelBoundTranscriber(for: descriptor)
-        observeDownloadProgress(for: transcriber)
-        return transcriber
-    }
-
-    private func activeVoiceModel() async -> ModelDescriptor {
-        guard let modelService else {
-            preconditionFailure("SessionCoordinator model-service path requires an ActiveModelService")
-        }
-
-        return await MainActor.run {
-            // Recording pipeline always uses the `.asr` slot. Other
-            // kinds (.streamingASR, .diarization, …) are placeholders
-            // for future pipelines and never feed `transcribe(_:)`
-            // today. Fallback to the catalog's pinned baseline if
-            // nothing is active for `.asr` (e.g. user evicted the
-            // entry without selecting a replacement).
-            modelService.activeDescriptor(for: .asr)
-                ?? BuiltInModelCatalog.parakeetTDT06Bv2
-        }
-    }
-
-    private func resolvedModelBoundTranscriber(
-        for descriptor: ModelDescriptor
-    ) -> any LegacyTranscriber {
-        guard let transcriberProvider else {
-            preconditionFailure("SessionCoordinator model-service path requires a transcriber provider")
-        }
-
-        return transcriberProvider.transcriber(for: descriptor)
-    }
-
-    private func observeDownloadProgress(for transcriber: any LegacyTranscriber) {
-        progressObservationTask?.cancel()
-        let broadcaster = progressBroadcaster
-
-        progressObservationTask = Task {
-            for await progress in transcriber.modelDownloadProgress() {
-                if Task.isCancelled {
-                    return
-                }
-
-                broadcaster.update(progress)
-            }
         }
     }
 }
@@ -675,45 +565,5 @@ private struct CoordinatorPipelineOutputSink: PipelineOutputSink {
 private struct CoordinatorPipelineContextProvider: PipelineContextProviding {
     func currentContext() -> PipelineContextSnapshot {
         PipelineContextSnapshot(streamingOutputEnabled: false)
-    }
-}
-
-private final class SessionDownloadProgressBroadcaster: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuations: [UUID: AsyncStream<ModelDownloadProgress>.Continuation] = [:]
-    private var snapshot = ModelDownloadProgress(
-        phase: .idle,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    func stream() -> AsyncStream<ModelDownloadProgress> {
-        AsyncStream { continuation in
-            let identifier = UUID()
-            let initial = lock.withLock { () -> ModelDownloadProgress in
-                continuations[identifier] = continuation
-                return snapshot
-            }
-
-            continuation.onTermination = { [weak self] _ in
-                guard let self else { return }
-                _ = self.lock.withLock {
-                    self.continuations.removeValue(forKey: identifier)
-                }
-            }
-            continuation.yield(initial)
-        }
-    }
-
-    func update(_ snapshot: ModelDownloadProgress) {
-        let continuations = lock.withLock { () -> [AsyncStream<ModelDownloadProgress>.Continuation] in
-            self.snapshot = snapshot
-            return Array(self.continuations.values)
-        }
-
-        for continuation in continuations {
-            continuation.yield(snapshot)
-        }
     }
 }

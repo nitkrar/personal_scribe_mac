@@ -19,7 +19,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
+            activeModeName: WorkflowMode.dictation.name,
             inputDevices: [],
             currentInputDeviceID: nil
         )
@@ -47,7 +47,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
+            activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-ext"
         )
@@ -64,7 +64,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
+            activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: nil
         )
@@ -84,7 +84,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
+            activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-unplugged"
         )
@@ -105,7 +105,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
+            activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-1"
         )
@@ -130,7 +130,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
+            activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-2"
         )
@@ -150,7 +150,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
+            activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: nil
         )
@@ -167,7 +167,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
+            activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-1"
         )
@@ -191,7 +191,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
+            activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-1"
         )
@@ -221,25 +221,32 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
 
     func testModeSubmenuPresentWithChildrenAndActiveCheckmark() {
         let modes = [
-            ModeRegistry.dictation,
-            LegacyWorkflowMode(id: "command", name: "Command", voiceModelID: "v"),
+            WorkflowMode.dictation,
+            WorkflowMode(
+                id: "command",
+                name: "Command",
+                pipelineShape: .batch,
+                processors: [.transcriber(kind: .asr)],
+                captureControllers: [.manualHotkey],
+                outputSinks: [.frontmostPaste]
+            ),
         ]
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
+            activeModeName: WorkflowMode.dictation.name,
             modes: modes,
-            currentModeID: ModeRegistry.dictation.id
+            currentModeID: WorkflowMode.dictation.id
         )
 
         let modeSubmenu = extractModeSubmenu(from: model)
-        XCTAssertEqual(modeSubmenu.title, ModeRegistry.dictation.name)
+        XCTAssertEqual(modeSubmenu.title, WorkflowMode.dictation.name)
         XCTAssertEqual(modeSubmenu.iconName, "switch.2")
-        XCTAssertEqual(modeSubmenu.children.map(\.modeID), [ModeRegistry.dictation.id, "command"])
+        XCTAssertEqual(modeSubmenu.children.map(\.modeID), [WorkflowMode.dictation.id, "command"])
         let activeChildren = modeSubmenu.children.filter(\.isActive)
         XCTAssertEqual(activeChildren.count, 1)
-        XCTAssertEqual(activeChildren.first?.modeID, ModeRegistry.dictation.id)
+        XCTAssertEqual(activeChildren.first?.modeID, WorkflowMode.dictation.id)
     }
 
     func testNoModeSubmenuWhenModesEmpty() {
@@ -247,7 +254,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name,
+            activeModeName: WorkflowMode.dictation.name,
             modes: [],
             currentModeID: nil
         )

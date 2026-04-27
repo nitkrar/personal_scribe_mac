@@ -28,13 +28,6 @@ extension AudioCapturer {
     }
 }
 
-public protocol LegacyTranscriber: Sendable {
-    func prepare() async throws
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress>
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult
-    func transcribe(stream: AsyncThrowingStream<PCMBuffer, Error>) async throws -> TranscriptionResult
-}
-
 public struct ModelDownloadProgress: Sendable, Equatable {
     public enum Phase: Sendable, Equatable {
         case idle

@@ -1,5 +1,6 @@
 import Foundation
 import PersonalScribeCore
+import PersonalScribeTranscription
 
 public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @unchecked Sendable {
     private let storageLocator: any StorageLocator
@@ -120,10 +121,32 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
     ) async throws {
         let canonical = try canonicalDescriptor(for: descriptor)
         let record = try resolvedRecord(for: canonical)
-        guard let downloadManager = record.downloadManager else {
-            throw ModelSelectionError.descriptorNotRegistered(id: canonical.id)
+        let lifecycle = record.lifecycle
+
+        // Real adapters drive the actual download from inside `prepare()`,
+        // emitting progress via `modelDownloadProgress()` (a hot
+        // AsyncStream). Bridge the stream to the callback API for the
+        // duration of prepare, then synthesize a terminal `.finished`
+        // so callers see a completion event regardless of whether the
+        // adapter fired one (real adapters skip emission when artifacts
+        // are already valid).
+        let progressStream = lifecycle.modelDownloadProgress()
+        let forwarder = Task {
+            for await snapshot in progressStream {
+                if Task.isCancelled { return }
+                progress(snapshot)
+            }
         }
-        try await downloadManager.download(progress: progress)
+        defer { forwarder.cancel() }
+
+        try await lifecycle.prepare()
+
+        progress(ModelDownloadProgress(
+            phase: .finished,
+            fractionCompleted: 1,
+            receivedBytes: 0,
+            expectedBytes: nil
+        ))
     }
 
     public func removeDownloadedFiles(_ descriptor: ModelDescriptor) throws {
@@ -168,33 +191,6 @@ private extension ModelBoundProcessorProvider {
     }
 }
 
-private extension AdapterRecord {
-    var downloadManager: (any ModelArtifactDownloadManaging)? {
-        if let transcriber, let manager = transcriber as? any ModelArtifactDownloadManaging {
-            return manager
-        }
-
-        if
-            let streamingTranscriber,
-            let manager = streamingTranscriber as? any ModelArtifactDownloadManaging
-        {
-            return manager
-        }
-
-        if let diarizer, let manager = diarizer as? any ModelArtifactDownloadManaging {
-            return manager
-        }
-
-        return nil
-    }
-}
-
-private protocol ModelArtifactDownloadManaging: ModelLifecycle {
-    func download(
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws
-}
-
 private enum ModelArtifactFilesystem {
     static func modelDirectory(
         for descriptor: ModelDescriptor,
@@ -204,33 +200,6 @@ private enum ModelArtifactFilesystem {
             .url(for: .models)
             .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
             .standardizedFileURL
-    }
-
-    static func materializeArtifacts(
-        for descriptor: ModelDescriptor,
-        storageLocator: any StorageLocator
-    ) throws {
-        let directory = modelDirectory(for: descriptor, storageLocator: storageLocator)
-        let fileManager = FileManager.default
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-
-        for relativePath in descriptor.requiredRelativePaths {
-            let fileURL = directory.appendingPathComponent(relativePath, isDirectory: false)
-            try fileManager.createDirectory(
-                at: fileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-
-            let data: Data
-            if fileURL.lastPathComponent == "coremldata.bin" {
-                data = Data([0x1])
-            } else if fileURL.pathExtension == "json" {
-                data = Data("{}".utf8)
-            } else {
-                data = Data("stub".utf8)
-            }
-            try data.write(to: fileURL)
-        }
     }
 
     static func modelArtifactsAreValid(
@@ -270,300 +239,5 @@ private enum ModelArtifactFilesystem {
         }
 
         return true
-    }
-}
-
-private final class ProcessorProviderDownloadProgressBroadcaster: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuations: [UUID: AsyncStream<ModelDownloadProgress>.Continuation] = [:]
-    private var snapshot = ModelDownloadProgress(
-        phase: .idle,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    func stream() -> AsyncStream<ModelDownloadProgress> {
-        AsyncStream { continuation in
-            let identifier = UUID()
-            let initial = lock.withLock { () -> ModelDownloadProgress in
-                continuations[identifier] = continuation
-                return snapshot
-            }
-
-            continuation.onTermination = { [weak self] _ in
-                guard let self else { return }
-                _ = self.lock.withLock {
-                    self.continuations.removeValue(forKey: identifier)
-                }
-            }
-            continuation.yield(initial)
-        }
-    }
-
-    func update(_ snapshot: ModelDownloadProgress) {
-        let continuations = lock.withLock { () -> [AsyncStream<ModelDownloadProgress>.Continuation] in
-            self.snapshot = snapshot
-            return Array(self.continuations.values)
-        }
-
-        for continuation in continuations {
-            continuation.yield(snapshot)
-        }
-    }
-}
-
-private final class ProcessorProviderStubAdapterSupport: @unchecked Sendable {
-    let descriptor: ModelDescriptor
-    let storageLocator: any StorageLocator
-    private let progressBroadcaster = ProcessorProviderDownloadProgressBroadcaster()
-
-    init(
-        descriptor: ModelDescriptor,
-        storageLocator: any StorageLocator
-    ) {
-        self.descriptor = descriptor
-        self.storageLocator = storageLocator
-    }
-
-    func prepare() async throws {
-        if ModelArtifactFilesystem.modelArtifactsAreValid(
-            in: modelDirectory(),
-            descriptor: descriptor
-        ) {
-            progressBroadcaster.update(Self.finishedProgress)
-            return
-        }
-
-        try await download { _ in }
-    }
-
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        progressBroadcaster.stream()
-    }
-
-    func download(
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws {
-        if ModelArtifactFilesystem.modelArtifactsAreValid(
-            in: modelDirectory(),
-            descriptor: descriptor
-        ) {
-            progressBroadcaster.update(Self.finishedProgress)
-            progress(Self.finishedProgress)
-            return
-        }
-
-        let downloading = ModelDownloadProgress(
-            phase: .downloading,
-            fractionCompleted: 0,
-            receivedBytes: 0,
-            expectedBytes: nil
-        )
-        progressBroadcaster.update(downloading)
-        progress(downloading)
-
-        try ModelArtifactFilesystem.materializeArtifacts(
-            for: descriptor,
-            storageLocator: storageLocator
-        )
-
-        progressBroadcaster.update(Self.finishedProgress)
-        progress(Self.finishedProgress)
-    }
-
-    private func modelDirectory() -> URL {
-        ModelArtifactFilesystem.modelDirectory(
-            for: descriptor,
-            storageLocator: storageLocator
-        )
-    }
-
-    private static let finishedProgress = ModelDownloadProgress(
-        phase: .finished,
-        fractionCompleted: 1,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-}
-
-private final class FluidAudioParakeetTranscriberAdapter:
-    @unchecked Sendable,
-    Transcriber,
-    ModelArtifactDownloadManaging
-{
-    let capabilities = TranscriberCapabilities(
-        providesTokenTimings: true,
-        providesConfidence: true,
-        providesPerformanceMetrics: true,
-        providesCustomVocabulary: true
-    )
-
-    private let support: ProcessorProviderStubAdapterSupport
-
-    init(
-        descriptor: ModelDescriptor,
-        storageLocator: any StorageLocator
-    ) {
-        self.support = ProcessorProviderStubAdapterSupport(
-            descriptor: descriptor,
-            storageLocator: storageLocator
-        )
-    }
-
-    func prepare() async throws {
-        try await support.prepare()
-    }
-
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        support.modelDownloadProgress()
-    }
-
-    func download(
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws {
-        try await support.download(progress: progress)
-    }
-
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        TranscriptionResult(
-            text: "",
-            audioDuration: audio.duration,
-            processingDuration: .zero
-        )
-    }
-}
-
-private final class FluidAudioQwenTranscriberAdapter:
-    @unchecked Sendable,
-    Transcriber,
-    ModelArtifactDownloadManaging
-{
-    let capabilities = TranscriberCapabilities()
-
-    private let support: ProcessorProviderStubAdapterSupport
-
-    init(
-        descriptor: ModelDescriptor,
-        storageLocator: any StorageLocator
-    ) {
-        self.support = ProcessorProviderStubAdapterSupport(
-            descriptor: descriptor,
-            storageLocator: storageLocator
-        )
-    }
-
-    func prepare() async throws {
-        try await support.prepare()
-    }
-
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        support.modelDownloadProgress()
-    }
-
-    func download(
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws {
-        try await support.download(progress: progress)
-    }
-
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        TranscriptionResult(
-            text: "",
-            audioDuration: audio.duration,
-            processingDuration: .zero
-        )
-    }
-}
-
-private final class FluidAudioStreamingTranscriberAdapter:
-    @unchecked Sendable,
-    StreamingTranscriber,
-    ModelArtifactDownloadManaging
-{
-    let capabilities = TranscriberCapabilities()
-
-    private let support: ProcessorProviderStubAdapterSupport
-
-    init(
-        descriptor: ModelDescriptor,
-        storageLocator: any StorageLocator
-    ) {
-        self.support = ProcessorProviderStubAdapterSupport(
-            descriptor: descriptor,
-            storageLocator: storageLocator
-        )
-    }
-
-    func prepare() async throws {
-        try await support.prepare()
-    }
-
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        support.modelDownloadProgress()
-    }
-
-    func download(
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws {
-        try await support.download(progress: progress)
-    }
-
-    func transcribe(
-        stream: AsyncThrowingStream<PCMBuffer, Error>
-    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
-        AsyncThrowingStream { continuation in
-            continuation.yield(
-                .finalized(
-                    TranscriptionResult(
-                        text: "",
-                        audioDuration: .zero,
-                        processingDuration: .zero
-                    )
-                )
-            )
-            continuation.finish()
-        }
-    }
-}
-
-private final class FluidAudioOfflineDiarizerAdapter:
-    @unchecked Sendable,
-    SpeakerDiarizer,
-    ModelArtifactDownloadManaging
-{
-    private let support: ProcessorProviderStubAdapterSupport
-
-    init(
-        descriptor: ModelDescriptor,
-        storageLocator: any StorageLocator
-    ) {
-        self.support = ProcessorProviderStubAdapterSupport(
-            descriptor: descriptor,
-            storageLocator: storageLocator
-        )
-    }
-
-    func prepare() async throws {
-        try await support.prepare()
-    }
-
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        support.modelDownloadProgress()
-    }
-
-    func download(
-        progress: @escaping @Sendable (ModelDownloadProgress) -> Void
-    ) async throws {
-        try await support.download(progress: progress)
-    }
-
-    func diarize(
-        stream: AsyncThrowingStream<PCMBuffer, Error>
-    ) -> AsyncStream<SpeakerDiarizationEvent> {
-        AsyncStream { continuation in
-            continuation.yield(.terminal([]))
-            continuation.finish()
-        }
     }
 }

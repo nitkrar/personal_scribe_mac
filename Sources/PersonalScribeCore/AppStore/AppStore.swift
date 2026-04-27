@@ -11,7 +11,11 @@ public final class AppStore: ObservableObject {
 
     private let session: any AppStoreSessionProviding
     private let permissions: any PermissionService
-    private let activeModeSource: any AppStoreActiveModeProviding
+    /// #078.36 / L21 — `WorkflowModeRegistry` replaces the deleted
+    /// `AppStoreActiveModeProviding` protocol. AppStore consumes the
+    /// registry directly (no re-pointing); the registry's
+    /// `activeModeStream()` feeds `snapshot.activeMode`.
+    private let workflowModeRegistry: WorkflowModeRegistry
     private let visibilityModeSource: any AppStoreVisibilityModeProviding
     private let clock: any AppStoreClock
     private let permissionSnapshotProvider: @MainActor @Sendable () -> [Permission: PermissionStatus]
@@ -30,13 +34,13 @@ public final class AppStore: ObservableObject {
     public init<Permissions: PermissionService>(
         session: any AppStoreSessionProviding,
         permissions: Permissions,
-        activeModeSource: any AppStoreActiveModeProviding,
+        workflowModeRegistry: WorkflowModeRegistry,
         visibilityModeSource: any AppStoreVisibilityModeProviding,
         clock: any AppStoreClock = LiveAppStoreClock()
     ) {
         self.session = session
         self.permissions = permissions
-        self.activeModeSource = activeModeSource
+        self.workflowModeRegistry = workflowModeRegistry
         self.visibilityModeSource = visibilityModeSource
         self.clock = clock
         self.permissionSnapshotProvider = {
@@ -56,7 +60,7 @@ public final class AppStore: ObservableObject {
         snapshot = AppStoreSnapshot(
             session: initialSession,
             permissions: permissions.statusSnapshot(),
-            activeMode: activeModeSource.currentActiveMode(),
+            activeMode: workflowModeRegistry.activeMode,
             pillVisibility: Self.derivePillVisibility(
                 mode: initialVisibilityMode,
                 sessionState: initialSession.sessionState,
@@ -76,7 +80,7 @@ public final class AppStore: ObservableObject {
         refreshStaticInputs()
 
         let session = self.session
-        let activeModeSource = self.activeModeSource
+        let workflowModeRegistry = self.workflowModeRegistry
         let visibilityModeSource = self.visibilityModeSource
 
         sessionObservationTask = Task { [weak self] in
@@ -97,7 +101,7 @@ public final class AppStore: ObservableObject {
         modeObservationTask = Task { [weak self] in
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { [weak self] in
-                    for await activeMode in activeModeSource.activeModeStream() {
+                    for await activeMode in workflowModeRegistry.activeModeStream() {
                         guard let self else { return }
                         await self.handleActiveModeChange(activeMode)
                     }
@@ -163,7 +167,7 @@ public final class AppStore: ObservableObject {
         rederivePillVisibility()
     }
 
-    private func handleActiveModeChange(_ activeMode: LegacyWorkflowMode?) {
+    private func handleActiveModeChange(_ activeMode: WorkflowMode) {
         updateSnapshot { snapshot in
             snapshot.activeMode = activeMode
         }
@@ -249,7 +253,7 @@ public final class AppStore: ObservableObject {
 
         updateSnapshot { snapshot in
             snapshot.permissions = permissionSnapshotProvider()
-            snapshot.activeMode = activeModeSource.currentActiveMode()
+            snapshot.activeMode = workflowModeRegistry.activeMode
         }
 
         rederivePillVisibility()

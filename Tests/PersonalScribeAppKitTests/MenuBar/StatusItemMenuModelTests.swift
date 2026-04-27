@@ -27,11 +27,11 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name
+            activeModeName: WorkflowMode.dictation.name
         )
 
         XCTAssertEqual(model.items.count, 9)
-        assertHeader(model.items[0], "\(AppBrand.displayName) — \(ModeRegistry.dictation.name)")
+        assertHeader(model.items[0], "\(AppBrand.displayName) — \(WorkflowMode.dictation.name)")
         assertAction(model.items[1], id: .openHome, title: "Home", iconName: "house.fill")
         assertAction(model.items[2], id: .openTranscriptions, title: "History", iconName: "waveform")
         assertAction(model.items[3], id: .openSettings, title: "Settings", iconName: "gearshape")
@@ -86,7 +86,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .capturing,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name
+            activeModeName: WorkflowMode.dictation.name
         )
         // Start/Stop Recording sits at index 5 in the post-#6+#16 layout.
         assertAction(
@@ -102,7 +102,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .transcribing,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name
+            activeModeName: WorkflowMode.dictation.name
         )
         guard case let .action(item) = model.items[5] else {
             return XCTFail("Expected action at index 5")
@@ -117,7 +117,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .error(.modelLoadFailure),
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name
+            activeModeName: WorkflowMode.dictation.name
         )
         assertAction(
             model.items[5],
@@ -193,10 +193,10 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .idle,
             micPermission: .pending,
             inputMonitoringPermission: .pending,
-            activeModeName: ModeRegistry.dictation.name
+            activeModeName: WorkflowMode.dictation.name
         )
         // First item is the combined brand — mode header, not a warning.
-        assertHeader(model.items[0], "\(AppBrand.displayName) — \(ModeRegistry.dictation.name)")
+        assertHeader(model.items[0], "\(AppBrand.displayName) — \(WorkflowMode.dictation.name)")
         XCTAssertEqual(model.items.count, 9, "No warning items expected")
     }
 
@@ -220,7 +220,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name
+            activeModeName: WorkflowMode.dictation.name
         )
         guard case let .action(quit) = model.items.last else {
             return XCTFail("Expected last item to be Quit action")
@@ -239,7 +239,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name
+            activeModeName: WorkflowMode.dictation.name
         )
         // Start/Stop Recording lives at index 5 in the post-#6+#16 layout.
         guard case let .action(record) = model.items[5] else {
@@ -337,7 +337,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: ModeRegistry.dictation.name
+            activeModeName: WorkflowMode.dictation.name
         )
         let match = model.items.compactMap { item -> StatusItemMenuModel.ActionItem? in
             if case let .action(action) = item, action.id == actionID {

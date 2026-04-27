@@ -70,7 +70,7 @@ public final class ActiveModelService: ObservableObject {
         physicalMemoryBytes: Int64 = Int64(ProcessInfo.processInfo.physicalMemory),
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
     ) {
-        let provider = ModelBoundTranscriberProvider(storageLocator: storageLocator)
+        let provider = ModelBoundProcessorProvider(storageLocator: storageLocator)
 
         // #016: RAM-aware first-launch default. The Preference layer's
         // `default:` is only consulted when no value is persisted, so

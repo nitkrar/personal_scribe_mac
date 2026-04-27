@@ -52,7 +52,7 @@ struct PersonalScribeAppMain: App {
         let appStore = AppStore(
             session: coordinator.appStoreSessionProvider(),
             permissions: appPermissionService,
-            activeModeSource: AppComposition.activeModeProvider,
+            workflowModeRegistry: AppComposition.workflowModeRegistry,
             visibilityModeSource: AppKitVisibilityModeProvider(defaults: defaults)
         )
         appStore.start()
@@ -193,17 +193,18 @@ struct PersonalScribeAppMain: App {
                     metricsReader: metricsReader,
                     permissionService: appPermissionService,
                     inputDeviceProvider: inputDeviceProvider,
-                    modes: ModeRegistry.all,
+                    modes: WorkflowModeRegistry.builtInModes,
                     modelService: modelService,
                     setActiveMode: { mode in
-                        guard let descriptor = modelService.registeredModels.first(
-                            where: { $0.id == mode.voiceModelID }
-                        ) else {
+                        // #078.36: WorkflowMode is referenced by id;
+                        // RecipeBuilder resolves descriptors per Kind
+                        // via ActiveModelService at session start.
+                        do {
+                            try AppComposition.workflowModeRegistry.setActive(id: mode.id)
+                        } catch {
                             PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
-                                .error("Failed to set active mode '\(mode.id)': voice model id '\(mode.voiceModelID)' not registered")
-                            return
+                                .error("Failed to set active mode '\(mode.id)'", error: error)
                         }
-                        modelService.setActive(descriptor)
                     },
                     menuBarVisibilityProvider: {
                         statusItemHostRef?.isMenuBarVisible ?? true
@@ -260,16 +261,17 @@ struct PersonalScribeAppMain: App {
             },
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider,
-            modes: ModeRegistry.all,
+            modes: WorkflowModeRegistry.builtInModes,
             setActiveMode: { mode in
-                guard let descriptor = modelService.registeredModels.first(
-                    where: { $0.id == mode.voiceModelID }
-                ) else {
+                // #078.36: WorkflowMode is referenced by id; recipe
+                // resolution against ActiveModelService happens at
+                // session start via RecipeBuilder.
+                do {
+                    try AppComposition.workflowModeRegistry.setActive(id: mode.id)
+                } catch {
                     PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
-                        .error("Failed to set active mode '\(mode.id)' from menu-bar submenu: voice model id '\(mode.voiceModelID)' not registered")
-                    return
+                        .error("Failed to set active mode '\(mode.id)' from menu-bar submenu", error: error)
                 }
-                modelService.setActive(descriptor)
             },
             prequitHandler: {
                 // Stop an active recording before terminate so
@@ -436,8 +438,8 @@ final class StatusItemControllerHost: ObservableObject {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
         },
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
-        modes: [LegacyWorkflowMode] = ModeRegistry.all,
-        setActiveMode: @escaping @MainActor (LegacyWorkflowMode) async -> Void = { _ in },
+        modes: [WorkflowMode] = WorkflowModeRegistry.builtInModes,
+        setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {}
     ) {
         self.controller = StatusItemController(

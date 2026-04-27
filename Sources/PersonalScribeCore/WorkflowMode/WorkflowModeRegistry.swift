@@ -22,6 +22,7 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
     private let store: any WorkflowModeStoring
     private let availableKindsProvider: @Sendable () -> Set<ModelKind>
     private var document: WorkflowModeDocument
+    private var activeModeContinuations: [UUID: AsyncStream<WorkflowMode>.Continuation] = [:]
 
     public init(
         store: any WorkflowModeStoring,
@@ -30,6 +31,39 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
         self.store = store
         self.availableKindsProvider = availableKindsProvider
         self.document = try store.load()
+    }
+
+    /// Observable stream of the currently-active mode (#078.36).
+    /// Yields the resolved active mode on subscribe and again whenever
+    /// `setActive` / `mutateActiveOrFork` / `deleteCustom` changes the
+    /// active selection. AppStore subscribes here directly, replacing
+    /// the deleted `AppStoreActiveModeProviding` protocol per L21.
+    public func activeModeStream() -> AsyncStream<WorkflowMode> {
+        let id = UUID()
+        return AsyncStream { continuation in
+            let initial = self.lock.withLock { () -> WorkflowMode in
+                self.activeModeContinuations[id] = continuation
+                return self.resolveActiveLocked()
+            }
+            continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
+                self.lock.withLock {
+                    self.activeModeContinuations[id] = nil
+                }
+            }
+            continuation.yield(initial)
+        }
+    }
+
+    /// Push the current active mode to all registered observers. Caller
+    /// must NOT hold `lock`.
+    private func broadcastActiveMode() {
+        let (mode, continuations) = lock.withLock {
+            (resolveActiveLocked(), Array(activeModeContinuations.values))
+        }
+        for continuation in continuations {
+            continuation.yield(mode)
+        }
     }
 
     /// All modes the user can pick from: built-ins + custom.
@@ -62,6 +96,7 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
             document.activeModeID = id
             try store.save(document)
         }
+        broadcastActiveMode()
     }
 
     /// Save (insert or update) a custom mode. Validates before writing.
@@ -125,7 +160,7 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
         forkSuffix: String = " (custom)",
         _ block: (inout WorkflowMode) -> Void
     ) throws -> WorkflowMode {
-        try lock.withLock {
+        let result: WorkflowMode = try lock.withLock {
             let current = resolveActiveLocked()
             let isBuiltIn = Self.builtInModes.contains(where: { $0.id == current.id })
 
@@ -165,6 +200,8 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
             try store.save(document)
             return working
         }
+        broadcastActiveMode()
+        return result
     }
 
     /// Remove a custom mode by ID. If the deleted mode was active, the
@@ -177,6 +214,7 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
             }
             try store.save(document)
         }
+        broadcastActiveMode()
     }
 
     // MARK: - Internals (lock-held)

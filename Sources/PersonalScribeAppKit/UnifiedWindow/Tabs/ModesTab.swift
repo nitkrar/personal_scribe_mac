@@ -9,15 +9,12 @@ import SwiftUI
 /// list source and active-mode derivation both live in
 /// `ModesTabViewModel`; this view stays a pure projection.
 ///
-/// Reference: `plans/App UI design/Claude_Final_Bundle_Prompt.md` §3C —
-/// "List of available modes (Dictation, Command, Notes) as cards.
-/// Show active state with a green dot."
-///
-/// The existing `ModeCard` composite (Phase 2 Sprint 2) renders the
-/// active state via a ready-state `StatusPill`. Per the reference, the
-/// pill's green indicator IS the "green dot" — reusing ModeCard keeps
-/// the Modes tab consistent with every other mode surface (onboarding,
-/// legacy settings).
+/// #078.36: post-cutover, `WorkflowMode` no longer carries a per-mode
+/// `voiceModelID` / `aiModelID` (per L23 — recipes reference Kinds,
+/// runtime late-binds via `ActiveModelService.activeDescriptor(for:)`).
+/// All visible modes share the active asr descriptor for display
+/// purposes. The card's voice-model row mirrors that single value;
+/// per-mode override of voice model is a Modes-editor follow-up.
 @MainActor
 struct ModesTab: View {
     @ObservedObject private var viewModel: ModesTabViewModel
@@ -37,17 +34,15 @@ struct ModesTab: View {
                 .font(PersonalScribeTheme.Typography.largeTitle.font)
 
             VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
-                // #024 follow-up: only show modes whose voice model is
-                // on disk and whose `kind` is enabled today. Modes
-                // pointing at not-downloaded or non-enabled voice
-                // models are hidden so `setActive` never fires on a
-                // missing model. User downloads via the AI Models tab
-                // first.
-                ForEach(downloadedModes) { mode in
+                // #024 follow-up: only show modes when there's an
+                // active asr descriptor that's downloaded. Without one,
+                // setActive would land on a missing model — the user
+                // must download via the AI Models tab first.
+                ForEach(visibleModes, id: \.id) { mode in
                     ModeCard(
                         modeName: mode.name,
-                        voiceModel: voiceModelName(for: mode),
-                        aiModelPreset: aiModelPresetName(for: mode),
+                        voiceModel: activeVoiceModelName,
+                        aiModelPreset: "No AI",
                         isActive: viewModel.isActive(mode),
                         onSetActive: viewModel.isActive(mode) ? nil : {
                             Task { await viewModel.setActive(mode) }
@@ -59,26 +54,20 @@ struct ModesTab: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var downloadedModes: [LegacyWorkflowMode] {
-        let enabledASRIDs = Set(modelService.enabledModels(kind: .asr).map(\.id))
-        return viewModel.modes.filter { mode in
-            enabledASRIDs.contains(mode.voiceModelID) &&
-                modelService.downloadStates[mode.voiceModelID]?.phase == .ready
+    private var visibleModes: [WorkflowMode] {
+        guard
+            let activeASR = modelService.activeDescriptor(for: .asr),
+            modelService.downloadStates[activeASR.id]?.phase == .ready
+        else {
+            return []
         }
+        return viewModel.modes
     }
 
-    // MARK: - Derivation helpers
-    //
-    // Matches the existing legacy ModesTab (`Settings/ModesTab.swift`)
-    // formatting so the unified-window surface reads identically until
-    // the legacy surface is retired (PHASE_2_unified_ui.md Step 2.10).
-
-    private func voiceModelName(for mode: LegacyWorkflowMode) -> String {
-        modelService.registeredModels.first { $0.id == mode.voiceModelID }?.displayName
-            ?? mode.voiceModelID
-    }
-
-    private func aiModelPresetName(for mode: LegacyWorkflowMode) -> String {
-        mode.aiModelID ?? "No AI"
+    private var activeVoiceModelName: String {
+        guard let activeASR = modelService.activeDescriptor(for: .asr) else {
+            return "—"
+        }
+        return activeASR.displayName
     }
 }

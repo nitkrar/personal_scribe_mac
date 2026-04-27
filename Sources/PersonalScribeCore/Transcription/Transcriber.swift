@@ -6,13 +6,8 @@ import Foundation
 /// declares which optional `TranscriptionResult` metadata the
 /// adapter populates.
 ///
-/// Phase G cutover (#078.30a) renamed the legacy `Transcriber`
-/// protocol (Sources/PersonalScribeCore/Protocols.swift) to
-/// `LegacyTranscriber` and promoted this protocol to the canonical
-/// `Transcriber` name.
-///
-/// Conformers in #078: `FluidAudioParakeetTranscriberAdapter` and
-/// `FluidAudioQwenTranscriberAdapter` (Phase D).
+/// Conformers: `FluidAudioParakeetTranscriberAdapter` and
+/// `FluidAudioQwenTranscriberAdapter` in `PersonalScribeTranscription`.
 public protocol Transcriber: ModelLifecycle, Sendable {
     /// What this transcriber surfaces on the optional metadata
     /// fields of `TranscriptionResult`. Features query this before

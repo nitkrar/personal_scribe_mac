@@ -344,22 +344,49 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         vadPreferences: any VadPreferencesReading,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
     ) -> SessionPipelineOrchestrator {
-        SessionPipelineOrchestrator(
-            capture: capture,
-            transcriber: FakeTranscriber(
-                result: TranscriptionResult(
-                    text: "",
-                    audioDuration: .seconds(1),
-                    processingDuration: .zero
+        // #078.29: orchestrator takes VAD config from the bound recipe's
+        // `.vad` capture controller. Translate the legacy
+        // `vadPreferences` reader into recipe shape: autoStopEnabled
+        // → include `.vad(...)`; !autoStopEnabled → omit it.
+        let prefs = vadPreferences.current()
+        var captureControllers: [BoundCaptureController] = [.manualHotkey]
+        if prefs.autoStopEnabled {
+            captureControllers.insert(
+                .vad(
+                    silenceThreshold: prefs.silenceThresholdSeconds,
+                    showWarning: prefs.showStoppingWarning,
+                    showAutoStoppedNotification: prefs.showAutoStoppedNotification
+                ),
+                at: 0
+            )
+        }
+        let recipe = BoundRecipe(
+            recipeID: "dictation",
+            recipeName: "Dictation",
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    FakeTranscriber(
+                        result: TranscriptionResult(
+                            text: "",
+                            audioDuration: .seconds(1),
+                            processingDuration: .zero
+                        )
+                    )
                 )
-            ),
+            ],
+            captureControllers: captureControllers,
+            outputSinks: [.frontmostPaste]
+        )
+        return SessionPipelineOrchestrator(
+            capture: capture,
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
             outputSink: TestPipelineOutputSink(),
             contextProvider: StaticPipelineContextProvider(
                 context: PipelineContextSnapshot(streamingOutputEnabled: false)
             ),
             vadProvider: vadProvider,
-            vadPreferences: vadPreferences,
+            boundRecipe: recipe,
             graceDurationSeconds: graceDurationSeconds
         )
     }

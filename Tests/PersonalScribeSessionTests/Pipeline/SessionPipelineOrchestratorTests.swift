@@ -449,35 +449,12 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(observedB, canned)
     }
 
-    func testPrepareTranscriberAndModelDownloadProgressPassThrough() async throws {
-        let tracker = TranscriberTracker()
-        let transcriber = TrackedTranscriber(
-            result: TranscriptionResult(
-                text: "hello",
-                audioDuration: .seconds(1),
-                processingDuration: .milliseconds(100)
-            ),
-            progressEvents: [
-                .init(phase: .downloading, fractionCompleted: 0.4, receivedBytes: 40, expectedBytes: 100),
-                .init(phase: .finished, fractionCompleted: 1.0, receivedBytes: 100, expectedBytes: 100),
-            ],
-            tracker: tracker
-        )
-        let orchestrator = makeOrchestrator(transcriber: transcriber)
-
-        try await orchestrator.prepareTranscriber()
-
-        let progressStream = await orchestrator.modelDownloadProgress()
-        var iterator = progressStream.makeAsyncIterator()
-        let first = await iterator.next()
-        let second = await iterator.next()
-
-        let prepareCount = await tracker.prepareCallCount()
-        XCTAssertEqual(prepareCount, 1)
-        XCTAssertEqual(first?.phase, .downloading)
-        XCTAssertEqual(first?.fractionCompleted, 0.4)
-        XCTAssertEqual(second?.phase, .finished)
-    }
+    // #078.29 Replace removed `orchestrator.modelDownloadProgress()` —
+    // progress now flows via `snapshot.modelDownloadProgress` field
+    // populated by the bound recipe's processor. The legacy passthrough
+    // assertion this test pinned is no longer meaningful at the
+    // orchestrator level. Recipe-driven progress is exercised by
+    // `RecipeDrivenOrchestratorTests`.
 
     func testSuccessfulTranscriptionAppendsEntryToSQLiteStore() async throws {
         let temporaryDirectory = try makeTemporaryDirectory()
@@ -829,7 +806,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
     private func makeOrchestrator(
         capture: any AudioCapturer = FakeAudioCapturer(),
-        transcriber: any LegacyTranscriber = FakeTranscriber(
+        transcriber: any Transcriber = FakeTranscriber(
             result: TranscriptionResult(
                 text: "",
                 audioDuration: .seconds(1),
@@ -842,42 +819,50 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         context: PipelineContextSnapshot = PipelineContextSnapshot(streamingOutputEnabled: false),
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)? = nil
     ) -> SessionPipelineOrchestrator {
+        // #078.31b: orchestrator init takes a `BoundRecipe` post-cutover.
+        // Wrap the `transcriber:` arg as the asr processor of a built-in
+        // batch dictation recipe so existing test names + bodies stay
+        // unchanged.
+        let boundRecipe = BoundRecipe(
+            recipeID: "dictation",
+            recipeName: "Dictation",
+            pipelineShape: .batch,
+            processors: [.transcriber(transcriber)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste]
+        )
         let contextProvider = StaticPipelineContextProvider(context: context)
         if let persistenceHandler {
             return SessionPipelineOrchestrator(
                 capture: capture,
-                transcriber: transcriber,
                 logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
                 postProcessingPipeline: postProcessingPipeline,
                 outputSink: outputSink,
                 contextProvider: contextProvider,
-                persistenceHandler: persistenceHandler
+                persistenceHandler: persistenceHandler,
+                boundRecipe: boundRecipe
             )
         }
 
         return SessionPipelineOrchestrator(
             capture: capture,
-            transcriber: transcriber,
             transcriptRepository: transcriptRepository,
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
-            contextProvider: contextProvider
+            contextProvider: contextProvider,
+            boundRecipe: boundRecipe
         )
     }
 
     private func makeContext(streamingOutputEnabled: Bool) -> PipelineContextSnapshot {
-        let mode = LegacyWorkflowMode(
-            id: "dictation-plus",
-            name: "Dictation Plus",
-            voiceModelID: "voice.default",
-            aiModelID: "gpt-5.4",
-            systemPrompt: "Polish the final transcript."
-        )
+        // #078.31a: activeMode field now carries the new `WorkflowMode`
+        // shape. The legacy aiModelID + systemPrompt fields stay as
+        // separate snapshot fields (post-processing dispatch hooks).
         return PipelineContextSnapshot(
-            activeMode: mode,
-            activeAIModelID: mode.aiModelID,
-            systemPrompt: mode.systemPrompt,
+            activeMode: WorkflowMode.dictation,
+            activeAIModelID: "gpt-5.4",
+            systemPrompt: "Polish the final transcript.",
             streamingOutputEnabled: streamingOutputEnabled
         )
     }
@@ -1054,7 +1039,9 @@ private enum OutputFailure: Error, CustomStringConvertible, Sendable {
     }
 }
 
-private actor CountingTranscriber: LegacyTranscriber {
+private actor CountingTranscriber: Transcriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+
     private let result: TranscriptionResult
     private var calls = 0
 
@@ -1083,18 +1070,14 @@ private actor CountingTranscriber: LegacyTranscriber {
         return result
     }
 
-    func transcribe(stream: AsyncThrowingStream<PCMBuffer, Error>) async throws -> TranscriptionResult {
-        for try await _ in stream {}
-        calls += 1
-        return result
-    }
-
     func transcribeCallCount() -> Int {
         calls
     }
 }
 
-private actor SlowPrepareTranscriber: LegacyTranscriber {
+private actor SlowPrepareTranscriber: Transcriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+
     private let result: TranscriptionResult
     private var didStartPrepare = false
     private var prepareContinuation: CheckedContinuation<Void, Never>?
@@ -1137,12 +1120,6 @@ private actor SlowPrepareTranscriber: LegacyTranscriber {
         return result
     }
 
-    func transcribe(stream: AsyncThrowingStream<PCMBuffer, Error>) async throws -> TranscriptionResult {
-        for try await _ in stream {}
-        transcribeCount += 1
-        return result
-    }
-
     func waitUntilPrepareStarted() async {
         if didStartPrepare {
             return
@@ -1163,7 +1140,8 @@ private actor SlowPrepareTranscriber: LegacyTranscriber {
     }
 }
 
-private struct TrackedTranscriber: LegacyTranscriber {
+private struct TrackedTranscriber: Transcriber {
+    let capabilities = TranscriberCapabilities()
     let result: TranscriptionResult
     let progressEvents: [ModelDownloadProgress]
     let tracker: TranscriberTracker
@@ -1183,12 +1161,6 @@ private struct TrackedTranscriber: LegacyTranscriber {
     }
 
     func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        await tracker.recordTranscribe()
-        return result
-    }
-
-    func transcribe(stream: AsyncThrowingStream<PCMBuffer, Error>) async throws -> TranscriptionResult {
-        for try await _ in stream {}
         await tracker.recordTranscribe()
         return result
     }
