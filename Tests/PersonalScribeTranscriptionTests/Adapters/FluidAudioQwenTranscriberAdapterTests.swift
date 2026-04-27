@@ -83,9 +83,11 @@ final class FluidAudioQwenTranscriberAdapterTests: PersonalScribeTranscriptionFi
         let variants = await manager.downloadVariants()
         XCTAssertEqual(variants, [.f32])
 
+        // Adapter passes the models root to the manager — FluidAudio's
+        // `DownloadUtils.downloadRepo` then appends `repo.folderName`
+        // to land files at the leaf path (= descriptor.repoFolderName).
         let expectedDirectory = storageLocator
             .url(for: .models)
-            .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
             .standardizedFileURL
         let downloadDirs = await manager.downloadDirectories()
         XCTAssertEqual(downloadDirs, [expectedDirectory])

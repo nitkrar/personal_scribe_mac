@@ -100,13 +100,14 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
         let loadCount = await manager.loadCallCount()
         XCTAssertEqual(loadCount, 0)
 
-        let leafDirectory = storageLocator
+        // Adapter passes the models root to the manager — FluidAudio's
+        // `DownloadUtils.downloadRepo` then appends `repo.folderName`
+        // to land files at the leaf path (= descriptor.repoFolderName).
+        let modelsRoot = storageLocator
             .url(for: .models)
-            .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
             .standardizedFileURL
-        let expectedParent = leafDirectory.deletingLastPathComponent()
         let downloadDirs = await manager.downloadDirectories()
-        XCTAssertEqual(downloadDirs, [expectedParent])
+        XCTAssertEqual(downloadDirs, [modelsRoot])
     }
 
     func testPrepareCallsDownloadIfNeededBeforeLoadModels() async throws {
@@ -131,9 +132,11 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
             .url(for: .models)
             .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
             .standardizedFileURL
-        let expectedParent = leafDirectory.deletingLastPathComponent()
+        let modelsRoot = storageLocator
+            .url(for: .models)
+            .standardizedFileURL
         let downloadDirs = await manager.downloadDirectories()
-        XCTAssertEqual(downloadDirs, [expectedParent])
+        XCTAssertEqual(downloadDirs, [modelsRoot])
         let loadedDirs = await manager.loadedDirectories()
         XCTAssertEqual(loadedDirs, [leafDirectory])
     }

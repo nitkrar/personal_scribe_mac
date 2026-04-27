@@ -47,11 +47,12 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
 
         let manager = try resolvedManager()
         let modelDirectory = try self.modelDirectory()
-        let parentDirectory = modelDirectory.deletingLastPathComponent()
+        try storageLocator.ensureDirectoriesExist()
+        let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
 
         let task = Task {
             self.progressBroadcaster.update(Self.loadingSnapshot)
-            try await manager.downloadIfNeeded(to: parentDirectory, progressHandler: nil)
+            try await manager.downloadIfNeeded(to: modelsRoot, progressHandler: nil)
             try await manager.loadModels(modelDir: modelDirectory)
         }
         prepareTask = task
@@ -70,7 +71,8 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
 
     public func downloadIfNeeded() async throws {
         let manager = try resolvedManager()
-        let parentDirectory = try modelDirectory().deletingLastPathComponent()
+        try storageLocator.ensureDirectoriesExist()
+        let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
 
         progressBroadcaster.update(Self.downloadingSnapshot)
         let broadcaster = progressBroadcaster
@@ -78,7 +80,7 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
             broadcaster.update(Self.map(snapshot))
         }
         do {
-            try await manager.downloadIfNeeded(to: parentDirectory, progressHandler: progressHandler)
+            try await manager.downloadIfNeeded(to: modelsRoot, progressHandler: progressHandler)
             progressBroadcaster.update(Self.finishedSnapshot)
         } catch {
             progressBroadcaster.update(Self.idleSnapshot)

@@ -52,18 +52,20 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
             return try await prepareTask.value
         }
 
-        let directory = try modelDirectory()
+        let leafDirectory = try modelDirectory()
+        try storageLocator.ensureDirectoriesExist()
+        let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
         let variant = try Self.resolveVariant(for: descriptor.id)
         progressBroadcaster.update(Self.loadingSnapshot)
 
         let manager = self.manager
         let task = Task {
             try await manager.downloadIfNeeded(
-                to: directory,
+                to: modelsRoot,
                 variant: variant,
                 progressHandler: nil
             )
-            try await manager.loadModels(from: directory)
+            try await manager.loadModels(from: leafDirectory)
         }
         prepareTask = task
 
@@ -80,7 +82,8 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
     }
 
     public func downloadIfNeeded() async throws {
-        let directory = try modelDirectory()
+        try storageLocator.ensureDirectoriesExist()
+        let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
         let variant = try Self.resolveVariant(for: descriptor.id)
         progressBroadcaster.update(Self.downloadingSnapshot)
 
@@ -91,7 +94,7 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
 
         do {
             try await manager.downloadIfNeeded(
-                to: directory,
+                to: modelsRoot,
                 variant: variant,
                 progressHandler: progressHandler
             )
@@ -222,8 +225,14 @@ private actor LiveFluidAudioQwenManager: FluidAudioQwenManaging {
         variant: Qwen3AsrVariant,
         progressHandler: DownloadUtils.ProgressHandler?
     ) async throws {
-        _ = try await Qwen3AsrModels.download(
-            variant: variant,
+        // Bypass `Qwen3AsrModels.download(variant:to:)` — its `to:`
+        // argument is silently ignored (always writes to FluidAudio's
+        // own modelsRoot). Calling `DownloadUtils.downloadRepo`
+        // directly honors the destination, so files land at
+        // `directory.appendingPathComponent(variant.repo.folderName)`
+        // — the same path our descriptor's `repoFolderName` resolves to.
+        try await DownloadUtils.downloadRepo(
+            variant.repo,
             to: directory,
             progressHandler: progressHandler
         )

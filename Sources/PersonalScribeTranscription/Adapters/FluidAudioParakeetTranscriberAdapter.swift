@@ -69,12 +69,12 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
 
     public func downloadIfNeeded() async throws {
         let runtimeVariant = try resolvedRuntimeVariant()
-        let leafDirectory = try modelDirectory()
-        let parentDirectory = leafDirectory.deletingLastPathComponent()
+        try storageLocator.ensureDirectoriesExist()
+        let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
 
         do {
             try await manager.downloadIfNeeded(
-                to: parentDirectory,
+                to: modelsRoot,
                 version: runtimeVariant.asrModelVersion,
                 progressHandler: { snapshot in
                     self.progressBroadcaster.update(Self.map(snapshot))
@@ -167,13 +167,14 @@ extension FluidAudioParakeetTranscriberAdapter {
 
     private func performPrepare(runtimeVariant: RuntimeVariant) async throws {
         let modelDirectory = try modelDirectory()
-        let parentDirectory = modelDirectory.deletingLastPathComponent()
+        try storageLocator.ensureDirectoriesExist()
+        let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
         let startedAt = ContinuousClock.now
         let progressBroadcaster = self.progressBroadcaster
 
         do {
             try await manager.downloadIfNeeded(
-                to: parentDirectory,
+                to: modelsRoot,
                 version: runtimeVariant.asrModelVersion,
                 progressHandler: { snapshot in
                     self.progressBroadcaster.update(Self.map(snapshot))
@@ -331,9 +332,26 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
         version: AsrModelVersion,
         progressHandler: DownloadUtils.ProgressHandler?
     ) async throws {
-        _ = try await AsrModels.download(
+        // Bypass `AsrModels.download(to:)` — its internal
+        // `targetDir.deletingLastPathComponent()` dance does not match
+        // the path our descriptor's `repoFolderName` resolves to.
+        // `DownloadUtils.downloadRepo` cleanly appends `repo.folderName`
+        // to `to:`, landing files at the same leaf our descriptor uses.
+        // (`AsrModelVersion.repo` is internal in FluidAudio, so we
+        // mirror the mapping here.)
+        let repo: Repo
+        switch version {
+        case .v2: repo = .parakeetV2
+        case .v3: repo = .parakeet
+        case .tdtCtc110m: repo = .parakeetTdtCtc110m
+        case .ctcZhCn: repo = .parakeetCtcZhCn
+        case .ctcJa: repo = .parakeetCtcJa
+        case .tdtJa: repo = .parakeetCtcJa  // mirrors FluidAudio's mapping (TDT v2 uploaded to CTC repo)
+        @unknown default: repo = .parakeet
+        }
+        try await DownloadUtils.downloadRepo(
+            repo,
             to: directory,
-            version: version,
             progressHandler: progressHandler
         )
     }
