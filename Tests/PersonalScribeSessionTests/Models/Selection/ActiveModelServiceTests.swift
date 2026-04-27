@@ -66,13 +66,16 @@ final class ActiveModelServiceTests: XCTestCase {
             }
         )
 
-        let publications = Task { () -> [ModelKind: String]? in
-            var seen = 0
-            for await value in service.$activeModelIDs.values {
-                seen += 1
-                if seen == 2 {
-                    return value
-                }
+        // Subscribe to the post-setActive publish only — drop the
+        // initial value emitted on subscribe so we don't race with the
+        // setActive call below. The test was previously waiting for
+        // `seen == 2` (initial + post-setActive) which deadlocked under
+        // Swift 6 strict concurrency when the @MainActor service's
+        // publisher couldn't deliver synchronously to a non-MainActor
+        // observer Task.
+        let publications = Task { @MainActor () -> [ModelKind: String]? in
+            for await value in service.$activeModelIDs.dropFirst().values {
+                return value
             }
             return nil
         }
