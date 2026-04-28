@@ -2,38 +2,60 @@ import AppKit
 import Foundation
 import PersonalScribeCore
 
+/// `NSEvent` is not `Sendable`, but `addLocalMonitorForEvents`
+/// callbacks are documented to run on the main thread — there is no
+/// real cross-thread hop to guard against. This box lets us pass the
+/// event through `MainActor.assumeIsolated` without fighting strict
+/// concurrency.
+private struct NSEventBox: @unchecked Sendable {
+    let event: NSEvent
+}
+
 /// Global Esc-key monitor for the pill UX (spec §3: "Click ✕ or press
 /// Esc | Pill is .holdToRecord or .recording | Discard audio; enter
 /// .cancelled; show Cancel Card").
 ///
-/// Why a global monitor and not `.onKeyPress(.escape)`:
+/// Why not `.onKeyPress(.escape)`:
 ///
 /// The pill panel is non-activating (Issue 6) — `DraggablePanel.canBecomeKey
 /// = false`. A non-key window cannot deliver `keyDown` to SwiftUI content,
-/// so SwiftUI's `.onKeyPress` never fires while the user is focused in
-/// another app (which is exactly when they'd press Esc to cancel).
-/// `NSEvent.addGlobalMonitorForEvents` observes keyboard events globally
-/// and requires the same Input Monitoring TCC grant as the main
-/// `GlobalHotkeyMonitor`, so there's no additional permission cost.
+/// so SwiftUI's `.onKeyPress` never fires.
+///
+/// # Two installer legs
+///
+/// * `installGlobal` (`NSEvent.addGlobalMonitorForEvents`) sees keystrokes
+///   delivered to OTHER apps — the canonical "user is recording into a
+///   text editor and presses Esc" path.
+/// * `installLocal` (`NSEvent.addLocalMonitorForEvents`) sees keystrokes
+///   delivered to Ninimma itself — needed since Ninimma now launches as
+///   a `.regular` app (commit `6c6505f`) and can be frontmost while the
+///   user records (Settings open, Notes window open, dock-icon focused).
+///   Without this leg Esc was a no-op whenever Ninimma had focus.
+///
+/// Both legs share the same TCC grant as `GlobalHotkeyMonitor`, so
+/// adding the local leg costs no additional permission.
 ///
 /// # Filter
 ///
-/// Only fires `onEscapePressed` when:
-/// * Event type is `.keyDown`
+/// `handle(event:)` returns `true` only when the closure handled the
+/// event. The filter requires:
+/// * Event type `.keyDown`
 /// * `keyCode == 53` (Escape)
-/// * No modifier keys are held (plain Esc — not Cmd+Esc or Option+Esc)
+/// * No modifier keys held (plain Esc — not Cmd+Esc / Option+Esc)
+/// * `onEscapePressed()` itself returned `true` (caller decided to act)
 ///
-/// # Gating at the call site
-///
-/// The monitor does NOT check pill state itself — the caller wires
-/// `onEscapePressed` to a closure that consults the view model and only
-/// acts when pill is `.holdToRecord` or `.recording`. Keeps the monitor
-/// stateless and simple to test.
+/// The local monitor uses the return value to decide whether to swallow
+/// the event (`nil`) or pass it through. Keeps Esc unambiguous when
+/// recording is active without breaking normal Esc behaviour when idle.
 @MainActor
 public final class EscapeKeyMonitor {
-    public typealias Installer = @MainActor (
+    public typealias GlobalInstaller = @MainActor (
         _ mask: NSEvent.EventTypeMask,
         _ handler: @escaping (NSEvent) -> Void
+    ) -> Any?
+    public typealias LocalInstaller = @MainActor (
+        _ mask: NSEvent.EventTypeMask,
+        _ handler: @escaping (NSEvent) -> NSEvent?
     ) -> Any?
     public typealias Uninstaller = @MainActor (Any) -> Void
 
@@ -47,16 +69,21 @@ public final class EscapeKeyMonitor {
         .shift,
     ]
 
-    private let onEscapePressed: @MainActor () -> Void
-    private let install: Installer
+    private let onEscapePressed: @MainActor () -> Bool
+    private let installGlobal: GlobalInstaller
+    private let installLocal: LocalInstaller
     private let uninstall: Uninstaller
-    private var monitor: Any?
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
 
-    public convenience init(onEscapePressed: @escaping @MainActor () -> Void) {
+    public convenience init(onEscapePressed: @escaping @MainActor () -> Bool) {
         self.init(
             onEscapePressed: onEscapePressed,
-            install: { mask, handler in
+            installGlobal: { mask, handler in
                 NSEvent.addGlobalMonitorForEvents(matching: mask, handler: handler)
+            },
+            installLocal: { mask, handler in
+                NSEvent.addLocalMonitorForEvents(matching: mask, handler: handler)
             },
             uninstall: { handle in
                 NSEvent.removeMonitor(handle)
@@ -65,40 +92,56 @@ public final class EscapeKeyMonitor {
     }
 
     init(
-        onEscapePressed: @escaping @MainActor () -> Void,
-        install: @escaping Installer,
+        onEscapePressed: @escaping @MainActor () -> Bool,
+        installGlobal: @escaping GlobalInstaller,
+        installLocal: @escaping LocalInstaller,
         uninstall: @escaping Uninstaller
     ) {
         self.onEscapePressed = onEscapePressed
-        self.install = install
+        self.installGlobal = installGlobal
+        self.installLocal = installLocal
         self.uninstall = uninstall
     }
 
     public var isActive: Bool {
-        monitor != nil
+        globalMonitor != nil || localMonitor != nil
     }
 
     public func start() {
-        guard monitor == nil else { return }
-        monitor = install([.keyDown]) { [weak self] event in
+        guard globalMonitor == nil, localMonitor == nil else { return }
+        globalMonitor = installGlobal([.keyDown]) { [weak self] event in
             Task { @MainActor [weak self] in
-                self?.handle(event: event)
+                _ = self?.handle(event: event)
             }
+        }
+        localMonitor = installLocal([.keyDown]) { [weak self] event in
+            guard let self else { return event }
+            let box = NSEventBox(event: event)
+            let handled = MainActor.assumeIsolated {
+                self.handle(event: box.event)
+            }
+            return handled ? nil : event
         }
     }
 
     public func stop() {
-        guard let handle = monitor else { return }
-        uninstall(handle)
-        monitor = nil
+        if let handle = globalMonitor {
+            uninstall(handle)
+            globalMonitor = nil
+        }
+        if let handle = localMonitor {
+            uninstall(handle)
+            localMonitor = nil
+        }
     }
 
-    internal func handle(event: NSEvent) {
-        guard event.type == .keyDown else { return }
-        guard event.keyCode == Self.escapeKeyCode else { return }
+    @discardableResult
+    internal func handle(event: NSEvent) -> Bool {
+        guard event.type == .keyDown else { return false }
+        guard event.keyCode == Self.escapeKeyCode else { return false }
         let activeModifiers = event.modifierFlags.intersection(Self.blockingModifierMask)
-        guard activeModifiers.isEmpty else { return }
+        guard activeModifiers.isEmpty else { return false }
 
-        onEscapePressed()
+        return onEscapePressed()
     }
 }

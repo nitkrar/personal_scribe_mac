@@ -137,15 +137,16 @@ struct PersonalScribeAppMain: App {
         // stays wired for compatibility. #070 will reshape the pill
         // affordances around pause/resume.
         let escapeKeyMonitor = EscapeKeyMonitor { [weak pillController, weak coordinator] in
-            guard let pillController else { return }
+            guard let pillController else { return false }
             let visibility = pillController.viewModel.visibility
             guard visibility == .holdToRecord || visibility == .recording else {
-                return
+                return false
             }
             pillController.viewModel.cancel()
             Task { [weak coordinator] in
                 await coordinator?.cancelIfActive()
             }
+            return true
         }
 
         // #071: hold-start now routes through `coordinator.startHoldIfIdle()`
