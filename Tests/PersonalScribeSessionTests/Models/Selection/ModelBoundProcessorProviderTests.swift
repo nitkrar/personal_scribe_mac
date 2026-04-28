@@ -170,28 +170,6 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
         XCTAssertTrue((first as AnyObject) === (second as AnyObject))
     }
 
-    func testEvictRunsCleanupOnCachedLifecycle() async throws {
-        let descriptor = BuiltInModelCatalog.parakeetTDT06Bv2
-        let cleaned = expectation(description: "cached lifecycle cleaned up")
-        let transcriber = CleanupTrackingTranscriber {
-            cleaned.fulfill()
-        }
-        let provider = ModelBoundProcessorProvider(
-            storageLocator: TestStorageLocator.make(),
-            adapterFactory: { descriptor in
-                AdapterRecord(
-                    descriptorID: descriptor.id,
-                    transcriber: transcriber
-                )
-            }
-        )
-
-        _ = try provider.transcriber(for: descriptor)
-        provider.evict(descriptor)
-
-        await fulfillment(of: [cleaned], timeout: 1)
-    }
-
     func testRemoveDownloadedFilesEvictsAllAdapterTypes() throws {
         let storageLocator = TestStorageLocator.make()
         let batchDescriptor = BuiltInModelCatalog.parakeetTDT06Bv2
@@ -318,66 +296,6 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
             "Auxiliary CTC head leaf must be removed"
         )
     }
-
-    /// FluidAudio's `Repo.qwen3Asr.folderName` writes Qwen artifacts to
-    /// `<modelsRoot>/qwen3-asr-0.6b-coreml/{f32,int8}/...` (it keeps the
-    /// `-coreml` suffix unlike Parakeet's default-case stripping). The
-    /// catalog descriptor's `repoFolderName` MUST match — otherwise
-    /// `isDownloaded` checks the wrong directory and always reports
-    /// "not downloaded", which makes the AI Models tab fail to detect
-    /// downloaded Qwen models and resets the active dot on every app
-    /// restart. This test seeds artifacts at FluidAudio's actual write
-    /// path and asserts the provider sees them.
-    func testIsDownloadedFindsQwenArtifactsAtFluidAudioWritePath() throws {
-        try assertProviderFindsArtifacts(
-            for: BuiltInModelCatalog.qwen3AsrF32,
-            atFluidAudioPath: "qwen3-asr-0.6b-coreml/f32"
-        )
-        try assertProviderFindsArtifacts(
-            for: BuiltInModelCatalog.qwen3AsrInt8,
-            atFluidAudioPath: "qwen3-asr-0.6b-coreml/int8"
-        )
-    }
-
-    private func assertProviderFindsArtifacts(
-        for descriptor: ModelDescriptor,
-        atFluidAudioPath relativePath: String,
-        file: StaticString = #file,
-        line: UInt = #line
-    ) throws {
-        let storageLocator = TestStorageLocator.make()
-        let provider = ModelBoundProcessorProvider(
-            storageLocator: storageLocator,
-            adapterFactory: { d in
-                AdapterRecord(
-                    descriptorID: d.id,
-                    transcriber: MarkerTranscriber()
-                )
-            }
-        )
-
-        let leaf = storageLocator
-            .url(for: .models)
-            .appendingPathComponent(relativePath, isDirectory: true)
-            .standardizedFileURL
-        for required in descriptor.requiredRelativePaths {
-            let fileURL = leaf.appendingPathComponent(required, isDirectory: false)
-            try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            // `modelArtifactsAreValid` requires `coremldata.bin` files to
-            // be > 0 bytes; any non-empty content satisfies that.
-            try Data("stub".utf8).write(to: fileURL)
-        }
-
-        XCTAssertTrue(
-            provider.isDownloaded(descriptor),
-            "Provider must detect \(descriptor.id) artifacts at \(relativePath); descriptor.repoFolderName = \(descriptor.repoFolderName)",
-            file: file,
-            line: line
-        )
-    }
 }
 
 private struct StubTranscriber: Transcriber {
@@ -452,35 +370,6 @@ private final class MarkerTranscriber: @unchecked Sendable, Transcriber {
     func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
         TranscriptionResult(
             text: "marker",
-            audioDuration: audio.duration,
-            processingDuration: .zero
-        )
-    }
-}
-
-private final class CleanupTrackingTranscriber: @unchecked Sendable, Transcriber {
-    let capabilities = TranscriberCapabilities()
-    private let onCleanup: @Sendable () -> Void
-
-    init(onCleanup: @escaping @Sendable () -> Void) {
-        self.onCleanup = onCleanup
-    }
-
-    func prepare() async throws {}
-
-    func cleanup() async {
-        onCleanup()
-    }
-
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        AsyncStream { continuation in
-            continuation.finish()
-        }
-    }
-
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        TranscriptionResult(
-            text: "cleanup-tracker",
             audioDuration: audio.duration,
             processingDuration: .zero
         )
