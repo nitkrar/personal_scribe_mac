@@ -15,6 +15,7 @@ extension ModelDescriptor: Codable {
         case revision
         case requiredRelativePaths
         case approximateSizeBytes
+        case isEnabled
         case engine
         case performance
     }
@@ -39,6 +40,7 @@ extension ModelDescriptor: Codable {
             revision: try container.decode(String.self, forKey: .revision),
             requiredRelativePaths: try container.decode([String].self, forKey: .requiredRelativePaths),
             approximateSizeBytes: try container.decode(Int64.self, forKey: .approximateSizeBytes),
+            isEnabled: try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true,
             engine: try container.decode(TranscriptionEngine.self, forKey: .engine),
             performance: try container.decodeIfPresent(ModelPerformance.self, forKey: .performance) ?? ModelPerformance()
         )
@@ -55,6 +57,7 @@ extension ModelDescriptor: Codable {
         try container.encode(revision, forKey: .revision)
         try container.encode(requiredRelativePaths, forKey: .requiredRelativePaths)
         try container.encode(approximateSizeBytes, forKey: .approximateSizeBytes)
+        try container.encode(isEnabled, forKey: .isEnabled)
         try container.encode(engine, forKey: .engine)
         try container.encode(performance, forKey: .performance)
     }

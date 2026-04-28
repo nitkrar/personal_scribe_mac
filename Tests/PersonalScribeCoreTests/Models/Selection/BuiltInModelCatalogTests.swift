@@ -23,6 +23,11 @@ final class BuiltInModelCatalogTests: XCTestCase {
         )
     }
 
+    func testQwenDescriptorsAreDisabledInRegistry() {
+        XCTAssertFalse(BuiltInModelCatalog.qwen3AsrF32.isEnabled)
+        XCTAssertFalse(BuiltInModelCatalog.qwen3AsrInt8.isEnabled)
+    }
+
     func test110MDescriptorUsesPinnedRevisionAndFusedLayout() {
         let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
 
@@ -84,12 +89,9 @@ final class BuiltInModelCatalogTests: XCTestCase {
     /// without benchmarks today; they don't surface in the AI Models
     /// tab so the popover never reads their metrics.
     func testAllEnabledModelsCarryPublishedBenchmarks() {
-        // Scope: parakeet TDT descriptors only. Qwen3 f32/int8 are
-        // enabled (`kind: .asr`) but ship without benchmarks today —
-        // the popover's relative-ranking bars source data from the
-        // parakeet-family HF Open ASR leaderboard citations, which
-        // don't cover Qwen3. Adding those rows to the popover + test
-        // requires Qwen3 benchmark data we don't have in the catalog.
+        // Scope: parakeet TDT descriptors only. Qwen3 stays in the
+        // registry but is disabled for now, and it still ships without
+        // the benchmark metadata this popover ranking consumes.
         let parakeetDescriptors = BuiltInModelCatalog.registeredModels
             .filter { $0.engine == .parakeetTDT }
         XCTAssertFalse(parakeetDescriptors.isEmpty)

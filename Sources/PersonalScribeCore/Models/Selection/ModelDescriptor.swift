@@ -107,6 +107,9 @@ public struct ModelDescriptor: Sendable, Equatable {
     /// Broad capability category — derived from `engine` per L2 of #078.
     /// Single source of truth: change the engine, the kind follows.
     public var kind: ModelKind { engine.kind }
+    /// Descriptor-level rollout flag. Keeps a model in the registry for
+    /// metadata/tests while hiding it from live selectors.
+    public let isEnabled: Bool
     /// One-line inline description shown under `displayName` in the
     /// Settings → AI Models row. Keep ≤70 chars so it fits on one line
     /// at the default settings content width (620pt) without
@@ -181,6 +184,7 @@ public struct ModelDescriptor: Sendable, Equatable {
         revision: String,
         requiredRelativePaths: [String],
         approximateSizeBytes: Int64,
+        isEnabled: Bool = true,
         engine: TranscriptionEngine,
         performance: ModelPerformance = ModelPerformance(),
         madeBy: String? = nil,
@@ -198,6 +202,7 @@ public struct ModelDescriptor: Sendable, Equatable {
         self.revision = revision
         self.requiredRelativePaths = requiredRelativePaths
         self.approximateSizeBytes = approximateSizeBytes
+        self.isEnabled = isEnabled
         self.engine = engine
         self.performance = performance
         self.madeBy = madeBy

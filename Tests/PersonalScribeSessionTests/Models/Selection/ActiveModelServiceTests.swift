@@ -248,6 +248,22 @@ final class ActiveModelServiceTests: XCTestCase {
         )
     }
 
+    func testEnabledModelsExcludeDisabledQwenRows() {
+        let service = ActiveModelService(
+            defaults: isolatedDefaults(),
+            physicalMemoryBytes: 24 * 1024 * 1024 * 1024
+        )
+
+        XCTAssertEqual(
+            service.enabledModels(kind: .asr).map(\.id),
+            [
+                BuiltInModelCatalog.parakeetTDT06Bv2.id,
+                BuiltInModelCatalog.parakeetTDTCTC110M.id,
+                BuiltInModelCatalog.parakeetTDT06Bv3.id,
+            ]
+        )
+    }
+
     // MARK: - #024 — per-row delete
 
     func testRemoveDownloadedInvokesHandlerAndPublishesNotDownloaded() throws {

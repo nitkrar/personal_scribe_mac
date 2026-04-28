@@ -182,7 +182,7 @@ public final class ActiveModelService: ObservableObject {
     /// kind is enabled today. Optional `kind:` narrows further.
     public func enabledModels(kind: ModelKind? = nil) -> [ModelDescriptor] {
         registeredModels.filter { d in
-            d.kind.isEnabled && (kind == nil || d.kind == kind)
+            d.kind.isEnabled && d.isEnabled && (kind == nil || d.kind == kind)
         }
     }
 
@@ -417,7 +417,7 @@ private extension ActiveModelService {
         return descriptor
     }
 
-    /// Read the persisted active-id map and prune any entries that no
+    /// Read the persisted active-id map and rewrite any entry that no
     /// longer reference a registered model. If pruning happens, the
     /// preference is rewritten so the next launch sees the cleaned map.
     static func resolveInitialActiveIDs(
