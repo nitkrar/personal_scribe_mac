@@ -145,8 +145,21 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         guard let lifecycle = Self.lifecycleForObservation(in: recipe) else {
             return nil
         }
+        // Extract the stream BEFORE entering the Task body so the Task
+        // doesn't capture `lifecycle` (the adapter) strongly. The Task
+        // captures only the AsyncStream value; once the recipe is
+        // replaced and `provider.records` is evicted, the adapter has
+        // no remaining references and can dealloc — its broadcaster's
+        // deinit then `finish()`-es the continuation, the for-await
+        // exits, and this Task body completes.
+        //
+        // Without this extraction, the task body's
+        // `lifecycle.modelDownloadProgress()` capture pinned the
+        // adapter alive for the process lifetime — a 1+ GB MLModel
+        // weight leak per Activate switch.
+        let stream = lifecycle.modelDownloadProgress()
         return Task { [weak self] in
-            for await progress in lifecycle.modelDownloadProgress() {
+            for await progress in stream {
                 if Task.isCancelled { return }
                 await self?.publish { snapshot in
                     snapshot.modelDownloadProgress = Self.normalizeModelDownloadProgress(progress)

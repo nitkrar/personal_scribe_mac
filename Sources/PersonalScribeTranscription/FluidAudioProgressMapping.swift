@@ -111,6 +111,33 @@ public final class FluidAudioDownloadProgressBroadcaster: @unchecked Sendable {
             continuation.yield(snapshot)
         }
     }
+
+    /// Critical for adapter eviction: when the owning adapter dealloc's,
+    /// any consumer Task suspended in `for await ... in stream` would
+    /// otherwise stay parked forever — the continuation is held by the
+    /// AsyncStream buffer that the Task captured, and without an
+    /// explicit `finish()` the for-await never wakes. That keeps the
+    /// Task alive, which keeps its captures alive (most importantly the
+    /// AsyncStream's reference to the broadcaster and via that, the
+    /// adapter — gigabytes of CoreML weights pinned).
+    ///
+    /// Calling `finish()` on every outstanding continuation in `deinit`
+    /// makes consumer for-await loops exit, freeing their captures.
+    /// Combined with extracting the AsyncStream out of the for-await
+    /// closure capture (so the Task captures the stream value, not the
+    /// adapter via `lifecycle.modelDownloadProgress()`), the eviction
+    /// chain actually fires when `provider.evict(_:)` removes the last
+    /// adapter reference.
+    deinit {
+        let outstanding = lock.withLock { () -> [AsyncStream<ModelDownloadProgress>.Continuation] in
+            let copy = Array(continuations.values)
+            continuations.removeAll()
+            return copy
+        }
+        for continuation in outstanding {
+            continuation.finish()
+        }
+    }
 }
 
 extension ModelDownloadProgress {
