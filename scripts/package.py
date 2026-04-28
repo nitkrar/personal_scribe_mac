@@ -422,6 +422,9 @@ def sign() -> None:
         f.write(ENTITLEMENTS_PLIST)
         ent_path = f.name
     try:
+        # `quiet=True` previously hid codesign's stderr — the real error
+        # message went to /dev/null and we just saw "command failed". Let
+        # codesign's stdout/stderr through so failures surface in-band.
         run(
             [
                 "codesign",
@@ -436,7 +439,6 @@ def sign() -> None:
                 "--timestamp=none",
                 str(APP_PATH),
             ],
-            quiet=True,
         )
         run(["codesign", "--verify", "--verbose", str(APP_PATH)])
     finally:
