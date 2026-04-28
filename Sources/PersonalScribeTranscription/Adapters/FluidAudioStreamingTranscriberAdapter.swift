@@ -9,7 +9,7 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
     private let managerResult: Result<any FluidAudioStreamingEouManaging, Error>
-    private nonisolated let progressBroadcaster = StreamingAdapterProgressBroadcaster()
+    private nonisolated let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
 
@@ -51,7 +51,7 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
         let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
 
         let task = Task {
-            self.progressBroadcaster.update(Self.loadingSnapshot)
+            self.progressBroadcaster.emit(.loading)
             try await manager.downloadIfNeeded(to: modelsRoot, progressHandler: nil)
             try await manager.loadModels(modelDir: modelDirectory)
         }
@@ -61,10 +61,10 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
             try await task.value
             hasPreparedModel = true
             prepareTask = nil
-            progressBroadcaster.update(Self.finishedSnapshot)
+            progressBroadcaster.emit(.finished)
         } catch {
             prepareTask = nil
-            progressBroadcaster.update(Self.idleSnapshot)
+            progressBroadcaster.emit(.idle)
             throw PersonalScribeError.modelLoadFailure
         }
     }
@@ -74,16 +74,16 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
         try storageLocator.ensureDirectoriesExist()
         let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
 
-        progressBroadcaster.update(Self.downloadingSnapshot)
+        progressBroadcaster.emit(.downloading)
         let broadcaster = progressBroadcaster
         let progressHandler: DownloadUtils.ProgressHandler = { snapshot in
-            broadcaster.update(Self.map(snapshot))
+            broadcaster.emit(snapshot)
         }
         do {
             try await manager.downloadIfNeeded(to: modelsRoot, progressHandler: progressHandler)
-            progressBroadcaster.update(Self.finishedSnapshot)
+            progressBroadcaster.emit(.finished)
         } catch {
-            progressBroadcaster.update(Self.idleSnapshot)
+            progressBroadcaster.emit(.idle)
             throw PersonalScribeError.modelLoadFailure
         }
     }
@@ -139,59 +139,6 @@ protocol FluidAudioStreamingEouManaging: Actor, Sendable {
 }
 
 private extension FluidAudioStreamingTranscriberAdapter {
-    static let idleSnapshot = ModelDownloadProgress(
-        phase: .idle,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    static let downloadingSnapshot = ModelDownloadProgress(
-        phase: .downloading,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    /// Map FluidAudio's download phase to our chip-driving phase.
-    /// `.listing`/`.downloading` → `.downloading` (progress bar);
-    /// `.compiling` → `.loading`. Stretch downloading 0–0.5 → 0–1.0
-    /// so the bar spans the full chip; FluidAudio caps download at
-    /// 0.5 reserving the upper half for compile, but our `.loading`
-    /// phase renders without a bar so the cap is purely cosmetic loss.
-    static func map(_ snapshot: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
-        let phase: ModelDownloadProgress.Phase
-        let fraction: Double
-        switch snapshot.phase {
-        case .listing, .downloading:
-            phase = .downloading
-            fraction = min(snapshot.fractionCompleted * 2.0, 1.0)
-        case .compiling:
-            phase = .loading
-            fraction = snapshot.fractionCompleted
-        }
-        return ModelDownloadProgress(
-            phase: phase,
-            fractionCompleted: fraction,
-            receivedBytes: 0,
-            expectedBytes: nil
-        )
-    }
-
-    static let loadingSnapshot = ModelDownloadProgress(
-        phase: .loading,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    static let finishedSnapshot = ModelDownloadProgress(
-        phase: .finished,
-        fractionCompleted: 1,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
     func executeTranscription(
         from stream: AsyncThrowingStream<PCMBuffer, Error>,
         continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation
@@ -344,43 +291,3 @@ private extension StreamingChunkSize {
     }
 }
 
-private final class StreamingAdapterProgressBroadcaster: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuations: [UUID: AsyncStream<ModelDownloadProgress>.Continuation] = [:]
-    private var snapshot = ModelDownloadProgress(
-        phase: .idle,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    func stream() -> AsyncStream<ModelDownloadProgress> {
-        AsyncStream { continuation in
-            let identifier = UUID()
-            let initialSnapshot = lock.withLock { () -> ModelDownloadProgress in
-                continuations[identifier] = continuation
-                return snapshot
-            }
-
-            continuation.onTermination = { [weak self] _ in
-                guard let self else { return }
-                _ = self.lock.withLock {
-                    self.continuations.removeValue(forKey: identifier)
-                }
-            }
-
-            continuation.yield(initialSnapshot)
-        }
-    }
-
-    func update(_ snapshot: ModelDownloadProgress) {
-        let continuations = lock.withLock { () -> [AsyncStream<ModelDownloadProgress>.Continuation] in
-            self.snapshot = snapshot
-            return Array(self.continuations.values)
-        }
-
-        for continuation in continuations {
-            continuation.yield(snapshot)
-        }
-    }
-}

@@ -6,7 +6,7 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
     private let manager: any FluidAudioOfflineDiarizerManaging
-    private let progressBroadcaster = OfflineDiarizerDownloadProgressBroadcaster()
+    private let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private let lock = NSLock()
 
     private var hasPreparedModel = false
@@ -43,7 +43,7 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
                 return prepareTask
             }
 
-            progressBroadcaster.update(Self.loadingSnapshot)
+            progressBroadcaster.emit(.loading)
             let task = Task {
                 try await self.performPrepare()
             }
@@ -61,12 +61,12 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
                 hasPreparedModel = true
                 prepareTask = nil
             }
-            progressBroadcaster.update(Self.finishedSnapshot)
+            progressBroadcaster.emit(.finished)
         } catch {
             lock.withLock {
                 prepareTask = nil
             }
-            progressBroadcaster.update(Self.idleSnapshot)
+            progressBroadcaster.emit(.idle)
             throw PersonalScribeError.modelLoadFailure
         }
     }
@@ -78,16 +78,16 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
         try storageLocator.ensureDirectoriesExist()
         let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
 
-        progressBroadcaster.update(Self.downloadingSnapshot)
+        progressBroadcaster.emit(.downloading)
         let broadcaster = progressBroadcaster
         let progressHandler: DownloadUtils.ProgressHandler = { snapshot in
-            broadcaster.update(Self.map(snapshot))
+            broadcaster.emit(snapshot)
         }
         do {
             try await manager.downloadIfNeeded(to: modelsRoot, progressHandler: progressHandler)
-            progressBroadcaster.update(Self.finishedSnapshot)
+            progressBroadcaster.emit(.finished)
         } catch {
-            progressBroadcaster.update(Self.idleSnapshot)
+            progressBroadcaster.emit(.idle)
             throw PersonalScribeError.modelLoadFailure
         }
     }
@@ -122,61 +122,6 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
                 task.cancel()
             }
         }
-    }
-}
-
-extension FluidAudioOfflineDiarizerAdapter {
-    static let idleSnapshot = ModelDownloadProgress(
-        phase: .idle,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    static let loadingSnapshot = ModelDownloadProgress(
-        phase: .loading,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    static let downloadingSnapshot = ModelDownloadProgress(
-        phase: .downloading,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    static let finishedSnapshot = ModelDownloadProgress(
-        phase: .finished,
-        fractionCompleted: 1,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    /// Map FluidAudio's download phase to our chip-driving phase.
-    /// `.listing`/`.downloading` → `.downloading` (progress bar);
-    /// `.compiling` → `.loading`. Stretch downloading 0–0.5 → 0–1.0
-    /// to fill the chip's bar during the network-heavy phase (FluidAudio
-    /// caps download at 0.5 reserving the upper half for compile, but
-    /// our `.loading` phase renders without a bar).
-    static func map(_ snapshot: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
-        let phase: ModelDownloadProgress.Phase
-        let fraction: Double
-        switch snapshot.phase {
-        case .listing, .downloading:
-            phase = .downloading
-            fraction = min(snapshot.fractionCompleted * 2.0, 1.0)
-        case .compiling:
-            phase = .loading
-            fraction = snapshot.fractionCompleted
-        }
-        return ModelDownloadProgress(
-            phase: phase,
-            fractionCompleted: fraction,
-            receivedBytes: 0,
-            expectedBytes: nil
-        )
     }
 }
 
@@ -282,39 +227,3 @@ private final class PrivateFluidAudioOfflineDiarizerManager:
     }
 }
 
-private final class OfflineDiarizerDownloadProgressBroadcaster: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuations: [UUID: AsyncStream<ModelDownloadProgress>.Continuation] = [:]
-    private var snapshot = FluidAudioOfflineDiarizerAdapter.idleSnapshot
-
-    func stream() -> AsyncStream<ModelDownloadProgress> {
-        AsyncStream { continuation in
-            let identifier = UUID()
-            let initial = lock.withLock { () -> ModelDownloadProgress in
-                continuations[identifier] = continuation
-                return snapshot
-            }
-
-            continuation.onTermination = { [weak self] _ in
-                guard let self else {
-                    return
-                }
-                _ = self.lock.withLock {
-                    self.continuations.removeValue(forKey: identifier)
-                }
-            }
-            continuation.yield(initial)
-        }
-    }
-
-    func update(_ snapshot: ModelDownloadProgress) {
-        let continuations = lock.withLock { () -> [AsyncStream<ModelDownloadProgress>.Continuation] in
-            self.snapshot = snapshot
-            return Array(self.continuations.values)
-        }
-
-        for continuation in continuations {
-            continuation.yield(snapshot)
-        }
-    }
-}

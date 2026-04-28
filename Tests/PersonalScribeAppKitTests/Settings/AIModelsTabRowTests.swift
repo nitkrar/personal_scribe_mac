@@ -30,7 +30,11 @@ final class AIModelsTabRowTests: XCTestCase {
         XCTAssertEqual(r.chip.status, .neutral)
     }
 
-    func testChipForDownloadingUsesWarningStatusAndPercentLabel() {
+    func testChipForDownloadingUsesWarningStatusAndLabelOnly() {
+        // Fraction is intentionally discarded — FluidAudio's progress
+        // delegate is too coarse to drive a smooth bar without a
+        // custom delegate. The chip is label-only until that's
+        // revisited.
         let state = ModelDownloadState(
             descriptorId: BuiltInModelCatalog.parakeetTDT06Bv2.id,
             phase: .downloading,
@@ -38,7 +42,7 @@ final class AIModelsTabRowTests: XCTestCase {
         )
         let r = row(state: state)
         XCTAssertEqual(r.chip.status, .warning)
-        XCTAssertEqual(r.chip.label, "Downloading 42%")
+        XCTAssertEqual(r.chip.label, "Downloading…")
     }
 
     func testChipForLoadingUsesWarningStatus() {

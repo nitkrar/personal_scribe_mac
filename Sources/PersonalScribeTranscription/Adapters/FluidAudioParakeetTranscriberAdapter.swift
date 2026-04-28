@@ -14,7 +14,7 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
     private let storageLocator: any StorageLocator
     private let manager: any FluidAudioParakeetManaging
     private let runtimeVariantResult: Result<RuntimeVariant, ModelSelectionError>
-    private let progressBroadcaster = FluidAudioParakeetDownloadProgressBroadcaster()
+    private let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
     private var loadDuration: Duration?
@@ -62,7 +62,7 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
             prepareTask = nil
         } catch {
             prepareTask = nil
-            progressBroadcaster.update(Self.idleSnapshot)
+            progressBroadcaster.emit(.idle)
             throw error
         }
     }
@@ -77,7 +77,7 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
                 to: modelsRoot,
                 version: runtimeVariant.asrModelVersion,
                 progressHandler: { snapshot in
-                    self.progressBroadcaster.update(Self.map(snapshot))
+                    self.progressBroadcaster.emit(snapshot)
                 }
             )
             // Hybrid TDT-CTC 110m loads a CTC head from a sibling
@@ -89,16 +89,16 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
                     .ctc110m,
                     to: modelsRoot,
                     progressHandler: { snapshot in
-                        self.progressBroadcaster.update(Self.map(snapshot))
+                        self.progressBroadcaster.emit(snapshot)
                     }
                 )
             }
         } catch {
-            progressBroadcaster.update(Self.idleSnapshot)
+            progressBroadcaster.emit(.idle)
             throw PersonalScribeError.modelLoadFailure
         }
 
-        progressBroadcaster.update(Self.finishedSnapshot(from: progressBroadcaster.currentSnapshot))
+        progressBroadcaster.emit(.finished)
     }
 
     public nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
@@ -155,13 +155,6 @@ extension FluidAudioParakeetTranscriberAdapter {
         }
     }
 
-    static let idleSnapshot = ModelDownloadProgress(
-        phase: .idle,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
     private static func resolveRuntimeVariant(
         for descriptor: ModelDescriptor
     ) -> Result<RuntimeVariant, ModelSelectionError> {
@@ -190,7 +183,7 @@ extension FluidAudioParakeetTranscriberAdapter {
                 to: modelsRoot,
                 version: runtimeVariant.asrModelVersion,
                 progressHandler: { snapshot in
-                    self.progressBroadcaster.update(Self.map(snapshot))
+                    self.progressBroadcaster.emit(snapshot)
                 }
             )
             // Mirror the auxiliary pull from `downloadIfNeeded` so the
@@ -202,7 +195,7 @@ extension FluidAudioParakeetTranscriberAdapter {
                     .ctc110m,
                     to: modelsRoot,
                     progressHandler: { snapshot in
-                        self.progressBroadcaster.update(Self.map(snapshot))
+                        self.progressBroadcaster.emit(snapshot)
                     }
                 )
             }
@@ -210,7 +203,7 @@ extension FluidAudioParakeetTranscriberAdapter {
                 from: modelDirectory,
                 version: runtimeVariant.asrModelVersion,
                 progressHandler: { snapshot in
-                    self.progressBroadcaster.update(Self.map(snapshot))
+                    self.progressBroadcaster.emit(snapshot)
                 }
             )
             loadDuration = startedAt.duration(to: ContinuousClock.now)
@@ -218,7 +211,7 @@ extension FluidAudioParakeetTranscriberAdapter {
             throw PersonalScribeError.modelLoadFailure
         }
 
-        progressBroadcaster.update(Self.finishedSnapshot(from: progressBroadcaster.currentSnapshot))
+        progressBroadcaster.emit(.finished)
     }
 
     func modelDirectory() throws -> URL {
@@ -270,42 +263,6 @@ extension FluidAudioParakeetTranscriberAdapter {
         return confidences.reduce(0, +) / Float(confidences.count)
     }
 
-    /// FluidAudio's `downloadRepo` caps download-phase progress at 0.5
-    /// because it expects a compile phase to fill 0.5–1.0 afterwards
-    /// (see `DownloadUtils.swift:415` for the cap, `:247-248` for the
-    /// compile-phase emission). For our chip that's a 50% jump-then-pin
-    /// pattern. Stretch downloading 0–0.5 → 0–1.0 so the bar spans the
-    /// full chip width during the network-heavy phase. Compile phase
-    /// (which only fires in the Activate / prepare path) maps to
-    /// `.loading`, which our chip renders without a bar — so the
-    /// fraction value there is irrelevant.
-    static func map(_ snapshot: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
-        switch snapshot.phase {
-        case .listing, .downloading:
-            return .init(
-                phase: .downloading,
-                fractionCompleted: min(snapshot.fractionCompleted * 2.0, 1.0),
-                receivedBytes: 0,
-                expectedBytes: nil
-            )
-        case .compiling:
-            return .init(
-                phase: .loading,
-                fractionCompleted: snapshot.fractionCompleted,
-                receivedBytes: 0,
-                expectedBytes: nil
-            )
-        }
-    }
-
-    static func finishedSnapshot(from snapshot: ModelDownloadProgress) -> ModelDownloadProgress {
-        .init(
-            phase: .finished,
-            fractionCompleted: 1,
-            receivedBytes: snapshot.receivedBytes,
-            expectedBytes: snapshot.expectedBytes
-        )
-    }
 }
 
 /// Sendable shim for the auxiliary repos a Parakeet variant may need
@@ -695,46 +652,3 @@ private enum FluidAudioParakeetResultExtractor {
     }
 }
 
-private final class FluidAudioParakeetDownloadProgressBroadcaster: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuations: [UUID: AsyncStream<ModelDownloadProgress>.Continuation] = [:]
-    private var snapshot = ModelDownloadProgress(
-        phase: .idle,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    func stream() -> AsyncStream<ModelDownloadProgress> {
-        AsyncStream { continuation in
-            let identifier = UUID()
-            let initial = lock.withLock { () -> ModelDownloadProgress in
-                continuations[identifier] = continuation
-                return snapshot
-            }
-
-            continuation.onTermination = { [weak self] _ in
-                guard let self else { return }
-                _ = self.lock.withLock {
-                    self.continuations.removeValue(forKey: identifier)
-                }
-            }
-            continuation.yield(initial)
-        }
-    }
-
-    func update(_ snapshot: ModelDownloadProgress) {
-        let continuations = lock.withLock { () -> [AsyncStream<ModelDownloadProgress>.Continuation] in
-            self.snapshot = snapshot
-            return Array(self.continuations.values)
-        }
-
-        for continuation in continuations {
-            continuation.yield(snapshot)
-        }
-    }
-
-    var currentSnapshot: ModelDownloadProgress {
-        lock.withLock { snapshot }
-    }
-}

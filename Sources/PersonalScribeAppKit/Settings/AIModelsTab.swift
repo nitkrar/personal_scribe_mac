@@ -268,8 +268,12 @@ struct ModelRow: View {
         case .notDownloaded:
             return (.neutral, "Not downloaded")
         case .downloading:
-            let percent = Int((state?.fractionCompleted ?? 0) * 100)
-            return (.warning, "Downloading \(percent)%")
+            // Fraction is intentionally discarded — FluidAudio's
+            // delegate callbacks for `URLSession.download(for:)` are
+            // too coarse (~2 emits per file) to drive a smooth bar
+            // without a custom delegate. Show a label-only chip
+            // until that's revisited.
+            return (.warning, "Downloading…")
         case .loading:
             return (.warning, "Loading…")
         case .ready:

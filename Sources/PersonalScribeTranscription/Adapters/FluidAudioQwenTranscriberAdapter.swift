@@ -18,7 +18,7 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
     private let manager: any FluidAudioQwenManaging
-    private let progressBroadcaster = QwenModelDownloadProgressBroadcaster()
+    private let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
 
@@ -56,7 +56,7 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
         try storageLocator.ensureDirectoriesExist()
         let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
         let variant = try Self.resolveVariant(for: descriptor.id)
-        progressBroadcaster.update(Self.loadingSnapshot)
+        progressBroadcaster.emit(.loading)
 
         let manager = self.manager
         let task = Task {
@@ -73,10 +73,10 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
             try await task.value
             hasPreparedModel = true
             prepareTask = nil
-            progressBroadcaster.update(Self.finishedSnapshot)
+            progressBroadcaster.emit(.finished)
         } catch {
             prepareTask = nil
-            progressBroadcaster.update(Self.idleSnapshot)
+            progressBroadcaster.emit(.idle)
             throw PersonalScribeError.modelLoadFailure
         }
     }
@@ -85,11 +85,11 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
         try storageLocator.ensureDirectoriesExist()
         let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
         let variant = try Self.resolveVariant(for: descriptor.id)
-        progressBroadcaster.update(Self.downloadingSnapshot)
+        progressBroadcaster.emit(.downloading)
 
         let broadcaster = progressBroadcaster
         let progressHandler: DownloadUtils.ProgressHandler = { snapshot in
-            broadcaster.update(Self.map(snapshot))
+            broadcaster.emit(snapshot)
         }
 
         do {
@@ -98,9 +98,9 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
                 variant: variant,
                 progressHandler: progressHandler
             )
-            progressBroadcaster.update(Self.finishedSnapshot)
+            progressBroadcaster.emit(.finished)
         } catch {
-            progressBroadcaster.update(Self.idleSnapshot)
+            progressBroadcaster.emit(.idle)
             throw PersonalScribeError.modelLoadFailure
         }
     }
@@ -132,63 +132,6 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
 }
 
 private extension FluidAudioQwenTranscriberAdapter {
-    static let idleSnapshot = ModelDownloadProgress(
-        phase: .idle,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    static let loadingSnapshot = ModelDownloadProgress(
-        phase: .loading,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    static let downloadingSnapshot = ModelDownloadProgress(
-        phase: .downloading,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    static let finishedSnapshot = ModelDownloadProgress(
-        phase: .finished,
-        fractionCompleted: 1,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    /// Map FluidAudio's download phase to our chip-driving phase.
-    /// `.listing`/`.downloading` surface as `.downloading` (chip shows
-    /// progress bar). `.compiling` surfaces as `.loading`.
-    ///
-    /// Stretch downloading 0–0.5 → 0–1.0: FluidAudio reserves the
-    /// upper half of its progress range for compile, but our chip's
-    /// `.loading` phase doesn't render a bar — so the natural cap
-    /// makes the bar pin at 50% during the entire download, then jump
-    /// to 100% from our `finishedSnapshot`. Doubling-with-clamp lets
-    /// the bar span the full chip during the network-heavy phase.
-    static func map(_ snapshot: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
-        let phase: ModelDownloadProgress.Phase
-        let fraction: Double
-        switch snapshot.phase {
-        case .listing, .downloading:
-            phase = .downloading
-            fraction = min(snapshot.fractionCompleted * 2.0, 1.0)
-        case .compiling:
-            phase = .loading
-            fraction = snapshot.fractionCompleted
-        }
-        return ModelDownloadProgress(
-            phase: phase,
-            fractionCompleted: fraction,
-            receivedBytes: 0,
-            expectedBytes: nil
-        )
-    }
-
     static func makeLiveManager() -> any FluidAudioQwenManaging {
         if #available(macOS 15, *) {
             return LiveFluidAudioQwenManager()
@@ -283,40 +226,3 @@ private actor UnsupportedFluidAudioQwenManager: FluidAudioQwenManaging {
     }
 }
 
-private final class QwenModelDownloadProgressBroadcaster: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuations: [UUID: AsyncStream<ModelDownloadProgress>.Continuation] = [:]
-    private var snapshot = ModelDownloadProgress(
-        phase: .idle,
-        fractionCompleted: 0,
-        receivedBytes: 0,
-        expectedBytes: nil
-    )
-
-    func stream() -> AsyncStream<ModelDownloadProgress> {
-        AsyncStream { continuation in
-            let identifier = UUID()
-            let initial = lock.withLock { () -> ModelDownloadProgress in
-                continuations[identifier] = continuation
-                return snapshot
-            }
-
-            continuation.onTermination = { [weak self] _ in
-                guard let self else { return }
-                _ = self.lock.withLock {
-                    self.continuations.removeValue(forKey: identifier)
-                }
-            }
-            continuation.yield(initial)
-        }
-    }
-
-    func update(_ snapshot: ModelDownloadProgress) {
-        let continuations = lock.withLock { () -> [AsyncStream<ModelDownloadProgress>.Continuation] in
-            self.snapshot = snapshot
-            return Array(self.continuations.values)
-        }
-
-        continuations.forEach { $0.yield(snapshot) }
-    }
-}
