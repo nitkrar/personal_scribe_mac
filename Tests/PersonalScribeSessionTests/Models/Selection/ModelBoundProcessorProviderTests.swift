@@ -296,6 +296,33 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
             "Auxiliary CTC head leaf must be removed"
         )
     }
+
+    /// Regression guard for the AI Models tab: Qwen download state must
+    /// treat FluidAudio's current 2-model layout as "downloaded", or the
+    /// Settings row regresses to "Not downloaded" after app relaunch.
+    func testIsDownloadedReturnsTrueForQwenWhenFluidAudioTwoModelLayoutExists() throws {
+        let storageLocator = TestStorageLocator.make()
+        let descriptor = BuiltInModelCatalog.qwen3AsrF32
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: storageLocator,
+            adapterFactory: { d in
+                AdapterRecord(
+                    descriptorID: d.id,
+                    transcriber: MarkerTranscriber()
+                )
+            }
+        )
+
+        try seedQwenTwoModelLayout(
+            for: descriptor,
+            storageLocator: storageLocator
+        )
+
+        XCTAssertTrue(
+            provider.isDownloaded(descriptor),
+            "FluidAudio's Qwen layout should be treated as downloaded"
+        )
+    }
 }
 
 private struct StubTranscriber: Transcriber {
@@ -521,4 +548,34 @@ private func makeMarkerDirectory(
         withIntermediateDirectories: true
     )
     try Data("marker".utf8).write(to: markerFile)
+}
+
+private func seedQwenTwoModelLayout(
+    for descriptor: ModelDescriptor,
+    storageLocator: any StorageLocator
+) throws {
+    let directory = modelDirectory(for: descriptor, storageLocator: storageLocator)
+    let fileManager = FileManager.default
+    let requiredRelativePaths = [
+        "qwen3_asr_audio_encoder_v2.mlmodelc/coremldata.bin",
+        "qwen3_asr_decoder_stateful.mlmodelc/coremldata.bin",
+        "qwen3_asr_embeddings.bin",
+        "vocab.json",
+    ]
+
+    for relativePath in requiredRelativePaths {
+        let path = directory.appendingPathComponent(relativePath, isDirectory: false)
+        try fileManager.createDirectory(
+            at: path.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let data: Data
+        switch relativePath {
+        case "vocab.json":
+            data = Data("{\"hello\":0}".utf8)
+        default:
+            data = Data("artifact".utf8)
+        }
+        try data.write(to: path)
+    }
 }

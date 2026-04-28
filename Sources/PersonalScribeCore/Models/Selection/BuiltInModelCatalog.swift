@@ -205,8 +205,9 @@ public enum BuiltInModelCatalog {
     // wired yet, downloads currently fail (interim).
     private static let qwen3AsrRequiredPaths = [
         "qwen3_asr_audio_encoder_v2.mlmodelc/coremldata.bin",
-        "qwen3_asr_embedding.mlmodelc/coremldata.bin",
         "qwen3_asr_decoder_stateful.mlmodelc/coremldata.bin",
+        "qwen3_asr_embeddings.bin",
+        "vocab.json",
     ]
 
     public static let qwen3AsrF32 = ModelDescriptor(

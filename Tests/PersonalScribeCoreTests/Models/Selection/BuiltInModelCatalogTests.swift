@@ -38,6 +38,18 @@ final class BuiltInModelCatalogTests: XCTestCase {
         )
     }
 
+    func testQwenDescriptorsUseFluidAudioTwoModelArtifactLayout() {
+        let expectedPaths = [
+            "qwen3_asr_audio_encoder_v2.mlmodelc/coremldata.bin",
+            "qwen3_asr_decoder_stateful.mlmodelc/coremldata.bin",
+            "qwen3_asr_embeddings.bin",
+            "vocab.json",
+        ]
+
+        XCTAssertEqual(BuiltInModelCatalog.qwen3AsrF32.requiredRelativePaths, expectedPaths)
+        XCTAssertEqual(BuiltInModelCatalog.qwen3AsrInt8.requiredRelativePaths, expectedPaths)
+    }
+
     // MARK: - #007 — descriptive metadata for Settings AI Models tab
 
     /// Every registered model must carry a non-empty one-line
