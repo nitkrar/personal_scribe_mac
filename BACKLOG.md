@@ -715,27 +715,32 @@ Separate hotkey from quick mode. EOU 120M partials render in the overlay pill on
 
 ### #078 — Adapter layer for non-`parakeetTDT` model families
 
-`feature` · `P0` · `open` · `phase: 4` · `area: transcription, models, architecture`
-*Updated 2026-04-25*
+`feature` · `P0` · `done` · `phase: 4` · `area: transcription, models, architecture`
+*Updated 2026-04-28*
 
-#024.6 added catalog metadata for Streaming EOU (parakeet-realtime-eou-120m), Qwen3 ASR (0.6B f32 + int8), and speaker diarization. None of these have transcriber adapters in `PersonalScribeTranscription`. Today our only adapter is `ModelAwareFluidAudioInferenceClient` wrapping FluidAudio's `AsrManager`. Each new family lives in a different FluidAudio manager class:
+Adapter layer for Qwen3 ASR, streaming EOU (parakeet-realtime), and offline diarization landed via the parallel-build → swap → delete plan in `plans/078_adapter_layer/`. Recipe-driven backbone is the only path; legacy `LegacyTranscriber` / `ServiceBackedActiveModeProvider` / `LegacyWorkflowMode` are gone.
 
-- Streaming EOU → `StreamingEouAsrManager` (chunked, EOU-detecting).
-- Qwen3 ASR → `Qwen3AsrManager` (transformer, multilingual, Whisper-style mel frontend).
-- Diarization → `OfflineDiarizerManager` (pyannote segmentation + WeSpeaker-v2).
+**What landed (post-cutover, in commit-order):**
+- Phases A–F (additive parallel build): `ModelLifecycle` / `Transcriber` / `StreamingTranscriber` / `SpeakerDiarizer` protocols, `RecipeWorkflowMode` + Codable schema + validator, `ModelBoundProcessorProvider`, four FluidAudio adapters, `RecipeBuilder`, `WorkflowModeRegistry` + `LegacyToggleMigrator`.
+- Phase G cutover (`#078.29-31a/b`): orchestrator becomes recipe-driven; `AppComposition` + `ActiveModelService` swap to `ModelBoundProcessorProvider`; `SessionCoordinator` drops legacy `transcriberProvider` + `pipelineTranscriber` bridge.
+- Phase H deletes (`#078.34-36`, commits `81a8492` + `5caf7c1`): legacy `LegacyTranscriber` / runtime-variant / `ServiceBackedActiveModeProvider` removed; `WorkflowModeRegistry` moved Session→Core for direct `AppStore` consumption; `ModelDescriptor.kind` becomes a computed accessor on `engine`.
+- `#078.33` GeneralTab Settings toggle bridge to `WorkflowModeRegistry.mutateActiveOrFork(_:)` (commit `d00b8d6`). Auto-paste / Auto-stop / Restore-clipboard toggles fork active built-in mode into a custom recipe on first touch.
 
-Each needs:
-1. A `Transcribing`-conforming wrapper (or, for diarization, a new protocol — diarization output is speaker turns, not text).
-2. An entry in `FluidAudioRuntimeVariant` (or a new variant enum if the existing one gets too parakeet-specific).
-3. A composition-root wiring path in `AppComposition` so the right inference client is constructed for the active descriptor's `engine`.
-4. Pipeline routing: `SessionPipelineOrchestrator` may need branch logic per engine (e.g. streaming partials vs. batch finals).
+**Post-#078 regression hunt (2026-04-28 session):**
+- `36e4867` — Phase 1-3 adapter lifecycle: `downloadIfNeeded()` (disk-only) on `ModelLifecycle`; activate-time prepare via `onSetActive`; `provider.evict(_:)` on the previously-active descriptor.
+- `d622b6b` — path fix. Adapters bypass FluidAudio's `Qwen3AsrModels.download` / `AsrModels.download` (which mangle `to:`) and call `DownloadUtils.downloadRepo` directly. Manual `AsrModelVersion → Repo` mapping in the live Parakeet manager (`Repo` is non-Sendable, so a `ParakeetAuxiliaryRepo` shim wraps it).
+- `967a9d9` — AI Models tab Delete button hidden on the active row; removal errors publish `.failed(message:)` to the chip.
+- `3fe1caf` — `ModelDescriptor.auxiliaryRepoFolderNames`. 110m hybrid declares its CTC head; `removeDownloadedFiles` iterates aux folders; `downloadIfNeeded` pulls aux when variant matches.
+- `848c095` — shared `FluidAudioDownloadProgressBroadcaster` + `FluidAudioProgressMapper` replaces four near-identical per-adapter broadcasters; AIModelsTab chip drops the percent (`"Downloading…"` label-only — FluidAudio's `URLSession.download(for:)` delegate fires too coarsely for smooth bar).
+- `10a81f0` — **runtime memory eviction fix.** Process was hitting 4.77GB resident with 3.86GB MALLOC_LARGE because `SessionPipelineOrchestrator.makeProgressForwardingTask` captured `lifecycle` strongly via the for-await header AND `FluidAudioDownloadProgressBroadcaster` had no `deinit`. Each Activate switch left the previous adapter pinned forever. Fix: extract `let stream = lifecycle.modelDownloadProgress()` outside the Task body so the closure captures the AsyncStream value, not the adapter; broadcaster `deinit` calls `continuation.finish()` on outstanding subscribers. Together breaks the retention cycle.
 
-P0 because catalog rows for non-ASR families are visible in Settings today (#077 is the cosmetic fix); without adapters, any user click on those rows fails.
+**Test status:** 1081 tests, 1 skipped, 0 failures. Tap-to-record + hold-to-record + Activate-switch + Download/Delete flows verified on 2026-04-27/28.
 
-**Suggested staging**
-- Stage A — Qwen3 ASR adapter only. Highest user value (16 languages).
-- Stage B — Streaming EOU adapter (precondition for #056 streaming dictation mode).
-- Stage C — Diarization (precondition for #058 / #061 meeting features).
+**Pending runtime verification** (post-`10a81f0`): user testing on the Air to confirm process RSS tracks only the currently active model's footprint, not the cumulative sum across switches.
+
+**Open follow-ups (filed separately):**
+- `#078.39` — manual verification artefacts (Qwen3 entry in `ManualTranscriptionVerification.md`; streaming + diarizer checklists deferred until #056/#058/#061 ship UI consumers).
+- `#088` — narrow FluidAudio model download to runtime-needed files (P2 refactor — Qwen int8 lands ~2.9GB for a 1.25GB runtime due to FluidAudio's `isMetadata` carve-out admitting `.bin/.json/.model` from any nested dir under subPath, scooping up v1 + `.mlpackage` siblings).
 
 **Legacy:** session-generated 2026-04-25 from #024.6 catalog expansion follow-up.
 
@@ -881,6 +886,77 @@ Replace pill ✕ with a pause/play toggle on pill-click-initiated recordings. Pa
 ---
 
 ## Refactors
+
+### #088 — Narrow FluidAudio model download to runtime-needed files
+
+`refactor` · `P2` · `open` · `area: transcription, models, downloads`
+*Filed 2026-04-28*
+
+`DownloadUtils.downloadRepo` (FluidAudio) over-pulls when a repo's
+subPath contains sibling directories or duplicate model formats.
+Concrete case: Qwen3-ASR int8 lands ~2.9 GB on disk for an int8
+runtime that only needs ~1.25 GB. The bloat:
+
+- `qwen3_asr_audio_encoder.mlmodelc` (v1, ~369MB) + `.mlpackage` (~368MB)
+  alongside the v2 the runtime actually loads (~370MB compiled).
+- `qwen3_asr_decoder_stateful.mlpackage` (~577MB) alongside the
+  `.mlmodelc` we use (~578MB).
+
+**Root cause** (FluidAudio bug): the listing recursion
+(`DownloadUtils.swift:321-355`) admits any directory whose path
+starts with the subPath, then admits any nested file matching
+`isMetadata` — `.json` / `.model` / `.bin` extensions — regardless
+of whether the parent directory was named in the pattern list.
+`.mlmodelc` and `.mlpackage` directories contain `weights.bin` and
+`coremldata.bin` files; the carve-out scoops them up.
+
+**Why ours-not-FluidAudio.** We already bypassed FluidAudio's
+higher-level `Qwen3AsrModels.download` (which silently dropped the
+`to:` argument) by calling `DownloadUtils.downloadRepo` directly
+from `LiveFluidAudioQwenManager`. We're already one step from
+"replace the only FluidAudio download call with our own."
+
+**Scope.** A shared narrower wrapper used by every adapter, not a
+Qwen-only special case. Per-adapter forks would re-introduce the
+duplication we just collapsed in #094 (the shared
+`FluidAudioDownloadProgressBroadcaster` consolidation).
+
+Approach (sketch):
+- New `FluidAudioDirectDownloader` in `PersonalScribeTranscription`
+  using FluidAudio's public lower-level API:
+  `DownloadUtils.downloadSubdirectory(_ repo:subdirectory:to:)`
+  (line 521 of `DownloadUtils.swift`) per `.mlmodelc` directory the
+  descriptor's `requiredRelativePaths` declares, plus a small
+  URLSession fetch helper for top-level metadata files (vocab.json,
+  embeddings.bin) via `ModelRegistry.resolveModel(remotePath:filePath:)`.
+- Adapter manager protocols' `downloadIfNeeded(...)` route through
+  this wrapper instead of `DownloadUtils.downloadRepo`. All four
+  adapters change in lockstep — no Qwen-specific path.
+- Descriptor's `requiredRelativePaths` becomes the contract; the
+  wrapper enforces it. Drift between descriptor and FluidAudio's
+  `requiredModelsFull` enums is now visible at our layer.
+
+**Tradeoff.** We own the download path, including future FluidAudio
+release tracking. If FluidAudio adds a required file we don't list,
+runtime fails. Mitigation: pin the FluidAudio version + add a smoke
+test that loads each registered model from its descriptor's required
+paths.
+
+**Alternative.** File upstream issue + PR against FluidAudio to
+tighten `downloadRepo`'s metadata carve-out (constrain to depth-1
+under subPath, AND require pattern-list match for nested
+directories). Cleaner architecturally but slower + we don't control
+release cadence.
+
+P2 because the bloat is one-time per model activation (not
+per-session) and the user can manually clean unused files. Bumps to
+P1 if dogfood disk pressure becomes an issue or if a model variant
+bloats >2× its declared size and breaks the disk-space precheck.
+
+**Legacy:** session-generated 2026-04-28 from Qwen int8 download
+inspection (#078 follow-up).
+
+---
 
 ### #074 — State-ownership audit across app
 
