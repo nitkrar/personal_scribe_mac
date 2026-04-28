@@ -5,6 +5,21 @@ Defaults match the secondary Mac at Nitins-MacBook-Air.local. Override with
 --host / --path for other targets.
 
 Exits non-zero on the first failed step.
+
+Codesign-over-SSH note (TODO if/when the package step needs to run from here):
+    The package.py step calls `codesign --sign 'Nitkrar Dev' ...`. SSH sessions
+    don't have keychain access by default, so codesign can't read the private
+    key and fails — even though running package.py while logged in to the Air
+    works fine. To make codesign work over SSH, add it to the keychain ACL
+    once on the remote machine:
+
+        security set-key-partition-list \\
+            -S apple-tool:,apple:,codesign: \\
+            -s -k '<login-password>' \\
+            ~/Library/Keychains/login.keychain-db
+
+    Until that's set up, prefer `--no-package` for automated runs and run
+    `scripts/package.py -ir -c release` directly on the Air for installs.
 """
 import argparse
 import shlex
