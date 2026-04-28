@@ -161,20 +161,29 @@ private extension FluidAudioQwenTranscriberAdapter {
     )
 
     /// Map FluidAudio's download phase to our chip-driving phase.
-    /// `.listing` and `.downloading` surface as `.downloading` (chip
-    /// shows progress bar). `.compiling` surfaces as `.loading`
-    /// (CoreML compile after the network bytes have landed).
+    /// `.listing`/`.downloading` surface as `.downloading` (chip shows
+    /// progress bar). `.compiling` surfaces as `.loading`.
+    ///
+    /// Stretch downloading 0–0.5 → 0–1.0: FluidAudio reserves the
+    /// upper half of its progress range for compile, but our chip's
+    /// `.loading` phase doesn't render a bar — so the natural cap
+    /// makes the bar pin at 50% during the entire download, then jump
+    /// to 100% from our `finishedSnapshot`. Doubling-with-clamp lets
+    /// the bar span the full chip during the network-heavy phase.
     static func map(_ snapshot: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
         let phase: ModelDownloadProgress.Phase
+        let fraction: Double
         switch snapshot.phase {
         case .listing, .downloading:
             phase = .downloading
+            fraction = min(snapshot.fractionCompleted * 2.0, 1.0)
         case .compiling:
             phase = .loading
+            fraction = snapshot.fractionCompleted
         }
         return ModelDownloadProgress(
             phase: phase,
-            fractionCompleted: snapshot.fractionCompleted,
+            fractionCompleted: fraction,
             receivedBytes: 0,
             expectedBytes: nil
         )

@@ -270,12 +270,21 @@ extension FluidAudioParakeetTranscriberAdapter {
         return confidences.reduce(0, +) / Float(confidences.count)
     }
 
+    /// FluidAudio's `downloadRepo` caps download-phase progress at 0.5
+    /// because it expects a compile phase to fill 0.5–1.0 afterwards
+    /// (see `DownloadUtils.swift:415` for the cap, `:247-248` for the
+    /// compile-phase emission). For our chip that's a 50% jump-then-pin
+    /// pattern. Stretch downloading 0–0.5 → 0–1.0 so the bar spans the
+    /// full chip width during the network-heavy phase. Compile phase
+    /// (which only fires in the Activate / prepare path) maps to
+    /// `.loading`, which our chip renders without a bar — so the
+    /// fraction value there is irrelevant.
     static func map(_ snapshot: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
         switch snapshot.phase {
         case .listing, .downloading:
             return .init(
                 phase: .downloading,
-                fractionCompleted: snapshot.fractionCompleted,
+                fractionCompleted: min(snapshot.fractionCompleted * 2.0, 1.0),
                 receivedBytes: 0,
                 expectedBytes: nil
             )

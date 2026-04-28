@@ -155,18 +155,24 @@ private extension FluidAudioStreamingTranscriberAdapter {
 
     /// Map FluidAudio's download phase to our chip-driving phase.
     /// `.listing`/`.downloading` → `.downloading` (progress bar);
-    /// `.compiling` → `.loading`.
+    /// `.compiling` → `.loading`. Stretch downloading 0–0.5 → 0–1.0
+    /// so the bar spans the full chip; FluidAudio caps download at
+    /// 0.5 reserving the upper half for compile, but our `.loading`
+    /// phase renders without a bar so the cap is purely cosmetic loss.
     static func map(_ snapshot: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
         let phase: ModelDownloadProgress.Phase
+        let fraction: Double
         switch snapshot.phase {
         case .listing, .downloading:
             phase = .downloading
+            fraction = min(snapshot.fractionCompleted * 2.0, 1.0)
         case .compiling:
             phase = .loading
+            fraction = snapshot.fractionCompleted
         }
         return ModelDownloadProgress(
             phase: phase,
-            fractionCompleted: snapshot.fractionCompleted,
+            fractionCompleted: fraction,
             receivedBytes: 0,
             expectedBytes: nil
         )
