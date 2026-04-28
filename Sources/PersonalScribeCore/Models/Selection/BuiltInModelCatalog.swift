@@ -212,7 +212,14 @@ public enum BuiltInModelCatalog {
     public static let qwen3AsrF32 = ModelDescriptor(
         id: "qwen3-asr-0.6b-f32",
         displayName: "Qwen3 ASR 0.6B (f32)",
-        repoFolderName: "qwen3-asr-0.6b/f32",
+        // FluidAudio's `Repo.qwen3Asr.folderName` keeps the `-coreml`
+        // suffix (unlike Parakeet's default-case stripping in
+        // `ModelNames.swift`). `DownloadUtils.downloadRepo` writes
+        // artifacts to `<modelsRoot>/qwen3-asr-0.6b-coreml/f32/`; the
+        // descriptor must mirror that path or `isDownloaded` will
+        // probe the wrong directory and the AI Models tab will report
+        // "not downloaded" forever after a successful download.
+        repoFolderName: "qwen3-asr-0.6b-coreml/f32",
         shortDescription: "Multilingual ASR (16 languages) — full precision.",
         architecture: "Qwen3 transformer ASR",
         repository: "FluidInference/qwen3-asr-0.6b-coreml",
@@ -229,7 +236,8 @@ public enum BuiltInModelCatalog {
     public static let qwen3AsrInt8 = ModelDescriptor(
         id: "qwen3-asr-0.6b-int8",
         displayName: "Qwen3 ASR 0.6B (int8)",
-        repoFolderName: "qwen3-asr-0.6b/int8",
+        // See `qwen3AsrF32` for the FluidAudio path-matching contract.
+        repoFolderName: "qwen3-asr-0.6b-coreml/int8",
         shortDescription: "Multilingual ASR (16 languages) — int8 quantized.",
         architecture: "Qwen3 transformer ASR (int8)",
         repository: "FluidInference/qwen3-asr-0.6b-coreml",
