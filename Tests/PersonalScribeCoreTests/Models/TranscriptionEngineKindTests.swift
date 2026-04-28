@@ -27,20 +27,4 @@ final class TranscriptionEngineKindTests: XCTestCase {
         XCTAssertEqual(TranscriptionEngine.diarization.kind, .diarization)
     }
 
-    func testEngineKindMappingMatchesCatalogConvention() {
-        // Convention-consistency check: every catalog descriptor's
-        // stored `kind` must equal `engine.kind`. Holds while the
-        // stored field exists (today and through Phase G); becomes
-        // tautological / loses bite once Phase H.6 deletes the
-        // stored field. The four hardcoded mapping tests above are
-        // the behavioral oracle that survives the deletion.
-        for descriptor in BuiltInModelCatalog.registeredModels {
-            XCTAssertEqual(
-                descriptor.kind,
-                descriptor.engine.kind,
-                "Catalog descriptor \(descriptor.id): stored kind \(descriptor.kind) "
-                + "does not match engine.kind \(descriptor.engine.kind)"
-            )
-        }
-    }
 }

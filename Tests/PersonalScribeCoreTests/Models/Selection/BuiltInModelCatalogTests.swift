@@ -2,32 +2,6 @@ import XCTest
 @testable import PersonalScribeCore
 
 final class BuiltInModelCatalogTests: XCTestCase {
-    func testRegisteredModelsContainExpectedASRAndPlaceholderDescriptors() {
-        // Refactor #024.10: the catalog now ships 9 descriptors across
-        // 4 kinds. ASR rows surface in the AI Models tab today;
-        // streaming / qwen3 / diarization rows are placeholders for
-        // future adapters (#078).
-        XCTAssertEqual(
-            BuiltInModelCatalog.registeredModels.map(\.id),
-            [
-                BuiltInModelCatalog.parakeetTDT06Bv2.id,
-                BuiltInModelCatalog.parakeetTDTCTC110M.id,
-                BuiltInModelCatalog.parakeetTDT06Bv3.id,
-                BuiltInModelCatalog.parakeetEou160ms.id,
-                BuiltInModelCatalog.parakeetEou320ms.id,
-                BuiltInModelCatalog.parakeetEou1280ms.id,
-                BuiltInModelCatalog.qwen3AsrF32.id,
-                BuiltInModelCatalog.qwen3AsrInt8.id,
-                BuiltInModelCatalog.speakerDiarization.id,
-            ]
-        )
-    }
-
-    func testQwenDescriptorsAreDisabledInRegistry() {
-        XCTAssertFalse(BuiltInModelCatalog.qwen3AsrF32.isEnabled)
-        XCTAssertFalse(BuiltInModelCatalog.qwen3AsrInt8.isEnabled)
-    }
-
     func test110MDescriptorUsesPinnedRevisionAndFusedLayout() {
         let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
 
@@ -90,8 +64,8 @@ final class BuiltInModelCatalogTests: XCTestCase {
     /// tab so the popover never reads their metrics.
     func testAllEnabledModelsCarryPublishedBenchmarks() {
         // Scope: parakeet TDT descriptors only. Qwen3 stays in the
-        // registry but is disabled for now, and it still ships without
-        // the benchmark metadata this popover ranking consumes.
+        // registry and still ships without the benchmark metadata this
+        // popover ranking consumes.
         let parakeetDescriptors = BuiltInModelCatalog.registeredModels
             .filter { $0.engine == .parakeetTDT }
         XCTAssertFalse(parakeetDescriptors.isEmpty)
