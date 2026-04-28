@@ -11,6 +11,99 @@ import XCTest
 @MainActor
 final class UnifiedWindowControllerTests: XCTestCase {
 
+    // MARK: - Foreground recovery state
+
+    func testForegroundRecoveryArmsWhenVisibleWindowWasFrontmostOnDeactivate() {
+        var state = UnifiedWindowForegroundRecoveryState()
+
+        state.appDidResignActive(
+            unifiedWindowIsVisible: true,
+            unifiedWindowIsKey: true,
+            unifiedWindowIsMain: false
+        )
+
+        XCTAssertTrue(
+            state.consumeRestoreRequest(
+                appIsActive: true,
+                unifiedWindowIsVisible: true
+            ),
+            "A visible unified window that was key before app deactivation "
+            + "must request one foreground recovery on return."
+        )
+    }
+
+    func testForegroundRecoveryDoesNotArmForBackgroundWindow() {
+        var state = UnifiedWindowForegroundRecoveryState()
+
+        state.appDidResignActive(
+            unifiedWindowIsVisible: true,
+            unifiedWindowIsKey: false,
+            unifiedWindowIsMain: false
+        )
+
+        XCTAssertFalse(
+            state.consumeRestoreRequest(
+                appIsActive: true,
+                unifiedWindowIsVisible: true
+            ),
+            "A merely visible background window must not be pulled to the "
+            + "front on a later space/app activation."
+        )
+    }
+
+    func testForegroundRecoveryWaitsUntilAppIsActive() {
+        var state = UnifiedWindowForegroundRecoveryState()
+
+        state.appDidResignActive(
+            unifiedWindowIsVisible: true,
+            unifiedWindowIsKey: false,
+            unifiedWindowIsMain: true
+        )
+
+        XCTAssertFalse(
+            state.consumeRestoreRequest(
+                appIsActive: false,
+                unifiedWindowIsVisible: true
+            ),
+            "Space-change notifications while the app is inactive must not "
+            + "steal focus back."
+        )
+
+        XCTAssertTrue(
+            state.consumeRestoreRequest(
+                appIsActive: true,
+                unifiedWindowIsVisible: true
+            ),
+            "The pending recovery should remain armed until the app becomes "
+            + "active again."
+        )
+    }
+
+    func testForegroundRecoveryClearsAfterSingleUse() {
+        var state = UnifiedWindowForegroundRecoveryState()
+
+        state.appDidResignActive(
+            unifiedWindowIsVisible: true,
+            unifiedWindowIsKey: true,
+            unifiedWindowIsMain: false
+        )
+
+        XCTAssertTrue(
+            state.consumeRestoreRequest(
+                appIsActive: true,
+                unifiedWindowIsVisible: true
+            )
+        )
+        XCTAssertFalse(
+            state.consumeRestoreRequest(
+                appIsActive: true,
+                unifiedWindowIsVisible: true
+            ),
+            "Foreground recovery should be single-shot; once the window has "
+            + "been reasserted, later notifications should no-op."
+        )
+    }
+
     // MARK: - Bug #041 regression guards — collectionBehavior must not
     // inherit pill-overlay pinning flags, and MUST include
     // `.moveToActiveSpace` so the window follows the user to the current

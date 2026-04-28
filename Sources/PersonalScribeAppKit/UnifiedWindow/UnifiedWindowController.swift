@@ -3,6 +3,37 @@ import PersonalScribeCore
 import PersonalScribeSession
 import SwiftUI
 
+struct UnifiedWindowForegroundRecoveryState: Equatable {
+    private(set) var pendingRestore = false
+
+    mutating func appDidResignActive(
+        unifiedWindowIsVisible: Bool,
+        unifiedWindowIsKey: Bool,
+        unifiedWindowIsMain: Bool
+    ) {
+        pendingRestore = unifiedWindowIsVisible && (unifiedWindowIsKey || unifiedWindowIsMain)
+    }
+
+    mutating func consumeRestoreRequest(
+        appIsActive: Bool,
+        unifiedWindowIsVisible: Bool
+    ) -> Bool {
+        guard pendingRestore else {
+            return false
+        }
+        guard unifiedWindowIsVisible else {
+            pendingRestore = false
+            return false
+        }
+        guard appIsActive else {
+            return false
+        }
+
+        pendingRestore = false
+        return true
+    }
+}
+
 /// NSWindowController for the unified NavigationSplitView window.
 ///
 /// Mirrors `SettingsWindowController`'s hosting pattern — a single
@@ -19,6 +50,8 @@ import SwiftUI
 @MainActor
 final class UnifiedWindowController: NSWindowController {
     private let defaults: UserDefaults
+    private let notificationCenter: NotificationCenter
+    private let workspaceNotificationCenter: NotificationCenter
     private let model: UnifiedWindowModel
     private let hostingController: NSHostingController<UnifiedWindowView>
     private let homeViewModel: HomeTabViewModel
@@ -29,9 +62,15 @@ final class UnifiedWindowController: NSWindowController {
     private let menuBarVisibilityProvider: @MainActor () -> Bool
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
     private var windowTintObserver: NSObjectProtocol?
+    private var appDidBecomeActiveObserver: NSObjectProtocol?
+    private var appDidResignActiveObserver: NSObjectProtocol?
+    private var activeSpaceDidChangeObserver: NSObjectProtocol?
+    private var foregroundRecoveryState = UnifiedWindowForegroundRecoveryState()
 
     init(
         defaults: UserDefaults = .standard,
+        notificationCenter: NotificationCenter = .default,
+        workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
         model: UnifiedWindowModel = UnifiedWindowModel(),
         transcriptReader: any TranscriptReading,
         metricsReader: any MetricsReading,
@@ -44,6 +83,8 @@ final class UnifiedWindowController: NSWindowController {
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
         self.defaults = defaults
+        self.notificationCenter = notificationCenter
+        self.workspaceNotificationCenter = workspaceNotificationCenter
         self.model = model
         self.permissionService = permissionService
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
@@ -105,13 +146,43 @@ final class UnifiedWindowController: NSWindowController {
 
         super.init(window: window)
 
-        windowTintObserver = NotificationCenter.default.addObserver(
+        windowTintObserver = notificationCenter.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: defaults,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.applyWindowTint()
+            }
+        }
+
+        appDidResignActiveObserver = notificationCenter.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.handleAppDidResignActive()
+            }
+        }
+
+        appDidBecomeActiveObserver = notificationCenter.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.recoverForegroundIfNeeded()
+            }
+        }
+
+        activeSpaceDidChangeObserver = workspaceNotificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.recoverForegroundIfNeeded()
             }
         }
     }
@@ -123,7 +194,16 @@ final class UnifiedWindowController: NSWindowController {
 
     isolated deinit {
         if let windowTintObserver {
-            NotificationCenter.default.removeObserver(windowTintObserver)
+            notificationCenter.removeObserver(windowTintObserver)
+        }
+        if let appDidBecomeActiveObserver {
+            notificationCenter.removeObserver(appDidBecomeActiveObserver)
+        }
+        if let appDidResignActiveObserver {
+            notificationCenter.removeObserver(appDidResignActiveObserver)
+        }
+        if let activeSpaceDidChangeObserver {
+            workspaceNotificationCenter.removeObserver(activeSpaceDidChangeObserver)
         }
     }
 
@@ -142,18 +222,12 @@ final class UnifiedWindowController: NSWindowController {
         // full-screen space) re-center it on the screen the user is
         // actually looking at. `.moveToActiveSpace` ensures the window
         // follows to the current space; this ensures it lands on-screen.
-        if !window.isVisible {
-            let activeScreenFrame = UnifiedWindowController.activeScreenVisibleFrame()
-            let reconciled = UnifiedWindowController.reconciledFrame(
-                for: window.frame,
-                activeScreenVisibleFrame: activeScreenFrame
-            )
-            if reconciled != window.frame {
-                window.setFrame(reconciled, display: false)
-            }
-        }
+        reconcileWindowFrameIfNeeded(window, whenVisible: false)
 
         super.showWindow(sender)
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
@@ -196,6 +270,58 @@ final class UnifiedWindowController: NSWindowController {
             return screen.visibleFrame
         }
         return NSScreen.main?.visibleFrame ?? .zero
+    }
+
+    private func handleAppDidResignActive() {
+        guard let window else {
+            foregroundRecoveryState.appDidResignActive(
+                unifiedWindowIsVisible: false,
+                unifiedWindowIsKey: false,
+                unifiedWindowIsMain: false
+            )
+            return
+        }
+
+        foregroundRecoveryState.appDidResignActive(
+            unifiedWindowIsVisible: window.isVisible,
+            unifiedWindowIsKey: window.isKeyWindow,
+            unifiedWindowIsMain: window.isMainWindow
+        )
+    }
+
+    private func recoverForegroundIfNeeded() {
+        guard let window else { return }
+        guard foregroundRecoveryState.consumeRestoreRequest(
+            appIsActive: NSApplication.shared.isActive,
+            unifiedWindowIsVisible: window.isVisible
+        ) else {
+            return
+        }
+
+        reconcileWindowFrameIfNeeded(window, whenVisible: true)
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private func reconcileWindowFrameIfNeeded(
+        _ window: NSWindow,
+        whenVisible shouldRunForVisibleWindow: Bool
+    ) {
+        guard shouldRunForVisibleWindow || !window.isVisible else {
+            return
+        }
+
+        let activeScreenFrame = UnifiedWindowController.activeScreenVisibleFrame()
+        let reconciled = UnifiedWindowController.reconciledFrame(
+            for: window.frame,
+            activeScreenVisibleFrame: activeScreenFrame
+        )
+        if reconciled != window.frame {
+            window.setFrame(reconciled, display: false)
+        }
     }
 
     private func applyWindowTint() {

@@ -209,6 +209,13 @@ in M3.2–M3.5; this milestone proves the shell + routing + menu-bar entry
   visible screen, or centered on first launch). Close and re-open —
   the window should remember its position between opens on the same
   space (no spurious re-centering).
+- [ ] **MV-WINDOW-FOREGROUND-1 (frontmost survives full-screen round-trip)**
+  Open Ninimma's Home window on the desktop so it is the frontmost
+  window. Switch to another app in a dedicated **full-screen** space,
+  then return to the original desktop. Ninimma's window should still
+  be present and frontmost on that desktop — it must not silently
+  drop behind another window or appear to disappear until reopened
+  from the menu bar.
 
 ## M4.1 voice-modulated pill waveform
 
