@@ -174,8 +174,14 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
         guard let canonical = registeredDescriptorsByID[descriptor.id] else {
             return
         }
-        lock.withLock {
-            records[canonical.id] = nil
+        let lifecycle = lock.withLock { () -> (any ModelLifecycle)? in
+            records.removeValue(forKey: canonical.id)?.lifecycle
+        }
+        guard let lifecycle else {
+            return
+        }
+        Task {
+            await lifecycle.cleanup()
         }
     }
 }

@@ -140,6 +140,31 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
         let loadedDirs = await manager.loadedDirectories()
         XCTAssertEqual(loadedDirs, [leafDirectory])
     }
+
+    func testCleanupForwardsToManagerAndAllowsPrepareToReload() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetEou160ms
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let manager = StubFluidAudioStreamingManager()
+        let adapter = FluidAudioStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.prepare()
+        await adapter.cleanup()
+        try await adapter.prepare()
+
+        let cleanupCount = await manager.cleanupCallCount()
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(cleanupCount, 1)
+        XCTAssertEqual(
+            loadCount,
+            2,
+            "cleanup must clear the prepared latch so a later prepare reloads the model"
+        )
+    }
 }
 
 private extension FluidAudioStreamingTranscriberAdapterTests {
@@ -212,6 +237,7 @@ private actor StubFluidAudioStreamingManager: FluidAudioStreamingEouManaging {
     private var loadedDirectoriesStorage: [URL] = []
     private var loadModelCallCountStorage = 0
     private var downloadDirectoriesStorage: [URL] = []
+    private var cleanupCallCountStorage = 0
 
     init(
         scriptedProcessActions: [[ScriptedAction]] = [],
@@ -261,6 +287,10 @@ private actor StubFluidAudioStreamingManager: FluidAudioStreamingEouManaging {
 
     func reset() async {}
 
+    func cleanup() async {
+        cleanupCallCountStorage += 1
+    }
+
     func loadModelCallCount() -> Int {
         loadModelCallCountStorage
     }
@@ -279,5 +309,9 @@ private actor StubFluidAudioStreamingManager: FluidAudioStreamingEouManaging {
 
     func downloadCallCount() -> Int {
         downloadDirectoriesStorage.count
+    }
+
+    func cleanupCallCount() -> Int {
+        cleanupCallCountStorage
     }
 }

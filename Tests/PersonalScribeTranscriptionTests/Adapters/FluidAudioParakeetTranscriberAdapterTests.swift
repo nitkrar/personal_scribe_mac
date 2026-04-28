@@ -178,6 +178,30 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(auxCalls.first?.aux, .ctc110m)
     }
 
+    func testCleanupForwardsToManagerAndAllowsPrepareToReload() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetTDT06Bv3
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let manager = StubFluidAudioParakeetManager()
+        let adapter = FluidAudioParakeetTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.prepare()
+        await adapter.cleanup()
+        try await adapter.prepare()
+
+        let cleanupCount = await manager.cleanupCallCount()
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(cleanupCount, 1)
+        XCTAssertEqual(
+            loadCount,
+            2,
+            "cleanup must clear the prepared latch so a later prepare reloads the model"
+        )
+    }
+
     func testNonHybridParakeetDownloadIfNeededDoesNotPullAuxiliary() async throws {
         // v3 (and v2) are single-repo Parakeet variants — no CTC head.
         let descriptor = BuiltInModelCatalog.parakeetTDT06Bv3
@@ -245,6 +269,7 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
     private var loadedDirectoriesStorage: [URL] = []
     private var transcribeCallCountStorage = 0
     private var lastSamplesStorage: [Float] = []
+    private var cleanupCallCountStorage = 0
 
     init(
         result: FluidAudioParakeetManagerResult = .init(
@@ -295,6 +320,10 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
         return result
     }
 
+    func cleanup() async {
+        cleanupCallCountStorage += 1
+    }
+
     func downloadIfNeededCallCount() -> Int {
         downloadIfNeededCallCountStorage
     }
@@ -321,5 +350,9 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
 
     func lastSamples() -> [Float] {
         lastSamplesStorage
+    }
+
+    func cleanupCallCount() -> Int {
+        cleanupCallCountStorage
     }
 }

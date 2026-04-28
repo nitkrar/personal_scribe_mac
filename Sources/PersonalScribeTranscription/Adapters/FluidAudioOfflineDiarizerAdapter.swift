@@ -96,6 +96,18 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
         progressBroadcaster.stream()
     }
 
+    public func cleanup() async {
+        let inFlightPrepare = lock.withLock { () -> Task<Void, Error>? in
+            let task = prepareTask
+            prepareTask = nil
+            hasPreparedModel = false
+            return task
+        }
+        inFlightPrepare?.cancel()
+        await manager.cleanup()
+        progressBroadcaster.emit(.idle)
+    }
+
     public func diarize(
         stream: AsyncThrowingStream<PCMBuffer, Error>
     ) -> AsyncStream<SpeakerDiarizationEvent> {
@@ -194,20 +206,25 @@ protocol FluidAudioOfflineDiarizerManaging: Sendable {
         progressHandler: DownloadUtils.ProgressHandler?
     ) async throws
     func process(audio: [Float]) async throws -> DiarizationResult
+    func cleanup() async
 }
 
 private final class PrivateFluidAudioOfflineDiarizerManager:
     @unchecked Sendable,
     FluidAudioOfflineDiarizerManaging
 {
-    private let manager: OfflineDiarizerManager
+    private let lock = NSLock()
+    private let managerFactory: @Sendable () -> OfflineDiarizerManager
+    private var manager: OfflineDiarizerManager?
 
-    init(manager: OfflineDiarizerManager = OfflineDiarizerManager()) {
-        self.manager = manager
+    init(
+        managerFactory: @escaping @Sendable () -> OfflineDiarizerManager = { OfflineDiarizerManager() }
+    ) {
+        self.managerFactory = managerFactory
     }
 
     func prepareModels(directory: URL?) async throws {
-        try await manager.prepareModels(directory: directory)
+        try await resolvedManager().prepareModels(directory: directory)
     }
 
     func downloadIfNeeded(
@@ -223,7 +240,24 @@ private final class PrivateFluidAudioOfflineDiarizerManager:
     }
 
     func process(audio: [Float]) async throws -> DiarizationResult {
-        try await manager.process(audio: audio)
+        try await resolvedManager().process(audio: audio)
+    }
+
+    func cleanup() async {
+        lock.withLock {
+            manager = nil
+        }
+    }
+
+    private func resolvedManager() -> OfflineDiarizerManager {
+        lock.withLock {
+            if let manager {
+                return manager
+            }
+
+            let manager = managerFactory()
+            self.manager = manager
+            return manager
+        }
     }
 }
-

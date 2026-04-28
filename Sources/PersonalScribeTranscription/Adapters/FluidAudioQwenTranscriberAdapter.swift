@@ -10,6 +10,7 @@ protocol FluidAudioQwenManaging: Sendable {
     ) async throws
     func loadModels(from directory: URL) async throws
     func transcribe(audioSamples: [Float]) async throws -> String
+    func cleanup() async
 }
 
 public actor FluidAudioQwenTranscriberAdapter: Transcriber {
@@ -109,6 +110,15 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
         progressBroadcaster.stream()
     }
 
+    public func cleanup() async {
+        let inFlightPrepare = prepareTask
+        prepareTask = nil
+        hasPreparedModel = false
+        inFlightPrepare?.cancel()
+        await manager.cleanup()
+        progressBroadcaster.emit(.idle)
+    }
+
     public func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
         try await prepare()
 
@@ -170,7 +180,14 @@ private extension FluidAudioQwenTranscriberAdapter {
 
 @available(macOS 15, *)
 private actor LiveFluidAudioQwenManager: FluidAudioQwenManaging {
-    private let manager = Qwen3AsrManager()
+    private let managerFactory: @Sendable () -> Qwen3AsrManager
+    private var manager: Qwen3AsrManager?
+
+    init(
+        managerFactory: @escaping @Sendable () -> Qwen3AsrManager = { Qwen3AsrManager() }
+    ) {
+        self.managerFactory = managerFactory
+    }
 
     func downloadIfNeeded(
         to directory: URL,
@@ -191,11 +208,25 @@ private actor LiveFluidAudioQwenManager: FluidAudioQwenManaging {
     }
 
     func loadModels(from directory: URL) async throws {
-        try await manager.loadModels(from: directory)
+        try await resolvedManager().loadModels(from: directory)
     }
 
     func transcribe(audioSamples: [Float]) async throws -> String {
-        try await manager.transcribe(audioSamples: audioSamples)
+        try await resolvedManager().transcribe(audioSamples: audioSamples)
+    }
+
+    func cleanup() async {
+        manager = nil
+    }
+
+    private func resolvedManager() -> Qwen3AsrManager {
+        if let manager {
+            return manager
+        }
+
+        let manager = managerFactory()
+        self.manager = manager
+        return manager
     }
 }
 
@@ -224,5 +255,6 @@ private actor UnsupportedFluidAudioQwenManager: FluidAudioQwenManaging {
         _ = audioSamples
         throw UnsupportedOSError.requiresMacOS15
     }
-}
 
+    func cleanup() async {}
+}

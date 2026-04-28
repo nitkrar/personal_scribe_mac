@@ -112,6 +112,29 @@ final class FluidAudioOfflineDiarizerAdapterTests: PersonalScribeTranscriptionFi
         )
     }
 
+    func testCleanupForwardsToManagerAndAllowsPrepareToReload() async throws {
+        let storageLocator = AppConfig.liveStorageLocator()
+        let manager = StubOfflineDiarizerManager(result: DiarizationResult(segments: []))
+        let adapter = FluidAudioOfflineDiarizerAdapter(
+            descriptor: BuiltInModelCatalog.speakerDiarization,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.prepare()
+        await adapter.cleanup()
+        try await adapter.prepare()
+
+        let cleanupCount = await manager.cleanupCallCount()
+        let prepareCount = await manager.prepareModelsCallCount()
+        XCTAssertEqual(cleanupCount, 1)
+        XCTAssertEqual(
+            prepareCount,
+            2,
+            "cleanup must clear the prepared latch so a later prepare reloads the model"
+        )
+    }
+
     private func collectEvents(
         from stream: AsyncStream<SpeakerDiarizationEvent>
     ) async -> [SpeakerDiarizationEvent] {
@@ -127,6 +150,7 @@ private actor StubOfflineDiarizerManager: FluidAudioOfflineDiarizerManaging {
     private(set) var preparedDirectories: [URL?] = []
     private(set) var processedAudio: [[Float]] = []
     private var downloadDirectoriesStorage: [URL] = []
+    private var cleanupCallCountStorage = 0
 
     private let result: DiarizationResult
 
@@ -150,6 +174,10 @@ private actor StubOfflineDiarizerManager: FluidAudioOfflineDiarizerManaging {
         return result
     }
 
+    func cleanup() async {
+        cleanupCallCountStorage += 1
+    }
+
     func downloadDirectories() -> [URL] {
         downloadDirectoriesStorage
     }
@@ -160,5 +188,9 @@ private actor StubOfflineDiarizerManager: FluidAudioOfflineDiarizerManaging {
 
     func prepareModelsCallCount() -> Int {
         preparedDirectories.count
+    }
+
+    func cleanupCallCount() -> Int {
+        cleanupCallCountStorage
     }
 }

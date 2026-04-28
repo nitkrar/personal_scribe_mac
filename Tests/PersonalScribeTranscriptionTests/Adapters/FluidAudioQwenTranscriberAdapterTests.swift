@@ -108,6 +108,30 @@ final class FluidAudioQwenTranscriberAdapterTests: PersonalScribeTranscriptionFi
         let variants = await manager.downloadVariants()
         XCTAssertEqual(variants, [.int8])
     }
+
+    func testCleanupForwardsToManagerAndAllowsPrepareToReload() async throws {
+        let descriptor = BuiltInModelCatalog.qwen3AsrF32
+        let storageLocator = QwenAdapterTestStorageLocator(baseDirectory: testRoot)
+        let manager = StubQwenManager(resultText: "unused")
+        let adapter = FluidAudioQwenTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.prepare()
+        await adapter.cleanup()
+        try await adapter.prepare()
+
+        let cleanupCount = await manager.cleanupCallCount()
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(cleanupCount, 1)
+        XCTAssertEqual(
+            loadCount,
+            2,
+            "cleanup must clear the prepared latch so a later prepare reloads the model"
+        )
+    }
 }
 
 private struct QwenAdapterTestStorageLocator: StorageLocator {
@@ -128,6 +152,7 @@ private actor StubQwenManager: FluidAudioQwenManaging {
     private var downloadVariantsStorage: [Qwen3AsrVariant] = []
     private var loadDirectoriesStorage: [URL] = []
     private var transcribedSamplesStorage: [[Float]] = []
+    private var cleanupCallCountStorage = 0
 
     init(resultText: String) {
         self.resultText = resultText
@@ -149,6 +174,10 @@ private actor StubQwenManager: FluidAudioQwenManaging {
     func transcribe(audioSamples: [Float]) async throws -> String {
         transcribedSamplesStorage.append(audioSamples)
         return resultText
+    }
+
+    func cleanup() async {
+        cleanupCallCountStorage += 1
     }
 
     func downloadDirectories() -> [URL] {
@@ -173,5 +202,9 @@ private actor StubQwenManager: FluidAudioQwenManaging {
 
     func transcribedSamples() -> [[Float]] {
         transcribedSamplesStorage
+    }
+
+    func cleanupCallCount() -> Int {
+        cleanupCallCountStorage
     }
 }

@@ -105,6 +105,16 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
         progressBroadcaster.stream()
     }
 
+    public func cleanup() async {
+        let inFlightPrepare = prepareTask
+        prepareTask = nil
+        hasPreparedModel = false
+        loadDuration = nil
+        inFlightPrepare?.cancel()
+        await manager.cleanup()
+        progressBroadcaster.emit(.idle)
+    }
+
     public func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
         try await prepare()
 
@@ -298,6 +308,7 @@ protocol FluidAudioParakeetManaging: Sendable {
     ) async throws
 
     func transcribe(samples: [Float]) async throws -> FluidAudioParakeetManagerResult
+    func cleanup() async
 }
 
 struct FluidAudioParakeetManagerResult: Sendable, Equatable {
@@ -399,6 +410,14 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
     func transcribe(samples: [Float]) async throws -> FluidAudioParakeetManagerResult {
         let result = try await resolvedManager().transcribe(samples, source: .microphone)
         return FluidAudioParakeetResultExtractor.extract(from: result)
+    }
+
+    func cleanup() async {
+        guard let manager else {
+            return
+        }
+        await manager.cleanup()
+        self.manager = nil
     }
 
     private func resolvedManager() -> AsrManager {
@@ -651,4 +670,3 @@ private enum FluidAudioParakeetResultExtractor {
         return nil
     }
 }
-

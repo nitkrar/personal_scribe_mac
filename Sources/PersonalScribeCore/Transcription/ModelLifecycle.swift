@@ -48,6 +48,13 @@ public protocol ModelLifecycle: Sendable {
     /// has loaded local weights) return a stream that immediately
     /// publishes a `.finished` phase and terminates.
     func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress>
+
+    /// Explicit teardown hook used when a model is evicted from the
+    /// provider cache but the adapter may still be retained elsewhere.
+    /// Implementations should release heavyweight runtime state
+    /// (loaded CoreML models, decoder caches, auxiliary managers)
+    /// without relying on `deinit`.
+    func cleanup() async
 }
 
 public extension ModelLifecycle {
@@ -62,4 +69,8 @@ public extension ModelLifecycle {
     func downloadIfNeeded() async throws {
         try await prepare()
     }
+
+    /// Default backstop for lightweight or pure-value conformers that
+    /// have no retained runtime state to release on eviction.
+    func cleanup() async {}
 }

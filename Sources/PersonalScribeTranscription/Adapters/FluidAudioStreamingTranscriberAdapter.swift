@@ -92,6 +92,21 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
         progressBroadcaster.stream()
     }
 
+    public func cleanup() async {
+        let inFlightPrepare = prepareTask
+        prepareTask = nil
+        hasPreparedModel = false
+        inFlightPrepare?.cancel()
+
+        if let manager = try? resolvedManager() {
+            await manager.setPartialCallback { _ in }
+            await manager.setEouCallback { _ in }
+            await manager.cleanup()
+        }
+
+        progressBroadcaster.emit(.idle)
+    }
+
     public nonisolated func transcribe(
         stream: AsyncThrowingStream<PCMBuffer, Error>
     ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
@@ -136,6 +151,7 @@ protocol FluidAudioStreamingEouManaging: Actor, Sendable {
     func process(audioBuffer: AVAudioPCMBuffer) async throws -> String
     func finish() async throws -> String
     func reset() async
+    func cleanup() async
 }
 
 private extension FluidAudioStreamingTranscriberAdapter {
@@ -290,4 +306,3 @@ private extension StreamingChunkSize {
         }
     }
 }
-
