@@ -250,6 +250,52 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
         XCTAssertFalse((seededStreaming as AnyObject) === (rebuiltStreaming as AnyObject))
         XCTAssertFalse((seededDiarizer as AnyObject) === (rebuiltDiarizer as AnyObject))
     }
+
+    /// Hybrid descriptors (110m TDT-CTC) declare an auxiliary repo
+    /// (`parakeet-ctc-110m-coreml`) whose folder lives next to the
+    /// primary leaf. `removeDownloadedFiles` must wipe both — otherwise
+    /// the user "deletes the model" but ~98MB of CTC head bytes
+    /// orphan on disk.
+    func testRemoveDownloadedFilesAlsoRemovesAuxiliaryRepoFolders() throws {
+        let storageLocator = TestStorageLocator.make()
+        let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
+        XCTAssertEqual(
+            descriptor.auxiliaryRepoFolderNames,
+            ["parakeet-ctc-110m-coreml"],
+            "Catalog precondition: 110m hybrid declares its CTC head as auxiliary"
+        )
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: storageLocator,
+            adapterFactory: { d in
+                AdapterRecord(
+                    descriptorID: d.id,
+                    transcriber: MarkerTranscriber()
+                )
+            }
+        )
+
+        // Seed both leaves on disk.
+        let primaryLeaf = modelDirectory(for: descriptor, storageLocator: storageLocator)
+        let auxLeaf = storageLocator
+            .url(for: .models)
+            .appendingPathComponent("parakeet-ctc-110m-coreml", isDirectory: true)
+            .standardizedFileURL
+        try FileManager.default.createDirectory(at: primaryLeaf, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: auxLeaf, withIntermediateDirectories: true)
+        try Data("marker".utf8).write(to: primaryLeaf.appendingPathComponent("marker.txt"))
+        try Data("aux-marker".utf8).write(to: auxLeaf.appendingPathComponent("marker.txt"))
+
+        try provider.removeDownloadedFiles(descriptor)
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: primaryLeaf.path),
+            "Primary 110m leaf must be removed"
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: auxLeaf.path),
+            "Auxiliary CTC head leaf must be removed"
+        )
+    }
 }
 
 private struct StubTranscriber: Transcriber {

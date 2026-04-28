@@ -134,6 +134,13 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         let downloadDirs = await manager.downloadIfNeededDirectories()
         XCTAssertEqual(downloadDirs, [expectedParentDirectory])
 
+        // Hybrid 110m must also pull the CTC head auxiliary so the
+        // Download UI accounts for all bytes the model needs.
+        let auxCalls = await manager.auxiliaryDownloadCalls()
+        XCTAssertEqual(auxCalls.count, 1)
+        XCTAssertEqual(auxCalls.first?.aux, .ctc110m)
+        XCTAssertEqual(auxCalls.first?.directory, expectedParentDirectory)
+
         XCTAssertEqual(collected.last?.phase, .finished)
     }
 
@@ -164,6 +171,31 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(downloadDirs, [expectedParentDirectory])
         let loadedDirs = await manager.loadedDirectories()
         XCTAssertEqual(loadedDirs, [expectedLeafDirectory])
+        // Prepare path also pulls the hybrid's CTC head — same fix as
+        // Download, just via the Activate-time chain.
+        let auxCalls = await manager.auxiliaryDownloadCalls()
+        XCTAssertEqual(auxCalls.count, 1)
+        XCTAssertEqual(auxCalls.first?.aux, .ctc110m)
+    }
+
+    func testNonHybridParakeetDownloadIfNeededDoesNotPullAuxiliary() async throws {
+        // v3 (and v2) are single-repo Parakeet variants — no CTC head.
+        let descriptor = BuiltInModelCatalog.parakeetTDT06Bv3
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let manager = StubFluidAudioParakeetManager()
+        let adapter = FluidAudioParakeetTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.downloadIfNeeded()
+
+        let auxCalls = await manager.auxiliaryDownloadCalls()
+        XCTAssertTrue(
+            auxCalls.isEmpty,
+            "Only the 110m hybrid descriptor should trigger the auxiliary download"
+        )
     }
 
     private func temporaryRootDirectory() throws -> URL {
@@ -207,6 +239,7 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
     private let result: FluidAudioParakeetManagerResult
     private var downloadIfNeededCallCountStorage = 0
     private var downloadIfNeededDirectoriesStorage: [URL] = []
+    private var auxiliaryDownloadCallsStorage: [(aux: ParakeetAuxiliaryRepo, directory: URL)] = []
     private var loadCallCountStorage = 0
     private var loadedVersionsStorage: [AsrModelVersion] = []
     private var loadedDirectoriesStorage: [URL] = []
@@ -230,6 +263,19 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
         _ = progressHandler
         downloadIfNeededCallCountStorage += 1
         downloadIfNeededDirectoriesStorage.append(directory)
+    }
+
+    func downloadAuxiliary(
+        _ aux: ParakeetAuxiliaryRepo,
+        to directory: URL,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws {
+        _ = progressHandler
+        auxiliaryDownloadCallsStorage.append((aux: aux, directory: directory))
+    }
+
+    func auxiliaryDownloadCalls() -> [(aux: ParakeetAuxiliaryRepo, directory: URL)] {
+        auxiliaryDownloadCallsStorage
     }
 
     func loadModel(

@@ -89,7 +89,12 @@ public enum BuiltInModelCatalog {
         madeBy: "NVIDIA · FluidInference",
         worksWith: "English",
         goodFor: "Quick dictation, battery-conscious use",
-        license: "CC-BY-4.0"
+        license: "CC-BY-4.0",
+        // Hybrid TDT-CTC: FluidAudio loads the CTC head from a
+        // separate repo at runtime. Without declaring this aux,
+        // Download misses ~98MB the model needs and Delete leaves
+        // those bytes stranded on disk.
+        auxiliaryRepoFolderNames: ["parakeet-ctc-110m-coreml"]
     )
 
     public static let parakeetTDT06Bv3 = ModelDescriptor(

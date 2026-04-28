@@ -152,10 +152,18 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
 
     public func removeDownloadedFiles(_ descriptor: ModelDescriptor) throws {
         let canonical = try canonicalDescriptor(for: descriptor)
-        let directory = modelDirectory(for: canonical)
         let fileManager = FileManager.default
-        if fileManager.fileExists(atPath: directory.path) {
-            try fileManager.removeItem(at: directory)
+        let modelsRoot = storageLocator.url(for: .models).standardizedFileURL
+        // Primary repo's leaf, plus any auxiliary repos the descriptor
+        // declares. Hybrid models (e.g. parakeet-tdt-ctc-110m + its
+        // CTC head at parakeet-ctc-110m-coreml) need both removed; if
+        // we drop only the primary, the aux bytes orphan on disk and
+        // the user thinks "Delete" worked when ~98MB stays behind.
+        let leaves: [URL] = [modelDirectory(for: canonical)] + canonical.auxiliaryRepoFolderNames.map { folder in
+            modelsRoot.appendingPathComponent(folder, isDirectory: true).standardizedFileURL
+        }
+        for leaf in leaves where fileManager.fileExists(atPath: leaf.path) {
+            try fileManager.removeItem(at: leaf)
         }
         lock.withLock {
             records[canonical.id] = nil

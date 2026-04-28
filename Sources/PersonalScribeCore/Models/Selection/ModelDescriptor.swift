@@ -149,6 +149,23 @@ public struct ModelDescriptor: Sendable, Equatable {
     /// E.g. "CC-BY-4.0" or "Apache 2.0".
     public let license: String?
 
+    /// Companion repos this descriptor's runtime needs in addition to
+    /// `repoFolderName`. Folder names match FluidAudio's `Repo.folderName`
+    /// for the auxiliary repos.
+    ///
+    /// Today only the Parakeet TDT-CTC 110m hybrid declares one — its
+    /// runtime loads the CTC head from `parakeet-ctc-110m-coreml`
+    /// alongside the TDT bundle at `parakeet-tdt-ctc-110m`. Without
+    /// declaring the auxiliary, "Download" misses ~98MB the model
+    /// actually needs (FluidAudio fetches it implicitly on first
+    /// activate) and "Delete" leaves that 98MB stranded.
+    ///
+    /// Provider iterates `repoFolderName + auxiliaryRepoFolderNames`
+    /// for `removeDownloadedFiles`. The adapter's `downloadIfNeeded`
+    /// pulls the auxiliaries in the same pass as the primary so all
+    /// bytes a model needs land at Download time, not at Activate.
+    public let auxiliaryRepoFolderNames: [String]
+
     public init(
         id: String,
         displayName: String,
@@ -169,7 +186,8 @@ public struct ModelDescriptor: Sendable, Equatable {
         madeBy: String? = nil,
         worksWith: String? = nil,
         goodFor: String? = nil,
-        license: String? = nil
+        license: String? = nil,
+        auxiliaryRepoFolderNames: [String] = []
     ) {
         self.id = id
         self.displayName = displayName
@@ -186,6 +204,7 @@ public struct ModelDescriptor: Sendable, Equatable {
         self.worksWith = worksWith
         self.goodFor = goodFor
         self.license = license
+        self.auxiliaryRepoFolderNames = auxiliaryRepoFolderNames
     }
 
     public func resolveURL(for relativePath: String) -> URL {

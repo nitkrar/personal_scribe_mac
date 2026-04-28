@@ -80,6 +80,19 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
                     self.progressBroadcaster.update(Self.map(snapshot))
                 }
             )
+            // Hybrid TDT-CTC 110m loads a CTC head from a sibling
+            // repo. Pull it here so Download accounts for all bytes
+            // and Delete (which iterates auxiliary folders) can clean
+            // both up. Other Parakeet variants are single-repo.
+            if runtimeVariant.asrModelVersion == .tdtCtc110m {
+                try await manager.downloadAuxiliary(
+                    .ctc110m,
+                    to: modelsRoot,
+                    progressHandler: { snapshot in
+                        self.progressBroadcaster.update(Self.map(snapshot))
+                    }
+                )
+            }
         } catch {
             progressBroadcaster.update(Self.idleSnapshot)
             throw PersonalScribeError.modelLoadFailure
@@ -180,6 +193,19 @@ extension FluidAudioParakeetTranscriberAdapter {
                     self.progressBroadcaster.update(Self.map(snapshot))
                 }
             )
+            // Mirror the auxiliary pull from `downloadIfNeeded` so the
+            // Activate-time chain (prepare) is symmetric with the
+            // Download-button chain. Idempotent — DownloadUtils skips
+            // per-file when bytes are already on disk.
+            if runtimeVariant.asrModelVersion == .tdtCtc110m {
+                try await manager.downloadAuxiliary(
+                    .ctc110m,
+                    to: modelsRoot,
+                    progressHandler: { snapshot in
+                        self.progressBroadcaster.update(Self.map(snapshot))
+                    }
+                )
+            }
             try await manager.loadModel(
                 from: modelDirectory,
                 version: runtimeVariant.asrModelVersion,
@@ -273,10 +299,29 @@ extension FluidAudioParakeetTranscriberAdapter {
     }
 }
 
+/// Sendable shim for the auxiliary repos a Parakeet variant may need
+/// (FluidAudio's `Repo` enum is non-Sendable, so we can't pass it
+/// through actor-isolated protocol methods directly). Each case
+/// maps to a single FluidAudio `Repo` inside the live manager.
+enum ParakeetAuxiliaryRepo: Sendable {
+    /// `Repo.parakeetCtc110m` — the CTC head the 110m hybrid loads
+    /// alongside its TDT bundle.
+    case ctc110m
+}
+
 protocol FluidAudioParakeetManaging: Sendable {
     func downloadIfNeeded(
         to directory: URL,
         version: AsrModelVersion,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws
+
+    /// Pull a sibling repo into `directory` (e.g. the CTC head for the
+    /// 110m hybrid). Idempotent — `DownloadUtils.downloadRepo` skips
+    /// per-file when the destination already has the model files.
+    func downloadAuxiliary(
+        _ aux: ParakeetAuxiliaryRepo,
+        to directory: URL,
         progressHandler: DownloadUtils.ProgressHandler?
     ) async throws
 
@@ -348,6 +393,22 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
         case .ctcJa: repo = .parakeetCtcJa
         case .tdtJa: repo = .parakeetCtcJa  // mirrors FluidAudio's mapping (TDT v2 uploaded to CTC repo)
         @unknown default: repo = .parakeet
+        }
+        try await DownloadUtils.downloadRepo(
+            repo,
+            to: directory,
+            progressHandler: progressHandler
+        )
+    }
+
+    func downloadAuxiliary(
+        _ aux: ParakeetAuxiliaryRepo,
+        to directory: URL,
+        progressHandler: DownloadUtils.ProgressHandler?
+    ) async throws {
+        let repo: Repo
+        switch aux {
+        case .ctc110m: repo = .parakeetCtc110m
         }
         try await DownloadUtils.downloadRepo(
             repo,
