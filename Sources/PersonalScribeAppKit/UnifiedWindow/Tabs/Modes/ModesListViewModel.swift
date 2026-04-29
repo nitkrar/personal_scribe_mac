@@ -131,10 +131,15 @@ final class ModesListViewModel: ObservableObject {
 
     private func recomputeValidity() {
         let kinds = availableKinds()
+        let descriptors = modelService.registeredModels
         var next: [String: ModeRowValidity] = [:]
         for mode in customModes {
             do {
-                try WorkflowModeValidator.validate(mode, availableKinds: kinds)
+                try WorkflowModeValidator.validate(
+                    mode,
+                    availableKinds: kinds,
+                    registeredDescriptors: descriptors
+                )
                 next[mode.id] = .valid
             } catch {
                 next[mode.id] = .invalid(reason: message(for: error))
@@ -196,6 +201,10 @@ final class ModesListViewModel: ObservableObject {
                 return "Diarization requires an ASR transcriber."
             case .streamingShapeRequiresExactlyOneStreamingProcessor:
                 return "Realtime needs a single streaming transcriber."
+            case .pinnedDescriptorNotRegistered(let id):
+                return "Pinned model \"\(id)\" is no longer available. Pick another in the mode's settings."
+            case .pinnedDescriptorKindMismatch(let id, let expected, _):
+                return "Pinned model \"\(id)\" can't be used as \(expected.displayName). Pick another in the mode's settings."
             }
         }
         return (error as? LocalizedError)?.errorDescription ?? "\(error)"

@@ -29,6 +29,7 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
     private let lock = NSLock()
     private let store: any WorkflowModeStoring
     private let availableKindsProvider: @Sendable () -> Set<ModelKind>
+    private let registeredDescriptorsProvider: @Sendable () -> [ModelDescriptor]
     private var document: WorkflowModeDocument
     private var inMemoryCurrentID: String?
 
@@ -38,10 +39,14 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
 
     public init(
         store: any WorkflowModeStoring,
-        availableKindsProvider: @escaping @Sendable () -> Set<ModelKind>
+        availableKindsProvider: @escaping @Sendable () -> Set<ModelKind>,
+        registeredDescriptorsProvider: @escaping @Sendable () -> [ModelDescriptor] = {
+            BuiltInModelCatalog.registeredModels
+        }
     ) throws {
         self.store = store
         self.availableKindsProvider = availableKindsProvider
+        self.registeredDescriptorsProvider = registeredDescriptorsProvider
         var loaded = try store.load()
         // Stale-ID auto-clear at init (#089 IMPL §H.1): if the persisted
         // defaultModeID points at a mode that no longer exists in
@@ -197,7 +202,8 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
             }
             try WorkflowModeValidator.validate(
                 mode,
-                availableKinds: availableKindsProvider()
+                availableKinds: availableKindsProvider(),
+                registeredDescriptors: registeredDescriptorsProvider()
             )
             document.defaultModeID = id
             try store.save(document)
@@ -288,7 +294,8 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
             }
             try WorkflowModeValidator.validate(
                 mode,
-                availableKinds: availableKindsProvider()
+                availableKinds: availableKindsProvider(),
+                registeredDescriptors: registeredDescriptorsProvider()
             )
             if let index = document.customModes.firstIndex(where: { $0.id == mode.id }) {
                 document.customModes[index] = mode
@@ -323,7 +330,11 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
         availableKinds: Set<ModelKind>
     ) throws -> WorkflowMode {
         let mode = currentMode
-        try WorkflowModeValidator.validate(mode, availableKinds: availableKinds)
+        try WorkflowModeValidator.validate(
+            mode,
+            availableKinds: availableKinds,
+            registeredDescriptors: registeredDescriptorsProvider()
+        )
         return mode
     }
 

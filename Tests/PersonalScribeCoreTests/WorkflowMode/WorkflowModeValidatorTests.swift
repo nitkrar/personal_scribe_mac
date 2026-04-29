@@ -126,4 +126,101 @@ final class WorkflowModeValidatorTests: XCTestCase {
             availableKinds: [.diarization, .asr]
         )
     }
+
+    // MARK: - #090: per-mode descriptor pinning
+
+    /// A pinned `.transcriber` MUST validate even when its kind is
+    /// absent from `availableKinds`. The whole point of #090 is that
+    /// pinning bypasses the global-active-descriptor requirement: a
+    /// mode that pins its own model should be usable even if the
+    /// globally active model for that kind is unset/missing.
+    func testPinnedDescriptorBypassesAvailableKindsRequirement() throws {
+        let pinned = WorkflowMode(
+            id: "pinned-asr",
+            name: "Pinned ASR",
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: "parakeet-tdt-0.6b-v2"
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        try WorkflowModeValidator.validate(
+            pinned,
+            availableKinds: [], // nothing globally active
+            registeredDescriptors: [BuiltInModelCatalog.parakeetTDT06Bv2]
+        )
+    }
+
+    /// A pinned `descriptorID` that doesn't reference a registered
+    /// descriptor must throw — otherwise the recipe holds a phantom
+    /// reference and the user has no signal that their pin is broken.
+    func testPinnedDescriptorMustBeRegistered() {
+        let pinned = WorkflowMode(
+            id: "pinned-missing",
+            name: "Pinned Missing",
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: "no-such-descriptor"
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        XCTAssertThrowsError(
+            try WorkflowModeValidator.validate(
+                pinned,
+                availableKinds: [.asr],
+                registeredDescriptors: [BuiltInModelCatalog.parakeetTDT06Bv2]
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? WorkflowModeValidationError,
+                .pinnedDescriptorNotRegistered(id: "no-such-descriptor")
+            )
+        }
+    }
+
+    /// A pinned `descriptorID` whose descriptor's `kind` doesn't match
+    /// the spec's `kind` must throw — pinning a diarization descriptor
+    /// to a transcriber spec is incoherent.
+    func testPinnedDescriptorKindMustMatchSpecKind() {
+        let pinned = WorkflowMode(
+            id: "pinned-mismatch",
+            name: "Pinned Mismatch",
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.speakerDiarization.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        XCTAssertThrowsError(
+            try WorkflowModeValidator.validate(
+                pinned,
+                availableKinds: [.asr],
+                registeredDescriptors: [BuiltInModelCatalog.speakerDiarization]
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? WorkflowModeValidationError,
+                .pinnedDescriptorKindMismatch(
+                    id: BuiltInModelCatalog.speakerDiarization.id,
+                    expected: .asr,
+                    actual: .diarization
+                )
+            )
+        }
+    }
 }
