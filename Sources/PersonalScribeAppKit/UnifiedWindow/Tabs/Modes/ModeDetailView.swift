@@ -94,21 +94,105 @@ struct ModeDetailView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading) {
                     Text("Voice model").font(PersonalScribeTheme.Typography.body.font.weight(.medium))
-                    Text(activeVoiceModelDescription)
+                    Text(voiceModelCaption)
                         .font(PersonalScribeTheme.Typography.caption.font)
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: PersonalScribeTheme.Spacing.sm)
-                // #090 picks up per-mode override; for now the row is
-                // read-only and points the user at AI Models.
-                Text("Manage in AI Models tab")
-                    .font(PersonalScribeTheme.Typography.caption.font)
-                    .foregroundStyle(.tertiary)
+                voiceModelMenu
             }
         }
     }
 
-    private var activeVoiceModelDescription: String {
+    /// Caption under the row title — always shows "Use globally active"
+    /// vs. "Pinned to <Name>" so the picker's button label and the
+    /// caption together communicate the mode's choice unambiguously.
+    private var voiceModelCaption: String {
+        if let pinID = viewModel.voiceModelPinID,
+           let pinned = modelService.registeredModels.first(where: { $0.id == pinID }) {
+            return "Pinned to \(pinned.displayName)"
+        }
+        if viewModel.voiceModelPinID != nil {
+            // Pin references a descriptor we no longer know about
+            // (catalog removed it). Validity check elsewhere flags
+            // the mode; the row just surfaces the broken state.
+            return "Pinned model unavailable"
+        }
+        return "Use globally active (\(activeVoiceModelDisplayName))"
+    }
+
+    /// SwiftUI Menu that drives the per-mode pin. First item resets to
+    /// "use globally active" (nil pin); subsequent items pin to a
+    /// specific descriptor. Filters to descriptors of the mode's
+    /// transcriber kind, respecting `enabledModels` so users can't
+    /// pick a flag-disabled model.
+    private var voiceModelMenu: some View {
+        Menu {
+            Button {
+                viewModel.setVoiceModelPin(nil)
+            } label: {
+                voiceModelMenuItemLabel(
+                    title: "Use globally active",
+                    detail: activeVoiceModelDisplayName,
+                    selected: viewModel.voiceModelPinID == nil
+                )
+            }
+            Divider()
+            ForEach(pickableDescriptors, id: \.id) { descriptor in
+                Button {
+                    viewModel.setVoiceModelPin(descriptor.id)
+                } label: {
+                    voiceModelMenuItemLabel(
+                        title: descriptor.displayName,
+                        detail: nil,
+                        selected: viewModel.voiceModelPinID == descriptor.id
+                    )
+                }
+            }
+        } label: {
+            Text(voiceModelMenuButtonLabel)
+                .font(PersonalScribeTheme.Typography.body.font)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private func voiceModelMenuItemLabel(
+        title: String,
+        detail: String?,
+        selected: Bool
+    ) -> some View {
+        HStack {
+            if selected {
+                Image(systemName: "checkmark")
+            }
+            if let detail {
+                Text("\(title) (\(detail))")
+            } else {
+                Text(title)
+            }
+        }
+    }
+
+    /// Button label = the picker's current selection. Same logic as the
+    /// caption inverted: pinned shows the model name; unpinned shows
+    /// "Globally active".
+    private var voiceModelMenuButtonLabel: String {
+        if let pinID = viewModel.voiceModelPinID {
+            if let pinned = modelService.registeredModels.first(where: { $0.id == pinID }) {
+                return pinned.displayName
+            }
+            return "Unknown model"
+        }
+        return "Globally active"
+    }
+
+    private var pickableDescriptors: [ModelDescriptor] {
+        let kind: ModelKind = viewModel.realtimeOn ? .streamingASR : .asr
+        return modelService.enabledModels(kind: kind)
+    }
+
+    private var activeVoiceModelDisplayName: String {
         let kind: ModelKind = viewModel.realtimeOn ? .streamingASR : .asr
         return modelService.activeDescriptor(for: kind)?.displayName ?? "—"
     }
