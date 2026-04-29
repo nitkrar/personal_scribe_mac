@@ -35,7 +35,7 @@ steps additionally require streaming ASR / diarization models.
    menu-bar mode submenu showing it as current).
 
 ## MV-MODES-5 — Drag-reorder persists across restart
-1. With ≥3 modes, drag the third to the top.
+1. With ≥3 modes, drag the third row to the top from the row body (no edit mode / reorder handle required).
 2. Restart → list order matches.
 3. Open menu-bar mode submenu → reflects new order.
 
