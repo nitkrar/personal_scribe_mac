@@ -186,6 +186,24 @@ public final class ActiveModelService: ObservableObject {
         }
     }
 
+    /// Kinds for which an active descriptor exists AND its artifacts
+    /// are downloaded (`.ready`). Used by `WorkflowModeValidator` to
+    /// reject *unpinned* modes whose required kind has no usable model.
+    /// Pinned modes (#090) bypass this check via the validator's
+    /// `registeredDescriptors:` rule.
+    public func availableKinds() -> Set<ModelKind> {
+        var kinds: Set<ModelKind> = []
+        for kind in ModelKind.allCases where kind.isEnabled {
+            guard let descriptor = activeDescriptor(for: kind) else {
+                continue
+            }
+            if downloadStates[descriptor.id]?.phase == .ready {
+                kinds.insert(kind)
+            }
+        }
+        return kinds
+    }
+
     public func isDownloaded(_ descriptor: ModelDescriptor) -> Bool {
         guard let canonical = registeredModels.first(where: { $0.id == descriptor.id }) else {
             return false

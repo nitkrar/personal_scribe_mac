@@ -99,3 +99,56 @@ steps additionally require streaming ASR / diarization models.
 5. Flip Realtime OFF; flip Identify Speakers ON; record a 2-speaker
    conversation (if diarization model is downloaded).
 6. Expect: transcript shows per-speaker turns.
+
+## MV-MODES-13 — Per-mode voice-model picker (#090)
+Prerequisite: at least two ASR voice models downloaded (e.g.
+Parakeet TDT 0.6B v2 and Parakeet TDT-CTC 110M).
+
+1. Set the GLOBAL active ASR model in AI Models tab to model A
+   (e.g. v2).
+2. Open Modes tab → tap a custom mode (or create one).
+3. In the detail view, the "Voice model" row shows
+   `Use globally active (<A name>)` as the caption + a `Globally
+   active` button.
+4. Click the button to open the menu. Expect:
+   - First item: `✓ Use globally active (<A name>)`.
+   - Divider.
+   - One item per enabled descriptor of the relevant kind.
+5. Pick model B (e.g. 110M).
+6. Expect: caption flips to `Pinned to <B name>`; button label
+   shows `<B name>`.
+7. Restart app → mode still pinned to B.
+8. In AI Models tab, switch GLOBAL active back to A.
+9. Return to the mode's detail. Expect: still pinned to B (caption
+   `Pinned to <B name>`).
+10. Trigger recording for this mode → transcript uses model B (the
+    pin), not the globally-active A.
+
+## MV-MODES-14 — Pinned mode survives global swap (#090)
+1. From MV-MODES-13 step 6, with the mode pinned to B.
+2. In AI Models tab, deactivate (or set a different active) for the
+   ASR kind.
+3. The unpinned `Dictation` built-in fallback would now have no
+   active ASR model. But the pinned mode still validates and runs.
+4. Modes tab: pinned mode shows green "valid" indicator (no warning).
+5. Trigger recording on the pinned mode → it works (uses B).
+
+## MV-MODES-15 — Removed-pin model surfaces invalidity (#090)
+This step requires editing `workflow-modes.json` directly OR pinning
+to a model and then disabling its catalog entry via a build that
+sets `isEnabled: false` on the descriptor.
+
+1. With a mode pinned to model B, edit
+   `~/Library/Application Support/com.nitkrar.personal_scribe/workflow-modes.json`
+   and change the `descriptorID` to a non-existent id (e.g.
+   `"deleted-model"`).
+2. Restart app → Modes tab.
+3. Expect: red "invalid" chip on the mode's row with copy
+   `Pinned model "deleted-model" is no longer available. Pick
+   another in the mode's settings.`
+4. Open the mode's detail. Voice model card caption:
+   `Pinned model unavailable`. Button: `Unknown model`.
+5. Open the picker, choose a valid model (or `Use globally active`).
+6. Caption + chip clear.
+7. Menu-bar mode submenu: with the mode invalid (step 3), it does
+   NOT appear in the submenu. After repair (step 5), it reappears.

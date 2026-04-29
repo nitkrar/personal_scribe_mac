@@ -130,7 +130,7 @@ final class ModesListViewModel: ObservableObject {
     }
 
     private func recomputeValidity() {
-        let kinds = availableKinds()
+        let kinds = modelService.availableKinds()
         let descriptors = modelService.registeredModels
         var next: [String: ModeRowValidity] = [:]
         for mode in customModes {
@@ -146,19 +146,6 @@ final class ModesListViewModel: ObservableObject {
             }
         }
         validityByID = next
-    }
-
-    private func availableKinds() -> Set<ModelKind> {
-        var kinds: Set<ModelKind> = []
-        for kind in ModelKind.allCases where kind.isEnabled {
-            guard let descriptor = modelService.activeDescriptor(for: kind) else {
-                continue
-            }
-            if modelService.downloadStates[descriptor.id]?.phase == .ready {
-                kinds.insert(kind)
-            }
-        }
-        return kinds
     }
 
     /// True iff at least one descriptor of `kind` is downloaded
