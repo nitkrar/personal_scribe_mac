@@ -456,10 +456,9 @@ private struct HotkeyRecorderEventMonitor: View {
                 // while the recorder UI is open. Token is dropped on
                 // disappear; RAII deinit auto-unregisters.
                 token = AppComposition.keyEventRouter.registerLocalDecider(
+                    { event in onEvent(event) },
                     position: .first
-                ) { event in
-                    onEvent(event)
-                }
+                )
             }
             .onDisappear {
                 token = nil

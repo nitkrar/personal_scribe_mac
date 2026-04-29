@@ -38,25 +38,25 @@ private struct KeyEventRouterNSEventBox: @unchecked Sendable {
 /// SwiftUI `@State` going out of scope) auto-unregisters the
 /// subscriber. No explicit `remove(_:)` calls needed.
 @MainActor
-final class KeyEventRouter {
-    enum Position: Sendable {
+public final class KeyEventRouter {
+    public enum Position: Sendable {
         case first
         case last
     }
 
-    typealias Decider = @MainActor (HotkeyEvent) -> Bool
-    typealias Observer = @MainActor (HotkeyEvent) -> Void
+    public typealias Decider = @MainActor (HotkeyEvent) -> Bool
+    public typealias Observer = @MainActor (HotkeyEvent) -> Void
 
-    typealias TapFactory = @MainActor (@escaping HotkeyEventTap.Decider) -> HotkeyEventTap
-    typealias LocalInstaller = @MainActor (
+    public typealias TapFactory = @MainActor (@escaping HotkeyEventTap.Decider) -> HotkeyEventTap
+    public typealias LocalInstaller = @MainActor (
         _ mask: NSEvent.EventTypeMask,
         _ handler: @escaping (NSEvent) -> NSEvent?
     ) -> Any?
-    typealias GlobalInstaller = @MainActor (
+    public typealias GlobalInstaller = @MainActor (
         _ mask: NSEvent.EventTypeMask,
         _ handler: @escaping (NSEvent) -> Void
     ) -> Any?
-    typealias Uninstaller = @MainActor (Any) -> Void
+    public typealias Uninstaller = @MainActor (Any) -> Void
 
     private struct Slot<Handler> {
         let id: UUID
@@ -76,7 +76,7 @@ final class KeyEventRouter {
     private var localMonitor: Any?
     private var globalMonitor: Any?
 
-    init(
+    public init(
         tapFactory: @escaping TapFactory = { decider in
             HotkeyEventTap(decider: decider)
         },
@@ -101,7 +101,7 @@ final class KeyEventRouter {
     /// NSEvent monitors still succeed — `start()` returns the tap
     /// result so the caller can surface the permission error, but the
     /// router stays usable for in-app keystrokes regardless.
-    var isActive: Bool {
+    public var isActive: Bool {
         tap?.isActive == true || localMonitor != nil || globalMonitor != nil
     }
 
@@ -110,7 +110,7 @@ final class KeyEventRouter {
     /// router has not been started. Consumers that need to surface a
     /// permission warning to the user (e.g. `GlobalHotkeyMonitor`'s
     /// "÷÷÷÷ leak" warning) read this getter after registering.
-    var isTapActive: Bool {
+    public var isTapActive: Bool {
         tap?.isActive == true
     }
 
@@ -119,7 +119,7 @@ final class KeyEventRouter {
     /// `HotkeyEventTap.start`). NSEvent local + global installs are
     /// best-effort and don't gate the return value.
     @discardableResult
-    func start() -> Bool {
+    public func start() -> Bool {
         guard tap == nil, localMonitor == nil, globalMonitor == nil else {
             return tap?.isActive == true
         }
@@ -155,7 +155,7 @@ final class KeyEventRouter {
         return tapStarted
     }
 
-    func stop() {
+    public func stop() {
         tap?.stop()
         tap = nil
         if let localMonitor {
@@ -177,7 +177,7 @@ final class KeyEventRouter {
     /// modal subscribers (e.g. `HotkeyRecorder`) that must take priority
     /// over already-registered consumers while their UI is active.
     @discardableResult
-    func registerLocalDecider(
+    public func registerLocalDecider(
         _ decider: @escaping Decider,
         position: Position = .last
     ) -> KeyEventRouterToken {
@@ -195,7 +195,7 @@ final class KeyEventRouter {
     /// `true` return swallows the event before it reaches the focused
     /// app — the bug-#5 use case.
     @discardableResult
-    func registerGlobalDecider(
+    public func registerGlobalDecider(
         _ decider: @escaping Decider,
         position: Position = .last
     ) -> KeyEventRouterToken {
@@ -214,7 +214,7 @@ final class KeyEventRouter {
     /// them (e.g. `EscapeKeyMonitor`'s "user pressed Esc while recording
     /// into a text editor" detection).
     @discardableResult
-    func registerGlobalObserver(
+    public func registerGlobalObserver(
         _ observer: @escaping Observer
     ) -> KeyEventRouterToken {
         let id = UUID()
@@ -291,7 +291,7 @@ final class KeyEventRouter {
 /// the subscriber. Consumers store the token in `@State` (SwiftUI),
 /// `private let` (long-lived), or any property whose lifetime matches
 /// the desired registration scope.
-final class KeyEventRouterToken: @unchecked Sendable {
+public final class KeyEventRouterToken: @unchecked Sendable {
     private let cleanup: @Sendable () -> Void
 
     fileprivate init(cleanup: @escaping @Sendable () -> Void) {

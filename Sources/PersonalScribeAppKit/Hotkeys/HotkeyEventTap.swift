@@ -35,11 +35,11 @@ private struct CGEventBox: @unchecked Sendable {
 /// same tap plumbing by subscribing additional deciders rather than by
 /// extracting code from `GlobalHotkeyMonitor` first.
 @MainActor
-final class HotkeyEventTap {
+public final class HotkeyEventTap {
     /// DI seam for `CGEvent.tapCreate` — tests substitute a fake that
     /// returns `nil` (simulate permission denied / OS failure) or a
     /// sentinel `CFMachPort` without touching the real HID event system.
-    typealias Installer = @MainActor (
+    public typealias Installer = @MainActor (
         _ callback: CGHotkeyEventTapCallback,
         _ userInfo: UnsafeMutableRawPointer?
     ) -> CFMachPort?
@@ -47,7 +47,7 @@ final class HotkeyEventTap {
     /// Decider called per event. Returning `true` swallows the event —
     /// the CGEventTap callback returns `nil` and the event is NOT
     /// delivered to the focused app. Returning `false` passes it through.
-    typealias Decider = @MainActor (HotkeyEvent) -> Bool
+    public typealias Decider = @MainActor (HotkeyEvent) -> Bool
 
     private let decider: Decider
     private let installer: Installer
@@ -57,7 +57,7 @@ final class HotkeyEventTap {
     private var runLoopSource: CFRunLoopSource?
     private var userInfo: UnsafeMutableRawPointer?
 
-    init(
+    public init(
         decider: @escaping Decider,
         installer: @escaping Installer = { callback, userInfo in
             CGHotkeyEventTapInstaller.createTap(callback: callback, userInfo: userInfo)
@@ -69,7 +69,7 @@ final class HotkeyEventTap {
         self.logger = logger
     }
 
-    var isActive: Bool { tap != nil }
+    public var isActive: Bool { tap != nil }
 
     /// Installs the tap + adds its run-loop source. Returns `true` on
     /// success. Returns `false` if `CGEvent.tapCreate` returns `nil`
@@ -77,7 +77,7 @@ final class HotkeyEventTap {
     /// failure). Caller should route the `false` result through its
     /// existing permission-failure path.
     @discardableResult
-    func start() -> Bool {
+    public func start() -> Bool {
         guard tap == nil else {
             logger.info("HotkeyEventTap already active; ignoring duplicate start")
             return true
@@ -141,7 +141,7 @@ final class HotkeyEventTap {
         return true
     }
 
-    func stop() {
+    public func stop() {
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
             runLoopSource = nil

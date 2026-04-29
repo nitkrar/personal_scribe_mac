@@ -107,10 +107,10 @@ final class KeyEventRouterTests: XCTestCase {
             fired.append(1)
             return false
         }
-        let modal = router.registerLocalDecider(position: .first) { _ in
+        let modal = router.registerLocalDecider({ _ in
             fired.append(2)
             return true // swallow
-        }
+        }, position: .first)
         defer { _ = (normal, modal) }
 
         let swallowed = router.handleLocal(makeEvent())

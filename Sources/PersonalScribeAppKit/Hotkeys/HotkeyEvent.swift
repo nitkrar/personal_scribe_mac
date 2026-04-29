@@ -10,35 +10,36 @@ import Foundation
 /// into the same `HotkeyEvent` so the state machine doesn't care which
 /// framework produced the event.
 ///
-/// Kept in its own file — and module-internal (no `public`) — so the planned
-/// central `KeyEventRouter` (#19 backlog, 5a-v2) can consume the same type
-/// without extracting it from `GlobalHotkeyMonitor.swift` first.
-struct HotkeyEvent: Sendable {
-    enum EventType: Equatable, Sendable {
+/// Lifted to `public` (#028) because `KeyEventRouter`'s public
+/// `Decider` typealias references this type — Swift requires
+/// referenced types to be at least as accessible as the referencing
+/// API. Originally module-internal per the 5a-v2 design brief.
+public struct HotkeyEvent: Sendable {
+    public enum EventType: Equatable, Sendable {
         case keyDown
         case keyUp
         case flagsChanged
     }
 
-    let type: EventType
-    let keyCode: UInt16
-    let modifierFlags: NSEvent.ModifierFlags
-    let timestamp: TimeInterval
-    let isARepeat: Bool
+    public let type: EventType
+    public let keyCode: UInt16
+    public let modifierFlags: NSEvent.ModifierFlags
+    public let timestamp: TimeInterval
+    public let isARepeat: Bool
     /// Source characters when the event came from an `NSEvent` (local /
     /// global NSEvent monitor path). `nil` when the event came from the
     /// `CGEventTap` path — `CGEvent` does not surface readable
     /// characters in a Sendable form, and the CG-tap consumers
     /// (gesture state machine) don't need them. Used by `HotkeyRecorder`
     /// for chord-display rendering.
-    let charactersIgnoringModifiers: String?
-    let characters: String?
+    public let charactersIgnoringModifiers: String?
+    public let characters: String?
 
     /// Memberwise initializer with optional `characters` fields
     /// defaulted to `nil` — keeps existing test fixtures (which
     /// construct `HotkeyEvent` with the original 5 fields) compiling
     /// after #028's addition of character storage.
-    init(
+    public init(
         type: EventType,
         keyCode: UInt16,
         modifierFlags: NSEvent.ModifierFlags,
@@ -77,13 +78,19 @@ extension HotkeyEvent {
         self.modifierFlags = nsEvent.modifierFlags
         self.timestamp = nsEvent.timestamp
         self.isARepeat = (nsEvent.type == .keyDown) ? nsEvent.isARepeat : false
-        // NSEvent's `characters` / `charactersIgnoringModifiers` are
-        // documented as non-nil only for `.keyDown` / `.keyUp`. For
-        // `.flagsChanged` they're nil. Optional storage handles both
-        // cleanly; HotkeyRecorder consults these for chord-display
-        // text.
-        self.charactersIgnoringModifiers = nsEvent.charactersIgnoringModifiers
-        self.characters = nsEvent.characters
+        // `NSEvent.characters` / `charactersIgnoringModifiers` are
+        // valid ONLY for `.keyDown` / `.keyUp`. Reading either on a
+        // `.flagsChanged` event throws `NSInternalInconsistencyException`
+        // (unlike most NSEvent properties which return nil for
+        // out-of-domain reads). Guard the reads explicitly.
+        switch nsEvent.type {
+        case .keyDown, .keyUp:
+            self.charactersIgnoringModifiers = nsEvent.charactersIgnoringModifiers
+            self.characters = nsEvent.characters
+        default:
+            self.charactersIgnoringModifiers = nil
+            self.characters = nil
+        }
     }
 
     /// Adapter from a `CGEvent` delivered through `CGEventTap`. Returns

@@ -2,7 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 
-typealias CGHotkeyEventTapCallback = @convention(c) (
+public typealias CGHotkeyEventTapCallback = @convention(c) (
     CGEventTapProxy,
     CGEventType,
     CGEvent,
@@ -62,11 +62,11 @@ internal struct CGHotkeyEventTapContext: Sendable {
 /// can manage the `CallbackBox` lifecycle and tests can inject a fake
 /// installer that returns `nil` (simulating permission denied / OS
 /// failure) without ever touching the real HID event system.
-internal enum CGHotkeyEventTapInstaller {
+public enum CGHotkeyEventTapInstaller {
     /// Event mask for `.keyDown | .keyUp | .flagsChanged`. Keeps the
     /// tap's interest scoped to keyboard events — mouse / scroll events
     /// pass through untouched.
-    static let eventMask: CGEventMask =
+    public static let eventMask: CGEventMask =
         (1 << CGEventType.keyDown.rawValue) |
         (1 << CGEventType.keyUp.rawValue) |
         (1 << CGEventType.flagsChanged.rawValue)
@@ -78,7 +78,7 @@ internal enum CGHotkeyEventTapInstaller {
     /// `.cgSessionEventTap` (not `.cghidEventTap`) — the HID tap is
     /// root-only on modern macOS; session tap is what LSUIElement apps
     /// can legitimately install with Input Monitoring permission.
-    static func createTap(
+    public static func createTap(
         callback: CGHotkeyEventTapCallback,
         userInfo: UnsafeMutableRawPointer?
     ) -> CFMachPort? {
