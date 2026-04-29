@@ -273,7 +273,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         XCTAssertEqual(snapshot.sessionState, .completed)
         XCTAssertEqual(
             snapshot.lastCompletedResult?.text,
-            "Spk1: turn one.",
+            "Speaker 1: turn one.",
             "Diarized recipe must flow speaker-prefixed turn transcripts into post-processing"
         )
         let perTurnCalls = await perTurnTranscriber.transcribeCallCount()
