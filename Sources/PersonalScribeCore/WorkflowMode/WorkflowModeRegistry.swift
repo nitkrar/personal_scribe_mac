@@ -1,20 +1,28 @@
 import Foundation
-import PersonalScribeCore
 
-/// Owns the user's workflow-mode state (per L21 of #078): list of
-/// registered modes (built-ins + custom), active mode tracking, validation
-/// on save, and persistence delegation to a `WorkflowModeStoring` seam.
+/// Owns the user's workflow-mode state (#078 L21 + #089 split).
 ///
-/// Distinct from `ActiveModelService` (active per-Kind descriptor); the
-/// registry tracks active **mode** only.
+/// State surfaces:
+/// - **Default mode** (persisted, `WorkflowModeDocument.defaultModeID`)
+///   — the user's chosen launch mode. Resolves to `WorkflowMode.dictation`
+///   when unset / stale.
+/// - **Current mode** (runtime, `inMemoryCurrentID`) — the mode the
+///   next session start will use. Switched by menu-bar / pill switcher
+///   / per-mode hotkey. Resets to `defaultMode` at app launch
+///   (#089 L-5, L-6).
+///
+/// Both reads happen under the existing `NSLock` (#089 L-7 — NOT
+/// `@MainActor`-isolated; same access pattern as the legacy
+/// `activeMode`).
 ///
 /// Validation fires at every mutation site that adds or selects a mode
 /// (per L15). The set of currently-available `ModelKind` values is
 /// supplied via a closure so the registry stays decoupled from
 /// `ActiveModelService`.
 ///
-/// Built-in modes: only `WorkflowMode.dictation` today. New
-/// built-ins land as additions to `builtInModes` here, not via the store.
+/// Built-in modes: only `WorkflowMode.dictation` today. The built-in
+/// is **never rendered** in the Modes UI; it acts as the fallback
+/// recipe when no custom default is set (#089 L-1, L-2).
 public final class WorkflowModeRegistry: @unchecked Sendable {
     public static let builtInModes: [WorkflowMode] = [.dictation]
 
@@ -22,7 +30,11 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
     private let store: any WorkflowModeStoring
     private let availableKindsProvider: @Sendable () -> Set<ModelKind>
     private var document: WorkflowModeDocument
-    private var activeModeContinuations: [UUID: AsyncStream<WorkflowMode>.Continuation] = [:]
+    private var inMemoryCurrentID: String?
+
+    private var defaultModeContinuations: [UUID: AsyncStream<WorkflowMode>.Continuation] = [:]
+    private var currentModeContinuations: [UUID: AsyncStream<WorkflowMode>.Continuation] = [:]
+    private var customModesContinuations: [UUID: AsyncStream<[WorkflowMode]>.Continuation] = [:]
 
     public init(
         store: any WorkflowModeStoring,
@@ -30,79 +42,246 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
     ) throws {
         self.store = store
         self.availableKindsProvider = availableKindsProvider
-        self.document = try store.load()
+        var loaded = try store.load()
+        // Stale-ID auto-clear at init (#089 IMPL §H.1): if the persisted
+        // defaultModeID points at a mode that no longer exists in
+        // customModes, scrub it and persist. Soft-fail the save so init
+        // doesn't throw on a transient I/O hiccup; resolve path falls
+        // back to .dictation either way.
+        if let id = loaded.defaultModeID,
+           !loaded.customModes.contains(where: { $0.id == id }) {
+            loaded.defaultModeID = nil
+            try? store.save(loaded)
+        }
+        self.document = loaded
     }
 
-    /// Observable stream of the currently-active mode (#078.36).
-    /// Yields the resolved active mode on subscribe and again whenever
-    /// `setActive` / `mutateActiveOrFork` / `deleteCustom` changes the
-    /// active selection. AppStore subscribes here directly, replacing
-    /// the deleted `AppStoreActiveModeProviding` protocol per L21.
-    public func activeModeStream() -> AsyncStream<WorkflowMode> {
+    // MARK: - Streams
+
+    /// Observable stream of the current mode (#089). Yields the
+    /// resolved current mode on subscribe and again whenever
+    /// `setCurrent` / `setDefault` (when the changed default is also
+    /// the current) / `deleteCustom` / `saveCustom` shifts the
+    /// in-memory current.
+    public func currentModeStream() -> AsyncStream<WorkflowMode> {
         let id = UUID()
         return AsyncStream { continuation in
             let initial = self.lock.withLock { () -> WorkflowMode in
-                self.activeModeContinuations[id] = continuation
-                return self.resolveActiveLocked()
+                self.currentModeContinuations[id] = continuation
+                return self.resolveCurrentLocked()
             }
             continuation.onTermination = { [weak self] _ in
                 guard let self else { return }
                 self.lock.withLock {
-                    self.activeModeContinuations[id] = nil
+                    self.currentModeContinuations[id] = nil
                 }
             }
             continuation.yield(initial)
         }
     }
 
-    /// Push the current active mode to all registered observers. Caller
-    /// must NOT hold `lock`.
-    private func broadcastActiveMode() {
+    /// Observable stream of the default mode (#089). Yields on
+    /// subscribe + on every `setDefault` / `deleteCustom` (when the
+    /// deleted mode was default) / `saveCustom` (when the saved mode
+    /// is the default).
+    public func defaultModeStream() -> AsyncStream<WorkflowMode> {
+        let id = UUID()
+        return AsyncStream { continuation in
+            let initial = self.lock.withLock { () -> WorkflowMode in
+                self.defaultModeContinuations[id] = continuation
+                return self.resolveDefaultLocked()
+            }
+            continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
+                self.lock.withLock {
+                    self.defaultModeContinuations[id] = nil
+                }
+            }
+            continuation.yield(initial)
+        }
+    }
+
+    /// Observable stream of the custom-mode list (#089). Yields on
+    /// subscribe + on every list-changing mutation (save / delete /
+    /// reorder).
+    public func customModesStream() -> AsyncStream<[WorkflowMode]> {
+        let id = UUID()
+        return AsyncStream { continuation in
+            let initial = self.lock.withLock { () -> [WorkflowMode] in
+                self.customModesContinuations[id] = continuation
+                return self.document.customModes
+            }
+            continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
+                self.lock.withLock {
+                    self.customModesContinuations[id] = nil
+                }
+            }
+            continuation.yield(initial)
+        }
+    }
+
+    private func broadcastDefaultMode() {
         let (mode, continuations) = lock.withLock {
-            (resolveActiveLocked(), Array(activeModeContinuations.values))
+            (resolveDefaultLocked(), Array(defaultModeContinuations.values))
         }
         for continuation in continuations {
             continuation.yield(mode)
         }
     }
 
-    /// All modes the user can pick from: built-ins + custom.
+    private func broadcastCurrentMode() {
+        let (mode, continuations) = lock.withLock {
+            (resolveCurrentLocked(), Array(currentModeContinuations.values))
+        }
+        for continuation in continuations {
+            continuation.yield(mode)
+        }
+    }
+
+    private func broadcastCustomModes() {
+        let (modes, continuations) = lock.withLock {
+            (document.customModes, Array(customModesContinuations.values))
+        }
+        for continuation in continuations {
+            continuation.yield(modes)
+        }
+    }
+
+    // MARK: - Reads
+
+    /// All modes the user can pick from: built-ins + custom. The
+    /// editor UI shows custom modes only (#089 L-2); this accessor
+    /// stays available for non-editor callers (e.g. eager-binding
+    /// session lookup) that need to resolve any id.
     public var allModes: [WorkflowMode] {
         lock.withLock {
             Self.builtInModes + document.customModes
         }
     }
 
-    /// Currently-active mode. Falls back to the built-in `.dictation`
-    /// if no `activeModeID` is persisted, or if the persisted ID no
-    /// longer resolves to a known mode.
-    public var activeMode: WorkflowMode {
+    /// User's custom modes only. Editor binds against this list.
+    public var customModes: [WorkflowMode] {
         lock.withLock {
-            resolveActiveLocked()
+            document.customModes
         }
     }
 
-    /// Set the active mode by ID. Validates the resolved recipe before
-    /// writing. Throws on unknown ID or invalid recipe.
-    public func setActive(id: String) throws {
+    /// Resolved default mode. Falls back to `WorkflowMode.dictation`
+    /// when `defaultModeID` is unset or doesn't resolve to a custom
+    /// mode.
+    public var defaultMode: WorkflowMode {
+        lock.withLock {
+            resolveDefaultLocked()
+        }
+    }
+
+    /// Resolved current mode. Falls back to `defaultMode` when
+    /// `inMemoryCurrentID` is unset.
+    public var currentMode: WorkflowMode {
+        lock.withLock {
+            resolveCurrentLocked()
+        }
+    }
+
+    // MARK: - Mutations
+
+    /// Set the default mode by id. Validates the mode against
+    /// `availableKindsProvider()` before persisting (#089 L-9 — invalid
+    /// recipes can't be activated). Throws on unknown id (must be a
+    /// custom mode) or validation failure.
+    public func setDefault(id: String) throws {
         try lock.withLock {
-            guard let mode = resolveModeLocked(id: id) else {
+            guard let mode = document.customModes.first(where: { $0.id == id }) else {
                 throw WorkflowModeRegistryError.unknownMode(id)
             }
             try WorkflowModeValidator.validate(
                 mode,
                 availableKinds: availableKindsProvider()
             )
-            document.activeModeID = id
+            document.defaultModeID = id
             try store.save(document)
         }
-        broadcastActiveMode()
+        broadcastDefaultMode()
+        // Default change can shift currentMode when no in-memory current
+        // is set (resolveCurrentLocked falls through to default).
+        broadcastCurrentMode()
+    }
+
+    /// Set the runtime current mode by id. Unknown id is a silent
+    /// no-op (caller likely raced a deletion). No validation — the
+    /// setDefault path already gated availability; switching current
+    /// mid-runtime mirrors the resolved binding the editor already
+    /// approved.
+    public func setCurrent(id: String) {
+        let resolved: Bool = lock.withLock {
+            if document.customModes.contains(where: { $0.id == id }) {
+                inMemoryCurrentID = id
+                return true
+            }
+            return false
+        }
+        if resolved {
+            broadcastCurrentMode()
+        }
+    }
+
+    /// Reorder a custom mode entry. `from` and `to` are indices into
+    /// `customModes`. Persists the new order.
+    public func reorderCustom(from: Int, to: Int) throws {
+        try lock.withLock {
+            let count = document.customModes.count
+            guard from >= 0, from < count, to >= 0, to < count else {
+                throw WorkflowModeRegistryError.invalidIndex
+            }
+            guard from != to else { return }
+            let moved = document.customModes.remove(at: from)
+            document.customModes.insert(moved, at: to)
+            try store.save(document)
+        }
+        broadcastCustomModes()
+    }
+
+    /// Skip-gaps default-name resolver (#089 L-14). Returns
+    /// `basename` if no custom mode currently uses it; otherwise
+    /// returns `"<basename> N"` where `N` is one greater than the
+    /// largest existing suffix (or 2 if only the bare basename is
+    /// taken). Skip-gaps means deleting "Notes 2" and creating again
+    /// produces "Notes 3", not a re-used "Notes 2".
+    public func nextAvailableName(_ basename: String) -> String {
+        lock.withLock {
+            let prefix = "\(basename) "
+            var basenameTaken = false
+            var maxSuffix: Int = 0
+            for mode in document.customModes {
+                if mode.name == basename {
+                    basenameTaken = true
+                    continue
+                }
+                if mode.name.hasPrefix(prefix) {
+                    let suffix = String(mode.name.dropFirst(prefix.count))
+                    if let n = Int(suffix), n > maxSuffix {
+                        maxSuffix = n
+                    }
+                }
+            }
+            if !basenameTaken && maxSuffix == 0 {
+                return basename
+            }
+            let next = max(maxSuffix, 1) + 1
+            return "\(basename) \(next)"
+        }
     }
 
     /// Save (insert or update) a custom mode. Validates before writing.
     /// Built-in IDs cannot be overwritten — throws
-    /// `.builtInIDReserved(...)`.
+    /// `.builtInIDReserved(...)`. Broadcasts the custom-modes stream
+    /// + default/current streams when the saved mode happens to be the
+    /// active selection (mutation may have changed user-visible state
+    /// for those observers).
     public func saveCustom(_ mode: WorkflowMode) throws {
+        var defaultChanged = false
+        var currentChanged = false
         try lock.withLock {
             if Self.builtInModes.contains(where: { $0.id == mode.id }) {
                 throw WorkflowModeRegistryError.builtInIDReserved(mode.id)
@@ -117,142 +296,90 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
                 document.customModes.append(mode)
             }
             try store.save(document)
+            defaultChanged = (document.defaultModeID == mode.id)
+            currentChanged = (inMemoryCurrentID == mode.id)
         }
+        broadcastCustomModes()
+        if defaultChanged { broadcastDefaultMode() }
+        if currentChanged { broadcastCurrentMode() }
     }
 
-    /// Re-validate the currently-active mode against a fresh
-    /// `availableKinds` snapshot (per L15, #078.28). Called by
-    /// `SessionCoordinator` immediately before starting capture so a
-    /// model that became unavailable since `setActive(...)` ran (e.g.
-    /// the user deleted it from AI Models tab) is caught before audio
-    /// flows.
+    /// Re-validate the current mode against a fresh `availableKinds`
+    /// snapshot (#078.28 + #089 L-8). Called by `SessionCoordinator`
+    /// immediately before starting capture so a model that became
+    /// unavailable since the user picked the mode (e.g. they deleted
+    /// it from AI Models tab) is caught before audio flows.
     ///
     /// - Parameter availableKinds: kinds for which `ActiveModelService`
     ///   currently has an active descriptor. Passed in by the caller
     ///   so this stays a pure validator (no `ActiveModelService`
     ///   coupling here).
-    /// - Returns: the validated active mode, ready to be passed to
+    /// - Returns: the validated current mode, ready to be passed to
     ///   `RecipeBuilder`.
     /// - Throws: `WorkflowModeValidationError` on the first rule
     ///   violation. Caller surfaces a descriptive error and aborts the
     ///   session.
-    public func validateActiveForSessionStart(
+    public func validateCurrentForSessionStart(
         availableKinds: Set<ModelKind>
     ) throws -> WorkflowMode {
-        let mode = activeMode
+        let mode = currentMode
         try WorkflowModeValidator.validate(mode, availableKinds: availableKinds)
         return mode
     }
 
-    /// Mutate the currently-active recipe. If the active mode is a
-    /// built-in (read-only), fork into a custom mode with the
-    /// `forkSuffix` appended to its name and a unique ID, apply the
-    /// mutation, and switch active. If the active mode is already
-    /// custom, mutate it in place. Validates the result before
-    /// persisting.
-    ///
-    /// Per L27 — the entry point for Settings toggles that need to
-    /// modify active recipe state (VAD inclusion, paste inclusion,
-    /// clipboard restore parameter override). The GeneralTab toggle
-    /// bridge is a follow-up; this method is the registry-side seam.
-    @discardableResult
-    public func mutateActiveOrFork(
-        forkSuffix: String = " (custom)",
-        _ block: (inout WorkflowMode) -> Void
-    ) throws -> WorkflowMode {
-        let result: WorkflowMode = try lock.withLock {
-            let current = resolveActiveLocked()
-            let isBuiltIn = Self.builtInModes.contains(where: { $0.id == current.id })
-
-            if isBuiltIn {
-                // Fork: derive a new custom mode from the built-in.
-                let newID = uniqueCustomIDLocked(base: "\(current.id)-custom")
-                var working = WorkflowMode(
-                    id: newID,
-                    name: "\(current.name)\(forkSuffix)",
-                    pipelineShape: current.pipelineShape,
-                    processors: current.processors,
-                    captureControllers: current.captureControllers,
-                    outputSinks: current.outputSinks
-                )
-                block(&working)
-                try WorkflowModeValidator.validate(
-                    working,
-                    availableKinds: availableKindsProvider()
-                )
-                document.customModes.append(working)
-                document.activeModeID = working.id
-                try store.save(document)
-                return working
-            }
-
-            // Mutate in place — find the custom entry by ID.
-            guard let index = document.customModes.firstIndex(where: { $0.id == current.id }) else {
-                throw WorkflowModeRegistryError.unknownMode(current.id)
-            }
-            var working = document.customModes[index]
-            block(&working)
-            try WorkflowModeValidator.validate(
-                working,
-                availableKinds: availableKindsProvider()
-            )
-            document.customModes[index] = working
-            try store.save(document)
-            return working
-        }
-        broadcastActiveMode()
-        return result
-    }
-
-    /// Remove a custom mode by ID. If the deleted mode was active, the
-    /// active selection falls back to the built-in `.dictation`.
+    /// Remove a custom mode by ID. If the deleted mode was the
+    /// default, `defaultModeID` is cleared (resolves to
+    /// `.dictation`). If the deleted mode was the in-memory current,
+    /// the in-memory current is cleared (resolves to `defaultMode`).
     public func deleteCustom(id: String) throws {
+        var defaultChanged = false
+        var currentChanged = false
         try lock.withLock {
+            let originalCount = document.customModes.count
             document.customModes.removeAll { $0.id == id }
-            if document.activeModeID == id {
-                document.activeModeID = WorkflowMode.dictation.id
+            guard document.customModes.count != originalCount else {
+                return
+            }
+            if document.defaultModeID == id {
+                document.defaultModeID = nil
+                defaultChanged = true
+            }
+            if inMemoryCurrentID == id {
+                inMemoryCurrentID = nil
+                currentChanged = true
             }
             try store.save(document)
         }
-        broadcastActiveMode()
+        broadcastCustomModes()
+        if defaultChanged { broadcastDefaultMode() }
+        if currentChanged || defaultChanged {
+            // Current resolution depends on default when in-memory current
+            // is nil; broadcast unconditionally on either change.
+            broadcastCurrentMode()
+        }
     }
 
     // MARK: - Internals (lock-held)
 
-    private func resolveActiveLocked() -> WorkflowMode {
-        if let id = document.activeModeID, let mode = resolveModeLocked(id: id) {
+    private func resolveDefaultLocked() -> WorkflowMode {
+        if let id = document.defaultModeID,
+           let mode = document.customModes.first(where: { $0.id == id }) {
             return mode
         }
         return .dictation
     }
 
-    private func resolveModeLocked(id: String) -> WorkflowMode? {
-        if let builtIn = Self.builtInModes.first(where: { $0.id == id }) {
-            return builtIn
+    private func resolveCurrentLocked() -> WorkflowMode {
+        if let id = inMemoryCurrentID,
+           let mode = document.customModes.first(where: { $0.id == id }) {
+            return mode
         }
-        return document.customModes.first(where: { $0.id == id })
-    }
-
-    /// Generate a custom-mode ID that doesn't collide with built-in or
-    /// existing custom IDs. Used by `mutateActiveOrFork` when forking
-    /// from a built-in.
-    private func uniqueCustomIDLocked(base: String) -> String {
-        let existing = Set(Self.builtInModes.map(\.id) + document.customModes.map(\.id))
-        if !existing.contains(base) {
-            return base
-        }
-        var counter = 2
-        while true {
-            let candidate = "\(base)-\(counter)"
-            if !existing.contains(candidate) {
-                return candidate
-            }
-            counter += 1
-        }
+        return resolveDefaultLocked()
     }
 }
 
 public enum WorkflowModeRegistryError: Error, Equatable {
     case unknownMode(String)
     case builtInIDReserved(String)
+    case invalidIndex
 }

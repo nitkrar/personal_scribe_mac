@@ -147,9 +147,17 @@ final class MenuBarSceneModel: ObservableObject {
         let outputService = outputService
         let onClipboardOnlyCopy = onClipboardOnlyCopy
         let logger = logger
+        let coordinator = coordinator
 
         Task { @MainActor in
-            switch await outputService.deliverBatch(text: transcript) {
+            // #089 L-24: drive output via the session-frozen sink list,
+            // never the live-registry recipe at delivery time. Recipe
+            // is nil only before the first session has bound — in that
+            // edge case there's nothing to deliver against, so skip.
+            guard let recipe = await coordinator.currentBoundRecipe() else {
+                return
+            }
+            switch await outputService.deliverBatch(text: transcript, sinks: recipe.outputSinks) {
             case .delivered(let target, _):
                 if target == .clipboardOnly || target == .selfFrontmost {
                     onClipboardOnlyCopy()

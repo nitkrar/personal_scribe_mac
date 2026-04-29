@@ -56,7 +56,7 @@ public actor SessionCoordinator {
             pipelineShape: .batch,
             processors: [.transcriber(transcriber)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: true)]
         )
         self.modelService = nil
         self.processorProvider = nil
@@ -266,6 +266,16 @@ public actor SessionCoordinator {
         await pipeline.snapshot().lastCompletedResult
     }
 
+    /// #089 — read the recipe currently bound to the orchestrator.
+    /// Async because the call crosses the
+    /// `SessionPipelineOrchestrator` actor boundary. Returns nil only
+    /// before the first session has bound a recipe; the returned
+    /// recipe is the same one captured at session start (the L-24
+    /// "session-frozen" sink list).
+    public func currentBoundRecipe() async -> BoundRecipe? {
+        await pipeline.currentBoundRecipe()
+    }
+
     /// Idempotent passthrough for eager model preparation; each
     /// processor's `prepare()` coalesces repeat calls. Builds a recipe
     /// from the current active mode and binds it before delegating to
@@ -308,21 +318,22 @@ public actor SessionCoordinator {
         audioLevelContinuations[id] = nil
     }
 
-    /// #078.28 — re-validate the registry's active recipe against the
-    /// currently-available `ModelKind` set right before starting a
-    /// session (per L15). Returns `true` to proceed; `false` after
-    /// publishing `.invalidActiveMode` to abort. When no registry is
-    /// wired (legacy callers) the check is a no-op pass-through.
+    /// #078.28 + #089 L-8 — re-validate the registry's current recipe
+    /// against the currently-available `ModelKind` set right before
+    /// starting a session (per L15). Returns `true` to proceed;
+    /// `false` after publishing `.invalidActiveMode` to abort. When no
+    /// registry is wired (legacy callers) the check is a no-op
+    /// pass-through.
     private func validateActiveRecipeForSessionStart() async -> Bool {
         guard let registry = workflowModeRegistry else {
             return true
         }
         let availableKinds = availableKindsProvider?() ?? Set(ModelKind.allCases)
         do {
-            _ = try registry.validateActiveForSessionStart(availableKinds: availableKinds)
+            _ = try registry.validateCurrentForSessionStart(availableKinds: availableKinds)
             return true
         } catch {
-            logger.error("Active workflow mode failed validation at session start", error: error)
+            logger.error("Current workflow mode failed validation at session start", error: error)
             await pipeline.publishSessionStartError(.invalidActiveMode)
             return false
         }
@@ -353,7 +364,7 @@ public actor SessionCoordinator {
     }
 
     /// Build + bind the recipe for this session per #078.29's
-    /// "WorkflowModeRegistry.activeMode() is read once at session
+    /// "WorkflowModeRegistry.currentMode() is read once at session
     /// start." On build failure publishes `.invalidActiveMode` so
     /// observers see the same error shape as the L15 validation path.
     private func bindRecipeBeforeStart() async {
@@ -370,8 +381,9 @@ public actor SessionCoordinator {
     }
 
     /// Resolve the recipe to bind: either the test-only fixed recipe,
-    /// or build via `RecipeBuilder` against the current active mode.
-    /// Returns nil only when neither path is wired (legacy state).
+    /// or build via `RecipeBuilder` against the registry's current
+    /// mode (#089 L-5). Returns nil only when neither path is wired
+    /// (legacy state).
     private func resolveRecipe() async throws -> BoundRecipe? {
         if let fixedRecipe {
             return fixedRecipe
@@ -383,7 +395,7 @@ public actor SessionCoordinator {
             return nil
         }
         return try await MainActor.run {
-            let mode = registry.activeMode
+            let mode = registry.currentMode
             let builder = RecipeBuilder(
                 modelService: modelService,
                 processorProvider: processorProvider

@@ -8,10 +8,11 @@ public enum PersonalScribeError: Error, Sendable, Equatable {
     case transcriptionFailure
     case cancelled
     case invalidState
-    /// #078.28: the active workflow recipe failed validation at session
-    /// start (per L15). Surfaced when `WorkflowModeRegistry`
-    /// `.validateActiveForSessionStart(...)` throws — the coordinator
-    /// aborts the session without starting capture.
+    /// #078.28 + #089 L-8: the current workflow recipe failed
+    /// validation at session start (per L15). Surfaced when
+    /// `WorkflowModeRegistry.validateCurrentForSessionStart(...)`
+    /// throws — the coordinator aborts the session without starting
+    /// capture.
     case invalidActiveMode
 }
 

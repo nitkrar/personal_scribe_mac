@@ -24,7 +24,7 @@ final class WorkflowModeStoreTests: XCTestCase {
         let doc = try store.load()
 
         XCTAssertEqual(doc.schemaVersion, WorkflowModeDocument.currentSchemaVersion)
-        XCTAssertNil(doc.activeModeID)
+        XCTAssertNil(doc.defaultModeID)
         XCTAssertTrue(doc.customModes.isEmpty)
         // Crucially: load does NOT create the file just because it was
         // missing — only save does.
@@ -38,7 +38,7 @@ final class WorkflowModeStoreTests: XCTestCase {
     func testSaveThenLoadRoundTrips() throws {
         let store = WorkflowModeStore(baseDirectory: tempDir)
         let original = WorkflowModeDocument(
-            activeModeID: "dictation",
+            defaultModeID: "med-notes",
             customModes: [
                 WorkflowMode(
                     id: "med-notes",
@@ -46,7 +46,7 @@ final class WorkflowModeStoreTests: XCTestCase {
                     pipelineShape: .batch,
                     processors: [.transcriber(kind: .asr)],
                     captureControllers: [.manualHotkey],
-                    outputSinks: [.frontmostPaste]
+                    outputSinks: [.frontmostPaste(enabled: .override(true))]
                 ),
             ]
         )
@@ -98,10 +98,10 @@ final class WorkflowModeStoreTests: XCTestCase {
             pipelineShape: .batch,
             processors: [.transcriber(kind: .asr)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
         )
         try registry1.saveCustom(custom)
-        try registry1.setActive(id: "med-notes")
+        try registry1.setDefault(id: "med-notes")
 
         // Fresh registry on a new store reading the same disk path.
         let store2 = WorkflowModeStore(baseDirectory: tempDir)
@@ -110,7 +110,8 @@ final class WorkflowModeStoreTests: XCTestCase {
             availableKindsProvider: { [.asr] }
         )
 
-        XCTAssertEqual(registry2.activeMode.id, "med-notes")
+        XCTAssertEqual(registry2.defaultMode.id, "med-notes")
+        XCTAssertEqual(registry2.currentMode.id, "med-notes")
         XCTAssertEqual(registry2.allModes.map(\.id), ["dictation", "med-notes"])
     }
 }

@@ -7,6 +7,21 @@ import PersonalScribeCore
 final class ClipboardBatchOutputTests: XCTestCase {
     private let suiteName = "PersonalScribeTestsClipboardBatchOutput"
 
+    /// #089 L-24: tests now drive `deliverBatch` via the session-frozen
+    /// sink list instead of UserDefaults flags. These helpers map
+    /// pre-#089 scenarios (auto-paste on/off, restore on/off) onto the
+    /// post-#089 `[BoundOutputSink]` shape.
+    private static func sinks(
+        autoPaste: Bool = true,
+        restoreEnabled: Bool = false
+    ) -> [BoundOutputSink] {
+        [
+            .clipboard(restoreEnabled: restoreEnabled),
+            .frontmostPaste(enabled: autoPaste),
+            .transcriptHistorySQLite,
+        ]
+    }
+
     private func makePasteboard() -> NSPasteboard {
         NSPasteboard(name: NSPasteboard.Name(rawValue: "personal_scribe.test.\(UUID().uuidString)"))
     }
@@ -66,7 +81,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             focusedElementIsInAnotherApp: { true }
         )
 
-        let result = await service.deliverBatch(text: "hello world")
+        let result = await service.deliverBatch(text: "hello world", sinks: Self.sinks())
 
         XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
         XCTAssertEqual(promptCount, 1)
@@ -96,7 +111,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             focusedElementIsInAnotherApp: { true }
         )
 
-        let result = await service.deliverBatch(text: "already trusted")
+        let result = await service.deliverBatch(text: "already trusted", sinks: Self.sinks())
 
         XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertEqual(promptCount, 0)
@@ -105,7 +120,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
     func testDeliverBatchReturnsClipboardOnlyWhenAutoPasteDisabled() async {
         let defaults = isolatedDefaults()
-        AutoPasteEnabledPreference.persist(false, to: defaults)
+        // #089: auto-paste is now a per-mode sink toggle, not a defaults flag.
         let pasteboard = makePasteboard()
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
@@ -125,7 +140,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             focusedElementIsInAnotherApp: { true }
         )
 
-        let result = await service.deliverBatch(text: "clipboard only")
+        let result = await service.deliverBatch(text: "clipboard only", sinks: Self.sinks(autoPaste: false))
 
         XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
         XCTAssertEqual(shortcutPostCount, 0)
@@ -139,7 +154,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
     // paste-gating path anymore.
     func testDeliverBatchPastesWhenFrontmostIsSelfButFocusIsInAnotherApp() async {
         let defaults = isolatedDefaults()
-        AutoPasteEnabledPreference.persist(true, to: defaults)
         let pasteboard = makePasteboard()
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
@@ -159,7 +173,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             focusedElementIsInAnotherApp: { true }
         )
 
-        let result = await service.deliverBatch(text: "self frontmost but cursor present")
+        let result = await service.deliverBatch(text: "self frontmost but cursor present", sinks: Self.sinks())
 
         XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertEqual(shortcutPostCount, 1)
@@ -190,7 +204,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             focusedElementIsInAnotherApp: { true }
         )
 
-        let result = await service.deliverBatch(text: "")
+        let result = await service.deliverBatch(text: "", sinks: Self.sinks())
 
         XCTAssertEqual(result, .ignoredEmptyInput)
         XCTAssertEqual(promptCount, 0)
@@ -201,9 +215,8 @@ final class ClipboardBatchOutputTests: XCTestCase {
     func testDeliverBatchReadsRestoreDelayPreferencePerCall() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
-        // Restore is off by default post-#072; this test specifically
-        // exercises the scheduled-restore path, so turn it on.
-        ClipboardRestoreEnabledPreference.persist(true, to: defaults)
+        // #089: restore-enabled is now a sink parameter; this test
+        // exercises the scheduled-restore path, so turn it on in sinks.
         var scheduledRestores: [(delay: TimeInterval, action: @MainActor () -> Void)] = []
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
@@ -225,7 +238,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         _ = pasteboard.setString("original one", forType: .string)
         ClipboardRestoreDelay.storedSeconds(defaults: defaults).persist(0.2)
 
-        let firstResult = await service.deliverBatch(text: "transcript one")
+        let firstResult = await service.deliverBatch(text: "transcript one", sinks: Self.sinks(restoreEnabled: true))
 
         XCTAssertEqual(firstResult, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertEqual(scheduledRestores.count, 1)
@@ -238,7 +251,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         _ = pasteboard.setString("original two", forType: .string)
         ClipboardRestoreDelay.storedSeconds(defaults: defaults).persist(1.4)
 
-        let secondResult = await service.deliverBatch(text: "transcript two")
+        let secondResult = await service.deliverBatch(text: "transcript two", sinks: Self.sinks(restoreEnabled: true))
 
         XCTAssertEqual(secondResult, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertEqual(scheduledRestores.count, 2)
@@ -253,8 +266,8 @@ final class ClipboardBatchOutputTests: XCTestCase {
     func testDeliverBatchSkipsScheduledRestoreWhenRestoreDisabled() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
-        // Default is OFF; set explicitly to document intent.
-        ClipboardRestoreEnabledPreference.persist(false, to: defaults)
+        // #089: restore is now expressed in the sink list. Pass
+        // restoreEnabled: false explicitly to document intent.
         var scheduledRestores: [(delay: TimeInterval, action: @MainActor () -> Void)] = []
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
@@ -275,7 +288,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         pasteboard.clearContents()
         _ = pasteboard.setString("original", forType: .string)
 
-        let result = await service.deliverBatch(text: "transcript")
+        let result = await service.deliverBatch(text: "transcript", sinks: Self.sinks(restoreEnabled: false))
 
         XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertTrue(
@@ -291,7 +304,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
         // and the delayed restore, the restore must NOT clobber that content.
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
-        ClipboardRestoreEnabledPreference.persist(true, to: defaults)
         var scheduledRestores: [(delay: TimeInterval, action: @MainActor () -> Void)] = []
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
@@ -312,7 +324,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         pasteboard.clearContents()
         _ = pasteboard.setString("user original", forType: .string)
 
-        let result = await service.deliverBatch(text: "transcript")
+        let result = await service.deliverBatch(text: "transcript", sinks: Self.sinks(restoreEnabled: true))
         XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertEqual(scheduledRestores.count, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "transcript")
@@ -358,7 +370,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             focusedElementIsInAnotherApp: { true }
         )
 
-        let result = await service.deliverBatch(text: "shortcut fallback")
+        let result = await service.deliverBatch(text: "shortcut fallback", sinks: Self.sinks())
 
         XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .clipboardOnly))
         XCTAssertEqual(shortcutPostCount, 1)
@@ -367,7 +379,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
     func testClipboardOnlyWriteFailureRestoresExistingPasteboardContents() async {
         let defaults = isolatedDefaults()
-        AutoPasteEnabledPreference.persist(false, to: defaults)
         let pasteboard = makePasteboard()
         pasteboard.clearContents()
         _ = pasteboard.setString("existing value", forType: .string)
@@ -389,7 +400,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             focusedElementIsInAnotherApp: { true }
         )
 
-        let result = await service.deliverBatch(text: "new value")
+        let result = await service.deliverBatch(text: "new value", sinks: Self.sinks(autoPaste: false))
 
         XCTAssertEqual(result, .failed(.clipboardWriteFailed))
         XCTAssertEqual(shortcutPostCount, 0)
@@ -423,7 +434,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             }
         )
 
-        let result = await service.deliverBatch(text: "cursor present")
+        let result = await service.deliverBatch(text: "cursor present", sinks: Self.sinks())
 
         XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertEqual(shortcutPostCount, 1)
@@ -456,7 +467,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             }
         )
 
-        let result = await service.deliverBatch(text: "no cursor")
+        let result = await service.deliverBatch(text: "no cursor", sinks: Self.sinks())
 
         XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
         XCTAssertEqual(shortcutPostCount, 0, "paste shortcut must not be posted when focused element is owned by self")
@@ -481,7 +492,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             focusedElementIsInAnotherApp: { false }
         )
 
-        let result = await service.deliverBatch(text: "written regardless")
+        let result = await service.deliverBatch(text: "written regardless", sinks: Self.sinks())
 
         XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
         XCTAssertEqual(
@@ -493,7 +504,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
     func testFocusedElementCheckIsNotConsultedWhenAutoPasteDisabled() async {
         let defaults = isolatedDefaults()
-        AutoPasteEnabledPreference.persist(false, to: defaults)
         let pasteboard = makePasteboard()
         var probeCount = 0
         let service = ClipboardBatchOutput(
@@ -513,7 +523,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             }
         )
 
-        let result = await service.deliverBatch(text: "clipboard-only mode")
+        let result = await service.deliverBatch(text: "clipboard-only mode", sinks: Self.sinks(autoPaste: false))
 
         XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
         XCTAssertEqual(probeCount, 0, "focused-element probe must be skipped when auto-paste is disabled")
@@ -542,12 +552,62 @@ final class ClipboardBatchOutputTests: XCTestCase {
             }
         )
 
-        let result = await service.deliverBatch(text: "ax denied")
+        let result = await service.deliverBatch(text: "ax denied", sinks: Self.sinks())
 
         XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
         XCTAssertEqual(probeCount, 0, "focused-element probe must be skipped when Accessibility is not trusted")
         XCTAssertEqual(promptCount, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "ax denied")
+    }
+
+    // MARK: - #089 H.6 — sink absence is the feature gate
+
+    /// H.6 — pin the L-24 sink-truth contract. A sink list with paste
+    /// but no `.clipboard` entry must NOT touch the pasteboard or
+    /// schedule a restore. Codex DESIGN-review-2 §2 caught the
+    /// booleans-only API would have clipboard-written here regardless.
+    func testDeliverBatchSkipsClipboardWhenNoClipboardSink() async {
+        let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
+        pasteboard.clearContents()
+        _ = pasteboard.setString("untouched", forType: .string)
+        let preChangeCount = pasteboard.changeCount
+        var scheduledRestores = 0
+        var shortcutPostCount = 0
+        let service = ClipboardBatchOutput(
+            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            snapshotService: makeSnapshotService(for: pasteboard),
+            scheduleRestore: { _, _ in scheduledRestores += 1 },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in
+                shortcutPostCount += 1
+                return true
+            },
+            focusedElementIsInAnotherApp: { true }
+        )
+
+        let result = await service.deliverBatch(
+            text: "no clipboard sink",
+            sinks: [
+                .frontmostPaste(enabled: true),
+                .transcriptHistorySQLite,
+            ]
+        )
+
+        XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
+        XCTAssertEqual(pasteboard.string(forType: .string), "untouched",
+                       "Pasteboard contents must be untouched when no .clipboard sink is present")
+        XCTAssertEqual(pasteboard.changeCount, preChangeCount,
+                       "Pasteboard changeCount must not advance — no write occurred")
+        XCTAssertEqual(scheduledRestores, 0,
+                       "No clipboard sink ⇒ no schedule-restore call")
+        XCTAssertEqual(shortcutPostCount, 0,
+                       "Paste must not fire when there's no clipboard write to follow")
     }
 
     // MARK: - Pure PID-comparison helper (#042)

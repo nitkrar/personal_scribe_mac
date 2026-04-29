@@ -22,7 +22,7 @@ struct UnifiedWindowView: View {
     // subscriptions intact.
     @ObservedObject var homeViewModel: HomeTabViewModel
     @ObservedObject var transcriptionsViewModel: TranscriptionsTabViewModel
-    @ObservedObject var modesViewModel: ModesTabViewModel
+    @ObservedObject var modesViewModel: ModesListViewModel
     @ObservedObject var microphoneFooterViewModel: MicrophoneFooterViewModel
     let permissionService: any PermissionService
     let defaults: UserDefaults
@@ -34,7 +34,7 @@ struct UnifiedWindowView: View {
         windowTint: WindowTint = .warm,
         homeViewModel: HomeTabViewModel,
         transcriptionsViewModel: TranscriptionsTabViewModel,
-        modesViewModel: ModesTabViewModel,
+        modesViewModel: ModesListViewModel,
         microphoneFooterViewModel: MicrophoneFooterViewModel,
         permissionService: any PermissionService,
         defaults: UserDefaults = .standard,

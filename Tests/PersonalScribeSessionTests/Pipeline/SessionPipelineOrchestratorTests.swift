@@ -829,7 +829,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             pipelineShape: .batch,
             processors: [.transcriber(transcriber)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: true)]
         )
         let contextProvider = StaticPipelineContextProvider(context: context)
         if let persistenceHandler {

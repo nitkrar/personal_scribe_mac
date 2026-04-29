@@ -110,6 +110,7 @@ final class WorkflowModeValidatorTests: XCTestCase {
             ],
             captureControllers: [
                 .vad(
+                    enabled: .setting(PreferenceKeys.vadAutoStopEnabled),
                     silenceThreshold: .setting(PreferenceKeys.vadSilenceThreshold),
                     showWarning: .setting(PreferenceKeys.vadShowStoppingWarning),
                     showAutoStoppedNotification: .setting(

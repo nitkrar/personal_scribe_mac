@@ -74,6 +74,7 @@ final class RecipeBuilderTests: XCTestCase {
             processors: [.transcriber(kind: .asr)],
             captureControllers: [
                 .vad(
+                    enabled: .override(true),
                     silenceThreshold: .setting(PreferenceKeys.vadSilenceThreshold),
                     showWarning: .override(true),
                     showAutoStoppedNotification: .setting(
@@ -82,15 +83,16 @@ final class RecipeBuilderTests: XCTestCase {
                 ),
                 .manualHotkey,
             ],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
         )
 
         let bound = try builder.build(mode)
 
-        guard case .vad(let silenceThreshold, let showWarning, let showAutoStopped) = bound.captureControllers[0] else {
+        guard case .vad(let enabled, let silenceThreshold, let showWarning, let showAutoStopped) = bound.captureControllers[0] else {
             XCTFail("Expected .vad first capture controller, got \(bound.captureControllers)")
             return
         }
+        XCTAssertTrue(enabled)
         XCTAssertEqual(silenceThreshold, 2.5)
         XCTAssertTrue(showWarning)
         XCTAssertFalse(showAutoStopped) // setting key default: false

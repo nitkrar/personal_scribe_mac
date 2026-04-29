@@ -197,15 +197,11 @@ struct PersonalScribeAppMain: App {
                     modes: WorkflowModeRegistry.builtInModes,
                     modelService: modelService,
                     setActiveMode: { mode in
-                        // #078.36: WorkflowMode is referenced by id;
-                        // RecipeBuilder resolves descriptors per Kind
-                        // via ActiveModelService at session start.
-                        do {
-                            try AppComposition.workflowModeRegistry.setActive(id: mode.id)
-                        } catch {
-                            PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
-                                .error("Failed to set active mode '\(mode.id)'", error: error)
-                        }
+                        // #089: menu-bar / pill switcher set the runtime
+                        // *current* mode, not the persisted default.
+                        // RecipeBuilder resolves descriptors per Kind via
+                        // ActiveModelService at session start.
+                        AppComposition.workflowModeRegistry.setCurrent(id: mode.id)
                     },
                     menuBarVisibilityProvider: {
                         statusItemHostRef?.isMenuBarVisible ?? true
@@ -264,15 +260,10 @@ struct PersonalScribeAppMain: App {
             inputDeviceProvider: inputDeviceProvider,
             modes: WorkflowModeRegistry.builtInModes,
             setActiveMode: { mode in
-                // #078.36: WorkflowMode is referenced by id; recipe
-                // resolution against ActiveModelService happens at
-                // session start via RecipeBuilder.
-                do {
-                    try AppComposition.workflowModeRegistry.setActive(id: mode.id)
-                } catch {
-                    PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
-                        .error("Failed to set active mode '\(mode.id)' from menu-bar submenu", error: error)
-                }
+                // #089: menu-bar submenu picks the runtime *current*
+                // mode. Recipe resolution against ActiveModelService
+                // happens at session start via RecipeBuilder.
+                AppComposition.workflowModeRegistry.setCurrent(id: mode.id)
             },
             prequitHandler: {
                 // Stop an active recording before terminate so

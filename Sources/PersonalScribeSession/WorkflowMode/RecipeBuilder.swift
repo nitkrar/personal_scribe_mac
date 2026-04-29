@@ -72,8 +72,9 @@ public final class RecipeBuilder {
 
     private func buildCaptureController(_ spec: CaptureControllerSpec) -> BoundCaptureController {
         switch spec {
-        case .vad(let silenceThreshold, let showWarning, let showAutoStoppedNotification):
+        case .vad(let enabled, let silenceThreshold, let showWarning, let showAutoStoppedNotification):
             return .vad(
+                enabled: ParameterResolver.resolve(enabled, from: defaults),
                 silenceThreshold: ParameterResolver.resolve(silenceThreshold, from: defaults),
                 showWarning: ParameterResolver.resolve(showWarning, from: defaults),
                 showAutoStoppedNotification: ParameterResolver.resolve(
@@ -92,8 +93,10 @@ public final class RecipeBuilder {
             return .clipboard(
                 restoreEnabled: ParameterResolver.resolve(restoreEnabled, from: defaults)
             )
-        case .frontmostPaste:
-            return .frontmostPaste
+        case .frontmostPaste(let enabled):
+            return .frontmostPaste(
+                enabled: ParameterResolver.resolve(enabled, from: defaults)
+            )
         case .transcriptHistorySQLite:
             return .transcriptHistorySQLite
         }

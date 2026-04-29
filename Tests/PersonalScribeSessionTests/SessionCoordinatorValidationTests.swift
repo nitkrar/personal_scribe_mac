@@ -34,11 +34,11 @@ final class SessionCoordinatorValidationTests: XCTestCase {
             pipelineShape: .streaming,
             processors: [.streamingTranscriber(kind: .streamingASR)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
         )
         let store = InMemoryWorkflowModeStore(
             initial: WorkflowModeDocument(
-                activeModeID: "needs-streaming",
+                defaultModeID: "needs-streaming",
                 customModes: [needsStreaming]
             )
         )
@@ -158,7 +158,7 @@ final class SessionCoordinatorValidationTests: XCTestCase {
         await coordinator.cancelIfActive()
     }
 
-    // MARK: - WorkflowModeRegistry.validateActiveForSessionStart unit
+    // MARK: - WorkflowModeRegistry.validateCurrentForSessionStart unit
 
     /// Direct unit on the registry: returns the active mode when
     /// validation passes.
@@ -169,7 +169,7 @@ final class SessionCoordinatorValidationTests: XCTestCase {
             availableKindsProvider: { [.asr] }
         )
 
-        let validated = try registry.validateActiveForSessionStart(availableKinds: [.asr])
+        let validated = try registry.validateCurrentForSessionStart(availableKinds: [.asr])
         XCTAssertEqual(validated.id, "dictation")
     }
 
@@ -182,11 +182,11 @@ final class SessionCoordinatorValidationTests: XCTestCase {
             pipelineShape: .streaming,
             processors: [.streamingTranscriber(kind: .streamingASR)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
         )
         let store = InMemoryWorkflowModeStore(
             initial: WorkflowModeDocument(
-                activeModeID: "needs-streaming",
+                defaultModeID: "needs-streaming",
                 customModes: [custom]
             )
         )
@@ -196,7 +196,7 @@ final class SessionCoordinatorValidationTests: XCTestCase {
         )
 
         XCTAssertThrowsError(
-            try registry.validateActiveForSessionStart(availableKinds: [.asr])
+            try registry.validateCurrentForSessionStart(availableKinds: [.asr])
         ) { error in
             XCTAssertEqual(
                 error as? WorkflowModeValidationError,

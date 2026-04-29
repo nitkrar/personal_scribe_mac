@@ -11,14 +11,16 @@ public struct HotkeyRecorder: View {
     public init(
         currentPreference: HotkeyPreference,
         onConfirm: @escaping @MainActor (HotkeyPreference) -> Void,
-        onCancel: @escaping @MainActor () -> Void
+        onCancel: @escaping @MainActor () -> Void,
+        additionalReservations: [HotkeyPreference] = []
     ) {
         self.currentPreference = currentPreference
         _model = StateObject(
             wrappedValue: HotkeyRecorderModel(
                 onConfirm: onConfirm,
                 onCancel: onCancel,
-                systemHotkeys: SystemHotkeyRegistry.load()
+                systemHotkeys: SystemHotkeyRegistry.load(),
+                additionalReservations: additionalReservations
             )
         )
     }
@@ -113,15 +115,18 @@ final class HotkeyRecorderModel: ObservableObject {
     private let onConfirm: @MainActor (HotkeyPreference) -> Void
     private let onCancel: @MainActor () -> Void
     private let systemHotkeys: [SystemHotkey]
+    private let additionalReservations: [HotkeyPreference]
 
     init(
         onConfirm: @escaping @MainActor (HotkeyPreference) -> Void,
         onCancel: @escaping @MainActor () -> Void,
-        systemHotkeys: [SystemHotkey] = []
+        systemHotkeys: [SystemHotkey] = [],
+        additionalReservations: [HotkeyPreference] = []
     ) {
         self.onConfirm = onConfirm
         self.onCancel = onCancel
         self.systemHotkeys = systemHotkeys
+        self.additionalReservations = additionalReservations
     }
 
     var canConfirm: Bool {
@@ -216,7 +221,8 @@ final class HotkeyRecorderModel: ObservableObject {
 
         if let rejectionReason = Self.rejectionReason(
             for: preference,
-            charactersIgnoringModifiers: normalizedCharacters(for: event)
+            charactersIgnoringModifiers: normalizedCharacters(for: event),
+            additionalReservations: additionalReservations
         ) {
             captureResult = .rejected(reason: rejectionReason)
             return
@@ -247,9 +253,13 @@ final class HotkeyRecorderModel: ObservableObject {
 
     private static func rejectionReason(
         for preference: HotkeyPreference,
-        charactersIgnoringModifiers: String
+        charactersIgnoringModifiers: String,
+        additionalReservations: [HotkeyPreference] = []
     ) -> String? {
-        if let reason = ReservedInAppHotkeys.reservationReason(for: preference) {
+        if let reason = ReservedInAppHotkeys.reservationReason(
+            for: preference,
+            additionalReservations: additionalReservations
+        ) {
             return reason
         }
 

@@ -85,6 +85,25 @@ public final class GlobalHotkeyMonitor {
     private var lastToggleTimestamp: TimeInterval?
     private var holdCanceller: HoldCanceller?
 
+    /// #089 L-21..L-22 — per-mode hotkey table. Each entry pairs a
+    /// `HotkeyPreference` with the `WorkflowMode.id` that should
+    /// activate-and-record when the chord is pressed. Updated
+    /// in-place via `updatePerModeHotkeys(_:)` — additive, never
+    /// shadows the global recording hotkey (collision is a
+    /// recorder-level rejection per L-23).
+    private struct PerModeBinding {
+        let preference: HotkeyPreference
+        let modeID: String
+    }
+    private var perModeHotkeys: [PerModeBinding] = []
+    /// Fires synchronously on per-mode hotkey keyDown. Wired by
+    /// `AppComposition` to call `WorkflowModeRegistry.setCurrent(id:)`
+    /// then start recording.
+    private var perModeActivate: (@MainActor (String) -> Void)?
+    /// Tracks the per-mode keyCode currently held so the matching
+    /// keyUp swallows even when modifier flags have already lifted.
+    private var perModeKeyDownSwallowedKeyCode: UInt16?
+
     public init(
         onToggle: @escaping @MainActor () -> Void,
         onHoldStart: @escaping @MainActor () -> Void = {},
@@ -262,6 +281,38 @@ public final class GlobalHotkeyMonitor {
         resetState()
     }
 
+    /// #089 L-22 — replace the per-mode hotkey table from the current
+    /// `customModes` snapshot. Modes without a `hotkey` are skipped.
+    /// Idempotent; the modes editor calls this whenever the registry's
+    /// custom modes stream emits.
+    public func updatePerModeHotkeys(_ modes: [WorkflowMode]) {
+        perModeHotkeys = modes.compactMap { mode in
+            guard let hotkey = mode.hotkey else { return nil }
+            return PerModeBinding(preference: hotkey, modeID: mode.id)
+        }
+    }
+
+    /// #089 L-22 — wire the side-effect closure that fires when a
+    /// per-mode hotkey keyDown matches. The closure is expected to
+    /// call `WorkflowModeRegistry.setCurrent(id:)` synchronously, then
+    /// start recording. Async work is fine; the dispatch path returns
+    /// immediately.
+    public func setOnPerModeActivate(_ handler: @escaping @MainActor (String) -> Void) {
+        perModeActivate = handler
+    }
+
+    /// Returns the per-mode binding matching `event` (keyDown), if any.
+    /// Modifier comparison uses the same recording-modifier mask as the
+    /// global hotkey so transient flags (e.g. CapsLock) don't break the
+    /// match.
+    private func perModeBinding(for event: HotkeyEvent) -> PerModeBinding? {
+        let mods = event.modifierFlags.intersection(Self.recordingModifierMask)
+        return perModeHotkeys.first { binding in
+            binding.preference.keyCode == event.keyCode
+                && binding.preference.modifierFlags == mods
+        }
+    }
+
     /// Swallow decision for the CGEventTap (global path). Same logic as
     /// `shouldSwallowLocal` — swallow matching keyDown (setting the
     /// balance flag), swallow matching-keyCode keyUp only when the
@@ -271,15 +322,25 @@ public final class GlobalHotkeyMonitor {
     internal func shouldSwallowEvent(_ event: HotkeyEvent) -> Bool {
         switch event.type {
         case .keyDown:
-            let shouldSwallow = matchesHotkey(event)
-            if shouldSwallow {
+            if matchesHotkey(event) {
                 hotkeyKeyDownSwallowed = true
+                return true
             }
-            return shouldSwallow
+            if perModeBinding(for: event) != nil {
+                perModeKeyDownSwallowedKeyCode = event.keyCode
+                return true
+            }
+            return false
         case .keyUp:
-            let shouldSwallow = hotkeyKeyDownSwallowed && event.keyCode == recordingHotkey.keyCode
-            hotkeyKeyDownSwallowed = false
-            return shouldSwallow
+            if hotkeyKeyDownSwallowed && event.keyCode == recordingHotkey.keyCode {
+                hotkeyKeyDownSwallowed = false
+                return true
+            }
+            if let pending = perModeKeyDownSwallowedKeyCode, pending == event.keyCode {
+                perModeKeyDownSwallowedKeyCode = nil
+                return true
+            }
+            return false
         case .flagsChanged:
             return false
         }
@@ -300,17 +361,28 @@ public final class GlobalHotkeyMonitor {
     ///   care about modifier edges still work.
     /// * Everything else → pass through.
     internal func shouldSwallowLocal(_ event: NSEvent) -> Bool {
+        let hk = HotkeyEvent(nsEvent: event)
         switch event.type {
         case .keyDown:
-            let shouldSwallow = matchesHotkey(HotkeyEvent(nsEvent: event))
-            if shouldSwallow {
+            if matchesHotkey(hk) {
                 hotkeyKeyDownSwallowed = true
+                return true
             }
-            return shouldSwallow
+            if perModeBinding(for: hk) != nil {
+                perModeKeyDownSwallowedKeyCode = event.keyCode
+                return true
+            }
+            return false
         case .keyUp:
-            let shouldSwallow = hotkeyKeyDownSwallowed && event.keyCode == recordingHotkey.keyCode
-            hotkeyKeyDownSwallowed = false
-            return shouldSwallow
+            if hotkeyKeyDownSwallowed && event.keyCode == recordingHotkey.keyCode {
+                hotkeyKeyDownSwallowed = false
+                return true
+            }
+            if let pending = perModeKeyDownSwallowedKeyCode, pending == event.keyCode {
+                perModeKeyDownSwallowedKeyCode = nil
+                return true
+            }
+            return false
         default:
             return false
         }
@@ -338,23 +410,29 @@ public final class GlobalHotkeyMonitor {
     }
 
     private func handleKeyDown(_ event: HotkeyEvent) {
-        guard matchesHotkey(event) else {
+        if matchesHotkey(event) {
+            // Auto-repeat keydowns come as separate events after macOS's
+            // key-repeat delay. Ignore them — the gesture we care about
+            // is the *first* keydown, which anchors tap vs hold timing.
+            if event.isARepeat {
+                return
+            }
+
+            keyDownTimestamp = event.timestamp
+            isHolding = false
+
+            holdCanceller?()
+            holdCanceller = scheduleHoldDetection(holdThreshold) { [weak self] in
+                self?.enterHoldIfStillPressed(downTimestamp: event.timestamp)
+            }
             return
         }
 
-        // Auto-repeat keydowns come as separate events after macOS's
-        // key-repeat delay. Ignore them — the gesture we care about is
-        // the *first* keydown, which anchors tap vs hold timing.
-        if event.isARepeat {
-            return
-        }
-
-        keyDownTimestamp = event.timestamp
-        isHolding = false
-
-        holdCanceller?()
-        holdCanceller = scheduleHoldDetection(holdThreshold) { [weak self] in
-            self?.enterHoldIfStillPressed(downTimestamp: event.timestamp)
+        // #089 L-22 — per-mode hotkey: fire-on-keyDown (no tap/hold
+        // gesture machine for V1). Auto-repeat is suppressed so a held
+        // chord doesn't activate the same mode twice.
+        if !event.isARepeat, let binding = perModeBinding(for: event) {
+            perModeActivate?(binding.modeID)
         }
     }
 
@@ -418,6 +496,7 @@ public final class GlobalHotkeyMonitor {
     private func resetState() {
         keyDownTimestamp = nil
         hotkeyKeyDownSwallowed = false
+        perModeKeyDownSwallowedKeyCode = nil
         isHolding = false
         lastToggleTimestamp = nil
         holdCanceller?()

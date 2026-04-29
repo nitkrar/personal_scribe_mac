@@ -48,19 +48,16 @@ public enum BoundProcessor: Sendable {
 
 /// Resolved capture-controller config. VAD parameters resolved eagerly
 /// per L25 (no lazy reads inside the orchestrator's hot path).
+///
+/// `enabled` (#089) — when `false` the orchestrator skips VAD wiring
+/// completely; the rest of the fields are ignored in that case but
+/// retained for shape-stability.
 public enum BoundCaptureController: Sendable, Equatable {
     case vad(
+        enabled: Bool,
         silenceThreshold: TimeInterval,
         showWarning: Bool,
         showAutoStoppedNotification: Bool
     )
     case manualHotkey
-}
-
-/// Resolved output-sink config. Clipboard restore-enabled resolved
-/// eagerly.
-public enum BoundOutputSink: Sendable, Equatable {
-    case clipboard(restoreEnabled: Bool)
-    case frontmostPaste
-    case transcriptHistorySQLite
 }

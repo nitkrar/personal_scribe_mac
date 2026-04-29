@@ -42,4 +42,18 @@ public enum PreferenceKeys {
         key: "ClipboardRestoreEnabled",
         default: true
     )
+
+    /// VAD auto-stop master toggle. Matches
+    /// `VadAutoStopEnabledPreference.userDefaultsKey` + `default`.
+    public static let vadAutoStopEnabled = SettingKey<Bool>(
+        key: "VadAutoStopEnabled",
+        default: true
+    )
+
+    /// Auto-paste (Cmd+V after clipboard write). Matches
+    /// `AutoPasteEnabledPreference.userDefaultsKey` + `default`.
+    public static let autoPasteEnabled = SettingKey<Bool>(
+        key: "AutoPasteEnabled",
+        default: true
+    )
 }

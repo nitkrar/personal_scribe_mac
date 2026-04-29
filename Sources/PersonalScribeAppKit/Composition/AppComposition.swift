@@ -95,9 +95,9 @@ public enum AppComposition {
                 store: workflowModeStore,
                 availableKindsProvider: kindsProvider
             )
-            // Run legacy-toggle migration once at first composition.
-            // Idempotent via `LegacyToggleMigrationApplied_v1` flag.
-            try LegacyToggleMigrator(registry: registry).runIfNeeded()
+            // #089: legacy-toggle migration is no longer needed —
+            // GeneralTab toggles write UserDefaults directly and
+            // recipes consult them via `Parameter.setting(...)`.
             return registry
         } catch {
             // Fallback: in-memory registry so the app still launches.
@@ -214,7 +214,43 @@ public enum AppComposition {
     }
 
     @MainActor
-    public static let hotkeyMonitor: GlobalHotkeyMonitor = makeGlobalHotkeyMonitor()
+    public static let hotkeyMonitor: GlobalHotkeyMonitor = makeHotkeyMonitorWithPerModeWiring()
+
+    @MainActor
+    private static func makeHotkeyMonitorWithPerModeWiring() -> GlobalHotkeyMonitor {
+        let monitor = makeGlobalHotkeyMonitor()
+        // #089 L-22 — wire per-mode hotkey activation: set the
+        // registry's runtime current mode, then start recording via
+        // the same coordinator path the global hotkey uses.
+        let registry = workflowModeRegistry
+        let coordinator = sessionCoordinator
+        monitor.setOnPerModeActivate { modeID in
+            registry.setCurrent(id: modeID)
+            Task {
+                await coordinator.startIfIdle()
+            }
+        }
+        // Seed the per-mode table from the current custom modes.
+        monitor.updatePerModeHotkeys(registry.customModes)
+        return monitor
+    }
+
+    /// #089 — Task that subscribes to the registry's customModesStream
+    /// and forwards updates into the hotkey monitor's per-mode table.
+    @MainActor
+    private static var perModeHotkeyObservationTask: Task<Void, Never>?
+
+    @MainActor
+    static func startPerModeHotkeyObservation() {
+        guard perModeHotkeyObservationTask == nil else { return }
+        let registry = workflowModeRegistry
+        let monitor = hotkeyMonitor
+        perModeHotkeyObservationTask = Task { @MainActor in
+            for await modes in registry.customModesStream() {
+                monitor.updatePerModeHotkeys(modes)
+            }
+        }
+    }
 
     @MainActor
     static func makeStartupCoordinator(
@@ -226,6 +262,7 @@ public enum AppComposition {
         return AppStartupCoordinator(
             startHotkeyMonitor: {
                 hotkeyMonitor.start()
+                startPerModeHotkeyObservation()
             },
             prepareTranscriber: {
                 do {

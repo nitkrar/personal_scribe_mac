@@ -696,6 +696,73 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertEqual(holdReleases, 0, "No hold-release should fire without a completed hold")
     }
 
+    // MARK: - #089 H.8 — per-mode hotkey dispatch
+
+    /// H.8 — pressing a hotkey registered against `WorkflowMode.id`
+    /// must fire the per-mode activation closure exactly once on the
+    /// first keyDown (auto-repeat suppressed). Pinning the dispatch
+    /// table protects the wired path that `AppComposition` uses to
+    /// call `setCurrent(id:)` + start recording.
+    func testPerModeHotkeyFireSetsCurrentAndStartsRecording() throws {
+        let scheduler = HoldSchedulerSpy()
+        var perModeActivations: [String] = []
+        let monitor = GlobalHotkeyMonitor(
+            onToggle: { },
+            recordingHotkey: Self.optSlash,
+            scheduleHoldDetection: scheduler.schedule
+        )
+
+        let perModeHotkey = HotkeyPreference(
+            keyCode: 0, // 'a'
+            tapCount: 1,
+            modifiers: NSEvent.ModifierFlags([.command, .option]).rawValue
+        )
+        let mode = WorkflowMode(
+            id: "med-notes",
+            name: "Medical Notes",
+            glyph: "mic",
+            hotkey: perModeHotkey,
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
+        )
+        monitor.updatePerModeHotkeys([mode])
+        monitor.setOnPerModeActivate { id in perModeActivations.append(id) }
+
+        // Send the per-mode chord: Cmd+Opt+A keyDown.
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: 0,
+            modifierFlags: [.command, .option],
+            characters: "a",
+            timestamp: 1.0
+        ))
+
+        XCTAssertEqual(perModeActivations, ["med-notes"],
+                       "Per-mode keyDown must fire activation exactly once")
+
+        // Auto-repeat keyDown must not retrigger.
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: 0,
+            modifierFlags: [.command, .option],
+            characters: "a",
+            timestamp: 1.05,
+            isARepeat: true
+        ))
+        XCTAssertEqual(perModeActivations, ["med-notes"],
+                       "Auto-repeat keyDown must not double-activate")
+
+        // KeyUp must not fire activation.
+        monitor.handle(event: try makeKeyUpEvent(
+            keyCode: 0,
+            modifierFlags: [.command, .option],
+            characters: "a",
+            timestamp: 1.2
+        ))
+        XCTAssertEqual(perModeActivations, ["med-notes"],
+                       "KeyUp must not fire per-mode activation")
+    }
+
     // MARK: - Helpers
 
     private func sendKeyDown(

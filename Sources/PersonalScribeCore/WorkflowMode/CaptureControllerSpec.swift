@@ -5,16 +5,20 @@ import Foundation
 /// examples are VAD's silence-end fire and the manual hotkey release.
 ///
 /// Cases:
-/// - `.vad(silenceThreshold:showWarning:showAutoStoppedNotification:)`
-///   — voice-activity-detection auto-stop. Each parameter is a
-///   `Parameter<Value>` (`.setting` references a global preference;
-///   `.override` forces a per-mode value). Maps to today's
-///   `VadAutoStopController` after Phase G cutover.
+/// - `.vad(enabled:silenceThreshold:showWarning:showAutoStoppedNotification:)`
+///   — voice-activity-detection auto-stop. `enabled` (#089) gates VAD
+///   wiring; when it resolves to `false` the orchestrator skips VAD
+///   completely and recording stops only via manual hotkey / pill /
+///   Esc. The remaining parameters (silence threshold, warnings,
+///   notifications) are only consulted when `enabled` resolves true.
+///   Each parameter is a `Parameter<Value>` (`.setting` references a
+///   global preference; `.override` forces a per-mode value).
 /// - `.manualHotkey` — the press-to-talk / hold-to-record hotkey path.
 ///   No parameters; the hotkey binding itself is a global preference
 ///   (`HotkeyPreference`) read independently by the AppKit layer.
 public enum CaptureControllerSpec: Codable, Equatable, Sendable {
     case vad(
+        enabled: Parameter<Bool>,
         silenceThreshold: Parameter<TimeInterval>,
         showWarning: Parameter<Bool>,
         showAutoStoppedNotification: Parameter<Bool>
@@ -28,6 +32,7 @@ public enum CaptureControllerSpec: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case type
+        case enabled
         case silenceThreshold
         case showWarning
         case showAutoStoppedNotification
@@ -38,6 +43,10 @@ public enum CaptureControllerSpec: Codable, Equatable, Sendable {
         let type = try container.decode(Discriminator.self, forKey: .type)
         switch type {
         case .vad:
+            let enabled = try container.decodeIfPresent(
+                Parameter<Bool>.self,
+                forKey: .enabled
+            ) ?? .setting(PreferenceKeys.vadAutoStopEnabled)
             let silenceThreshold = try container.decode(
                 Parameter<TimeInterval>.self,
                 forKey: .silenceThreshold
@@ -51,6 +60,7 @@ public enum CaptureControllerSpec: Codable, Equatable, Sendable {
                 forKey: .showAutoStoppedNotification
             )
             self = .vad(
+                enabled: enabled,
                 silenceThreshold: silenceThreshold,
                 showWarning: showWarning,
                 showAutoStoppedNotification: showAutoStoppedNotification
@@ -63,8 +73,14 @@ public enum CaptureControllerSpec: Codable, Equatable, Sendable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .vad(let silenceThreshold, let showWarning, let showAutoStoppedNotification):
+        case .vad(
+            let enabled,
+            let silenceThreshold,
+            let showWarning,
+            let showAutoStoppedNotification
+        ):
             try container.encode(Discriminator.vad, forKey: .type)
+            try container.encode(enabled, forKey: .enabled)
             try container.encode(silenceThreshold, forKey: .silenceThreshold)
             try container.encode(showWarning, forKey: .showWarning)
             try container.encode(

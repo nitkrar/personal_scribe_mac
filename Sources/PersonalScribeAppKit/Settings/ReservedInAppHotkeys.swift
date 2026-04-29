@@ -34,7 +34,17 @@ enum ReservedInAppHotkeys {
 
     /// Returns the reservation reason if `preference` collides with an
     /// in-app hotkey, or `nil` if free.
-    static func reservationReason(for preference: HotkeyPreference) -> String? {
+    ///
+    /// `additionalReservations` (#089 L-23) accepts caller-supplied
+    /// hotkeys to reject — the modes editor passes the union of (a)
+    /// the global recording hotkey and (b) every other mode's
+    /// per-mode hotkey, so a user can't bind two modes to the same
+    /// chord and can't shadow the global. Existing call sites pass
+    /// nothing and behave unchanged.
+    static func reservationReason(
+        for preference: HotkeyPreference,
+        additionalReservations: [HotkeyPreference] = []
+    ) -> String? {
         let preferenceModifiers = preference.modifierFlags
 
         for entry in entries where entry.keyCode == preference.keyCode {
@@ -45,6 +55,12 @@ enum ReservedInAppHotkeys {
             } else {
                 return entry.reason
             }
+        }
+
+        for other in additionalReservations
+        where other.keyCode == preference.keyCode
+            && other.modifierFlags == preferenceModifiers {
+            return "Already in use by another mode or hotkey."
         }
 
         return nil

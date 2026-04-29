@@ -14,7 +14,8 @@ public final class AppStore: ObservableObject {
     /// #078.36 / L21 — `WorkflowModeRegistry` replaces the deleted
     /// `AppStoreActiveModeProviding` protocol. AppStore consumes the
     /// registry directly (no re-pointing); the registry's
-    /// `activeModeStream()` feeds `snapshot.activeMode`.
+    /// `currentModeStream()` feeds `snapshot.activeMode` (#089: DTO
+    /// field name preserved; source is `currentMode`).
     private let workflowModeRegistry: WorkflowModeRegistry
     private let visibilityModeSource: any AppStoreVisibilityModeProviding
     private let clock: any AppStoreClock
@@ -60,7 +61,7 @@ public final class AppStore: ObservableObject {
         snapshot = AppStoreSnapshot(
             session: initialSession,
             permissions: permissions.statusSnapshot(),
-            activeMode: workflowModeRegistry.activeMode,
+            activeMode: workflowModeRegistry.currentMode,
             pillVisibility: Self.derivePillVisibility(
                 mode: initialVisibilityMode,
                 sessionState: initialSession.sessionState,
@@ -101,9 +102,9 @@ public final class AppStore: ObservableObject {
         modeObservationTask = Task { [weak self] in
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { [weak self] in
-                    for await activeMode in workflowModeRegistry.activeModeStream() {
+                    for await currentMode in workflowModeRegistry.currentModeStream() {
                         guard let self else { return }
-                        await self.handleActiveModeChange(activeMode)
+                        await self.handleCurrentModeChange(currentMode)
                     }
                 }
 
@@ -167,9 +168,9 @@ public final class AppStore: ObservableObject {
         rederivePillVisibility()
     }
 
-    private func handleActiveModeChange(_ activeMode: WorkflowMode) {
+    private func handleCurrentModeChange(_ currentMode: WorkflowMode) {
         updateSnapshot { snapshot in
-            snapshot.activeMode = activeMode
+            snapshot.activeMode = currentMode
         }
     }
 
@@ -253,7 +254,7 @@ public final class AppStore: ObservableObject {
 
         updateSnapshot { snapshot in
             snapshot.permissions = permissionSnapshotProvider()
-            snapshot.activeMode = workflowModeRegistry.activeMode
+            snapshot.activeMode = workflowModeRegistry.currentMode
         }
 
         rederivePillVisibility()

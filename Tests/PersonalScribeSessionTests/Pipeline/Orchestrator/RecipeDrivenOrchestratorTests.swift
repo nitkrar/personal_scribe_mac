@@ -37,13 +37,14 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
             processors: [.transcriber(StubBoundTranscriber())],
             captureControllers: [
                 .vad(
+                    enabled: true,
                     silenceThreshold: 2.5,
                     showWarning: false,
                     showAutoStoppedNotification: false
                 ),
                 .manualHotkey,
             ],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: true)]
         )
 
         let handlerCalls = HandlerCallCounter()
@@ -70,6 +71,56 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         )
     }
 
+    /// H.5 (#089) — when the bound recipe declares `.vad(enabled:
+    /// false, ...)`, the orchestrator must skip VAD wiring entirely
+    /// even though the controller is present in the recipe. Pins the
+    /// new `enabled` parameter as the gate.
+    func testVadEnabledFalseSkipsWiring() async throws {
+        let capture = FakeAudioCapturer(
+            buffers: try Self.makeBuffers(count: 3),
+            delayPerBuffer: .milliseconds(10)
+        )
+        let provider = CountingVadProvider(fireOnIngestIndex: 0)
+        let recipe = BoundRecipe(
+            recipeID: "vad-disabled",
+            recipeName: "VAD disabled",
+            pipelineShape: .batch,
+            processors: [.transcriber(StubBoundTranscriber())],
+            captureControllers: [
+                .vad(
+                    enabled: false,
+                    silenceThreshold: 2.5,
+                    showWarning: false,
+                    showAutoStoppedNotification: false
+                ),
+                .manualHotkey,
+            ],
+            outputSinks: [.frontmostPaste(enabled: true)]
+        )
+        let handlerCalls = HandlerCallCounter()
+        let orchestrator = makeOrchestrator(
+            capture: capture,
+            vadProvider: provider,
+            boundRecipe: recipe
+        )
+        await orchestrator.setAutoStopHandler { await handlerCalls.increment() }
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(150))
+        await capture.stop()
+
+        let sessionCount = await provider.makeSessionCallCount
+        XCTAssertEqual(
+            sessionCount, 0,
+            "`.vad(enabled: false)` must NOT request a VAD session"
+        )
+        let callCount = await handlerCalls.count
+        XCTAssertEqual(
+            callCount, 0,
+            "`.vad(enabled: false)` must not fire the auto-stop handler"
+        )
+    }
+
     /// When the bound recipe has NO `.vad` capture controller, the
     /// orchestrator must NEVER ask the VAD provider for a session,
     /// even if `vadProvider` and a VAD-enabled `vadPreferences` are
@@ -87,7 +138,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
             pipelineShape: .batch,
             processors: [.transcriber(StubBoundTranscriber())],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: true)]
         )
         // Provide a legacy `vadPreferences` with autoStopEnabled=true to
         // prove the recipe wins: the recipe has no .vad, so VAD must
@@ -141,7 +192,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
             pipelineShape: .batch,
             processors: [.transcriber(stubTranscriber)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: true)]
         )
         let sink = TestPipelineOutputSink()
         let orchestrator = makeOrchestrator(
@@ -204,7 +255,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
             pipelineShape: .batch,
             processors: [.diarizedTurns(diarizer: diarizer, transcriber: perTurnTranscriber)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: true)]
         )
         let orchestrator = makeOrchestrator(
             capture: FakeAudioCapturer(buffers: [buffer]),
@@ -252,7 +303,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
             pipelineShape: .batch,
             processors: [.transcriber(stubTranscriber)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: true)]
         )
         let orchestrator = makeOrchestrator(
             capture: FakeAudioCapturer(buffers: [buffer]),

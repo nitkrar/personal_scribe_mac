@@ -10,15 +10,17 @@ import Foundation
 ///   `restoreEnabled` is a `Parameter<Bool>` controlling whether the
 ///   prior clipboard contents are restored after a paste delay
 ///   (`ClipboardRestoreDelay`).
-/// - `.frontmostPaste` — synthesize Cmd+V into the frontmost app via
-///   CGEventPost. No parameters today (the paste-pipeline PID probe
-///   in #042 is universal, not per-recipe).
+/// - `.frontmostPaste(enabled:)` — synthesize Cmd+V into the frontmost
+///   app via CGEventPost. `enabled` (#089) is a `Parameter<Bool>`
+///   gating the paste — when it resolves to `false` the sink is
+///   present but the paste is skipped, mirroring the legacy
+///   `AutoPasteEnabledPreference` toggle.
 /// - `.transcriptHistorySQLite` — insert into the transcript history
 ///   store unconditionally per the Phase 3 "notes = transcripts"
 ///   policy. No parameters.
 public enum OutputSinkSpec: Codable, Equatable, Sendable {
     case clipboard(restoreEnabled: Parameter<Bool>)
-    case frontmostPaste
+    case frontmostPaste(enabled: Parameter<Bool>)
     case transcriptHistorySQLite
 
     private enum Discriminator: String, Codable {
@@ -30,6 +32,7 @@ public enum OutputSinkSpec: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case type
         case restoreEnabled
+        case enabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -43,7 +46,11 @@ public enum OutputSinkSpec: Codable, Equatable, Sendable {
             )
             self = .clipboard(restoreEnabled: restoreEnabled)
         case .frontmostPaste:
-            self = .frontmostPaste
+            let enabled = try container.decodeIfPresent(
+                Parameter<Bool>.self,
+                forKey: .enabled
+            ) ?? .setting(PreferenceKeys.autoPasteEnabled)
+            self = .frontmostPaste(enabled: enabled)
         case .transcriptHistorySQLite:
             self = .transcriptHistorySQLite
         }
@@ -55,8 +62,9 @@ public enum OutputSinkSpec: Codable, Equatable, Sendable {
         case .clipboard(let restoreEnabled):
             try container.encode(Discriminator.clipboard, forKey: .type)
             try container.encode(restoreEnabled, forKey: .restoreEnabled)
-        case .frontmostPaste:
+        case .frontmostPaste(let enabled):
             try container.encode(Discriminator.frontmostPaste, forKey: .type)
+            try container.encode(enabled, forKey: .enabled)
         case .transcriptHistorySQLite:
             try container.encode(
                 Discriminator.transcriptHistorySQLite,

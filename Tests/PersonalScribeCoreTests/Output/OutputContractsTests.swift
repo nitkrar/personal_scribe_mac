@@ -42,7 +42,10 @@ final class OutputContractsTests: XCTestCase {
             result: .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
         )
 
-        let result = await service.deliverBatch(text: "batched text")
+        let result = await service.deliverBatch(
+            text: "batched text",
+            sinks: [.clipboard(restoreEnabled: false)]
+        )
 
         XCTAssertEqual(service.receivedTexts, ["batched text"])
         XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
@@ -52,14 +55,16 @@ final class OutputContractsTests: XCTestCase {
 @MainActor
 private final class RecordingOutputService: OutputService, @unchecked Sendable {
     private(set) var receivedTexts: [String] = []
+    private(set) var receivedSinks: [[BoundOutputSink]] = []
     private let result: OutputResult
 
     init(result: OutputResult) {
         self.result = result
     }
 
-    func deliverBatch(text: String) async -> OutputResult {
+    func deliverBatch(text: String, sinks: [BoundOutputSink]) async -> OutputResult {
         receivedTexts.append(text)
+        receivedSinks.append(sinks)
         return result
     }
 }

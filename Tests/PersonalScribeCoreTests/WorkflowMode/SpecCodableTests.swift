@@ -45,6 +45,7 @@ final class SpecCodableTests: XCTestCase {
 
     func testCaptureControllerSpecVadCarriesParameters() throws {
         let original = CaptureControllerSpec.vad(
+            enabled: .override(true),
             silenceThreshold: .setting(
                 SettingKey<TimeInterval>(
                     key: "VadSilenceDurationSeconds",
@@ -61,10 +62,11 @@ final class SpecCodableTests: XCTestCase {
             from: data
         )
 
-        guard case .vad(let threshold, let warning, let notification) = decoded else {
+        guard case .vad(let enabled, let threshold, let warning, let notification) = decoded else {
             XCTFail("Expected .vad case, got \(decoded)")
             return
         }
+        XCTAssertEqual(enabled, .override(true))
         guard case .setting(let key) = threshold else {
             XCTFail("silenceThreshold should round-trip as .setting")
             return

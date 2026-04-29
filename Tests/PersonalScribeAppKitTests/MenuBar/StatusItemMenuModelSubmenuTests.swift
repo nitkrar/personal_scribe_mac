@@ -228,7 +228,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
                 pipelineShape: .batch,
                 processors: [.transcriber(kind: .asr)],
                 captureControllers: [.manualHotkey],
-                outputSinks: [.frontmostPaste]
+                outputSinks: [.frontmostPaste(enabled: .override(true))]
             ),
         ]
         let model = StatusItemMenuModel.makeUnified(

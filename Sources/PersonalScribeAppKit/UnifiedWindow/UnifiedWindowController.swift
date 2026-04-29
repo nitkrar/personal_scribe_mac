@@ -56,7 +56,7 @@ final class UnifiedWindowController: NSWindowController {
     private let hostingController: NSHostingController<UnifiedWindowView>
     private let homeViewModel: HomeTabViewModel
     private let transcriptionsViewModel: TranscriptionsTabViewModel
-    private let modesViewModel: ModesTabViewModel
+    private let modesViewModel: ModesListViewModel
     private let microphoneFooterViewModel: MicrophoneFooterViewModel
     private let permissionService: any PermissionService
     private let menuBarVisibilityProvider: @MainActor () -> Bool
@@ -91,10 +91,9 @@ final class UnifiedWindowController: NSWindowController {
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.homeViewModel = HomeTabViewModel(reader: metricsReader)
         self.transcriptionsViewModel = TranscriptionsTabViewModel(reader: transcriptReader)
-        self.modesViewModel = ModesTabViewModel(
-            modes: modes,
+        self.modesViewModel = ModesListViewModel(
             registry: AppComposition.workflowModeRegistry,
-            setActiveHandler: setActiveMode
+            modelService: modelService
         )
         self.microphoneFooterViewModel = MicrophoneFooterViewModel(
             provider: inputDeviceProvider,

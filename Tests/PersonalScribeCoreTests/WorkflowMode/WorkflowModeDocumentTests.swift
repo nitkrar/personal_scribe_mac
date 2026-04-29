@@ -2,16 +2,16 @@ import Foundation
 import XCTest
 @testable import PersonalScribeCore
 
-/// #078.12 — `WorkflowModeDocument` is the on-disk schema for
+/// #078.12 + #089 — `WorkflowModeDocument` is the on-disk schema for
 /// `workflow-modes.json`. Tests pin schema-version round-trip, the
-/// `activeModeID` default, and tolerant decoding of an absent
-/// `customModes` field.
+/// `defaultModeID` default (#089 rename), and tolerant decoding of an
+/// absent `customModes` field.
 final class WorkflowModeDocumentTests: XCTestCase {
 
     func testDocumentRoundTripPreservesSchemaVersion() throws {
         let original = WorkflowModeDocument(
             schemaVersion: 1,
-            activeModeID: "dictation",
+            defaultModeID: "dictation",
             customModes: [WorkflowMode.dictation]
         )
 
@@ -22,19 +22,19 @@ final class WorkflowModeDocumentTests: XCTestCase {
         let decoded = try decoder.decode(WorkflowModeDocument.self, from: data)
 
         XCTAssertEqual(decoded.schemaVersion, 1)
-        XCTAssertEqual(decoded.activeModeID, "dictation")
+        XCTAssertEqual(decoded.defaultModeID, "dictation")
         XCTAssertEqual(decoded.customModes.count, 1)
         XCTAssertEqual(decoded.customModes.first?.id, "dictation")
     }
 
-    func testDocumentDefaultsActiveModeIDToNil() {
+    func testDocumentDefaultsDefaultModeIDToNil() {
         let fresh = WorkflowModeDocument()
 
         XCTAssertEqual(
             fresh.schemaVersion,
             WorkflowModeDocument.currentSchemaVersion
         )
-        XCTAssertNil(fresh.activeModeID)
+        XCTAssertNil(fresh.defaultModeID)
         XCTAssertTrue(fresh.customModes.isEmpty)
     }
 
@@ -44,7 +44,7 @@ final class WorkflowModeDocumentTests: XCTestCase {
         let json = """
         {
             "schemaVersion": 1,
-            "activeModeID": null
+            "defaultModeID": null
         }
         """.data(using: .utf8)!
 
@@ -54,7 +54,7 @@ final class WorkflowModeDocumentTests: XCTestCase {
         )
 
         XCTAssertEqual(decoded.schemaVersion, 1)
-        XCTAssertNil(decoded.activeModeID)
+        XCTAssertNil(decoded.defaultModeID)
         XCTAssertTrue(decoded.customModes.isEmpty)
     }
 }

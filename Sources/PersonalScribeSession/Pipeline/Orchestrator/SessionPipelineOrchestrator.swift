@@ -141,6 +141,15 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         progressForwardingTask = makeProgressForwardingTask(for: recipe)
     }
 
+    /// #089 — read the recipe currently bound to the orchestrator.
+    /// Returns nil only before the first session has bound a recipe.
+    /// `MenuBarSceneModel.deliverBatch(text:)` consumes this to drive
+    /// output via the session-frozen sink list (per L-24 — never falls
+    /// back to the live registry mid-delivery).
+    public func currentBoundRecipe() -> BoundRecipe? {
+        boundRecipe
+    }
+
     private func makeProgressForwardingTask(for recipe: BoundRecipe) -> Task<Void, Never>? {
         guard let lifecycle = Self.lifecycleForObservation(in: recipe) else {
             return nil
@@ -839,20 +848,23 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
-    /// #078.29 — pick VAD config for this session from the bound
-    /// recipe's `.vad` capture controller. No `.vad` controller (or
-    /// no bound recipe) → returns nil and the orchestrator skips VAD
-    /// monitoring entirely.
+    /// #078.29 + #089 — pick VAD config for this session from the
+    /// bound recipe's `.vad` capture controller. No `.vad` controller
+    /// (or no bound recipe) → returns nil. **`enabled: false`** on a
+    /// present `.vad` also returns nil — orchestrator skips VAD
+    /// monitoring entirely (#089 L-4 / CHECKLIST critical-1).
     private func resolvedVadPreferencesForSession() -> VadPreferences? {
         guard let recipe = boundRecipe else {
             return nil
         }
         for controller in recipe.captureControllers {
             if case .vad(
+                let enabled,
                 let silenceThreshold,
                 let showWarning,
                 let showAutoStoppedNotification
             ) = controller {
+                guard enabled else { return nil }
                 return VadPreferences(
                     autoStopEnabled: true,
                     silenceThresholdSeconds: silenceThreshold,

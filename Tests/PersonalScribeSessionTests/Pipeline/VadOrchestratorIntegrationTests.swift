@@ -344,22 +344,22 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         vadPreferences: any VadPreferencesReading,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
     ) -> SessionPipelineOrchestrator {
-        // #078.29: orchestrator takes VAD config from the bound recipe's
-        // `.vad` capture controller. Translate the legacy
-        // `vadPreferences` reader into recipe shape: autoStopEnabled
-        // → include `.vad(...)`; !autoStopEnabled → omit it.
+        // #078.29 + #089: orchestrator takes VAD config from the
+        // bound recipe's `.vad` capture controller. Translate the
+        // legacy `vadPreferences` reader into recipe shape — the
+        // `enabled:` parameter (#089) gates wiring, so feed it from
+        // `prefs.autoStopEnabled` here for parity with the pre-#089
+        // behaviour these tests pin.
         let prefs = vadPreferences.current()
-        var captureControllers: [BoundCaptureController] = [.manualHotkey]
-        if prefs.autoStopEnabled {
-            captureControllers.insert(
-                .vad(
-                    silenceThreshold: prefs.silenceThresholdSeconds,
-                    showWarning: prefs.showStoppingWarning,
-                    showAutoStoppedNotification: prefs.showAutoStoppedNotification
-                ),
-                at: 0
-            )
-        }
+        let captureControllers: [BoundCaptureController] = [
+            .vad(
+                enabled: prefs.autoStopEnabled,
+                silenceThreshold: prefs.silenceThresholdSeconds,
+                showWarning: prefs.showStoppingWarning,
+                showAutoStoppedNotification: prefs.showAutoStoppedNotification
+            ),
+            .manualHotkey,
+        ]
         let recipe = BoundRecipe(
             recipeID: "dictation",
             recipeName: "Dictation",
@@ -376,7 +376,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
                 )
             ],
             captureControllers: captureControllers,
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: true)]
         )
         return SessionPipelineOrchestrator(
             capture: capture,

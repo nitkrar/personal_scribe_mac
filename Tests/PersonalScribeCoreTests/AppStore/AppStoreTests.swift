@@ -111,8 +111,9 @@ final class AppStoreTests: XCTestCase {
     }
 
     func testActiveModeChangesRepublishSnapshot() async throws {
-        // #078.36: AppStore consumes WorkflowModeRegistry directly.
-        // Pre-populate a custom mode + flip active via setActive.
+        // #078.36 + #089: AppStore consumes WorkflowModeRegistry's
+        // currentModeStream(); the snapshot DTO field is still
+        // `activeMode` (renamed source per #089 L-evidence).
         let registry = makeRegistry()
         let coding = makeMode(id: "coding", name: "Coding")
         try registry.saveCustom(coding)
@@ -129,7 +130,7 @@ final class AppStoreTests: XCTestCase {
             store.snapshot.activeMode?.id == WorkflowMode.dictation.id
         }
 
-        try registry.setActive(id: "coding")
+        registry.setCurrent(id: "coding")
         await waitUntil {
             store.snapshot.activeMode?.id == "coding"
         }
@@ -428,7 +429,7 @@ final class AppStoreTests: XCTestCase {
             pipelineShape: .batch,
             processors: [.transcriber(kind: .asr)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
         )
     }
 

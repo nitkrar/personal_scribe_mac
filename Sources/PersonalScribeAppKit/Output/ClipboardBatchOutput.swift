@@ -68,13 +68,42 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         self.focusedElementIsInAnotherApp = focusedElementIsInAnotherApp
     }
 
-    public func deliverBatch(text: String) async -> OutputResult {
+    public func deliverBatch(text: String, sinks: [BoundOutputSink]) async -> OutputResult {
         guard !text.isEmpty else {
             return .ignoredEmptyInput
         }
 
-        let autoPasteEnabled = AutoPasteEnabledPreference.resolve(from: defaults)
-        let restoreEnabled = ClipboardRestoreEnabledPreference.resolve(from: defaults)
+        // #089 L-24: sink presence is the feature gate. No `.clipboard`
+        // entry → skip clipboard write + restore + paste entirely. No
+        // `.frontmostPaste` entry → skip Cmd+V even when clipboard
+        // wrote successfully. The associated `restoreEnabled` /
+        // `enabled` booleans are already resolved by RecipeBuilder
+        // (eager L-25), so we consume them as-is.
+        let clipboardRestoreEnabled: Bool? = sinks.lazy.compactMap { sink -> Bool? in
+            if case .clipboard(let restore) = sink {
+                return restore
+            }
+            return nil
+        }.first
+
+        let pasteEnabled: Bool = sinks.lazy.compactMap { sink -> Bool? in
+            if case .frontmostPaste(let enabled) = sink {
+                return enabled
+            }
+            return nil
+        }.first ?? false
+
+        guard let restoreEnabled = clipboardRestoreEnabled else {
+            // No clipboard sink → nothing to write. The frontmost-paste
+            // path requires a clipboard write to land first; without
+            // it, paste cannot synthesize the right key sequence.
+            // Surface as ignoredEmptyInput-shape: the orchestrator
+            // already persisted the transcript via
+            // `.transcriptHistorySQLite`; clipboard absence is a
+            // deliberate config, not an error.
+            return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
+        }
+
         let restoreDelay = ClipboardRestoreDelay.resolve(from: defaults).seconds
         let handle = snapshotService.captureTransientSnapshot()
 
@@ -98,8 +127,8 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
             }
         }
 
-        if !autoPasteEnabled {
-            logger.info("ClipboardBatchOutput: AutoPasteEnabled = false; leaving transcript on clipboard for manual paste")
+        if !pasteEnabled {
+            logger.info("ClipboardBatchOutput: paste sink absent or disabled; leaving transcript on clipboard for manual paste")
             maybeScheduleRestore()
             return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
         }

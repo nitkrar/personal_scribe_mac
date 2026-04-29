@@ -4,21 +4,24 @@ import PersonalScribeCore
 
 final class WorkflowModeRegistryTests: XCTestCase {
 
-    func testFreshRegistryExposesBuiltInDictationAsActive() throws {
+    // MARK: - Resolution
+
+    func testFreshRegistryExposesBuiltInDictationAsCurrent() throws {
         let store = InMemoryWorkflowModeStore()
         let registry = try WorkflowModeRegistry(
             store: store,
             availableKindsProvider: { Set(ModelKind.allCases) }
         )
 
-        XCTAssertEqual(registry.activeMode.id, "dictation")
+        XCTAssertEqual(registry.defaultMode.id, "dictation")
+        XCTAssertEqual(registry.currentMode.id, "dictation")
         XCTAssertEqual(registry.allModes.map(\.id), ["dictation"])
     }
 
-    func testSetActiveSwitchesActiveModeAndPersists() throws {
+    func testSetDefaultSwitchesDefaultModeAndPersists() throws {
         let store = InMemoryWorkflowModeStore(
             initial: WorkflowModeDocument(
-                activeModeID: nil,
+                defaultModeID: nil,
                 customModes: [Self.makeCustomDictation(id: "med-notes")]
             )
         )
@@ -27,21 +30,22 @@ final class WorkflowModeRegistryTests: XCTestCase {
             availableKindsProvider: { [.asr] }
         )
 
-        try registry.setActive(id: "med-notes")
+        try registry.setDefault(id: "med-notes")
 
-        XCTAssertEqual(registry.activeMode.id, "med-notes")
+        XCTAssertEqual(registry.defaultMode.id, "med-notes")
+        XCTAssertEqual(registry.currentMode.id, "med-notes")
         let persisted = try store.load()
-        XCTAssertEqual(persisted.activeModeID, "med-notes")
+        XCTAssertEqual(persisted.defaultModeID, "med-notes")
     }
 
-    func testSetActiveRejectsUnknownID() throws {
+    func testSetDefaultRejectsUnknownID() throws {
         let store = InMemoryWorkflowModeStore()
         let registry = try WorkflowModeRegistry(
             store: store,
             availableKindsProvider: { [.asr] }
         )
 
-        XCTAssertThrowsError(try registry.setActive(id: "no-such-mode")) { error in
+        XCTAssertThrowsError(try registry.setDefault(id: "no-such-mode")) { error in
             XCTAssertEqual(
                 error as? WorkflowModeRegistryError,
                 .unknownMode("no-such-mode")
@@ -49,18 +53,20 @@ final class WorkflowModeRegistryTests: XCTestCase {
         }
     }
 
-    func testSetActiveRejectsModeWithUnavailableKind() throws {
+    /// Renamed from `testSetActiveValidatesAvailableKinds` (#089 IMPL
+    /// Stage H — same body, `setActive` → `setDefault`).
+    func testSetDefaultValidatesAvailableKinds() throws {
         let custom = WorkflowMode(
             id: "needs-streaming",
             name: "Needs streaming",
             pipelineShape: .streaming,
             processors: [.streamingTranscriber(kind: .streamingASR)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
         )
         let store = InMemoryWorkflowModeStore(
             initial: WorkflowModeDocument(
-                activeModeID: nil,
+                defaultModeID: nil,
                 customModes: [custom]
             )
         )
@@ -69,7 +75,7 @@ final class WorkflowModeRegistryTests: XCTestCase {
             availableKindsProvider: { [.asr] } // streamingASR NOT available
         )
 
-        XCTAssertThrowsError(try registry.setActive(id: "needs-streaming")) { error in
+        XCTAssertThrowsError(try registry.setDefault(id: "needs-streaming")) { error in
             guard let validationError = error as? WorkflowModeValidationError else {
                 XCTFail("Expected WorkflowModeValidationError, got \(error)")
                 return
@@ -77,6 +83,42 @@ final class WorkflowModeRegistryTests: XCTestCase {
             XCTAssertEqual(validationError, .kindUnavailable(.streamingASR))
         }
     }
+
+    func testSetCurrentSwitchesRuntimeWithoutPersisting() throws {
+        let custom = Self.makeCustomDictation(id: "med-notes")
+        let store = InMemoryWorkflowModeStore(
+            initial: WorkflowModeDocument(
+                defaultModeID: nil,
+                customModes: [custom]
+            )
+        )
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+
+        registry.setCurrent(id: "med-notes")
+
+        XCTAssertEqual(registry.currentMode.id, "med-notes")
+        // Default unchanged: setCurrent never writes the document.
+        XCTAssertEqual(registry.defaultMode.id, "dictation")
+        let persisted = try store.load()
+        XCTAssertNil(persisted.defaultModeID)
+    }
+
+    func testSetCurrentUnknownIDIsSilentNoop() throws {
+        let store = InMemoryWorkflowModeStore()
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+
+        registry.setCurrent(id: "no-such-mode")
+
+        XCTAssertEqual(registry.currentMode.id, "dictation")
+    }
+
+    // MARK: - saveCustom
 
     func testSaveCustomInsertsThenUpdatesByID() throws {
         let store = InMemoryWorkflowModeStore()
@@ -111,79 +153,66 @@ final class WorkflowModeRegistryTests: XCTestCase {
         }
     }
 
-    func testDeleteCustomFallsBackToDictationWhenActive() throws {
+    // MARK: - H-tests (#089 Stage H)
+
+    /// H.1 — stale defaultModeID at init must scrub-and-persist; the
+    /// resolve path is also implicitly covered (every test that reads
+    /// `defaultMode` exercises it).
+    func testInitClearsStaleDefaultModeID() throws {
         let store = InMemoryWorkflowModeStore(
             initial: WorkflowModeDocument(
-                activeModeID: "med-notes",
-                customModes: [Self.makeCustomDictation(id: "med-notes")]
+                defaultModeID: "ghost-mode",
+                customModes: []
             )
         )
+
         let registry = try WorkflowModeRegistry(
             store: store,
             availableKindsProvider: { [.asr] }
         )
 
-        try registry.deleteCustom(id: "med-notes")
-
-        XCTAssertEqual(registry.activeMode.id, "dictation")
-        XCTAssertEqual(registry.allModes.map(\.id), ["dictation"])
+        XCTAssertEqual(registry.defaultMode.id, "dictation")
+        let persisted = try store.load()
+        XCTAssertNil(persisted.defaultModeID,
+                     "Stale defaultModeID must be cleared and written-through at init")
     }
 
-    // MARK: - mutateActiveOrFork
-
-    func testMutateActiveOrForkOnBuiltInForksToCustomAndSwitchesActive() throws {
+    /// H.2 — skip-gaps default-name resolver (#089 L-14).
+    func testCreatePresetSkipsNameGaps() throws {
         let store = InMemoryWorkflowModeStore()
         let registry = try WorkflowModeRegistry(
             store: store,
             availableKindsProvider: { [.asr] }
         )
-        XCTAssertEqual(registry.activeMode.id, "dictation")
 
-        let result = try registry.mutateActiveOrFork { mode in
-            // Append .vad to capture controllers (simulates Settings
-            // toggling Auto-stop on).
-            mode = WorkflowMode(
-                id: mode.id,
-                name: mode.name,
-                pipelineShape: mode.pipelineShape,
-                processors: mode.processors,
-                captureControllers: [
-                    .vad(
-                        silenceThreshold: .setting(PreferenceKeys.vadSilenceThreshold),
-                        showWarning: .setting(PreferenceKeys.vadShowStoppingWarning),
-                        showAutoStoppedNotification: .setting(
-                            PreferenceKeys.vadShowAutoStoppedNotification
-                        )
-                    ),
-                ] + mode.captureControllers,
-                outputSinks: mode.outputSinks
-            )
-        }
+        // First save with "Dictation" — bare basename is free.
+        let n1 = registry.nextAvailableName("Dictation")
+        XCTAssertEqual(n1, "Dictation")
+        try registry.saveCustom(Self.makeCustomDictation(id: "m1", name: n1))
 
-        XCTAssertEqual(result.id, "dictation-custom")
-        XCTAssertEqual(result.name, "Dictation (custom)")
-        XCTAssertEqual(registry.activeMode.id, "dictation-custom")
-        XCTAssertEqual(registry.allModes.count, 2)
-        // First capture controller is now .vad.
-        if case .vad = result.captureControllers.first {
-            // ok
-        } else {
-            XCTFail("Expected .vad to be first capture controller, got \(result.captureControllers)")
-        }
+        // Second save — bare basename is taken; bumps to "Dictation 2".
+        let n2 = registry.nextAvailableName("Dictation")
+        XCTAssertEqual(n2, "Dictation 2")
+        try registry.saveCustom(Self.makeCustomDictation(id: "m2", name: n2))
+
+        // Delete "Dictation" (id m1). Now: bare basename free again,
+        // but "Dictation 2" still occupies the suffix space — skip-gaps
+        // means the next name is "Dictation 3", NOT a reused
+        // "Dictation".
+        try registry.deleteCustom(id: "m1")
+        let n3 = registry.nextAvailableName("Dictation")
+        XCTAssertEqual(n3, "Dictation 3",
+                       "Skip-gaps: must not reuse a name even when basename is free if a suffix is in use")
     }
 
-    func testMutateActiveOrForkOnCustomMutatesInPlaceWithoutForking() throws {
-        let custom = WorkflowMode(
-            id: "med-notes",
-            name: "Medical Notes",
-            pipelineShape: .batch,
-            processors: [.transcriber(kind: .asr)],
-            captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
-        )
+    /// H.3 — deleting the default mode clears defaultModeID (does NOT
+    /// fall back to dictation.id) and currentMode resolves through to
+    /// the built-in fallback.
+    func testDeleteDefaultClearsDefault() throws {
+        let custom = Self.makeCustomDictation(id: "med-notes", name: "Medical Notes")
         let store = InMemoryWorkflowModeStore(
             initial: WorkflowModeDocument(
-                activeModeID: "med-notes",
+                defaultModeID: "med-notes",
                 customModes: [custom]
             )
         )
@@ -191,25 +220,36 @@ final class WorkflowModeRegistryTests: XCTestCase {
             store: store,
             availableKindsProvider: { [.asr] }
         )
+        registry.setCurrent(id: "med-notes")
+        XCTAssertEqual(registry.currentMode.id, "med-notes")
 
-        let result = try registry.mutateActiveOrFork { mode in
-            // Strip frontmostPaste (simulates Auto-paste toggle off).
-            mode = WorkflowMode(
-                id: mode.id,
-                name: mode.name,
-                pipelineShape: mode.pipelineShape,
-                processors: mode.processors,
-                captureControllers: mode.captureControllers,
-                outputSinks: mode.outputSinks.filter { sink in
-                    if case .frontmostPaste = sink { return false }
-                    return true
-                }
-            )
-        }
+        try registry.deleteCustom(id: "med-notes")
 
-        XCTAssertEqual(result.id, "med-notes")
-        XCTAssertEqual(registry.allModes.count, 2) // dictation + med-notes
-        XCTAssertTrue(result.outputSinks.isEmpty)
+        let persisted = try store.load()
+        XCTAssertNil(persisted.defaultModeID,
+                     "Deleting the default mode must clear defaultModeID, not point at dictation.id")
+        XCTAssertEqual(registry.defaultMode.id, "dictation")
+        XCTAssertEqual(registry.currentMode.id, "dictation")
+    }
+
+    /// H.4 — reorderCustom writes through the new array order.
+    func testReorderPersistsThroughStore() throws {
+        let store = InMemoryWorkflowModeStore()
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+
+        try registry.saveCustom(Self.makeCustomDictation(id: "A", name: "A"))
+        try registry.saveCustom(Self.makeCustomDictation(id: "B", name: "B"))
+        try registry.saveCustom(Self.makeCustomDictation(id: "C", name: "C"))
+        XCTAssertEqual(registry.customModes.map(\.id), ["A", "B", "C"])
+
+        try registry.reorderCustom(from: 0, to: 2)
+
+        let persisted = try store.load()
+        XCTAssertEqual(persisted.customModes.map(\.id), ["B", "C", "A"],
+                       "Reorder must rewrite the customModes array order on disk")
     }
 
     // MARK: - Helpers
@@ -227,7 +267,7 @@ final class WorkflowModeRegistryTests: XCTestCase {
             pipelineShape: .batch,
             processors: [.transcriber(kind: .asr)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste]
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
         )
     }
 }
