@@ -24,7 +24,7 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
 
         switch output {
         case .text(let result):
-            XCTAssertEqual(result.text, "alpha\nbeta")
+            XCTAssertEqual(result.text, "Speaker 1: alpha\nSpeaker 2: beta")
             XCTAssertEqual(result.audioDuration, .seconds(1))
             XCTAssertEqual(result.processingDuration, .milliseconds(15))
             XCTAssertEqual(
@@ -89,7 +89,60 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
 
         switch output {
         case .text(let result):
-            XCTAssertEqual(result.text, "stable")
+            XCTAssertEqual(result.text, "Speaker 1: stable")
+        case .streamingText, .turns:
+            XCTFail("Expected batch text output")
+        }
+    }
+
+    func testProcessRepeatsSpeakerLabelForConsecutiveSameSpeakerTurns() async throws {
+        let firstTurn = makeTurn(speakerID: "speaker_0", startMS: 0, endMS: 200)
+        let secondTurn = makeTurn(speakerID: "speaker_0", startMS: 500, endMS: 700)
+        let diarizer = StubSpeakerDiarizer(events: [.terminal([firstTurn, secondTurn])])
+        let transcriber = RecordingTranscriber(
+            results: [
+                makeResult(text: "alpha", startMS: 0, endMS: 200),
+                makeResult(text: "beta", startMS: 0, endMS: 200),
+            ]
+        )
+        let processor: any Processor = DiarizedTurnTranscriptionProcessor(
+            diarizer: diarizer,
+            transcriber: transcriber
+        )
+
+        let output = try await processor.process(audio: try makeBuffer(), priors: [])
+
+        switch output {
+        case .text(let result):
+            XCTAssertEqual(result.text, "Speaker 1: alpha\nSpeaker 1: beta")
+        case .streamingText, .turns:
+            XCTFail("Expected batch text output")
+        }
+    }
+
+    // Vendor IDs are not guaranteed to start at 0 or be contiguous — the
+    // aggregator must assign labels by order of first appearance, not by
+    // parsing the vendor string.
+    func testProcessAssignsLabelsByOrderOfAppearanceNotVendorID() async throws {
+        let firstTurn = makeTurn(speakerID: "speaker_5", startMS: 0, endMS: 200)
+        let secondTurn = makeTurn(speakerID: "speaker_2", startMS: 500, endMS: 700)
+        let diarizer = StubSpeakerDiarizer(events: [.terminal([firstTurn, secondTurn])])
+        let transcriber = RecordingTranscriber(
+            results: [
+                makeResult(text: "alpha", startMS: 0, endMS: 200),
+                makeResult(text: "beta", startMS: 0, endMS: 200),
+            ]
+        )
+        let processor: any Processor = DiarizedTurnTranscriptionProcessor(
+            diarizer: diarizer,
+            transcriber: transcriber
+        )
+
+        let output = try await processor.process(audio: try makeBuffer(), priors: [])
+
+        switch output {
+        case .text(let result):
+            XCTAssertEqual(result.text, "Speaker 1: alpha\nSpeaker 2: beta")
         case .streamingText, .turns:
             XCTFail("Expected batch text output")
         }

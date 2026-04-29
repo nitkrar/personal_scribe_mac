@@ -159,7 +159,7 @@ private extension DiarizedTurnTranscriptionProcessor {
         _ turnResults: [TurnTranscription],
         audioDuration: Duration
     ) -> TranscriptionResult {
-        let texts = turnResults.map(\.result.text).filter { $0.isEmpty == false }
+        let labeledLines = labeledTurnLines(from: turnResults)
         let segments = turnResults
             .flatMap(offsetSegments(for:))
             .sorted(by: segmentsAreOrdered)
@@ -173,7 +173,7 @@ private extension DiarizedTurnTranscriptionProcessor {
         let appliedTerms = orderedUnion(turnResults.compactMap(\.result.ctcAppliedTerms).flatMap { $0 })
 
         return TranscriptionResult(
-            text: texts.joined(separator: "\n"),
+            text: labeledLines.joined(separator: "\n"),
             segments: segments,
             audioDuration: audioDuration,
             processingDuration: turnResults.reduce(.zero) { partialResult, turnResult in
@@ -185,6 +185,29 @@ private extension DiarizedTurnTranscriptionProcessor {
             ctcDetectedTerms: detectedTerms.isEmpty ? nil : detectedTerms,
             ctcAppliedTerms: appliedTerms.isEmpty ? nil : appliedTerms
         )
+    }
+
+    // Assigns "Speaker N" labels by order of first appearance — vendor IDs
+    // are not guaranteed contiguous or zero-indexed, so we map them to
+    // 1-indexed display numbers as we walk the turn results. Empty-text
+    // turns are skipped and do not consume a label slot.
+    static func labeledTurnLines(from turnResults: [TurnTranscription]) -> [String] {
+        var labelByVendorID: [String: Int] = [:]
+        var nextLabelNumber = 1
+        return turnResults.compactMap { turnResult -> String? in
+            let text = turnResult.result.text
+            guard text.isEmpty == false else { return nil }
+            let vendorID = turnResult.turn.speakerID
+            let labelNumber: Int
+            if let existing = labelByVendorID[vendorID] {
+                labelNumber = existing
+            } else {
+                labelNumber = nextLabelNumber
+                labelByVendorID[vendorID] = labelNumber
+                nextLabelNumber += 1
+            }
+            return "Speaker \(labelNumber): \(text)"
+        }
     }
 
     static func offsetSegments(
