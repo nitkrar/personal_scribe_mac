@@ -39,6 +39,19 @@ struct ModeDetailView: View {
             .padding(PersonalScribeTheme.Spacing.windowPadding)
         }
         .navigationTitle(viewModel.mode.name)
+        .toolbar {
+            // macOS NavigationStack doesn't auto-render a back chevron
+            // the way iOS does; an explicit toolbar button is needed.
+            // MV-MODES-3 already assumes "Tap the back arrow" works.
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    dismiss()
+                } label: {
+                    Label("Back to Modes", systemImage: "chevron.left")
+                }
+                .help("Back to Modes")
+            }
+        }
         .alert(item: $activeAlert) { alert in
             switch alert {
             case .confirmDelete:
