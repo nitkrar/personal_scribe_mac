@@ -232,8 +232,10 @@ public enum AppComposition {
                 await coordinator.toggle()
             }
         }
-        // Seed the per-mode table from the current custom modes.
-        monitor.updatePerModeHotkeys(registry.customModes)
+        // Seed the per-mode table from the current custom modes,
+        // filtered through validation (#090 follow-up): an invalid
+        // mode's hotkey shouldn't fire a session-start error.
+        monitor.updatePerModeHotkeys(currentlyValidCustomModes(among: registry.customModes))
         return monitor
     }
 
@@ -249,7 +251,36 @@ public enum AppComposition {
         let monitor = hotkeyMonitor
         perModeHotkeyObservationTask = Task { @MainActor in
             for await modes in registry.customModesStream() {
-                monitor.updatePerModeHotkeys(modes)
+                // #090 follow-up: filter out invalid modes (unpinned
+                // with no ready active model OR pinned to a removed
+                // descriptor) so their hotkeys don't fire. Re-fires
+                // on every mode-list change; activating a model
+                // doesn't trigger a re-fire here, so the hotkey
+                // becomes live on next mode-list emission (or restart).
+                monitor.updatePerModeHotkeys(currentlyValidCustomModes(among: modes))
+            }
+        }
+    }
+
+    /// Subset of `modes` that pass `WorkflowModeValidator` against the
+    /// current `ActiveModelService` snapshot. Shared by the menu-bar
+    /// mode submenu, the per-mode hotkey table, and (future) the pill
+    /// switcher — all selectors that should refuse to surface a mode
+    /// the session would reject at start time.
+    @MainActor
+    static func currentlyValidCustomModes(among modes: [WorkflowMode]) -> [WorkflowMode] {
+        let kinds = modelService.availableKinds()
+        let descriptors = modelService.registeredModels
+        return modes.filter { mode in
+            do {
+                try WorkflowModeValidator.validate(
+                    mode,
+                    availableKinds: kinds,
+                    registeredDescriptors: descriptors
+                )
+                return true
+            } catch {
+                return false
             }
         }
     }

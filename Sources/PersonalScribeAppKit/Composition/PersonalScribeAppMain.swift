@@ -262,28 +262,14 @@ struct PersonalScribeAppMain: App {
                 // #089: surface the user's customModes in the menu
                 // submenu. Pulled fresh on every rebuild so newly
                 // created modes show up without a relaunch.
-                // #090: filter out modes that fail validation (unpinned
-                // modes whose required kind has no ready active model,
-                // OR pinned modes whose pin references a removed
-                // descriptor). The user can repair these in the Modes
-                // tab; selectors hide them so the user can't pick a
-                // mode that would fail at session start.
-                let registry = AppComposition.workflowModeRegistry
-                let modelService = AppComposition.modelService
-                let kinds = modelService.availableKinds()
-                let descriptors = modelService.registeredModels
-                return registry.customModes.filter { mode in
-                    do {
-                        try WorkflowModeValidator.validate(
-                            mode,
-                            availableKinds: kinds,
-                            registeredDescriptors: descriptors
-                        )
-                        return true
-                    } catch {
-                        return false
-                    }
-                }
+                // #090: filter out invalid modes (unpinned with no
+                // ready active model OR pinned to a removed
+                // descriptor). The user can repair these in the
+                // Modes tab; selectors hide them so the user can't
+                // pick a mode that would fail at session start.
+                AppComposition.currentlyValidCustomModes(
+                    among: AppComposition.workflowModeRegistry.customModes
+                )
             },
             setActiveMode: { mode in
                 // #089: menu-bar submenu picks the runtime *current*

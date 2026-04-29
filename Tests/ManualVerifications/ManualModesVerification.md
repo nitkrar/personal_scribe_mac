@@ -154,3 +154,22 @@ sets `isEnabled: false` on the descriptor.
 6. Caption + chip clear.
 7. Menu-bar mode submenu: with the mode invalid (step 3), it does
    NOT appear in the submenu. After repair (step 5), it reappears.
+
+## MV-MODES-16 — Per-mode hotkey doesn't fire for invalid modes (#090 follow-up)
+1. Pick a mode and capture a per-mode hotkey (e.g. ⌃⇧F2). Confirm
+   the chord works (recording starts when pressed).
+2. Quit the app.
+3. Edit `~/Library/Application Support/personal_scribe/workflow-modes.json`
+   to set the mode's pin (`descriptorID`) to a non-existent id.
+4. Relaunch.
+5. Press the chord. Expect: nothing happens (no recording, no error
+   toast). The hotkey table now refuses to register an invalid
+   mode's chord.
+6. Repair the pin via the Modes editor picker.
+7. Press the chord again. Expect: recording starts as in step 1.
+
+Limitation: the hotkey table re-fires only on mode-list changes
+(create / save / delete / reorder). If the mode is invalid because
+of a model state change (e.g. user deleted the active descriptor in
+AI Models tab), the hotkey stays registered until the next
+mode-list event or app restart. Acceptable trade-off for V1.
