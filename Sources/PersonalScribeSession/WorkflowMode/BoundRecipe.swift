@@ -43,7 +43,11 @@ public struct BoundRecipe: Sendable {
 public enum BoundProcessor: Sendable {
     case transcriber(any Transcriber)
     case streamingTranscriber(any StreamingTranscriber)
-    case diarizedTurns(diarizer: any SpeakerDiarizer, transcriber: any Transcriber)
+    case diarizedTurns(
+        diarizer: any SpeakerDiarizer,
+        transcriber: any Transcriber,
+        sensitivity: SpeakerSeparationSensitivity
+    )
 }
 
 /// Resolved capture-controller config. VAD parameters resolved eagerly

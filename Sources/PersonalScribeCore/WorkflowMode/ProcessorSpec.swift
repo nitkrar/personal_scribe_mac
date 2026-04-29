@@ -41,7 +41,9 @@ public enum ProcessorSpec: Codable, Equatable, Sendable {
     case diarizedTurns(
         diarizerKind: ModelKind,
         transcriberKind: ModelKind,
-        transcriberDescriptorID: String? = nil
+        transcriberDescriptorID: String? = nil,
+        sensitivity: Parameter<SpeakerSeparationSensitivity>
+            = .setting(PreferenceKeys.speakerSeparationSensitivity)
     )
 
     private enum Discriminator: String, Codable {
@@ -57,6 +59,7 @@ public enum ProcessorSpec: Codable, Equatable, Sendable {
         case diarizerKind
         case transcriberKind
         case transcriberDescriptorID
+        case sensitivity
     }
 
     public init(from decoder: Decoder) throws {
@@ -90,10 +93,18 @@ public enum ProcessorSpec: Codable, Equatable, Sendable {
                 String.self,
                 forKey: .transcriberDescriptorID
             )
+            // Older recipe documents (pre-#092) lack a `sensitivity`
+            // field — fall back to the global preference reference so
+            // legacy modes inherit whatever the user has set globally.
+            let sensitivity = try container.decodeIfPresent(
+                Parameter<SpeakerSeparationSensitivity>.self,
+                forKey: .sensitivity
+            ) ?? .setting(PreferenceKeys.speakerSeparationSensitivity)
             self = .diarizedTurns(
                 diarizerKind: diarizerKind,
                 transcriberKind: transcriberKind,
-                transcriberDescriptorID: transcriberDescriptorID
+                transcriberDescriptorID: transcriberDescriptorID,
+                sensitivity: sensitivity
             )
         }
     }
@@ -109,7 +120,7 @@ public enum ProcessorSpec: Codable, Equatable, Sendable {
             try container.encode(Discriminator.streamingTranscriber, forKey: .type)
             try container.encode(kind, forKey: .kind)
             try container.encodeIfPresent(descriptorID, forKey: .descriptorID)
-        case .diarizedTurns(let diarizerKind, let transcriberKind, let transcriberDescriptorID):
+        case .diarizedTurns(let diarizerKind, let transcriberKind, let transcriberDescriptorID, let sensitivity):
             try container.encode(Discriminator.diarizedTurns, forKey: .type)
             try container.encode(diarizerKind, forKey: .diarizerKind)
             try container.encode(transcriberKind, forKey: .transcriberKind)
@@ -117,6 +128,7 @@ public enum ProcessorSpec: Codable, Equatable, Sendable {
                 transcriberDescriptorID,
                 forKey: .transcriberDescriptorID
             )
+            try container.encode(sensitivity, forKey: .sensitivity)
         }
     }
 }

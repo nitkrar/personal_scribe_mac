@@ -18,6 +18,26 @@ public protocol SpeakerDiarizer: ModelLifecycle, Sendable {
     func diarize(
         stream: AsyncThrowingStream<PCMBuffer, Error>
     ) -> AsyncStream<SpeakerDiarizationEvent>
+
+    /// Apply the resolved per-session sensitivity preset before the
+    /// next `diarize(stream:)` call. Default no-op; real adapters
+    /// translate the preset into vendor-specific tuning knobs (for
+    /// FluidAudio: `OfflineDiarizerConfig.clustering.threshold` +
+    /// `embedding.minSegmentDurationSeconds`).
+    ///
+    /// Called by the fusion processor at session start with the
+    /// recipe-resolved sensitivity (per-mode override winning over
+    /// the global preference).
+    func applySensitivity(_ sensitivity: SpeakerSeparationSensitivity) async
+}
+
+extension SpeakerDiarizer {
+    /// Default no-op so test stubs and future diarizer adapters can
+    /// opt out of sensitivity tuning when their underlying engine
+    /// doesn't expose equivalent knobs.
+    public func applySensitivity(_ sensitivity: SpeakerSeparationSensitivity) async {
+        // No-op default.
+    }
 }
 
 extension SpeakerDiarizer {

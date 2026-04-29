@@ -61,7 +61,7 @@ public final class RecipeBuilder {
             let transcriber = try processorProvider.streamingTranscriber(for: descriptor)
             return .streamingTranscriber(transcriber)
 
-        case .diarizedTurns(let diarizerKind, let transcriberKind, let transcriberDescriptorID):
+        case .diarizedTurns(let diarizerKind, let transcriberKind, let transcriberDescriptorID, let sensitivity):
             // Diarizer leg has no pin in #090 (single descriptor in
             // catalog); transcriber leg honors `transcriberDescriptorID`.
             let diarizerDescriptor = try resolveDescriptor(for: diarizerKind, pinnedID: nil)
@@ -71,7 +71,12 @@ public final class RecipeBuilder {
             )
             let diarizer = try processorProvider.diarizer(for: diarizerDescriptor)
             let transcriber = try processorProvider.transcriber(for: transcriberDescriptor)
-            return .diarizedTurns(diarizer: diarizer, transcriber: transcriber)
+            let resolvedSensitivity = ParameterResolver.resolve(sensitivity, from: defaults)
+            return .diarizedTurns(
+                diarizer: diarizer,
+                transcriber: transcriber,
+                sensitivity: resolvedSensitivity
+            )
         }
     }
 

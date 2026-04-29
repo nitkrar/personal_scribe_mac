@@ -149,6 +149,7 @@ final class FluidAudioOfflineDiarizerAdapterTests: PersonalScribeTranscriptionFi
 private actor StubOfflineDiarizerManager: FluidAudioOfflineDiarizerManaging {
     private(set) var preparedDirectories: [URL?] = []
     private(set) var processedAudio: [[Float]] = []
+    private(set) var appliedConfigs: [OfflineDiarizerConfig] = []
     private var downloadDirectoriesStorage: [URL] = []
     private var cleanupCallCountStorage = 0
 
@@ -156,6 +157,10 @@ private actor StubOfflineDiarizerManager: FluidAudioOfflineDiarizerManaging {
 
     init(result: DiarizationResult) {
         self.result = result
+    }
+
+    func applyConfig(_ config: OfflineDiarizerConfig) async {
+        appliedConfigs.append(config)
     }
 
     func prepareModels(directory: URL?) async throws {

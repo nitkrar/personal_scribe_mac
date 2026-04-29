@@ -30,7 +30,7 @@ final class ModeRecipeMutatorsTests: XCTestCase {
 
         let pinned = mode.withVoiceModelPin("parakeet-tdt-ctc-110m")
 
-        guard case .diarizedTurns(_, _, let id) = pinned.processors.first else {
+        guard case .diarizedTurns(_, _, let id, _) = pinned.processors.first else {
             XCTFail("Expected .diarizedTurns, got \(pinned.processors)")
             return
         }
@@ -74,7 +74,7 @@ final class ModeRecipeMutatorsTests: XCTestCase {
 
         let diarized = mode.withDiarization(true)
 
-        guard case .diarizedTurns(_, _, let id) = diarized.processors.first else {
+        guard case .diarizedTurns(_, _, let id, _) = diarized.processors.first else {
             XCTFail("Expected .diarizedTurns, got \(diarized.processors)")
             return
         }

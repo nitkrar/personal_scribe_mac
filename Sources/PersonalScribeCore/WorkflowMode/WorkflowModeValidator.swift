@@ -85,7 +85,8 @@ public enum WorkflowModeValidator {
             case .diarizedTurns(
                 let diarizerKind,
                 let transcriberKind,
-                let transcriberDescriptorID
+                let transcriberDescriptorID,
+                _
             ):
                 if mode.pipelineShape != .batch {
                     throw WorkflowModeValidationError.streamingShapeMismatch(

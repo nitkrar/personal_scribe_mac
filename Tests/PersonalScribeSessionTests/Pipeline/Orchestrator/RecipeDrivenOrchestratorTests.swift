@@ -253,7 +253,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
             recipeID: "meeting",
             recipeName: "Meeting",
             pipelineShape: .batch,
-            processors: [.diarizedTurns(diarizer: diarizer, transcriber: perTurnTranscriber)],
+            processors: [.diarizedTurns(diarizer: diarizer, transcriber: perTurnTranscriber, sensitivity: .balanced)],
             captureControllers: [.manualHotkey],
             outputSinks: [.frontmostPaste(enabled: true)]
         )

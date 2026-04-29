@@ -48,6 +48,7 @@ public struct GeneralTab: View {
                     applicationCard
                     transcribeOutputCard
                     autoStopCard
+                    speakerSeparationCard
                     behaviorCard
                 }
             }
@@ -380,6 +381,40 @@ public struct GeneralTab: View {
         }
     }
 
+    /// Speaker separation sensitivity (#092) — global default for the
+    /// offline diarizer's merge-vs-split tuning. Applies to all diarized
+    /// recipes (currently meeting mode) unless a per-mode override is
+    /// set in the Modes editor. Each preset is a hardcoded combination
+    /// of FluidAudio's `clusteringThreshold` + `minSegmentDurationSeconds`
+    /// codified in `SpeakerSeparationSensitivity.parameters`.
+    private var speakerSeparationCard: some View {
+        SettingsCard {
+            Text("Speaker separation sensitivity")
+                .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+
+            Picker(
+                "",
+                selection: Binding(
+                    get: { viewModel.speakerSeparationSensitivity },
+                    set: { viewModel.setSpeakerSeparationSensitivity($0) }
+                )
+            ) {
+                Text("Relaxed (split speakers more easily)")
+                    .tag(SpeakerSeparationSensitivity.relaxed)
+                Text("Balanced (recommended)")
+                    .tag(SpeakerSeparationSensitivity.balanced)
+                Text("Strict (prefer stable labels)")
+                    .tag(SpeakerSeparationSensitivity.strict)
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+
+            Text("Tunes how aggressively meeting recordings split similar voices into separate speaker labels. Per-mode override available in the Modes editor.")
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     /// Residual Behavior card — Waveform decay + Mute-while-recording.
     /// Restore-delay slider moved into `transcribeOutputCard` per #072.
     private var behaviorCard: some View {
@@ -597,6 +632,13 @@ final class GeneralTabViewModel: ObservableObject {
     /// `showsTintPicker` — tint is hidden when the effective scheme
     /// is dark (mockup-gaps G, 2026-04-21).
     @Published private(set) var appTheme: AppTheme
+    /// #092 — Global default for the offline diarizer's sensitivity
+    /// preset. Applies to all diarized recipes that haven't set a
+    /// per-mode `.override(...)`. Recipe parameters carry
+    /// `.setting(PreferenceKeys.speakerSeparationSensitivity)` by
+    /// default, so flipping this value here updates every untouched
+    /// diarized mode at the next session bind.
+    @Published private(set) var speakerSeparationSensitivity: SpeakerSeparationSensitivity
     /// Snapshot of the system's effective appearance — `true` when
     /// macOS resolves to `.darkAqua`. Injected for testability; at
     /// runtime the default provider reads
@@ -662,6 +704,7 @@ final class GeneralTabViewModel: ObservableObject {
         self.vadShowStoppingWarning = VadShowStoppingWarningPreference.resolve(from: defaults)
         self.vadShowAutoStoppedNotification = VadShowAutoStoppedNotificationPreference.resolve(from: defaults)
         self.appTheme = AppTheme.resolve(from: defaults)
+        self.speakerSeparationSensitivity = SpeakerSeparationSensitivityPreference.resolve(from: defaults)
         self.currentSystemIsDark = systemIsDarkProvider()
 
         // KVO on `NSApplication.effectiveAppearance` so that when the
@@ -783,6 +826,11 @@ final class GeneralTabViewModel: ObservableObject {
     ///
     /// Pill appearance and window tint are NOT mutated — they are
     /// independent axes per user direction (2026-04-21).
+    func setSpeakerSeparationSensitivity(_ sensitivity: SpeakerSeparationSensitivity) {
+        speakerSeparationSensitivity = sensitivity
+        SpeakerSeparationSensitivityPreference.persist(sensitivity, to: defaults)
+    }
+
     func setAppTheme(_ theme: AppTheme) {
         appTheme = theme
         theme.persist(to: defaults)

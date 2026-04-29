@@ -56,4 +56,13 @@ public enum PreferenceKeys {
         key: "AutoPasteEnabled",
         default: true
     )
+
+    /// Speaker separation sensitivity preset for the offline diarizer.
+    /// Matches `SpeakerSeparationSensitivityPreference.userDefaultsKey`
+    /// + `default`. The FluidAudio adapter reads this at session start
+    /// and translates the resolved case to an `OfflineDiarizerConfig`.
+    public static let speakerSeparationSensitivity = SettingKey<SpeakerSeparationSensitivity>(
+        key: "SpeakerSeparationSensitivity",
+        default: .balanced
+    )
 }

@@ -11,6 +11,26 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
 
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
+    private var lastAppliedSensitivity: SpeakerSeparationSensitivity?
+
+    public func applySensitivity(_ sensitivity: SpeakerSeparationSensitivity) async {
+        let needsReload = lock.withLock { () -> Bool in
+            guard lastAppliedSensitivity != sensitivity else {
+                return false
+            }
+            lastAppliedSensitivity = sensitivity
+            // Force the next prepare() to rebuild the FluidAudio
+            // OfflineDiarizerManager — config is constructor-only on
+            // their side, so changing the preset means a fresh manager.
+            hasPreparedModel = false
+            prepareTask?.cancel()
+            prepareTask = nil
+            return true
+        }
+        guard needsReload else { return }
+        let config = OfflineDiarizerConfigBuilder.makeConfig(for: sensitivity)
+        await manager.applyConfig(config)
+    }
 
     public convenience init(
         descriptor: ModelDescriptor,
@@ -200,6 +220,7 @@ private extension FluidAudioOfflineDiarizerAdapter {
 }
 
 protocol FluidAudioOfflineDiarizerManaging: Sendable {
+    func applyConfig(_ config: OfflineDiarizerConfig) async
     func prepareModels(directory: URL?) async throws
     func downloadIfNeeded(
         to directory: URL,
@@ -214,13 +235,26 @@ private final class PrivateFluidAudioOfflineDiarizerManager:
     FluidAudioOfflineDiarizerManaging
 {
     private let lock = NSLock()
-    private let managerFactory: @Sendable () -> OfflineDiarizerManager
+    private let managerFactory: @Sendable (OfflineDiarizerConfig) -> OfflineDiarizerManager
     private var manager: OfflineDiarizerManager?
+    private var currentConfig: OfflineDiarizerConfig
 
     init(
-        managerFactory: @escaping @Sendable () -> OfflineDiarizerManager = { OfflineDiarizerManager() }
+        managerFactory: @escaping @Sendable (OfflineDiarizerConfig) -> OfflineDiarizerManager
+            = { config in OfflineDiarizerManager(config: config) }
     ) {
         self.managerFactory = managerFactory
+        self.currentConfig = OfflineDiarizerConfig()
+    }
+
+    func applyConfig(_ config: OfflineDiarizerConfig) async {
+        lock.withLock {
+            currentConfig = config
+            // Manager init takes the config — invalidate the cache so
+            // the next resolvedManager() builds a fresh one with the
+            // updated tuning.
+            manager = nil
+        }
     }
 
     func prepareModels(directory: URL?) async throws {
@@ -255,7 +289,7 @@ private final class PrivateFluidAudioOfflineDiarizerManager:
                 return manager
             }
 
-            let manager = managerFactory()
+            let manager = managerFactory(currentConfig)
             self.manager = manager
             return manager
         }

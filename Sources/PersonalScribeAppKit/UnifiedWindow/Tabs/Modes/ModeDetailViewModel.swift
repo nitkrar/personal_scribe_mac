@@ -66,7 +66,20 @@ final class ModeDetailViewModel: ObservableObject {
             switch spec {
             case .transcriber(_, let id): return id
             case .streamingTranscriber(_, let id): return id
-            case .diarizedTurns(_, _, let id): return id
+            case .diarizedTurns(_, _, let id, _): return id
+            }
+        }
+        return nil
+    }
+
+    /// #092 — Per-mode override for diarizer sensitivity. `nil` when
+    /// the mode has no diarized processor (the picker stays hidden);
+    /// otherwise the recipe's parameter (defaults to `.setting(...)`
+    /// pointing at the global preference).
+    var sensitivityParameter: Parameter<SpeakerSeparationSensitivity>? {
+        for spec in mode.processors {
+            if case .diarizedTurns(_, _, _, let parameter) = spec {
+                return parameter
             }
         }
         return nil
@@ -79,6 +92,9 @@ final class ModeDetailViewModel: ObservableObject {
     func setRestoreClipboard(_ parameter: Parameter<Bool>) { apply(mode.withRestoreClipboard(parameter: parameter)) }
     func setHotkey(_ hotkey: HotkeyPreference?) { apply(mode.withHotkey(hotkey)) }
     func setVoiceModelPin(_ id: String?) { apply(mode.withVoiceModelPin(id)) }
+    func setSpeakerSeparationSensitivity(_ parameter: Parameter<SpeakerSeparationSensitivity>) {
+        apply(mode.withSpeakerSeparationSensitivity(parameter: parameter))
+    }
 
     @discardableResult
     func delete() -> Bool {

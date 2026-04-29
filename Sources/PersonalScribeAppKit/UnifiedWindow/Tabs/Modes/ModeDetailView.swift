@@ -240,6 +240,19 @@ struct ModeDetailView: View {
                 }
             }
             .disabled(viewModel.realtimeOn) // streaming + diarization unsupported V1
+
+            // Per-mode override only surfaces when the mode actually
+            // has a diarized processor — otherwise there's nothing for
+            // the picker to override against. The view-model returns
+            // nil in that case.
+            if let sensitivityParameter = viewModel.sensitivityParameter {
+                Divider()
+                SensitivityParameterPickerView(
+                    title: "Speaker separation sensitivity",
+                    parameter: sensitivityParameter,
+                    onChange: { viewModel.setSpeakerSeparationSensitivity($0) }
+                )
+            }
         }
     }
 

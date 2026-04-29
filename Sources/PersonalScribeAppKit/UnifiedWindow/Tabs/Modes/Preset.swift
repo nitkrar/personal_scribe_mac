@@ -121,7 +121,8 @@ public enum Preset: String, CaseIterable, Sendable, Identifiable {
                 processors: [
                     .diarizedTurns(
                         diarizerKind: .diarization,
-                        transcriberKind: .asr
+                        transcriberKind: .asr,
+                        sensitivity: .setting(PreferenceKeys.speakerSeparationSensitivity)
                     ),
                 ],
                 captureControllers: [

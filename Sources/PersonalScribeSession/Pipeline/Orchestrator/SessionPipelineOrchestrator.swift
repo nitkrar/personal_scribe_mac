@@ -190,7 +190,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             return transcriber
         case .streamingTranscriber(let streamingTranscriber):
             return streamingTranscriber
-        case .diarizedTurns(_, let transcriber):
+        case .diarizedTurns(_, let transcriber, _):
             return transcriber
         }
     }
@@ -642,7 +642,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                     replayBuffers: replayBuffers
                 )
 
-            case .diarizedTurns(let diarizer, let perTurnTranscriber):
+            case .diarizedTurns(let diarizer, let perTurnTranscriber, _):
+                // Sensitivity already applied to the diarizer in
+                // `prepareAllProcessors` at session start, so the
+                // fusion processor itself stays sensitivity-agnostic.
                 let fusion = DiarizedTurnTranscriptionProcessor(
                     diarizer: diarizer,
                     transcriber: perTurnTranscriber
@@ -1085,7 +1088,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 try await transcriber.prepare()
             case .streamingTranscriber(let streamingTranscriber):
                 try await streamingTranscriber.prepare()
-            case .diarizedTurns(let diarizer, let transcriber):
+            case .diarizedTurns(let diarizer, let transcriber, let sensitivity):
+                // Apply the per-session sensitivity preset before
+                // prepare() so the FluidAudio adapter rebuilds its
+                // OfflineDiarizerManager with the resolved config.
+                await diarizer.applySensitivity(sensitivity)
                 try await diarizer.prepare()
                 try await transcriber.prepare()
             }

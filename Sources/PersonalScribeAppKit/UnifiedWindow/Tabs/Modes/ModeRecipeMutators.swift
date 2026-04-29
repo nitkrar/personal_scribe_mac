@@ -37,14 +37,18 @@ extension WorkflowMode {
             case .transcriber(let kind, let descriptorID) where on:
                 // Same ASR kind on both sides — CARRY the pin from
                 // `.transcriber.descriptorID` into the new
-                // `.diarizedTurns.transcriberDescriptorID`.
+                // `.diarizedTurns.transcriberDescriptorID`. Sensitivity
+                // defaults to the global preference reference; the
+                // user can override it from the mode detail later.
                 return .diarizedTurns(
                     diarizerKind: .diarization,
                     transcriberKind: kind,
                     transcriberDescriptorID: descriptorID
                 )
-            case .diarizedTurns(_, let transcriberKind, let transcriberDescriptorID) where !on:
+            case .diarizedTurns(_, let transcriberKind, let transcriberDescriptorID, _) where !on:
                 // Same direction in reverse — CARRY the pin out.
+                // Sensitivity is dropped because the destination spec
+                // (`.transcriber`) doesn't carry diarization tuning.
                 return .transcriber(kind: transcriberKind, descriptorID: transcriberDescriptorID)
             default:
                 return spec
@@ -70,12 +74,13 @@ extension WorkflowMode {
             case .streamingTranscriber(let kind, _):
                 didReplace = true
                 return .streamingTranscriber(kind: kind, descriptorID: id)
-            case .diarizedTurns(let diarizerKind, let transcriberKind, _):
+            case .diarizedTurns(let diarizerKind, let transcriberKind, _, let sensitivity):
                 didReplace = true
                 return .diarizedTurns(
                     diarizerKind: diarizerKind,
                     transcriberKind: transcriberKind,
-                    transcriberDescriptorID: id
+                    transcriberDescriptorID: id,
+                    sensitivity: sensitivity
                 )
             }
         }
@@ -146,6 +151,35 @@ extension WorkflowMode {
                 .clipboard(restoreEnabled: parameter),
                 at: 0
             )
+        }
+        return copy
+    }
+
+    /// Per-mode override for the offline diarizer's sensitivity preset.
+    /// Operates on the first `.diarizedTurns` processor in the recipe;
+    /// modes without a diarized processor are returned unchanged. The
+    /// view-model only surfaces the picker when a diarized processor
+    /// exists, so the no-op branch is a safety net rather than a
+    /// supported path.
+    func withSpeakerSeparationSensitivity(
+        parameter: Parameter<SpeakerSeparationSensitivity>
+    ) -> WorkflowMode {
+        var copy = self
+        var didReplace = false
+        copy.processors = copy.processors.map { spec -> ProcessorSpec in
+            guard !didReplace else { return spec }
+            switch spec {
+            case .diarizedTurns(let diarizerKind, let transcriberKind, let descriptorID, _):
+                didReplace = true
+                return .diarizedTurns(
+                    diarizerKind: diarizerKind,
+                    transcriberKind: transcriberKind,
+                    transcriberDescriptorID: descriptorID,
+                    sensitivity: parameter
+                )
+            default:
+                return spec
+            }
         }
         return copy
     }
