@@ -187,26 +187,16 @@ private extension DiarizedTurnTranscriptionProcessor {
         )
     }
 
-    // Assigns "Speaker N" labels by order of first appearance — vendor IDs
-    // are not guaranteed contiguous or zero-indexed, so we map them to
-    // 1-indexed display numbers as we walk the turn results. Empty-text
-    // turns are skipped and do not consume a label slot.
+    // TEMPORARY DIAGNOSTIC: emit the raw vendor speakerID per turn so we
+    // can read what the diarizer actually attributes from the clipboard
+    // output (no Console.app required). Restore "Speaker N" labels +
+    // order-of-appearance mapping once we've confirmed whether the
+    // diarizer is collapsing speakers or distinguishing them.
     static func labeledTurnLines(from turnResults: [TurnTranscription]) -> [String] {
-        var labelByVendorID: [String: Int] = [:]
-        var nextLabelNumber = 1
-        return turnResults.compactMap { turnResult -> String? in
+        turnResults.compactMap { turnResult -> String? in
             let text = turnResult.result.text
             guard text.isEmpty == false else { return nil }
-            let vendorID = turnResult.turn.speakerID
-            let labelNumber: Int
-            if let existing = labelByVendorID[vendorID] {
-                labelNumber = existing
-            } else {
-                labelNumber = nextLabelNumber
-                labelByVendorID[vendorID] = labelNumber
-                nextLabelNumber += 1
-            }
-            return "Speaker \(labelNumber): \(text)"
+            return "\(turnResult.turn.speakerID): \(text)"
         }
     }
 

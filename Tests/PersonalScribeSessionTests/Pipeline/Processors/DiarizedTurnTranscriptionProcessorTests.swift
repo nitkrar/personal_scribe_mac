@@ -24,7 +24,7 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
 
         switch output {
         case .text(let result):
-            XCTAssertEqual(result.text, "Speaker 1: alpha\nSpeaker 2: beta")
+            XCTAssertEqual(result.text, "speaker_0: alpha\nspeaker_1: beta")
             XCTAssertEqual(result.audioDuration, .seconds(1))
             XCTAssertEqual(result.processingDuration, .milliseconds(15))
             XCTAssertEqual(
@@ -89,13 +89,13 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
 
         switch output {
         case .text(let result):
-            XCTAssertEqual(result.text, "Speaker 1: stable")
+            XCTAssertEqual(result.text, "speaker_0: stable")
         case .streamingText, .turns:
             XCTFail("Expected batch text output")
         }
     }
 
-    func testProcessRepeatsSpeakerLabelForConsecutiveSameSpeakerTurns() async throws {
+    func testProcessRepeatsVendorIDForConsecutiveSameSpeakerTurns() async throws {
         let firstTurn = makeTurn(speakerID: "speaker_0", startMS: 0, endMS: 200)
         let secondTurn = makeTurn(speakerID: "speaker_0", startMS: 500, endMS: 700)
         let diarizer = StubSpeakerDiarizer(events: [.terminal([firstTurn, secondTurn])])
@@ -114,16 +114,17 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
 
         switch output {
         case .text(let result):
-            XCTAssertEqual(result.text, "Speaker 1: alpha\nSpeaker 1: beta")
+            XCTAssertEqual(result.text, "speaker_0: alpha\nspeaker_0: beta")
         case .streamingText, .turns:
             XCTFail("Expected batch text output")
         }
     }
 
-    // Vendor IDs are not guaranteed to start at 0 or be contiguous — the
-    // aggregator must assign labels by order of first appearance, not by
-    // parsing the vendor string.
-    func testProcessAssignsLabelsByOrderOfAppearanceNotVendorID() async throws {
+    // TEMPORARY DIAGNOSTIC: emit the raw vendor speakerID per turn so we
+    // can read what the diarizer actually attributes from the clipboard
+    // output. Restore Speaker-N order-of-appearance mapping once we've
+    // confirmed the diarizer behavior.
+    func testProcessPassesVendorSpeakerIDThroughDirectly() async throws {
         let firstTurn = makeTurn(speakerID: "speaker_5", startMS: 0, endMS: 200)
         let secondTurn = makeTurn(speakerID: "speaker_2", startMS: 500, endMS: 700)
         let diarizer = StubSpeakerDiarizer(events: [.terminal([firstTurn, secondTurn])])
@@ -142,7 +143,7 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
 
         switch output {
         case .text(let result):
-            XCTAssertEqual(result.text, "Speaker 1: alpha\nSpeaker 2: beta")
+            XCTAssertEqual(result.text, "speaker_5: alpha\nspeaker_2: beta")
         case .streamingText, .turns:
             XCTFail("Expected batch text output")
         }
