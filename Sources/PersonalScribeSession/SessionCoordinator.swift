@@ -445,7 +445,7 @@ public actor SessionCoordinator {
         SessionPipelineOrchestrator(
             capture: capture,
             logger: logger,
-            postProcessingPipeline: CoordinatorPostProcessingPipeline(),
+            postProcessingPipeline: DefaultPostProcessingPipeline(),
             outputSink: CoordinatorPipelineOutputSink(),
             contextProvider: CoordinatorPipelineContextProvider(),
             persistenceHandler: makePersistenceHandler(
@@ -493,76 +493,6 @@ public actor SessionCoordinator {
         case .idle, .capturing, .holdRecording, .transcribing, .error:
             return state
         }
-    }
-}
-
-private struct CoordinatorPostProcessingPipeline: PostProcessingPipeline {
-    private static let singleWordFillers = try! NSRegularExpression(
-        pattern: #"\b(um|uh|uhm|er|erm|ah|ahh|hmm|hmmm|like)\b"#,
-        options: [.caseInsensitive]
-    )
-    private static let hedges = try! NSRegularExpression(
-        pattern: #"\b(you know|i mean|i guess|sort of|kind of)\b"#,
-        options: [.caseInsensitive]
-    )
-    private static let repeatedWhitespace = try! NSRegularExpression(
-        pattern: #"\s+"#
-    )
-    private static let leadingPunctuationWhitespace = try! NSRegularExpression(
-        pattern: #"\s+([,.!?;:])"#
-    )
-    private static let trailingPunctuationWhitespace = try! NSRegularExpression(
-        pattern: #"([,.!?;:])\s+"#
-    )
-
-    func run(_ text: String, context: PostProcessingContext) async throws -> String {
-        let stageOne = Self.removeFillers(from: text)
-        return Self.applyBasicPunctuation(to: stageOne)
-    }
-
-    private static func removeFillers(from raw: String) -> String {
-        let withoutSingleWordFillers = singleWordFillers.stringByReplacingMatches(
-            in: raw,
-            range: NSRange(raw.startIndex..., in: raw),
-            withTemplate: " "
-        )
-        let withoutHedges = hedges.stringByReplacingMatches(
-            in: withoutSingleWordFillers,
-            range: NSRange(withoutSingleWordFillers.startIndex..., in: withoutSingleWordFillers),
-            withTemplate: " "
-        )
-        let collapsedWhitespace = repeatedWhitespace.stringByReplacingMatches(
-            in: withoutHedges,
-            range: NSRange(withoutHedges.startIndex..., in: withoutHedges),
-            withTemplate: " "
-        )
-        let trimmedLeadingPunctuationWhitespace = leadingPunctuationWhitespace.stringByReplacingMatches(
-            in: collapsedWhitespace,
-            range: NSRange(collapsedWhitespace.startIndex..., in: collapsedWhitespace),
-            withTemplate: "$1"
-        )
-
-        return trailingPunctuationWhitespace.stringByReplacingMatches(
-            in: trimmedLeadingPunctuationWhitespace,
-            range: NSRange(trimmedLeadingPunctuationWhitespace.startIndex..., in: trimmedLeadingPunctuationWhitespace),
-            withTemplate: "$1 "
-        )
-    }
-
-    private static func applyBasicPunctuation(to text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return ""
-        }
-
-        let punctuated: String
-        if let lastCharacter = trimmed.last, ".!?".contains(lastCharacter) {
-            punctuated = trimmed
-        } else {
-            punctuated = trimmed + "."
-        }
-
-        return punctuated.prefix(1).uppercased() + punctuated.dropFirst()
     }
 }
 
