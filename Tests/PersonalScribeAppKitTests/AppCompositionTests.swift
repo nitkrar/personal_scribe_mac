@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import XCTest
 import PersonalScribeCore
@@ -22,6 +23,158 @@ final class AppCompositionTests: XCTestCase {
         )
 
         XCTAssertFalse(monitor.isActive)
+    }
+
+    func testConfigurePerModeHotkeysWiresProvidedMonitorToRegistryCurrentMode() throws {
+        let perModeHotkey = HotkeyPreference(
+            keyCode: 0, // 'a'
+            tapCount: 1,
+            modifiers: NSEvent.ModifierFlags([.command, .option]).rawValue
+        )
+        let mode = WorkflowMode(
+            id: "med-notes",
+            name: "Medical Notes",
+            glyph: "mic",
+            hotkey: perModeHotkey,
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.parakeetTDTCTC110M.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(
+                initial: WorkflowModeDocument(defaultModeID: nil, customModes: [mode])
+            ),
+            availableKindsProvider: { Set(ModelKind.allCases) }
+        )
+        let modelService = makePinnedAsrModelService()
+        let coordinator = DevelopmentComposition.makeTestingSessionCoordinator()
+        let monitor = GlobalHotkeyMonitor(onToggle: { })
+
+        AppComposition.configurePerModeHotkeys(
+            on: monitor,
+            registry: registry,
+            coordinator: coordinator,
+            modelService: modelService
+        )
+
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: 0,
+            modifierFlags: [.command, .option],
+            characters: "a",
+            timestamp: 1.0
+        ))
+
+        XCTAssertEqual(registry.currentMode.id, "med-notes")
+    }
+
+    func testObservePerModeHotkeysUpdatesProvidedMonitorWhenModeSaved() async throws {
+        let perModeHotkey = HotkeyPreference(
+            keyCode: 0, // 'a'
+            tapCount: 1,
+            modifiers: NSEvent.ModifierFlags([.command, .option]).rawValue
+        )
+        let mode = WorkflowMode(
+            id: "med-notes",
+            name: "Medical Notes",
+            glyph: "mic",
+            hotkey: perModeHotkey,
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.parakeetTDTCTC110M.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(),
+            availableKindsProvider: { Set(ModelKind.allCases) }
+        )
+        let modelService = makePinnedAsrModelService()
+        let coordinator = DevelopmentComposition.makeTestingSessionCoordinator()
+        let monitor = GlobalHotkeyMonitor(onToggle: { })
+        let observation = AppComposition.observePerModeHotkeys(
+            on: monitor,
+            registry: registry,
+            coordinator: coordinator,
+            modelService: modelService
+        )
+        defer { observation.cancel() }
+
+        try registry.saveCustom(mode)
+
+        await waitUntil {
+            do {
+                monitor.handle(event: try self.makeKeyDownEvent(
+                    keyCode: 0,
+                    modifierFlags: [.command, .option],
+                    characters: "a",
+                    timestamp: 1.0
+                ))
+            } catch {
+                XCTFail("Failed to synthesize per-mode keyDown: \(error)")
+            }
+            return registry.currentMode.id == "med-notes"
+        }
+
+        XCTAssertEqual(registry.currentMode.id, "med-notes")
+    }
+
+    private func makePinnedAsrModelService() -> ActiveModelService {
+        let suiteName = "AppCompositionTests.\(#function).\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return ActiveModelService(
+            defaults: defaults,
+            physicalMemoryBytes: 8_000_000_000,
+            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+        )
+    }
+
+    private func makeKeyDownEvent(
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags,
+        characters: String,
+        timestamp: TimeInterval
+    ) throws -> NSEvent {
+        try XCTUnwrap(
+            NSEvent.keyEvent(
+                with: .keyDown,
+                location: .zero,
+                modifierFlags: modifierFlags,
+                timestamp: timestamp,
+                windowNumber: 0,
+                context: nil,
+                characters: characters,
+                charactersIgnoringModifiers: characters.lowercased(),
+                isARepeat: false,
+                keyCode: keyCode
+            )
+        )
+    }
+
+    private func waitUntil(
+        timeout: Duration = .seconds(2),
+        pollInterval: Duration = .milliseconds(10),
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if condition() {
+                return
+            }
+            try? await Task.sleep(for: pollInterval, tolerance: pollInterval)
+        }
+        XCTFail("Timed out waiting for condition after \(timeout)")
     }
 }
 

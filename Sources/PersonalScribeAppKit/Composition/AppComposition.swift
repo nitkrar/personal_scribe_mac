@@ -219,47 +219,95 @@ public enum AppComposition {
     @MainActor
     private static func makeHotkeyMonitorWithPerModeWiring() -> GlobalHotkeyMonitor {
         let monitor = makeGlobalHotkeyMonitor()
-        // #089 L-22 — wire per-mode hotkey: set the registry's
-        // runtime current mode, then toggle recording (start when
-        // idle, stop when active). Toggle (not just start) matches
-        // the global-hotkey UX so the user can press the same chord
-        // to stop a mode-initiated recording.
-        let registry = workflowModeRegistry
-        let coordinator = sessionCoordinator
+        configurePerModeHotkeys(
+            on: monitor,
+            registry: workflowModeRegistry,
+            coordinator: sessionCoordinator,
+            modelService: modelService
+        )
+        return monitor
+    }
+
+    /// Wire per-mode hotkey activation into `monitor` and seed its
+    /// table from the registry's current snapshot. Shared by the app's
+    /// startup path and by tests that inject a custom monitor.
+    @MainActor
+    static func configurePerModeHotkeys(
+        on monitor: GlobalHotkeyMonitor,
+        registry: WorkflowModeRegistry,
+        coordinator: SessionCoordinator,
+        modelService: ActiveModelService
+    ) {
+        // #089 L-22 — per-mode hotkey sets the runtime current mode,
+        // then toggles recording. Toggle (not just start) matches the
+        // global-hotkey UX so the same chord can stop a mode-initiated
+        // recording.
         monitor.setOnPerModeActivate { modeID in
             registry.setCurrent(id: modeID)
             Task {
                 await coordinator.toggle()
             }
         }
-        // Seed the per-mode table from the current custom modes,
-        // filtered through validation (#090 follow-up): an invalid
-        // mode's hotkey shouldn't fire a session-start error.
-        monitor.updatePerModeHotkeys(currentlyValidCustomModes(among: registry.customModes))
-        return monitor
+        monitor.updatePerModeHotkeys(
+            currentlyValidCustomModes(
+                among: registry.customModes,
+                modelService: modelService
+            )
+        )
+    }
+
+    /// Start observing `registry.customModesStream()` and keep
+    /// `monitor`'s per-mode hotkey table synchronized to the latest
+    /// valid custom-mode set.
+    @MainActor
+    static func observePerModeHotkeys(
+        on monitor: GlobalHotkeyMonitor,
+        registry: WorkflowModeRegistry,
+        coordinator: SessionCoordinator,
+        modelService: ActiveModelService
+    ) -> Task<Void, Never> {
+        configurePerModeHotkeys(
+            on: monitor,
+            registry: registry,
+            coordinator: coordinator,
+            modelService: modelService
+        )
+        return Task { @MainActor in
+            for await modes in registry.customModesStream() {
+                monitor.updatePerModeHotkeys(
+                    currentlyValidCustomModes(
+                        among: modes,
+                        modelService: modelService
+                    )
+                )
+            }
+        }
     }
 
     /// #089 — Task that subscribes to the registry's customModesStream
     /// and forwards updates into the hotkey monitor's per-mode table.
     @MainActor
     private static var perModeHotkeyObservationTask: Task<Void, Never>?
+    @MainActor
+    private static var perModeHotkeyObservationMonitor: GlobalHotkeyMonitor?
 
     @MainActor
-    static func startPerModeHotkeyObservation() {
-        guard perModeHotkeyObservationTask == nil else { return }
-        let registry = workflowModeRegistry
-        let monitor = hotkeyMonitor
-        perModeHotkeyObservationTask = Task { @MainActor in
-            for await modes in registry.customModesStream() {
-                // #090 follow-up: filter out invalid modes (unpinned
-                // with no ready active model OR pinned to a removed
-                // descriptor) so their hotkeys don't fire. Re-fires
-                // on every mode-list change; activating a model
-                // doesn't trigger a re-fire here, so the hotkey
-                // becomes live on next mode-list emission (or restart).
-                monitor.updatePerModeHotkeys(currentlyValidCustomModes(among: modes))
-            }
+    static func startPerModeHotkeyObservation(
+        on monitor: GlobalHotkeyMonitor = hotkeyMonitor
+    ) {
+        if let observed = perModeHotkeyObservationMonitor,
+           observed === monitor,
+           perModeHotkeyObservationTask != nil {
+            return
         }
+        perModeHotkeyObservationTask?.cancel()
+        perModeHotkeyObservationMonitor = monitor
+        perModeHotkeyObservationTask = observePerModeHotkeys(
+            on: monitor,
+            registry: workflowModeRegistry,
+            coordinator: sessionCoordinator,
+            modelService: modelService
+        )
     }
 
     /// Subset of `modes` that pass `WorkflowModeValidator` against the
@@ -269,6 +317,14 @@ public enum AppComposition {
     /// the session would reject at start time.
     @MainActor
     static func currentlyValidCustomModes(among modes: [WorkflowMode]) -> [WorkflowMode] {
+        currentlyValidCustomModes(among: modes, modelService: modelService)
+    }
+
+    @MainActor
+    static func currentlyValidCustomModes(
+        among modes: [WorkflowMode],
+        modelService: ActiveModelService
+    ) -> [WorkflowMode] {
         let kinds = modelService.availableKinds()
         let descriptors = modelService.registeredModels
         return modes.filter { mode in
@@ -295,7 +351,7 @@ public enum AppComposition {
         return AppStartupCoordinator(
             startHotkeyMonitor: {
                 hotkeyMonitor.start()
-                startPerModeHotkeyObservation()
+                startPerModeHotkeyObservation(on: hotkeyMonitor)
             },
             prepareTranscriber: {
                 do {
@@ -330,4 +386,3 @@ public enum AppComposition {
         PermissionServiceAdapter(wrapping: permissionService)
     }
 }
-
