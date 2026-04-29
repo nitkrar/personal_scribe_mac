@@ -642,13 +642,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                     replayBuffers: replayBuffers
                 )
 
-            case .diarizedTurns(let diarizer, let perTurnTranscriber, _):
-                // Sensitivity already applied to the diarizer in
-                // `prepareAllProcessors` at session start, so the
-                // fusion processor itself stays sensitivity-agnostic.
+            case .diarizedTurns(let diarizer, let perTurnTranscriber, let sensitivity):
                 let fusion = DiarizedTurnTranscriptionProcessor(
                     diarizer: diarizer,
-                    transcriber: perTurnTranscriber
+                    transcriber: perTurnTranscriber,
+                    sensitivity: sensitivity
                 )
                 let coalesced = try Self.coalesce(replayBuffers)
                 let output = try await fusion.process(audio: coalesced, priors: [])

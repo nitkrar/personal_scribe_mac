@@ -4,6 +4,7 @@ import PersonalScribeCore
 public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Processor {
     private let diarizer: any SpeakerDiarizer
     private let transcriber: any Transcriber
+    private let sensitivity: SpeakerSeparationSensitivity
     private let lock = NSLock()
 
     private var hasPreparedModel = false
@@ -11,10 +12,12 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
 
     public init(
         diarizer: any SpeakerDiarizer,
-        transcriber: any Transcriber
+        transcriber: any Transcriber,
+        sensitivity: SpeakerSeparationSensitivity = .balanced
     ) {
         self.diarizer = diarizer
         self.transcriber = transcriber
+        self.sensitivity = sensitivity
     }
 
     public func prepare() async throws {
@@ -29,7 +32,9 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
 
             let diarizer = self.diarizer
             let transcriber = self.transcriber
+            let sensitivity = self.sensitivity
             let task = Task {
+                await diarizer.applySensitivity(sensitivity)
                 async let prepareDiarizer: Void = diarizer.prepare()
                 async let prepareTranscriber: Void = transcriber.prepare()
                 try await prepareDiarizer

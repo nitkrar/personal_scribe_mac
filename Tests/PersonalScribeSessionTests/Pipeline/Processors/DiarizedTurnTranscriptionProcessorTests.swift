@@ -182,6 +182,30 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
         XCTAssertTrue(progress.contains(transcriberProgress[0]))
         XCTAssertTrue(progress.contains(transcriberProgress[1]))
     }
+
+    func testProcessAppliesSensitivityBeforePreparingDiarizer() async throws {
+        let turn = makeTurn(speakerID: "speaker_0", startMS: 0, endMS: 200)
+        let diarizer = StubSpeakerDiarizer(
+            events: [.terminal([turn])],
+            requiredSensitivityForPrepare: .strict
+        )
+        let transcriber = RecordingTranscriber(
+            results: [makeResult(text: "alpha", startMS: 0, endMS: 200)]
+        )
+        let processor = DiarizedTurnTranscriptionProcessor(
+            diarizer: diarizer,
+            transcriber: transcriber,
+            sensitivity: .strict
+        )
+
+        _ = try await processor.process(audio: try makeBuffer(), priors: [])
+
+        XCTAssertEqual(
+            diarizer.recordedAppliedSensitivities(),
+            [SpeakerSeparationSensitivity.strict]
+        )
+        XCTAssertEqual(diarizer.prepareCallCount(), 1)
+    }
 }
 
 private extension DiarizedTurnTranscriptionProcessorTests {
@@ -252,20 +276,37 @@ private extension DiarizedTurnTranscriptionProcessorTests {
 private final class StubSpeakerDiarizer: @unchecked Sendable, SpeakerDiarizer {
     private let events: [SpeakerDiarizationEvent]
     private let progressSnapshots: [ModelDownloadProgress]
+    private let requiredSensitivityForPrepare: SpeakerSeparationSensitivity?
     private let lock = NSLock()
     private var prepareCalls = 0
+    private var appliedSensitivityHistory: [SpeakerSeparationSensitivity] = []
 
     init(
         events: [SpeakerDiarizationEvent],
-        progressSnapshots: [ModelDownloadProgress] = []
+        progressSnapshots: [ModelDownloadProgress] = [],
+        requiredSensitivityForPrepare: SpeakerSeparationSensitivity? = nil
     ) {
         self.events = events
         self.progressSnapshots = progressSnapshots
+        self.requiredSensitivityForPrepare = requiredSensitivityForPrepare
     }
 
     func prepare() async throws {
         lock.withLock {
+            if let requiredSensitivityForPrepare {
+                XCTAssertEqual(
+                    appliedSensitivityHistory.last,
+                    requiredSensitivityForPrepare,
+                    "fusion processor must apply the session sensitivity before diarizer.prepare()"
+                )
+            }
             prepareCalls += 1
+        }
+    }
+
+    func applySensitivity(_ sensitivity: SpeakerSeparationSensitivity) async {
+        lock.withLock {
+            appliedSensitivityHistory.append(sensitivity)
         }
     }
 
@@ -303,6 +344,10 @@ private final class StubSpeakerDiarizer: @unchecked Sendable, SpeakerDiarizer {
 
     func prepareCallCount() -> Int {
         lock.withLock { prepareCalls }
+    }
+
+    func recordedAppliedSensitivities() -> [SpeakerSeparationSensitivity] {
+        lock.withLock { appliedSensitivityHistory }
     }
 }
 
