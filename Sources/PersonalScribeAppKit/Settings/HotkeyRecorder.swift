@@ -87,6 +87,9 @@ public struct HotkeyRecorder: View {
             HotkeyRecorderEventMonitor { event in
                 (try? model.handle(event: event)) ?? false
             }
+            // ^^ `event` is `HotkeyEvent` post-#028; the model's
+            // `handle(event: HotkeyEvent)` overload preserves
+            // the existing semantics.
         )
     }
 }
@@ -165,6 +168,11 @@ final class HotkeyRecorderModel: ObservableObject {
 
     @discardableResult
     func handle(event: NSEvent) throws -> Bool {
+        try handle(event: HotkeyEvent(nsEvent: event))
+    }
+
+    @discardableResult
+    func handle(event: HotkeyEvent) throws -> Bool {
         switch event.type {
         case .flagsChanged:
             captureModifierChange(event)
@@ -178,7 +186,7 @@ final class HotkeyRecorderModel: ObservableObject {
 
             captureKeyPress(event)
             return true
-        default:
+        case .keyUp:
             return false
         }
     }
@@ -196,7 +204,7 @@ final class HotkeyRecorderModel: ObservableObject {
         onCancel()
     }
 
-    private func captureModifierChange(_ event: NSEvent) {
+    private func captureModifierChange(_ event: HotkeyEvent) {
         let modifiers = normalizedModifierFlags(event.modifierFlags)
         guard modifiers.isEmpty == false else {
             return
@@ -212,7 +220,7 @@ final class HotkeyRecorderModel: ObservableObject {
         captureResult = .rejected(reason: "Modifier-only shortcuts are not supported.")
     }
 
-    private func captureKeyPress(_ event: NSEvent) {
+    private func captureKeyPress(_ event: HotkeyEvent) {
         let preference = HotkeyPreference(
             keyCode: event.keyCode,
             tapCount: 1,
@@ -247,7 +255,7 @@ final class HotkeyRecorderModel: ObservableObject {
         modifierFlags.intersection(Self.modifierMask)
     }
 
-    private func normalizedCharacters(for event: NSEvent) -> String {
+    private func normalizedCharacters(for event: HotkeyEvent) -> String {
         (event.charactersIgnoringModifiers ?? event.characters ?? "").lowercased()
     }
 
@@ -430,31 +438,31 @@ enum HotkeyShortcutFormatter {
 }
 
 private struct HotkeyRecorderEventMonitor: View {
-    let onEvent: (NSEvent) -> Bool
+    let onEvent: (HotkeyEvent) -> Bool
 
-    @State private var monitor: Any?
+    @State private var token: KeyEventRouterToken?
 
     var body: some View {
         Color.clear
             .frame(width: 0, height: 0)
             .onAppear {
-                guard monitor == nil else {
+                guard token == nil else {
                     return
                 }
-
-                monitor = NSEvent.addLocalMonitorForEvents(
-                    matching: [.flagsChanged, .keyDown]
+                // #028 — register on the shared `KeyEventRouter` at
+                // `position: .first` so the recorder takes priority
+                // over already-registered consumers (`EscapeKeyMonitor`,
+                // `GlobalHotkeyMonitor`) on the local NSEvent path
+                // while the recorder UI is open. Token is dropped on
+                // disappear; RAII deinit auto-unregisters.
+                token = AppComposition.keyEventRouter.registerLocalDecider(
+                    position: .first
                 ) { event in
-                    onEvent(event) ? nil : event
+                    onEvent(event)
                 }
             }
             .onDisappear {
-                guard let monitor else {
-                    return
-                }
-
-                NSEvent.removeMonitor(monitor)
-                self.monitor = nil
+                token = nil
             }
     }
 }

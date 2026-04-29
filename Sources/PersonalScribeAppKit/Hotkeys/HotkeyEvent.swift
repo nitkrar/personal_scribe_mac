@@ -25,6 +25,36 @@ struct HotkeyEvent: Sendable {
     let modifierFlags: NSEvent.ModifierFlags
     let timestamp: TimeInterval
     let isARepeat: Bool
+    /// Source characters when the event came from an `NSEvent` (local /
+    /// global NSEvent monitor path). `nil` when the event came from the
+    /// `CGEventTap` path — `CGEvent` does not surface readable
+    /// characters in a Sendable form, and the CG-tap consumers
+    /// (gesture state machine) don't need them. Used by `HotkeyRecorder`
+    /// for chord-display rendering.
+    let charactersIgnoringModifiers: String?
+    let characters: String?
+
+    /// Memberwise initializer with optional `characters` fields
+    /// defaulted to `nil` — keeps existing test fixtures (which
+    /// construct `HotkeyEvent` with the original 5 fields) compiling
+    /// after #028's addition of character storage.
+    init(
+        type: EventType,
+        keyCode: UInt16,
+        modifierFlags: NSEvent.ModifierFlags,
+        timestamp: TimeInterval,
+        isARepeat: Bool,
+        charactersIgnoringModifiers: String? = nil,
+        characters: String? = nil
+    ) {
+        self.type = type
+        self.keyCode = keyCode
+        self.modifierFlags = modifierFlags
+        self.timestamp = timestamp
+        self.isARepeat = isARepeat
+        self.charactersIgnoringModifiers = charactersIgnoringModifiers
+        self.characters = characters
+    }
 }
 
 extension HotkeyEvent {
@@ -47,6 +77,13 @@ extension HotkeyEvent {
         self.modifierFlags = nsEvent.modifierFlags
         self.timestamp = nsEvent.timestamp
         self.isARepeat = (nsEvent.type == .keyDown) ? nsEvent.isARepeat : false
+        // NSEvent's `characters` / `charactersIgnoringModifiers` are
+        // documented as non-nil only for `.keyDown` / `.keyUp`. For
+        // `.flagsChanged` they're nil. Optional storage handles both
+        // cleanly; HotkeyRecorder consults these for chord-display
+        // text.
+        self.charactersIgnoringModifiers = nsEvent.charactersIgnoringModifiers
+        self.characters = nsEvent.characters
     }
 
     /// Adapter from a `CGEvent` delivered through `CGEventTap`. Returns
@@ -76,6 +113,11 @@ extension HotkeyEvent {
         self.isARepeat = (type == .keyDown)
             ? (cgEvent.getIntegerValueField(.keyboardEventAutorepeat) != 0)
             : false
+        // CGEvent has no Sendable character accessor; HotkeyRecorder
+        // (the only consumer that reads characters) is local-NSEvent-
+        // only, so the CG path leaves these nil.
+        self.charactersIgnoringModifiers = nil
+        self.characters = nil
     }
 }
 
