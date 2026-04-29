@@ -105,6 +105,15 @@ final class KeyEventRouter {
         tap?.isActive == true || localMonitor != nil || globalMonitor != nil
     }
 
+    /// True when the CG tap (system-wide swallow path) is alive. False
+    /// when the tap install failed (Input Monitoring denied) or the
+    /// router has not been started. Consumers that need to surface a
+    /// permission warning to the user (e.g. `GlobalHotkeyMonitor`'s
+    /// "÷÷÷÷ leak" warning) read this getter after registering.
+    var isTapActive: Bool {
+        tap?.isActive == true
+    }
+
     /// Install all three monitor legs. Returns `true` only when the CG
     /// tap installed successfully (the same contract as
     /// `HotkeyEventTap.start`). NSEvent local + global installs are
