@@ -7,6 +7,16 @@ import PersonalScribeCore
 /// `plans/App UI design/Claude_Final_Bundle_Prompt.md` §2 (M5.1 layout).
 @MainActor
 final class StatusItemMenuModelTests: XCTestCase {
+    /// Pinned-fixture global recording hotkey used by tests so the
+    /// rendered chord is deterministic (production reads
+    /// `HotkeyPreference.resolve()` from UserDefaults, which is
+    /// non-deterministic in test runs).
+    private static let testRecordingHotkey = HotkeyPreference.default
+
+    private static var testRecordingHotkeyDisplay: String {
+        HotkeyShortcutFormatter.displayString(for: testRecordingHotkey)
+    }
+
     // MARK: - Base structure
 
     /// Post-#6 + #16 granted-mode baseline:
@@ -17,7 +27,9 @@ final class StatusItemMenuModelTests: XCTestCase {
     /// [2] History                    waveform
     /// [3] Settings                   gearshape
     /// [4] ---
-    /// [5] Start Recording   ⌥⌥      waveform
+    /// [5] Start Recording   <chord> waveform   (chord is the live
+    ///                                           global recording hotkey,
+    ///                                           e.g. `⌥/`)
     /// [6] Copy Last Transcript      doc.on.clipboard
     /// [7] ---
     /// [8] Quit <displayName>        xmark.circle
@@ -27,7 +39,8 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: WorkflowMode.dictation.name
+            activeModeName: WorkflowMode.dictation.name,
+            recordingHotkey: Self.testRecordingHotkey
         )
 
         XCTAssertEqual(model.items.count, 9)
@@ -39,7 +52,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         assertAction(
             model.items[5],
             id: .startStopRecording,
-            title: "Start Recording   ⌥⌥",
+            title: "Start Recording   \(Self.testRecordingHotkeyDisplay)",
             iconName: "waveform"
         )
         assertAction(
@@ -86,13 +99,14 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .capturing,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: WorkflowMode.dictation.name
+            activeModeName: WorkflowMode.dictation.name,
+            recordingHotkey: Self.testRecordingHotkey
         )
         // Start/Stop Recording sits at index 5 in the post-#6+#16 layout.
         assertAction(
             model.items[5],
             id: .startStopRecording,
-            title: "Stop Recording   ⌥⌥",
+            title: "Stop Recording   \(Self.testRecordingHotkeyDisplay)",
             iconName: "waveform"
         )
     }
@@ -117,12 +131,13 @@ final class StatusItemMenuModelTests: XCTestCase {
             sessionState: .error(.modelLoadFailure),
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: WorkflowMode.dictation.name
+            activeModeName: WorkflowMode.dictation.name,
+            recordingHotkey: Self.testRecordingHotkey
         )
         assertAction(
             model.items[5],
             id: .startStopRecording,
-            title: "Start Recording   ⌥⌥",
+            title: "Start Recording   \(Self.testRecordingHotkeyDisplay)",
             iconName: "waveform"
         )
     }
@@ -230,22 +245,102 @@ final class StatusItemMenuModelTests: XCTestCase {
     }
 
     func testStartRecordingHasNoAppKitKeyEquivalent() {
-        // The actual hotkey is a double-tap of right Option (see
-        // GlobalHotkeyMonitor). AppKit's NSMenu can't bind that, so
-        // no key-equivalent is published — the ⌥⌥ hint lives in the
-        // title instead. Guards against re-introducing a wrong
-        // shortcut like ⌥⌘R that doesn't actually trigger recording.
+        // `KeyEventRouter` (#028) handles the actual chord — AppKit's
+        // NSMenu `keyEquivalent` is a single keystroke that can't
+        // represent every chord we support (modifier-only, double-tap,
+        // etc.), so no key-equivalent is published. The chord shows
+        // as text in the title via `recordingItemTitle(...)`.
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
             inputMonitoringPermission: .granted,
-            activeModeName: WorkflowMode.dictation.name
+            activeModeName: WorkflowMode.dictation.name,
+            recordingHotkey: Self.testRecordingHotkey
         )
         // Start/Stop Recording lives at index 5 in the post-#6+#16 layout.
         guard case let .action(record) = model.items[5] else {
             return XCTFail("Expected record action at index 5")
         }
         XCTAssertEqual(record.keyEquivalent, "")
+    }
+
+    // MARK: - #028 follow-up: chord display reflects live hotkeys
+
+    func testStartRecordingTitleReflectsCustomGlobalHotkey() {
+        let custom = HotkeyPreference(
+            keyCode: 15, // R
+            tapCount: 1,
+            modifiers: NSEvent.ModifierFlags.command.union(.shift).rawValue
+        )
+        let expectedChord = HotkeyShortcutFormatter.displayString(for: custom)
+
+        let model = StatusItemMenuModel.makeUnified(
+            sessionState: .idle,
+            micPermission: .granted,
+            inputMonitoringPermission: .granted,
+            activeModeName: WorkflowMode.dictation.name,
+            recordingHotkey: custom
+        )
+
+        guard case let .action(item) = model.items[5] else {
+            return XCTFail("Expected record action at index 5")
+        }
+        XCTAssertEqual(item.title, "Start Recording   \(expectedChord)")
+    }
+
+    func testModeSubmenuChildShowsHotkeyWhenConfigured() {
+        let hk = HotkeyPreference(
+            keyCode: 2, // D
+            tapCount: 1,
+            modifiers: NSEvent.ModifierFlags.option.rawValue
+        )
+        let pinned = WorkflowMode(
+            id: "with-hotkey",
+            name: "Quick Note",
+            glyph: "mic",
+            hotkey: hk,
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let unpinned = WorkflowMode(
+            id: "no-hotkey",
+            name: "Plain Note",
+            glyph: "mic",
+            hotkey: nil,
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        let model = StatusItemMenuModel.makeUnified(
+            sessionState: .idle,
+            micPermission: .granted,
+            inputMonitoringPermission: .granted,
+            modes: [pinned, unpinned],
+            currentModeID: pinned.id
+        )
+
+        // The mode submenu sits between the trailing separator and the
+        // Quit row. Locate it by case match.
+        let submenu = model.items.first { item in
+            if case .modeSubmenu = item { return true }
+            return false
+        }
+        guard case let .modeSubmenu(parentTitle, _, children) = submenu else {
+            return XCTFail("Expected a mode submenu in the items list")
+        }
+        // Parent reflects the current mode's chord.
+        let expectedChord = HotkeyShortcutFormatter.displayString(for: hk)
+        XCTAssertEqual(parentTitle, "Quick Note   \(expectedChord)")
+        // Children mirror the same shape: hotkey-bearing modes append
+        // the chord, hotkey-free modes show just the name.
+        XCTAssertEqual(children.first { $0.modeID == "with-hotkey" }?.title,
+                       "Quick Note   \(expectedChord)")
+        XCTAssertEqual(children.first { $0.modeID == "no-hotkey" }?.title,
+                       "Plain Note")
     }
 
     // MARK: - SF Symbol icons (M5.1)
