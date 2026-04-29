@@ -133,7 +133,9 @@ struct StatusItemMenuModel: Equatable {
     /// History                                 (opens unified window on Transcriptions tab)
     /// Settings                                (opens unified window on Settings tab)
     /// ---
-    /// Start Recording ⌥⌥                     (or "Stop Recording")
+    /// Start Recording <chord>                (or "Stop Recording";
+    ///                                         <chord> is the live global
+    ///                                         recording hotkey, e.g. ⌥/)
     /// Copy Last Transcript                    (writes most-recent transcript to clipboard)
     /// ---
     /// Quit <AppBrand.displayName>
@@ -155,7 +157,8 @@ struct StatusItemMenuModel: Equatable {
         inputDevices: [AudioInputDevice] = [],
         currentInputDeviceID: String? = nil,
         modes: [WorkflowMode] = [],
-        currentModeID: String? = nil
+        currentModeID: String? = nil,
+        recordingHotkey: HotkeyPreference = HotkeyPreference.resolve()
     ) -> StatusItemMenuModel {
         _ = isOnboardingComplete
         var items: [Item] = []
@@ -230,7 +233,7 @@ struct StatusItemMenuModel: Equatable {
 
         items.append(.action(ActionItem(
             id: .startStopRecording,
-            title: recordingItemTitle(for: sessionState),
+            title: recordingItemTitle(for: sessionState, recordingHotkey: recordingHotkey),
             keyEquivalent: recordingItemKeyEquivalent(for: sessionState),
             isEnabled: recordingItemIsEnabled(for: sessionState),
             iconName: "waveform"
@@ -253,10 +256,16 @@ struct StatusItemMenuModel: Equatable {
         items.append(.separator)
 
         if !modes.isEmpty {
+            // #028 follow-up: per-mode hotkey appears alongside the
+            // mode name in BOTH the parent row (current mode) and each
+            // child row. Mirrors the chord-display pattern used for
+            // the global recording hotkey on the "Start Recording"
+            // row above. Modes without a configured hotkey just show
+            // their name unchanged.
             let parentTitle: String = {
                 if let currentModeID,
                    let current = modes.first(where: { $0.id == currentModeID }) {
-                    return current.name
+                    return modeRowTitle(for: current)
                 }
                 return "Mode"
             }()
@@ -266,7 +275,7 @@ struct StatusItemMenuModel: Equatable {
                 children: modes.map { mode in
                     ModeSubmenuChild(
                         modeID: mode.id,
-                        title: mode.name,
+                        title: modeRowTitle(for: mode),
                         isActive: mode.id == currentModeID
                     )
                 }
@@ -303,29 +312,45 @@ struct StatusItemMenuModel: Equatable {
 
     // MARK: - Record/stop toggle helpers
 
-    static func recordingItemTitle(for sessionState: SessionState) -> String {
-        // Title includes the ⌥⌥ hint for the actual hotkey (double-tap
-        // right Option, see GlobalHotkeyMonitor). AppKit NSMenu's
-        // keyEquivalent cannot represent a double-tap sequence, so the
-        // hotkey is surfaced as plain text in the title instead of an
-        // AppKit key-equivalent binding.
+    static func recordingItemTitle(
+        for sessionState: SessionState,
+        recordingHotkey: HotkeyPreference = HotkeyPreference.resolve()
+    ) -> String {
+        // Title carries the actual global recording hotkey as plain
+        // text alongside the action verb. AppKit NSMenu's
+        // `keyEquivalent` can't represent every chord we support
+        // (double-tap, modifier-only, etc.), so the chord is surfaced
+        // in the title instead of bound as a real key equivalent —
+        // the user reads it as a hint, the actual dispatch goes
+        // through `KeyEventRouter` -> `GlobalHotkeyMonitor`.
+        let chord = HotkeyShortcutFormatter.displayString(for: recordingHotkey)
         switch sessionState {
         case .idle, .completed, .shortExit, .error:
-            return "Start Recording   ⌥⌥"
+            return "Start Recording   \(chord)"
         case .capturing, .holdRecording:
-            return "Stop Recording   ⌥⌥"
+            return "Stop Recording   \(chord)"
         case .transcribing:
             return "Transcribing…"
         }
     }
 
+    /// Format a `WorkflowMode`'s title for the menu — appends the
+    /// chord display when the mode has a per-mode hotkey configured,
+    /// matching the chord-on-row pattern used for the global hotkey.
+    static func modeRowTitle(for mode: WorkflowMode) -> String {
+        guard let hotkey = mode.hotkey else {
+            return mode.name
+        }
+        let chord = HotkeyShortcutFormatter.displayString(for: hotkey)
+        return "\(mode.name)   \(chord)"
+    }
+
     static func recordingItemKeyEquivalent(for sessionState: SessionState) -> String {
-        // Intentionally empty — the actual hotkey is a double-tap of
-        // right Option (see GlobalHotkeyMonitor). NSMenu can't bind
-        // that, so we publish no key-equivalent and put the ⌥⌥ hint in
-        // the title instead. Earlier revisions advertised ⌥⌘R; that
-        // was a lie — the AppKit shortcut didn't actually trigger
-        // recording.
+        // Intentionally empty — `KeyEventRouter` (#028) handles the
+        // chord. NSMenu's `keyEquivalent` is a single keystroke, so
+        // it can't faithfully represent every chord we support
+        // (modifier-only, double-tap, etc.). The hint is surfaced as
+        // text in the title via `recordingItemTitle(for:recordingHotkey:)`.
         return ""
     }
 
