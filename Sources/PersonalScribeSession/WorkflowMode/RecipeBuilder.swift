@@ -51,19 +51,24 @@ public final class RecipeBuilder {
 
     private func buildProcessor(_ spec: ProcessorSpec) throws -> BoundProcessor {
         switch spec {
-        case .transcriber(let kind, _):
-            let descriptor = try resolveDescriptor(for: kind)
+        case .transcriber(let kind, let descriptorID):
+            let descriptor = try resolveDescriptor(for: kind, pinnedID: descriptorID)
             let transcriber = try processorProvider.transcriber(for: descriptor)
             return .transcriber(transcriber)
 
-        case .streamingTranscriber(let kind, _):
-            let descriptor = try resolveDescriptor(for: kind)
+        case .streamingTranscriber(let kind, let descriptorID):
+            let descriptor = try resolveDescriptor(for: kind, pinnedID: descriptorID)
             let transcriber = try processorProvider.streamingTranscriber(for: descriptor)
             return .streamingTranscriber(transcriber)
 
-        case .diarizedTurns(let diarizerKind, let transcriberKind, _):
-            let diarizerDescriptor = try resolveDescriptor(for: diarizerKind)
-            let transcriberDescriptor = try resolveDescriptor(for: transcriberKind)
+        case .diarizedTurns(let diarizerKind, let transcriberKind, let transcriberDescriptorID):
+            // Diarizer leg has no pin in #090 (single descriptor in
+            // catalog); transcriber leg honors `transcriberDescriptorID`.
+            let diarizerDescriptor = try resolveDescriptor(for: diarizerKind, pinnedID: nil)
+            let transcriberDescriptor = try resolveDescriptor(
+                for: transcriberKind,
+                pinnedID: transcriberDescriptorID
+            )
             let diarizer = try processorProvider.diarizer(for: diarizerDescriptor)
             let transcriber = try processorProvider.transcriber(for: transcriberDescriptor)
             return .diarizedTurns(diarizer: diarizer, transcriber: transcriber)
@@ -102,7 +107,35 @@ public final class RecipeBuilder {
         }
     }
 
-    private func resolveDescriptor(for kind: ModelKind) throws -> ModelDescriptor {
+    /// Resolve the descriptor for a processor spec.
+    ///
+    /// - When `pinnedID` is non-nil (#090): look up the descriptor in
+    ///   `modelService.registeredModels` and verify its `kind` matches.
+    ///   The pin wins regardless of the global active selection.
+    /// - When `pinnedID` is nil: fall back to
+    ///   `modelService.activeDescriptor(for:)` (pre-#090 behavior).
+    ///
+    /// Pinned-resolution failures are unusual at this layer because
+    /// `WorkflowModeValidator` runs upstream at save + session-start.
+    /// Defensive errors here protect against test fixtures or future
+    /// callers that bypass validation.
+    private func resolveDescriptor(
+        for kind: ModelKind,
+        pinnedID: String?
+    ) throws -> ModelDescriptor {
+        if let pinnedID {
+            guard let pinned = modelService.registeredModels.first(where: { $0.id == pinnedID }) else {
+                throw RecipeBuildError.pinnedDescriptorNotRegistered(id: pinnedID)
+            }
+            guard pinned.kind == kind else {
+                throw RecipeBuildError.pinnedDescriptorKindMismatch(
+                    id: pinnedID,
+                    expected: kind,
+                    actual: pinned.kind
+                )
+            }
+            return pinned
+        }
         guard let descriptor = modelService.activeDescriptor(for: kind) else {
             throw RecipeBuildError.kindHasNoActiveDescriptor(kind)
         }
@@ -112,4 +145,12 @@ public final class RecipeBuilder {
 
 public enum RecipeBuildError: Error, Equatable {
     case kindHasNoActiveDescriptor(ModelKind)
+    /// #090: a pinned `descriptorID` references a descriptor that is
+    /// not in `modelService.registeredModels`. Should be caught by the
+    /// validator first; defensive error if reached at build time.
+    case pinnedDescriptorNotRegistered(id: String)
+    /// #090: a pinned `descriptorID` references a descriptor whose
+    /// `kind` differs from the spec's `kind`. Should be caught by the
+    /// validator first; defensive error if reached at build time.
+    case pinnedDescriptorKindMismatch(id: String, expected: ModelKind, actual: ModelKind)
 }

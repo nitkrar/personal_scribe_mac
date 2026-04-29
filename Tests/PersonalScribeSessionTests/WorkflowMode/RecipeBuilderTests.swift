@@ -98,6 +98,83 @@ final class RecipeBuilderTests: XCTestCase {
         XCTAssertFalse(showAutoStopped) // setting key default: false
     }
 
+    func testPinnedDescriptorOverridesActiveDescriptor() throws {
+        // #090: when a `.transcriber` pins a descriptorID, RecipeBuilder
+        // resolves to the pinned descriptor regardless of which model is
+        // globally active for that kind. Active = v2; pinned = 110M.
+        // Builder must pass 110M (the pinned id) to the provider.
+        let service = makeServiceWithActive(
+            asr: BuiltInModelCatalog.parakeetTDT06Bv2.id
+        )
+        let provider = StubProcessorProvider()
+        let builder = RecipeBuilder(
+            modelService: service,
+            processorProvider: provider,
+            defaults: defaults
+        )
+
+        let pinned = WorkflowMode(
+            id: "pinned",
+            name: "Pinned",
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.parakeetTDTCTC110M.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        _ = try builder.build(pinned)
+
+        XCTAssertEqual(
+            provider.transcriberRequests.map(\.id),
+            [BuiltInModelCatalog.parakeetTDTCTC110M.id]
+        )
+    }
+
+    func testPinnedDiarizedTurnsTranscriberLegOverridesActiveDescriptor() throws {
+        // #090: the `.diarizedTurns` ASR leg honors its
+        // `transcriberDescriptorID` pin. Diarizer leg has no pin slot
+        // in #090, so it still late-binds via the active diarization
+        // descriptor.
+        let service = makeServiceWithActive(
+            asr: BuiltInModelCatalog.parakeetTDT06Bv2.id,
+            diarization: BuiltInModelCatalog.speakerDiarization.id
+        )
+        let provider = StubProcessorProvider()
+        let builder = RecipeBuilder(
+            modelService: service,
+            processorProvider: provider,
+            defaults: defaults
+        )
+
+        let pinned = WorkflowMode(
+            id: "pinned-meeting",
+            name: "Pinned Meeting",
+            pipelineShape: .batch,
+            processors: [
+                .diarizedTurns(
+                    diarizerKind: .diarization,
+                    transcriberKind: .asr,
+                    transcriberDescriptorID: BuiltInModelCatalog.parakeetTDTCTC110M.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        _ = try builder.build(pinned)
+
+        // ASR leg used the pin (110M), not the active (v2).
+        XCTAssertEqual(
+            provider.transcriberRequests.map(\.id),
+            [BuiltInModelCatalog.parakeetTDTCTC110M.id]
+        )
+    }
+
     func testMidBuildSetActiveOnServiceDoesNotAffectAlreadyBoundRecipe() throws {
         // Per L25: descriptor binding is eager-at-pipeline-build. Once
         // the recipe is built, mid-session setActive must not mutate it.
@@ -121,14 +198,20 @@ final class RecipeBuilderTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeServiceWithActive(asr asrID: String?) -> ActiveModelService {
+    private func makeServiceWithActive(
+        asr asrID: String?,
+        diarization diarizationID: String? = nil
+    ) -> ActiveModelService {
         let preference = Preference<[ModelKind: String]>(
             key: "RecipeBuilderTests-\(suiteName ?? "ActiveIDs")",
             default: [:],
             defaults: defaults
         )
-        if let asrID {
-            preference.persist([.asr: asrID])
+        var seed: [ModelKind: String] = [:]
+        if let asrID { seed[.asr] = asrID }
+        if let diarizationID { seed[.diarization] = diarizationID }
+        if !seed.isEmpty {
+            preference.persist(seed)
         }
         return ActiveModelService(
             activeIDsPreference: preference,
