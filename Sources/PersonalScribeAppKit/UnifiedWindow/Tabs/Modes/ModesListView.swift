@@ -59,23 +59,27 @@ struct ModesListView: View {
                         }
                     }
                 }
-                .alert(item: deleteAlertItem) { item in
-                    Alert(
-                        title: Text("Delete \"\(item.mode.name)\"?"),
-                        message: Text("This removes the mode permanently. The recipe is not recoverable."),
-                        primaryButton: .destructive(Text("Delete")) {
-                            viewModel.delete(item.mode)
-                            // Pop back to the list if the deleted mode
-                            // was the current detail target.
-                            if detailPath.last == item.mode.id {
-                                detailPath.removeAll()
-                            }
-                        },
-                        secondaryButton: .cancel {
-                            pendingDelete = nil
-                        }
-                    )
+        }
+        // Alert at the body level (outside NavigationStack) — alerts
+        // attached inside the stack don't present when the user is on
+        // a pushed destination, which is exactly when the delete button
+        // fires. See #089 follow-up.
+        .alert(item: deleteAlertItem) { item in
+            Alert(
+                title: Text("Delete \"\(item.mode.name)\"?"),
+                message: Text("This removes the mode permanently. The recipe is not recoverable."),
+                primaryButton: .destructive(Text("Delete")) {
+                    viewModel.delete(item.mode)
+                    // Pop back to the list if the deleted mode was
+                    // the current detail target.
+                    if detailPath.last == item.mode.id {
+                        detailPath.removeAll()
+                    }
+                },
+                secondaryButton: .cancel {
+                    pendingDelete = nil
                 }
+            )
         }
     }
 
@@ -123,7 +127,12 @@ struct ModesListView: View {
                 )
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+                // Match the original LazyVStack divider:
+                // Divider().padding(.leading, .md) starts at md from
+                // the row's leading edge (under the icon column).
+                .alignmentGuide(.listRowSeparatorLeading) { _ in
+                    PersonalScribeTheme.Spacing.md
+                }
             }
             .onMove { source, destination in
                 viewModel.reorder(from: source, to: destination)
