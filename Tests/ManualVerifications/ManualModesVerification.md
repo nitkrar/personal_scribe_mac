@@ -143,7 +143,7 @@ sets `isEnabled: false` on the descriptor.
    and change the `descriptorID` to a non-existent id (e.g.
    `"deleted-model"`).
 2. Restart app → Modes tab.
-3. Expect: red "invalid" chip on the mode's row with copy
+3. Expect: orange "invalid" chip on the mode's row with copy
    `Pinned model "deleted-model" is no longer available. Pick
    another in the mode's settings.`
 4. Open the mode's detail. Voice model card caption:
