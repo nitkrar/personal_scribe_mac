@@ -15,7 +15,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
     private let openURL: @MainActor (URL) -> Void
     private let inputDeviceProvider: any AudioInputDeviceProviding
-    private let modes: [WorkflowMode]
+    /// #089 — live custom modes for the menu submenu. Pulled fresh on
+    /// every `rebuildMenu()` so user-created modes show up without a
+    /// relaunch.
+    private let modesProvider: @MainActor () -> [WorkflowMode]
     private let setActiveMode: @MainActor (WorkflowMode) async -> Void
     private let prequitHandler: @MainActor () async -> Void
     private let logger: PersonalScribeLogger
@@ -35,7 +38,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
-        modes: [WorkflowMode] = WorkflowModeRegistry.builtInModes,
+        modesProvider: @escaping @MainActor () -> [WorkflowMode] = { WorkflowModeRegistry.builtInModes },
         setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {},
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
@@ -53,7 +56,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             openMicrophoneSystemSettings: openMicrophoneSystemSettings,
             openInputMonitoringSystemSettings: openInputMonitoringSystemSettings,
             inputDeviceProvider: inputDeviceProvider,
-            modes: modes,
+            modesProvider: modesProvider,
             setActiveMode: setActiveMode,
             prequitHandler: prequitHandler,
             logger: logger
@@ -73,7 +76,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
         openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
-        modes: [WorkflowMode] = WorkflowModeRegistry.builtInModes,
+        modesProvider: @escaping @MainActor () -> [WorkflowMode] = { WorkflowModeRegistry.builtInModes },
         setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {},
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
@@ -99,7 +102,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
         }
         self.inputDeviceProvider = inputDeviceProvider ?? EmptyAudioInputDeviceProvider()
-        self.modes = modes
+        self.modesProvider = modesProvider
         self.setActiveMode = setActiveMode
         self.prequitHandler = prequitHandler
         self.logger = logger
@@ -273,7 +276,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             isOnboardingComplete: isOnboardingCompleteProvider(),
             inputDevices: inputDevices,
             currentInputDeviceID: currentInputDeviceID,
-            modes: modes,
+            modes: modesProvider(),
             currentModeID: snapshot.activeMode?.id
         )
 
@@ -399,7 +402,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             logger.error("Mode selection fired with unknown representedObject")
             return
         }
-        guard let mode = modes.first(where: { $0.id == modeID }) else {
+        guard let mode = modesProvider().first(where: { $0.id == modeID }) else {
             logger.error("Mode selection fired for unknown modeID=\(modeID)")
             return
         }

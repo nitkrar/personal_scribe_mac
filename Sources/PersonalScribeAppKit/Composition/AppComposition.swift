@@ -219,15 +219,17 @@ public enum AppComposition {
     @MainActor
     private static func makeHotkeyMonitorWithPerModeWiring() -> GlobalHotkeyMonitor {
         let monitor = makeGlobalHotkeyMonitor()
-        // #089 L-22 — wire per-mode hotkey activation: set the
-        // registry's runtime current mode, then start recording via
-        // the same coordinator path the global hotkey uses.
+        // #089 L-22 — wire per-mode hotkey: set the registry's
+        // runtime current mode, then toggle recording (start when
+        // idle, stop when active). Toggle (not just start) matches
+        // the global-hotkey UX so the user can press the same chord
+        // to stop a mode-initiated recording.
         let registry = workflowModeRegistry
         let coordinator = sessionCoordinator
         monitor.setOnPerModeActivate { modeID in
             registry.setCurrent(id: modeID)
             Task {
-                await coordinator.startIfIdle()
+                await coordinator.toggle()
             }
         }
         // Seed the per-mode table from the current custom modes.

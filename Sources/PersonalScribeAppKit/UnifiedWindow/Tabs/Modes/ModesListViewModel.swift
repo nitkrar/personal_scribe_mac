@@ -137,7 +137,7 @@ final class ModesListViewModel: ObservableObject {
                 try WorkflowModeValidator.validate(mode, availableKinds: kinds)
                 next[mode.id] = .valid
             } catch {
-                next[mode.id] = .invalid(reason: Self.message(for: error))
+                next[mode.id] = .invalid(reason: message(for: error))
             }
         }
         validityByID = next
@@ -156,7 +156,19 @@ final class ModesListViewModel: ObservableObject {
         return kinds
     }
 
-    private static func message(for error: Error) -> String {
+    /// True iff at least one descriptor of `kind` is downloaded
+    /// (regardless of activation). Used to distinguish "not downloaded
+    /// at all" from "downloaded but not the active descriptor."
+    private func anyDownloaded(kind: ModelKind) -> Bool {
+        for descriptor in modelService.enabledModels(kind: kind) {
+            if modelService.downloadStates[descriptor.id]?.phase == .ready {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func message(for error: Error) -> String {
         if let validation = error as? WorkflowModeValidationError {
             switch validation {
             case .emptyProcessors:
@@ -166,11 +178,17 @@ final class ModesListViewModel: ObservableObject {
             case .kindUnavailable(let kind):
                 switch kind {
                 case .asr:
-                    return "Voice model not downloaded."
+                    return anyDownloaded(kind: .asr)
+                        ? "Voice model not active. Activate one in AI Models."
+                        : "Voice model not downloaded. Download one in AI Models."
                 case .streamingASR:
-                    return "Realtime requires a streaming ASR model."
+                    return anyDownloaded(kind: .streamingASR)
+                        ? "Realtime ASR model not active. Activate one in AI Models."
+                        : "Realtime requires a streaming ASR model. Download one in AI Models."
                 case .diarization:
-                    return "Speaker diarization model not downloaded."
+                    return anyDownloaded(kind: .diarization)
+                        ? "Diarization model not active. Activate one in AI Models."
+                        : "Diarization model not downloaded. Download one in AI Models."
                 case .vad, .tts:
                     return "Required model not available."
                 }

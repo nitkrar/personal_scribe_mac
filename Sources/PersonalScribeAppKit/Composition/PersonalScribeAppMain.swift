@@ -258,7 +258,13 @@ struct PersonalScribeAppMain: App {
             },
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider,
-            modes: WorkflowModeRegistry.builtInModes,
+            modesProvider: {
+                // #089: surface the user's customModes in the menu
+                // submenu. Pulled fresh on every rebuild so newly
+                // created modes show up without a relaunch. Empty
+                // customModes ⇒ empty array ⇒ submenu is omitted.
+                AppComposition.workflowModeRegistry.customModes
+            },
             setActiveMode: { mode in
                 // #089: menu-bar submenu picks the runtime *current*
                 // mode. Recipe resolution against ActiveModelService
@@ -430,7 +436,7 @@ final class StatusItemControllerHost: ObservableObject {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
         },
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
-        modes: [WorkflowMode] = WorkflowModeRegistry.builtInModes,
+        modesProvider: @escaping @MainActor () -> [WorkflowMode] = { WorkflowModeRegistry.builtInModes },
         setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {}
     ) {
@@ -443,7 +449,7 @@ final class StatusItemControllerHost: ObservableObject {
             openCopyLastTranscript: openCopyLastTranscript,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider,
-            modes: modes,
+            modesProvider: modesProvider,
             setActiveMode: setActiveMode,
             prequitHandler: prequitHandler
         )

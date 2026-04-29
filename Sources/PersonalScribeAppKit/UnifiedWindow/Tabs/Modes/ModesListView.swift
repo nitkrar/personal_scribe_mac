@@ -111,24 +111,29 @@ struct ModesListView: View {
     }
 
     private var modesList: some View {
-        List {
-            ForEach(viewModel.customModes) { mode in
-                ModeRowView(
-                    mode: mode,
-                    isCurrent: viewModel.currentModeID == mode.id,
-                    isDefault: viewModel.defaultModeID == mode.id,
-                    validity: viewModel.validityByID[mode.id] ?? .valid,
-                    onTapBody: { detailPath.append(mode.id) },
-                    onTapStar: { viewModel.setDefault(mode) }
-                )
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-            }
-            .onMove { source, destination in
-                viewModel.reorder(from: source, to: destination)
+        // ScrollView + LazyVStack rather than List so single-row layouts
+        // don't render as inset cards (macOS List's default chrome).
+        // Drag-reorder is deferred to a follow-up — the user-visible
+        // list ordering is set via array order in the registry, and
+        // the `reorder` method on the view-model still works for any
+        // future reorder UI.
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(viewModel.customModes.enumerated()), id: \.element.id) { index, mode in
+                    ModeRowView(
+                        mode: mode,
+                        isCurrent: viewModel.currentModeID == mode.id,
+                        isDefault: viewModel.defaultModeID == mode.id,
+                        validity: viewModel.validityByID[mode.id] ?? .valid,
+                        onTapBody: { detailPath.append(mode.id) },
+                        onTapStar: { viewModel.setDefault(mode) }
+                    )
+                    if index < viewModel.customModes.count - 1 {
+                        Divider().padding(.leading, PersonalScribeTheme.Spacing.md)
+                    }
+                }
             }
         }
-        .listStyle(.plain)
     }
 
     private var deleteAlertItem: Binding<DeletePromptItem?> {

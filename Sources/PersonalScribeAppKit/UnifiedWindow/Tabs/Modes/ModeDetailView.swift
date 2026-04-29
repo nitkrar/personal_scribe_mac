@@ -39,6 +39,7 @@ struct ModeDetailView: View {
             }
             .padding(PersonalScribeTheme.Spacing.windowPadding)
         }
+        .navigationTitle(viewModel.mode.name)
     }
 
     private var titleHeader: some View {
