@@ -101,6 +101,14 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
         var transcribedTurns: [TurnTranscription] = []
 
         for await event in diarizationStream {
+            // Surface adapter-side failures rather than collapsing them
+            // into an empty transcript. The orchestrator catches this
+            // and publishes `.error(.transcriptionFailure)` to the
+            // session snapshot so the pill + response card render the
+            // failure instead of returning a silent empty result.
+            if case .failed = event {
+                throw PersonalScribeError.transcriptionFailure
+            }
             let finalizedTurns = Self.finalizedTurns(from: event)
             let pendingTurns = finalizedTurns
                 .filter { turn in
@@ -121,11 +129,12 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
                     continue
                 }
 
-                let result = try await transcriber.transcribe(slice)
+                let prepared = try Self.preparedTurnAudio(from: slice)
+                let result = try await transcriber.transcribe(prepared.buffer)
                 transcribedTurns.append(
                     TurnTranscription(
                         turn: turn,
-                        result: result
+                        result: Self.clamped(result, to: prepared.originalDuration)
                     )
                 )
             }
@@ -141,12 +150,21 @@ private extension DiarizedTurnTranscriptionProcessor {
         let result: TranscriptionResult
     }
 
+    struct PreparedTurnAudio {
+        let buffer: PCMBuffer
+        let originalDuration: Duration
+    }
+
+    static let minimumPerTurnASRDuration: Duration = .seconds(1)
+
     static func finalizedTurns(from event: SpeakerDiarizationEvent) -> [SpeakerTurn] {
         switch event {
         case .update(_, let finalized):
             finalized
         case .terminal(let turns):
             turns
+        case .failed:
+            []
         }
     }
 
@@ -158,6 +176,64 @@ private extension DiarizedTurnTranscriptionProcessor {
             return lhs.end < rhs.end
         }
         return lhs.speakerID < rhs.speakerID
+    }
+
+    static func preparedTurnAudio(from slice: PCMBuffer) throws -> PreparedTurnAudio {
+        let minimumFrameCount = Int(ceil(seconds(minimumPerTurnASRDuration) * slice.sampleRate))
+        guard slice.frameCount < minimumFrameCount else {
+            return PreparedTurnAudio(buffer: slice, originalDuration: slice.duration)
+        }
+
+        let missingFrameCount = minimumFrameCount - slice.frameCount
+        let padded = try PCMBuffer(
+            samples: slice.samples + Array(
+                repeating: 0,
+                count: missingFrameCount * slice.channelCount
+            ),
+            sampleRate: slice.sampleRate,
+            channelCount: slice.channelCount,
+            timestamp: slice.timestamp
+        )
+        return PreparedTurnAudio(buffer: padded, originalDuration: slice.duration)
+    }
+
+    static func clamped(
+        _ result: TranscriptionResult,
+        to originalDuration: Duration
+    ) -> TranscriptionResult {
+        let segments = result.segments.compactMap { segment -> TranscriptionResult.Segment? in
+            let start = clamped(segment.start, to: originalDuration)
+            let end = clamped(segment.end, lowerBound: start, upperBound: originalDuration)
+            guard end > start else {
+                return nil
+            }
+            return .init(text: segment.text, start: start, end: end)
+        }
+        let tokenTimings = result.tokenTimings?.compactMap { timing -> TokenTiming? in
+            let start = clamped(timing.start, to: originalDuration)
+            let end = clamped(timing.end, lowerBound: start, upperBound: originalDuration)
+            guard end > start else {
+                return nil
+            }
+            return TokenTiming(
+                token: timing.token,
+                start: start,
+                end: end,
+                confidence: timing.confidence
+            )
+        }
+
+        return TranscriptionResult(
+            text: result.text,
+            segments: segments,
+            audioDuration: originalDuration,
+            processingDuration: result.processingDuration,
+            confidence: result.confidence,
+            tokenTimings: tokenTimings,
+            performanceMetrics: result.performanceMetrics,
+            ctcDetectedTerms: result.ctcDetectedTerms,
+            ctcAppliedTerms: result.ctcAppliedTerms
+        )
     }
 
     static func aggregate(
@@ -254,6 +330,18 @@ private extension DiarizedTurnTranscriptionProcessor {
         return lhs.text < rhs.text
     }
 
+    static func clamped(_ duration: Duration, to upperBound: Duration) -> Duration {
+        clamped(duration, lowerBound: .zero, upperBound: upperBound)
+    }
+
+    static func clamped(
+        _ duration: Duration,
+        lowerBound: Duration,
+        upperBound: Duration
+    ) -> Duration {
+        min(max(duration, lowerBound), upperBound)
+    }
+
     static func flattenedTokenTimings(
         from turnResults: [TurnTranscription]
     ) -> [TokenTiming] {
@@ -315,6 +403,12 @@ private extension DiarizedTurnTranscriptionProcessor {
         }
 
         return ordered
+    }
+
+    static func seconds(_ duration: Duration) -> Double {
+        let components = duration.components
+        let attosecondsPerSecond = 1_000_000_000_000_000_000.0
+        return Double(components.seconds) + (Double(components.attoseconds) / attosecondsPerSecond)
     }
 
     func priorTurnsStream(

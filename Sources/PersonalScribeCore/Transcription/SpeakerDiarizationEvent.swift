@@ -17,4 +17,14 @@ import Foundation
 public enum SpeakerDiarizationEvent: Sendable, Equatable {
     case update(provisional: [SpeakerTurn], finalized: [SpeakerTurn])
     case terminal([SpeakerTurn])
+    /// Adapter encountered an unrecoverable error during diarization
+    /// (model crash, config validation failure, runtime exception).
+    /// The fusion processor (`DiarizedTurnTranscriptionProcessor`)
+    /// observes this and rethrows so the orchestrator can surface the
+    /// failure to the UI instead of producing a silent empty transcript.
+    /// `reason` is a human-readable description (e.g.
+    /// `String(describing: error)`); kept as `String` so the event
+    /// stays `Equatable` and `Sendable` without leaking the underlying
+    /// `Error` type into the protocol.
+    case failed(reason: String)
 }

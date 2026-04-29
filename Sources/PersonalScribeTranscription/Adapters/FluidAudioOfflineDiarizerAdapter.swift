@@ -3,6 +3,8 @@ import Foundation
 import PersonalScribeCore
 
 public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, SpeakerDiarizer {
+    private static let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.transcription)
+
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
     private let manager: any FluidAudioOfflineDiarizerManaging
@@ -144,7 +146,13 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
                     let result = try await manager.process(audio: samples)
                     continuation.yield(.terminal(Self.turns(from: result)))
                 } catch {
-                    continuation.yield(.terminal([]))
+                    // Surface the error to the fusion processor as a
+                    // `.failed` event rather than swallowing it into a
+                    // silent empty transcript. Log first so the
+                    // underlying FluidAudio error type / message is
+                    // visible in Console.app for diagnosis.
+                    Self.logger.error("FluidAudioOfflineDiarizerAdapter.diarize failed", error: error)
+                    continuation.yield(.failed(reason: String(describing: error)))
                 }
 
                 continuation.finish()

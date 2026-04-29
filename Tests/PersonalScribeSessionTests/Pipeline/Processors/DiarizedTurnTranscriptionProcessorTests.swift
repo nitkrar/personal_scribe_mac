@@ -20,7 +20,13 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
 
         let output = try await processor.process(audio: try makeBuffer(), priors: [])
 
-        XCTAssertEqual(transcriber.recordedSampleBatches(), [[0, 1], [5, 6]])
+        XCTAssertEqual(
+            transcriber.recordedSampleBatches(),
+            [
+                [0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+                [5, 6, 0, 0, 0, 0, 0, 0, 0, 0],
+            ]
+        )
 
         switch output {
         case .text(let result):
@@ -59,8 +65,8 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
         XCTAssertEqual(
             transcriber.recordedSampleBatches(),
             [
-                [0, 1, 2, 3],
-                [2, 3, 4, 5],
+                [0, 1, 2, 3, 0, 0, 0, 0, 0, 0],
+                [2, 3, 4, 5, 0, 0, 0, 0, 0, 0],
             ]
         )
     }
@@ -85,7 +91,10 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
 
         let output = try await processor.process(audio: try makeBuffer(), priors: [])
 
-        XCTAssertEqual(transcriber.recordedSampleBatches(), [[0, 1, 2, 3]])
+        XCTAssertEqual(
+            transcriber.recordedSampleBatches(),
+            [[0, 1, 2, 3, 0, 0, 0, 0, 0, 0]]
+        )
 
         switch output {
         case .text(let result):
@@ -183,6 +192,29 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
         XCTAssertTrue(progress.contains(transcriberProgress[1]))
     }
 
+    func testProcessRethrowsWhenDiarizerEmitsFailedEvent() async throws {
+        // The fusion processor must surface adapter-side failures as a
+        // thrown error so the orchestrator can publish a session
+        // `.error(...)` snapshot — silent empty transcripts hide real
+        // problems (FluidAudio crashes, config validation failures,
+        // model corruption) from the user.
+        let diarizer = StubSpeakerDiarizer(
+            events: [.failed(reason: "synthesised adapter failure")]
+        )
+        let transcriber = RecordingTranscriber(results: [])
+        let processor = DiarizedTurnTranscriptionProcessor(
+            diarizer: diarizer,
+            transcriber: transcriber
+        )
+
+        do {
+            _ = try await processor.process(audio: try makeBuffer(), priors: [])
+            XCTFail("Expected .failed event to throw")
+        } catch let error as PersonalScribeError {
+            XCTAssertEqual(error, .transcriptionFailure)
+        }
+    }
+
     func testProcessAppliesSensitivityBeforePreparingDiarizer() async throws {
         let turn = makeTurn(speakerID: "speaker_0", startMS: 0, endMS: 200)
         let diarizer = StubSpeakerDiarizer(
@@ -205,6 +237,36 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
             [SpeakerSeparationSensitivity.strict]
         )
         XCTAssertEqual(diarizer.prepareCallCount(), 1)
+    }
+
+    func testProcessPadsShortTurnsBeforePerTurnASRAndClampsReturnedSegments() async throws {
+        let shortTurn = makeTurn(speakerID: "speaker_0", startMS: 0, endMS: 600)
+        let diarizer = StubSpeakerDiarizer(events: [.terminal([shortTurn])])
+        let transcriber = RecordingTranscriber(
+            results: [makeResult(text: "alpha", startMS: 0, endMS: 1_000)],
+            minimumSampleCountForSuccess: 10
+        )
+        let processor = DiarizedTurnTranscriptionProcessor(
+            diarizer: diarizer,
+            transcriber: transcriber
+        )
+
+        let output = try await processor.process(audio: try makeBuffer(), priors: [])
+
+        XCTAssertEqual(transcriber.recordedSampleBatches(), [[0, 1, 2, 3, 4, 5, 0, 0, 0, 0]])
+
+        switch output {
+        case .text(let result):
+            XCTAssertEqual(result.text, "Speaker 1: alpha")
+            XCTAssertEqual(
+                result.segments,
+                [
+                    .init(text: "alpha", start: .zero, end: .milliseconds(600)),
+                ]
+            )
+        case .streamingText, .turns:
+            XCTFail("Expected batch text output")
+        }
     }
 }
 
@@ -355,6 +417,7 @@ private final class RecordingTranscriber: @unchecked Sendable, Transcriber {
     let capabilities = TranscriberCapabilities()
 
     private let progressSnapshots: [ModelDownloadProgress]
+    private let minimumSampleCountForSuccess: Int?
     private let lock = NSLock()
     private var queuedResults: [TranscriptionResult]
     private var prepareCalls = 0
@@ -362,10 +425,12 @@ private final class RecordingTranscriber: @unchecked Sendable, Transcriber {
 
     init(
         results: [TranscriptionResult],
-        progressSnapshots: [ModelDownloadProgress] = []
+        progressSnapshots: [ModelDownloadProgress] = [],
+        minimumSampleCountForSuccess: Int? = nil
     ) {
         self.queuedResults = results
         self.progressSnapshots = progressSnapshots
+        self.minimumSampleCountForSuccess = minimumSampleCountForSuccess
     }
 
     func prepare() async throws {
@@ -385,7 +450,12 @@ private final class RecordingTranscriber: @unchecked Sendable, Transcriber {
     }
 
     func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        lock.withLock {
+        try lock.withLock {
+            if let minimumSampleCountForSuccess, audio.samples.count < minimumSampleCountForSuccess {
+                struct ShortInputError: Error {}
+                sampleBatches.append(audio.samples)
+                throw ShortInputError()
+            }
             sampleBatches.append(audio.samples)
             precondition(!queuedResults.isEmpty, "Expected a pinned transcription result")
             return queuedResults.removeFirst()

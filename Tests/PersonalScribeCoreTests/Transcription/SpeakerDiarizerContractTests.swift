@@ -95,7 +95,7 @@ final class SpeakerDiarizerContractTests: XCTestCase {
             XCTAssertEqual(p, provisional)
             XCTAssertEqual(f, finalized)
             XCTAssertNotEqual(p, f, "Provisional and finalized must be distinct lists")
-        case .terminal:
+        case .terminal, .failed(reason: _):
             XCTFail("Expected .update case")
         }
     }
@@ -123,5 +123,16 @@ final class SpeakerDiarizerContractTests: XCTestCase {
         }
 
         XCTAssertEqual(collected, pinned)
+    }
+
+    func testDiarizationEventCarriesFailureReason() {
+        let event: SpeakerDiarizationEvent = .failed(reason: "boom")
+
+        switch event {
+        case .failed(let reason):
+            XCTAssertEqual(reason, "boom")
+        case .update, .terminal:
+            XCTFail("Expected .failed case")
+        }
     }
 }
