@@ -117,6 +117,16 @@ public enum AppComposition {
     /// recipe-driven dispatch (via `RecipeBuilder`, per L24).
     public static let processorProvider: any ModelBoundProcessorProviding = ModelBoundProcessorProvider()
 
+    /// #028 / 5a-v2 — central key-event router. Owns the single
+    /// `HotkeyEventTap` (CGEvent), local NSEvent monitor, and global
+    /// NSEvent monitor that all hotkey consumers register against.
+    /// Started in `makeStartupCoordinator`'s `startHotkeyMonitor`
+    /// closure; never stopped during the app's lifetime. Subscribers
+    /// (`EscapeKeyMonitor`, `GlobalHotkeyMonitor`, `HotkeyRecorder`)
+    /// register deciders/observers that auto-unregister via RAII tokens.
+    @MainActor
+    public static let keyEventRouter: KeyEventRouter = KeyEventRouter()
+
     public static let sessionCoordinator: SessionCoordinator = {
         let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
         let capture = AVAudioCaptureService(
@@ -350,6 +360,10 @@ public enum AppComposition {
 
         return AppStartupCoordinator(
             startHotkeyMonitor: {
+                // #028: router starts BEFORE consumers so EscapeKeyMonitor
+                // / GlobalHotkeyMonitor's start() calls land into a
+                // ready dispatch chain.
+                keyEventRouter.start()
                 hotkeyMonitor.start()
                 startPerModeHotkeyObservation(on: hotkeyMonitor)
             },
