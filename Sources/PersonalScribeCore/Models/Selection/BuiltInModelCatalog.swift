@@ -248,25 +248,34 @@ public enum BuiltInModelCatalog {
 
     // MARK: - Speaker diarization
     //
-    // Pyannote segmentation + WeSpeaker-v2 embedding. FluidAudio's
-    // online diarizer default. Drives `OfflineDiarizerManager` despite
-    // the name — see FluidAudio's variant routing in
-    // `getRequiredModelNames`. Adapter not wired (interim).
+    // FluidAudio's *offline* diarizer (`OfflineDiarizerManager`) — VBx
+    // clustering pipeline with four CoreML stages plus a PLDA params
+    // JSON. The adapter calls `DownloadUtils.downloadRepo(.diarizer,
+    // variant: "offline", ...)`; that variant produces the file set
+    // below, NOT pyannote/wespeaker (which is the online diarizer
+    // shape). Source of truth for the path list is FluidAudio's
+    // `ModelNames.OfflineDiarizer.requiredModels` — keep this in sync
+    // when bumping FluidAudio.
     public static let speakerDiarization = ModelDescriptor(
         id: "speaker-diarization",
         displayName: "Speaker Diarization",
         repoFolderName: "speaker-diarization",
-        shortDescription: "Pyannote segmentation + WeSpeaker-v2 embedding.",
-        architecture: "Pyannote 3.1 + WeSpeaker-v2",
+        shortDescription: "Offline VBx-clustering diarizer (segmentation + FBank + embedding).",
+        architecture: "FluidAudio offline diarizer (VBx clustering)",
         repository: "FluidInference/speaker-diarization-coreml",
         revision: "1ed7a662fdc7109e36d822db793ee6eebdaf8594",
         requiredRelativePaths: [
-            "pyannote_segmentation.mlmodelc/coremldata.bin",
-            "wespeaker_v2.mlmodelc/coremldata.bin",
+            "Segmentation.mlmodelc/coremldata.bin",
+            "FBank.mlmodelc/coremldata.bin",
+            "Embedding.mlmodelc/coremldata.bin",
+            "PldaRho.mlmodelc/coremldata.bin",
+            "plda-parameters.json",
         ],
-        approximateSizeBytes: 13_720_676,
+        // Measured on disk after `OfflineDiarizerManager.downloadIfNeeded`
+        // (2026-04-29) — `du -k`: 21,816 KB.
+        approximateSizeBytes: 22_339_584,
         engine: .diarization,
-        madeBy: "pyannote · WeSpeaker · FluidInference",
+        madeBy: "FluidInference",
         worksWith: "Language-agnostic",
         goodFor: "Multi-speaker recordings, who-spoke-when",
         license: "MIT + Apache 2.0"
