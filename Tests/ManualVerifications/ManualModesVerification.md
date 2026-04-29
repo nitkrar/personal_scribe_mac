@@ -58,11 +58,13 @@ steps additionally require streaming ASR / diarization models.
 
 ## MV-MODES-8 — Delete-default clears default
 1. With Mode A as default, navigate into its detail.
-2. Tap the red Delete this mode card → confirm.
-3. Expect: list pops back to root, row is gone.
-4. Expect: no row shows a filled star (built-in fallback drives the
+2. Tap the red Delete this mode card.
+3. Expect: confirmation alert appears on the detail screen.
+4. Confirm delete.
+5. Expect: list pops back to root, row is gone.
+6. Expect: no row shows a filled star (built-in fallback drives the
    next session).
-5. Trigger a recording — verify the dictation fallback recipe runs
+7. Trigger a recording — verify the dictation fallback recipe runs
    (auto-paste / auto-stop driven by GeneralTab).
 
 ## MV-MODES-9 — GeneralTab toggles drive the fallback

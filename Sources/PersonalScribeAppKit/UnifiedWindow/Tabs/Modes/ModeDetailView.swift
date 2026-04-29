@@ -4,25 +4,24 @@ import PersonalScribeSession
 
 @MainActor
 struct ModeDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: ModeDetailViewModel
     @ObservedObject private var modelService: ActiveModelService
     @State private var nameDraft: String
     @State private var isEditingName = false
     @State private var hotkeySheetPresented = false
-    let onRequestDelete: (WorkflowMode) -> Void
+    @State private var activeAlert: DetailAlert?
 
     init(
         mode: WorkflowMode,
         registry: WorkflowModeRegistry,
-        modelService: ActiveModelService,
-        onRequestDelete: @escaping (WorkflowMode) -> Void
+        modelService: ActiveModelService
     ) {
         _viewModel = StateObject(
             wrappedValue: ModeDetailViewModel(mode: mode, registry: registry)
         )
         self.modelService = modelService
         _nameDraft = State(initialValue: mode.name)
-        self.onRequestDelete = onRequestDelete
     }
 
     var body: some View {
@@ -40,6 +39,25 @@ struct ModeDetailView: View {
             .padding(PersonalScribeTheme.Spacing.windowPadding)
         }
         .navigationTitle(viewModel.mode.name)
+        .alert(item: $activeAlert) { alert in
+            switch alert {
+            case .confirmDelete:
+                Alert(
+                    title: Text("Delete \"\(viewModel.mode.name)\"?"),
+                    message: Text("This removes the mode permanently. The recipe is not recoverable."),
+                    primaryButton: .destructive(Text("Delete")) {
+                        confirmDelete()
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .deleteFailed(let message):
+                Alert(
+                    title: Text("Couldn't delete mode"),
+                    message: Text(message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+        }
     }
 
     private var titleHeader: some View {
@@ -291,21 +309,48 @@ struct ModeDetailView: View {
 
     private var deleteCard: some View {
         SettingsCard {
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("Delete this mode")
-                        .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
-                        .foregroundStyle(.red)
-                    Text("Removes the recipe permanently.")
-                        .font(PersonalScribeTheme.Typography.caption.font)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button(role: .destructive) {
-                    onRequestDelete(viewModel.mode)
-                } label: {
+            Button(role: .destructive) {
+                activeAlert = .confirmDelete
+            } label: {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Delete this mode")
+                            .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+                            .foregroundStyle(.red)
+                        Text("Removes the recipe permanently.")
+                            .font(PersonalScribeTheme.Typography.caption.font)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
                     Image(systemName: "trash")
+                        .foregroundStyle(.red)
                 }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func confirmDelete() {
+        guard viewModel.delete() else {
+            if let message = viewModel.lastError {
+                activeAlert = .deleteFailed(message)
+            }
+            return
+        }
+        dismiss()
+    }
+
+    private enum DetailAlert: Identifiable {
+        case confirmDelete
+        case deleteFailed(String)
+
+        var id: String {
+            switch self {
+            case .confirmDelete:
+                return "confirm-delete"
+            case .deleteFailed(let message):
+                return "delete-failed-\(message)"
             }
         }
     }

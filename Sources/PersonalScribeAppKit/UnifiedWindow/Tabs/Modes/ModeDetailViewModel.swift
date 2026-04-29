@@ -80,6 +80,18 @@ final class ModeDetailViewModel: ObservableObject {
     func setHotkey(_ hotkey: HotkeyPreference?) { apply(mode.withHotkey(hotkey)) }
     func setVoiceModelPin(_ id: String?) { apply(mode.withVoiceModelPin(id)) }
 
+    @discardableResult
+    func delete() -> Bool {
+        do {
+            try registry.deleteCustom(id: mode.id)
+            lastError = nil
+            return true
+        } catch {
+            lastError = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            return false
+        }
+    }
+
     func setName(_ name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != mode.name else { return }

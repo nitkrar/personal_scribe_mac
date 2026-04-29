@@ -7,7 +7,6 @@ import PersonalScribeSession
 struct ModesListView: View {
     @ObservedObject var viewModel: ModesListViewModel
     @State private var showPresetPicker = false
-    @State private var pendingDelete: WorkflowMode? = nil
     @State private var detailPath: [String] = []
     @State private var draggedModeID: String? = nil
     @State private var dragBaseModeIDs: [String] = []
@@ -36,10 +35,7 @@ struct ModesListView: View {
                         ModeDetailView(
                             mode: mode,
                             registry: registry,
-                            modelService: modelService,
-                            onRequestDelete: { delete in
-                                pendingDelete = delete
-                            }
+                            modelService: modelService
                         )
                     } else {
                         // Mode disappeared (deleted by another path);
@@ -65,27 +61,6 @@ struct ModesListView: View {
                         }
                     }
                 }
-        }
-        // Alert at the body level (outside NavigationStack) — alerts
-        // attached inside the stack don't present when the user is on
-        // a pushed destination, which is exactly when the delete button
-        // fires. See #089 follow-up.
-        .alert(item: deleteAlertItem) { item in
-            Alert(
-                title: Text("Delete \"\(item.mode.name)\"?"),
-                message: Text("This removes the mode permanently. The recipe is not recoverable."),
-                primaryButton: .destructive(Text("Delete")) {
-                    viewModel.delete(item.mode)
-                    // Pop back to the list if the deleted mode was
-                    // the current detail target.
-                    if detailPath.last == item.mode.id {
-                        detailPath.removeAll()
-                    }
-                },
-                secondaryButton: .cancel {
-                    pendingDelete = nil
-                }
-            )
         }
         .onChange(of: isListDropTargeted) { _, isTargeted in
             if !isTargeted, draggedModeID != nil {
@@ -149,22 +124,6 @@ struct ModesListView: View {
         .onDrop(of: [UTType.plainText], isTargeted: $isListDropTargeted) { _, _ in
             false
         }
-    }
-
-    private var deleteAlertItem: Binding<DeletePromptItem?> {
-        Binding(
-            get: {
-                pendingDelete.map { DeletePromptItem(mode: $0) }
-            },
-            set: { newValue in
-                pendingDelete = newValue?.mode
-            }
-        )
-    }
-
-    private struct DeletePromptItem: Identifiable {
-        let mode: WorkflowMode
-        var id: String { mode.id }
     }
 
     private var displayedModes: [WorkflowMode] {

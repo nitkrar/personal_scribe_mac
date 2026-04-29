@@ -8,6 +8,31 @@ import PersonalScribeSession
 @MainActor
 final class ModeDetailViewModelTests: XCTestCase {
 
+    func testDeleteRemovesModeFromRegistry() throws {
+        let custom = WorkflowMode(
+            id: "delete-me",
+            name: "Delete Me",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let store = InMemoryWorkflowModeStore(
+            initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+        )
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+        let viewModel = ModeDetailViewModel(mode: custom, registry: registry)
+
+        XCTAssertEqual(registry.customModes.map(\.id), ["delete-me"])
+
+        XCTAssertTrue(viewModel.delete())
+        XCTAssertTrue(registry.customModes.isEmpty)
+        XCTAssertNil(viewModel.lastError)
+    }
+
     func testVoiceModelPinIDRoundTripsThroughRegistry() throws {
         let custom = WorkflowMode(
             id: "pin-rt",
