@@ -932,7 +932,7 @@ Replace pill ✕ with a pause/play toggle on pill-click-initiated recordings. Pa
 
 Each mode can pin a specific `ModelDescriptor` instead of late-binding to whichever model is globally active. Lets the user have a "Japanese meeting" mode (Qwen3) and an "English dictation" mode (Parakeet) coexist; pinned modes survive a global active swap.
 
-**Shipped 2026-04-29**, 7 cycles `0fbfdf5..663b7e9` + dogfood-verified on the Air (Tests 1/2/3 in `Tests/ManualVerifications/ManualModesVerification.md` MV-MODES-13/14/15).
+**Shipped 2026-04-29**, 8 cycles `0fbfdf5..f8f3961` + dogfood-verified on the Air (Tests 1/2/3 in `Tests/ManualVerifications/ManualModesVerification.md` MV-MODES-13/14/15).
 
 - `0fbfdf5` #090.1 — `ProcessorSpec` schema: `descriptorID: String?` on `.transcriber` / `.streamingTranscriber`, `transcriberDescriptorID: String?` on `.diarizedTurns`. Codable round-trip via `encodeIfPresent` / `decodeIfPresent` so pre-#090 documents stay valid.
 - `3cb4f4e` #090.2 — Validator: pinned specs bypass `availableKinds` rule and validate against `registeredDescriptors` instead. New `pinnedDescriptorNotRegistered` / `pinnedDescriptorKindMismatch` error cases. Validator + registry signatures gain a `registeredDescriptors[Provider]` param defaulted to the catalog so existing tests/callers compile unchanged.
@@ -941,6 +941,8 @@ Each mode can pin a specific `ModelDescriptor` instead of late-binding to whiche
 - `89b05ba` #090.5 — Modes editor `voiceModelCard` becomes a SwiftUI Menu picker. Filters via `enabledModels(kind:)`. Caption + button-label handle three states (unpinned, pinned-known, pinned-unknown).
 - `c03f310` #090.6 — Selectors filter invalid modes: menu-bar mode submenu hides modes that fail validation. Shared `ActiveModelService.availableKinds()`. Three manual-verification entries MV-MODES-13/14/15.
 - `663b7e9` #090.7 — MV doc fix: invalid-pin chip is orange (validation warning), not red.
+- `d6898d1` #090.8 — Per-mode hotkey table filters invalid modes (selector-filter parity with the menu-bar work in .6). Shared `AppComposition.currentlyValidCustomModes(among:)`.
+- `f8f3961` #090.8 fix-up (codex) — wiring robustness: `startPerModeHotkeyObservation` was assuming `makeHotkeyMonitorWithPerModeWiring` had already installed the activation callback; on a fresh DMG that assumption broke and per-mode chords did nothing. Refactored into reusable `configurePerModeHotkeys` / `observePerModeHotkeys` helpers that re-install the callback before subscribing the stream. Two new tests synthesize an `NSEvent.keyDown` and assert the registry's `currentMode` flips. **Load-bearing** — without this, per-mode hotkeys silently fail post-build despite #090.8's filter being correct.
 - `addeeae` (#089 follow-up) — back button on `ModeDetailView` toolbar (macOS NavigationStack doesn't auto-render). Caught during #090 dogfood.
 - `e486f5b` (data fix) — `BuiltInModelCatalog.speakerDiarization.requiredRelativePaths` matches FluidAudio's offline diarizer artifacts (was inheriting the *online* diarizer's filenames). Caused `isDownloaded` to return false post-download → AI Models showed Download on a downloaded model + Modes rejected diarized recipes. Surfaced during #090 dogfood; not a #090 regression.
 
@@ -999,7 +1001,7 @@ When a pinned descriptor is multilingual, the user picks a target language for t
 ### #088 — Narrow FluidAudio model download to runtime-needed files
 
 `refactor` · `P2` · `open` · `area: transcription, models, downloads`
-*Filed 2026-04-28*
+*Updated 2026-04-29 (Filed 2026-04-28)*
 
 `DownloadUtils.downloadRepo` (FluidAudio) over-pulls when a repo's
 subPath contains sibling directories or duplicate model formats.
@@ -1010,6 +1012,15 @@ runtime that only needs ~1.25 GB. The bloat:
   alongside the v2 the runtime actually loads (~370MB compiled).
 - `qwen3_asr_decoder_stateful.mlpackage` (~577MB) alongside the
   `.mlmodelc` we use (~578MB).
+
+**Audit-confirmed scope (2026-04-29, during #090 descriptor pinning
+dogfood)**: the same over-pull pattern affects more than just Qwen.
+Streaming Parakeet (`parakeet-eou-streaming/<chunk>`) downloads a
+`parakeet_eou_preprocessor.mlmodelc` that runtime doesn't load, plus
+a stray `streaming_encoder_metadata.json` in the 320ms variant.
+Qwen3 f32 + int8 each have v1 encoders + `.mlpackage` siblings
+alongside the v2 runtime artifacts. Whoever picks #088 up should
+plan the wrapper to clean BOTH families, not Qwen-only.
 
 **Root cause** (FluidAudio bug): the listing recursion
 (`DownloadUtils.swift:321-355`) admits any directory whose path
@@ -1096,12 +1107,24 @@ Schema evolution driven by Command Mode. `ModeDescriptor` soft-delete/tombstone 
 
 ### #028 — Central KeyEventRouter consolidation (5a-v2)
 
-`refactor` · `P1` · `open` · `stage: design` · `area: hotkey`
-*Updated 2026-04-21*
+`refactor` · `P1` · `done` · `area: hotkey`
+*Updated 2026-04-29*
 
-One router owning `CGEventTap` + `NSEvent` local-monitor pair; migrate `GlobalHotkeyMonitor`, `EscapeKeyMonitor`, `HotkeyRecorder`, and ad-hoc `addLocalMonitorForEvents` callers. ~3-5 commits. Do NOT bundle with #001's bug fix.
+`KeyEventRouter` (in `Sources/PersonalScribeAppKit/Hotkeys/`) now owns the single `HotkeyEventTap` (CGEvent) + local NSEvent monitor + global NSEvent monitor that all hotkey consumers register against. Subscribers register deciders/observers via `register{Local,Global}Decider(_:position:)` / `registerGlobalObserver(_:)` and receive RAII `KeyEventRouterToken`s — dropping the token auto-unregisters via Task-dispatched MainActor cleanup. Dispatch is in registration order; `position: .first` lets transient subscribers (HotkeyRecorder) take priority over already-registered consumers.
 
-**Depends on:** #001 shipping first
+**Shipped 2026-04-29**, 5 commits `dd9c185..03f4258` cherry-picked from `phase-3-028-key-event-router`. 1094 tests pass, 0 failures, 1 skipped.
+
+- `dd9c185` #028.A — `KeyEventRouter` type + `KeyEventRouterToken` RAII + 8 unit tests covering registration order, swallow short-circuit, position-first, channel isolation, lifecycle.
+- `5f4a825` #028.B — shared `AppComposition.keyEventRouter` static (started in `makeStartupCoordinator`'s `startHotkeyMonitor` closure, never stopped) + `EscapeKeyMonitor` migration. Drops `EscapeKeyMonitor`'s NSEvent install/uninstall typealiases; `start()`/`stop()` now register/drop tokens. `handle(event:)` migrated NSEvent → HotkeyEvent.
+- `64ee425` #028.C — `GlobalHotkeyMonitor` migrates: drops `eventTap: HotkeyEventTap?`, `localMonitor: Any?`, `EventTapFactory`, `NSEventBox`. `start()` registers two deciders (local + global) on the router, both running the same gesture-machine entry. `router.isTapActive` surfaces Input-Monitoring-denied through the existing `handleMonitorInstallFailure` path. Local NSEvent decider stays usable when CG tap fails (small partial-recovery improvement vs. pre-#028 all-or-nothing).
+- `e12df3e` #028.D — `HotkeyRecorder` SwiftUI shim migrates with `position: .first` for modal takeover; `HotkeyEvent` gains optional `charactersIgnoringModifiers` / `characters` fields (NSEvent path populates, CG path leaves nil) so the recorder can still render chord text from the same router channel.
+- `03f4258` #028.E — fix-up: lift `KeyEventRouter` / `HotkeyEvent` / `HotkeyEventTap` / `CGHotkeyEventTapInstaller` / token / typealiases to `public` (Swift access-control cascade for `AppComposition.keyEventRouter`'s `public` declaration); guard `nsEvent.characters` reads against `.flagsChanged` events (NSEvent throws there); rearrange two trailing-closure call sites that violated positional-args-first ordering.
+
+**Open follow-up** (not yet on trunk): `b1fc740` on branch `phase-3-menu-hotkey-display` — fixes the menu bar's hardcoded `⌥⌥` "Start Recording" label to use the live global hotkey + adds per-mode hotkey display in the Mode submenu (parent + each child row). Worktree commit; awaiting parallel-trunk-work merge before cherry-pick.
+
+**Foundation** that landed earlier (pre-#028): `HotkeyEventTap` (5a-v1) was already extracted as a DI'd CGEventTap wrapper. Its doc-comment named #028 as the eventual consumer. Made the migration low-risk.
+
+**Depends on:** #001 (shipped, in `BACKLOG_ARCHIVE.md`)
 **Legacy:** `ui-dogfood-bugs-2026-04-21.md` #19
 
 ---
