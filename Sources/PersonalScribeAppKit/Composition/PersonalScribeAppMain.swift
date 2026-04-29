@@ -136,7 +136,9 @@ struct PersonalScribeAppMain: App {
         // restore is a no-op on this path (no paste occurred) but
         // stays wired for compatibility. #070 will reshape the pill
         // affordances around pause/resume.
-        let escapeKeyMonitor = EscapeKeyMonitor { [weak pillController, weak coordinator] in
+        let escapeKeyMonitor = EscapeKeyMonitor(
+            router: AppComposition.keyEventRouter
+        ) { [weak pillController, weak coordinator] in
             guard let pillController else { return false }
             let visibility = pillController.viewModel.visibility
             guard visibility == .holdToRecord || visibility == .recording else {

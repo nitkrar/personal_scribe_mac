@@ -2,38 +2,36 @@ import AppKit
 import Foundation
 import PersonalScribeCore
 
-/// `NSEvent` is not `Sendable`, but `addLocalMonitorForEvents`
-/// callbacks are documented to run on the main thread — there is no
-/// real cross-thread hop to guard against. This box lets us pass the
-/// event through `MainActor.assumeIsolated` without fighting strict
-/// concurrency.
-private struct NSEventBox: @unchecked Sendable {
-    let event: NSEvent
-}
-
 /// Global Esc-key monitor for the pill UX (spec §3: "Click ✕ or press
 /// Esc | Pill is .holdToRecord or .recording | Discard audio; enter
 /// .cancelled; show Cancel Card").
 ///
-/// Why not `.onKeyPress(.escape)`:
+/// # Why not `.onKeyPress(.escape)`
 ///
 /// The pill panel is non-activating (Issue 6) — `DraggablePanel.canBecomeKey
 /// = false`. A non-key window cannot deliver `keyDown` to SwiftUI content,
 /// so SwiftUI's `.onKeyPress` never fires.
 ///
-/// # Two installer legs
+/// # Wiring (post-#028)
 ///
-/// * `installGlobal` (`NSEvent.addGlobalMonitorForEvents`) sees keystrokes
+/// `EscapeKeyMonitor` registers two subscriptions on the shared
+/// `KeyEventRouter`:
+///
+/// * **Local decider** (`registerLocalDecider`) for keystrokes
+///   delivered to Ninimma itself — needed since Ninimma launches as a
+///   `.regular` app and can be frontmost while the user records
+///   (Settings open, Notes window open, dock-icon focused). Returns
+///   `true` to swallow when `onEscapePressed()` claims the event so it
+///   doesn't bubble to text fields / SwiftUI handlers.
+/// * **Global observer** (`registerGlobalObserver`) for keystrokes
 ///   delivered to OTHER apps — the canonical "user is recording into a
-///   text editor and presses Esc" path.
-/// * `installLocal` (`NSEvent.addLocalMonitorForEvents`) sees keystrokes
-///   delivered to Ninimma itself — needed since Ninimma now launches as
-///   a `.regular` app (commit `6c6505f`) and can be frontmost while the
-///   user records (Settings open, Notes window open, dock-icon focused).
-///   Without this leg Esc was a no-op whenever Ninimma had focus.
+///   text editor and presses Esc" path. Observe-only by NSEvent
+///   global-monitor design; we react but don't (and can't) swallow.
 ///
-/// Both legs share the same TCC grant as `GlobalHotkeyMonitor`, so
-/// adding the local leg costs no additional permission.
+/// Pre-#028, this monitor owned its own NSEvent install/uninstall
+/// pair. The router-based wiring centralizes monitor lifecycle and
+/// makes registration order explicit (Esc registers first at app
+/// launch, ahead of the recording-hotkey decider).
 ///
 /// # Filter
 ///
@@ -44,21 +42,10 @@ private struct NSEventBox: @unchecked Sendable {
 /// * No modifier keys held (plain Esc — not Cmd+Esc / Option+Esc)
 /// * `onEscapePressed()` itself returned `true` (caller decided to act)
 ///
-/// The local monitor uses the return value to decide whether to swallow
-/// the event (`nil`) or pass it through. Keeps Esc unambiguous when
-/// recording is active without breaking normal Esc behaviour when idle.
+/// Keeps Esc unambiguous when recording is active without breaking
+/// normal Esc behaviour when idle.
 @MainActor
 public final class EscapeKeyMonitor {
-    public typealias GlobalInstaller = @MainActor (
-        _ mask: NSEvent.EventTypeMask,
-        _ handler: @escaping (NSEvent) -> Void
-    ) -> Any?
-    public typealias LocalInstaller = @MainActor (
-        _ mask: NSEvent.EventTypeMask,
-        _ handler: @escaping (NSEvent) -> NSEvent?
-    ) -> Any?
-    public typealias Uninstaller = @MainActor (Any) -> Void
-
     /// Escape key `keyCode` on all supported macOS keyboards.
     public static let escapeKeyCode: UInt16 = 53
 
@@ -69,74 +56,43 @@ public final class EscapeKeyMonitor {
         .shift,
     ]
 
+    private let router: KeyEventRouter
     private let onEscapePressed: @MainActor () -> Bool
-    private let installGlobal: GlobalInstaller
-    private let installLocal: LocalInstaller
-    private let uninstall: Uninstaller
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
+    private var localToken: KeyEventRouterToken?
+    private var globalToken: KeyEventRouterToken?
 
-    public convenience init(onEscapePressed: @escaping @MainActor () -> Bool) {
-        self.init(
-            onEscapePressed: onEscapePressed,
-            installGlobal: { mask, handler in
-                NSEvent.addGlobalMonitorForEvents(matching: mask, handler: handler)
-            },
-            installLocal: { mask, handler in
-                NSEvent.addLocalMonitorForEvents(matching: mask, handler: handler)
-            },
-            uninstall: { handle in
-                NSEvent.removeMonitor(handle)
-            }
-        )
-    }
-
-    init(
-        onEscapePressed: @escaping @MainActor () -> Bool,
-        installGlobal: @escaping GlobalInstaller,
-        installLocal: @escaping LocalInstaller,
-        uninstall: @escaping Uninstaller
+    public init(
+        router: KeyEventRouter,
+        onEscapePressed: @escaping @MainActor () -> Bool
     ) {
+        self.router = router
         self.onEscapePressed = onEscapePressed
-        self.installGlobal = installGlobal
-        self.installLocal = installLocal
-        self.uninstall = uninstall
     }
 
     public var isActive: Bool {
-        globalMonitor != nil || localMonitor != nil
+        localToken != nil || globalToken != nil
     }
 
     public func start() {
-        guard globalMonitor == nil, localMonitor == nil else { return }
-        globalMonitor = installGlobal([.keyDown]) { [weak self] event in
-            Task { @MainActor [weak self] in
-                _ = self?.handle(event: event)
-            }
+        guard localToken == nil, globalToken == nil else { return }
+        localToken = router.registerLocalDecider { [weak self] event in
+            self?.handle(event: event) ?? false
         }
-        localMonitor = installLocal([.keyDown]) { [weak self] event in
-            guard let self else { return event }
-            let box = NSEventBox(event: event)
-            let handled = MainActor.assumeIsolated {
-                self.handle(event: box.event)
-            }
-            return handled ? nil : event
+        globalToken = router.registerGlobalObserver { [weak self] event in
+            _ = self?.handle(event: event)
         }
     }
 
     public func stop() {
-        if let handle = globalMonitor {
-            uninstall(handle)
-            globalMonitor = nil
-        }
-        if let handle = localMonitor {
-            uninstall(handle)
-            localMonitor = nil
-        }
+        // Tokens' RAII deinit auto-unregisters via the router's
+        // Task-dispatched cleanup. Setting to nil drops the strong
+        // refs.
+        localToken = nil
+        globalToken = nil
     }
 
     @discardableResult
-    internal func handle(event: NSEvent) -> Bool {
+    internal func handle(event: HotkeyEvent) -> Bool {
         guard event.type == .keyDown else { return false }
         guard event.keyCode == Self.escapeKeyCode else { return false }
         let activeModifiers = event.modifierFlags.intersection(Self.blockingModifierMask)

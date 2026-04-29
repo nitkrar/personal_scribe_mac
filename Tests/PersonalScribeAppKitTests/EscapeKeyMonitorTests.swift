@@ -1,114 +1,54 @@
 import AppKit
+import CoreGraphics
 import XCTest
 @testable import PersonalScribeAppKit
 
-/// Tests for `EscapeKeyMonitor`'s filter logic (pill UX spec §3 — Esc
-/// cancels an active recording).
+/// Tests for `EscapeKeyMonitor`'s filter logic + router wiring (post-#028
+/// migration). The filter is exercised directly via `monitor.handle(event:)`
+/// using `HotkeyEvent` literals; the router wiring is exercised via a
+/// stub `KeyEventRouter` whose `handleLocal` / `handleGlobalObserved`
+/// test seams drive the dispatch chain without installing real monitors.
 @MainActor
 final class EscapeKeyMonitorTests: XCTestCase {
-    func testStartInstallsBothGlobalAndLocalMonitors() {
-        var globalCalls = 0
-        var localCalls = 0
-        let monitor = EscapeKeyMonitor(
-            onEscapePressed: { false },
-            installGlobal: { _, _ in
-                globalCalls += 1
-                return "mock-global"
-            },
-            installLocal: { _, _ in
-                localCalls += 1
-                return "mock-local"
-            },
-            uninstall: { _ in }
-        )
 
-        monitor.start()
+    // MARK: - Filter logic
 
-        XCTAssertEqual(globalCalls, 1)
-        XCTAssertEqual(localCalls, 1)
-        XCTAssertTrue(monitor.isActive)
-    }
-
-    func testStartIsIdempotent() {
-        var globalCalls = 0
-        var localCalls = 0
-        let monitor = EscapeKeyMonitor(
-            onEscapePressed: { false },
-            installGlobal: { _, _ in
-                globalCalls += 1
-                return "mock-global"
-            },
-            installLocal: { _, _ in
-                localCalls += 1
-                return "mock-local"
-            },
-            uninstall: { _ in }
-        )
-
-        monitor.start()
-        monitor.start()
-
-        XCTAssertEqual(globalCalls, 1, "Duplicate start must not re-install global")
-        XCTAssertEqual(localCalls, 1, "Duplicate start must not re-install local")
-    }
-
-    func testStopRemovesBothMonitors() {
-        var uninstalledHandles: [String] = []
-        let monitor = EscapeKeyMonitor(
-            onEscapePressed: { false },
-            installGlobal: { _, _ in "mock-global" },
-            installLocal: { _, _ in "mock-local" },
-            uninstall: { handle in
-                if let handle = handle as? String {
-                    uninstalledHandles.append(handle)
-                }
-            }
-        )
-        monitor.start()
-
-        monitor.stop()
-
-        XCTAssertEqual(Set(uninstalledHandles), ["mock-global", "mock-local"])
-        XCTAssertFalse(monitor.isActive)
-    }
-
-    func testPlainEscapeKeyDownFiresCallback() throws {
+    /// Plain Esc keyDown → handler fires; decider returns whatever the
+    /// handler returns.
+    func testPlainEscapeKeyDownFiresCallback() {
         var fireCount = 0
-        let monitor = EscapeKeyMonitor(
-            onEscapePressed: {
-                fireCount += 1
-                return true
-            },
-            installGlobal: { _, _ in nil },
-            installLocal: { _, _ in nil },
-            uninstall: { _ in }
-        )
+        let monitor = EscapeKeyMonitor(router: makeStubRouter()) {
+            fireCount += 1
+            return true
+        }
 
-        _ = monitor.handle(event: try makeKeyDownEvent(
+        let result = monitor.handle(event: makeKeyDown(
             keyCode: EscapeKeyMonitor.escapeKeyCode,
             modifierFlags: []
         ))
 
         XCTAssertEqual(fireCount, 1)
+        XCTAssertTrue(result)
     }
 
     /// Spec intent: plain Esc cancels. Modified Esc (Cmd+Esc, Option+Esc,
     /// etc.) is left alone — those are system / app shortcuts we don't
     /// want to intercept.
-    func testEscapeWithModifierIsIgnored() throws {
+    func testEscapeWithModifierIsIgnored() {
         var fireCount = 0
-        let monitor = EscapeKeyMonitor(
-            onEscapePressed: {
-                fireCount += 1
-                return true
-            },
-            installGlobal: { _, _ in nil },
-            installLocal: { _, _ in nil },
-            uninstall: { _ in }
-        )
+        let monitor = EscapeKeyMonitor(router: makeStubRouter()) {
+            fireCount += 1
+            return true
+        }
 
-        for flags: NSEvent.ModifierFlags in [[.command], [.option], [.control], [.shift], [.command, .shift]] {
-            _ = monitor.handle(event: try makeKeyDownEvent(
+        for flags: NSEvent.ModifierFlags in [
+            [.command],
+            [.option],
+            [.control],
+            [.shift],
+            [.command, .shift],
+        ] {
+            _ = monitor.handle(event: makeKeyDown(
                 keyCode: EscapeKeyMonitor.escapeKeyCode,
                 modifierFlags: flags
             ))
@@ -117,128 +57,165 @@ final class EscapeKeyMonitorTests: XCTestCase {
         XCTAssertEqual(fireCount, 0)
     }
 
-    func testNonEscapeKeyCodeIsIgnored() throws {
+    func testNonEscapeKeyCodeIsIgnored() {
         var fireCount = 0
-        let monitor = EscapeKeyMonitor(
-            onEscapePressed: {
-                fireCount += 1
-                return true
-            },
-            installGlobal: { _, _ in nil },
-            installLocal: { _, _ in nil },
-            uninstall: { _ in }
-        )
+        let monitor = EscapeKeyMonitor(router: makeStubRouter()) {
+            fireCount += 1
+            return true
+        }
 
         // keyCode 36 = Return
-        _ = monitor.handle(event: try makeKeyDownEvent(
-            keyCode: 36,
-            modifierFlags: []
-        ))
+        _ = monitor.handle(event: makeKeyDown(keyCode: 36, modifierFlags: []))
 
         XCTAssertEqual(fireCount, 0)
     }
 
-    /// Local-monitor leg: when Ninimma is frontmost (regular activation
-    /// policy after the Background-mode refactor), keystrokes are
-    /// delivered through the local monitor. Returning `nil` swallows
-    /// the event so it doesn't bubble to text fields / SwiftUI
-    /// handlers — pressing Esc during recording is unambiguously a
-    /// cancel intent.
-    func testLocalMonitorSwallowsEscapeWhenHandlerReportsHandled() throws {
-        var capturedHandler: ((NSEvent) -> NSEvent?)?
-        let monitor = EscapeKeyMonitor(
-            onEscapePressed: { true },
-            installGlobal: { _, _ in nil },
-            installLocal: { _, handler in
-                capturedHandler = handler
-                return "mock-local"
-            },
-            uninstall: { _ in }
+    func testNonKeyDownEventIsIgnored() {
+        var fireCount = 0
+        let monitor = EscapeKeyMonitor(router: makeStubRouter()) {
+            fireCount += 1
+            return true
+        }
+
+        let keyUp = HotkeyEvent(
+            type: .keyUp,
+            keyCode: EscapeKeyMonitor.escapeKeyCode,
+            modifierFlags: [],
+            timestamp: 0,
+            isARepeat: false
         )
+        _ = monitor.handle(event: keyUp)
+
+        XCTAssertEqual(fireCount, 0)
+    }
+
+    // MARK: - Router wiring
+
+    func testStartRegistersLocalDeciderThatSwallowsEscape() {
+        let router = makeStubRouter()
+        let monitor = EscapeKeyMonitor(router: router) { true }
 
         monitor.start()
-        let handler = try XCTUnwrap(capturedHandler)
-        let event = try makeKeyDownEvent(
+
+        let swallow = router.handleLocal(makeKeyDown(
             keyCode: EscapeKeyMonitor.escapeKeyCode,
             modifierFlags: []
-        )
+        ))
 
-        let result = handler(event)
-
-        XCTAssertNil(result, "Handler returned true → local monitor must swallow event")
+        XCTAssertTrue(swallow, "Esc keyDown delivered to Ninimma must be swallowed")
+        XCTAssertTrue(monitor.isActive)
     }
 
-    /// When the closure declines to handle (pill idle), the local
-    /// monitor must return the event unchanged so normal Esc behaviour
-    /// (close menu, exit text-field editing) still works.
-    func testLocalMonitorPassesThroughEscapeWhenHandlerDeclines() throws {
-        var capturedHandler: ((NSEvent) -> NSEvent?)?
-        let monitor = EscapeKeyMonitor(
-            onEscapePressed: { false },
-            installGlobal: { _, _ in nil },
-            installLocal: { _, handler in
-                capturedHandler = handler
-                return "mock-local"
-            },
-            uninstall: { _ in }
-        )
-
+    func testStartRegistersGlobalObserverThatFiresWithoutSwallowing() {
+        let router = makeStubRouter()
+        var fireCount = 0
+        let monitor = EscapeKeyMonitor(router: router) {
+            fireCount += 1
+            return true
+        }
         monitor.start()
-        let handler = try XCTUnwrap(capturedHandler)
-        let event = try makeKeyDownEvent(
+
+        // Global observers can't swallow — `handleGlobalObserved` returns Void.
+        router.handleGlobalObserved(makeKeyDown(
             keyCode: EscapeKeyMonitor.escapeKeyCode,
             modifierFlags: []
-        )
+        ))
 
-        let result = handler(event)
-
-        XCTAssertNotNil(result, "Handler returned false → local monitor must pass event through")
+        XCTAssertEqual(fireCount, 1, "Esc keyDown to other apps must trigger handler")
     }
 
-    /// Non-Esc keys must always pass through the local monitor — we
-    /// never swallow events that didn't match the filter.
-    func testLocalMonitorPassesThroughNonEscapeKeyCode() throws {
-        var capturedHandler: ((NSEvent) -> NSEvent?)?
-        let monitor = EscapeKeyMonitor(
-            onEscapePressed: { true },
-            installGlobal: { _, _ in nil },
-            installLocal: { _, handler in
-                capturedHandler = handler
-                return "mock-local"
-            },
-            uninstall: { _ in }
-        )
+    func testStartIsIdempotent() {
+        let router = makeStubRouter()
+        var fireCount = 0
+        let monitor = EscapeKeyMonitor(router: router) {
+            fireCount += 1
+            // Pass-through so a doubly-registered decider would
+            // re-fire on the same event.
+            return false
+        }
 
         monitor.start()
-        let handler = try XCTUnwrap(capturedHandler)
-        // keyCode 36 = Return — handle() returns false because it isn't Esc.
-        let event = try makeKeyDownEvent(
-            keyCode: 36,
+        monitor.start()
+
+        _ = router.handleLocal(makeKeyDown(
+            keyCode: EscapeKeyMonitor.escapeKeyCode,
             modifierFlags: []
-        )
+        ))
 
-        let result = handler(event)
-
-        XCTAssertNotNil(result, "Non-Esc keys must pass through local monitor unchanged")
+        XCTAssertEqual(fireCount, 1, "Duplicate start must not register decider twice")
     }
 
-    private func makeKeyDownEvent(
+    func testStopUnregistersTokensSoChainNoLongerFires() async {
+        let router = makeStubRouter()
+        var fireCount = 0
+        let monitor = EscapeKeyMonitor(router: router) {
+            fireCount += 1
+            return true
+        }
+        monitor.start()
+        _ = router.handleLocal(makeKeyDown(
+            keyCode: EscapeKeyMonitor.escapeKeyCode,
+            modifierFlags: []
+        ))
+        XCTAssertEqual(fireCount, 1)
+
+        monitor.stop()
+        // Token deinit cleanup is Task-dispatched on MainActor.
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 10_000_000)
+
+        _ = router.handleLocal(makeKeyDown(
+            keyCode: EscapeKeyMonitor.escapeKeyCode,
+            modifierFlags: []
+        ))
+        XCTAssertEqual(fireCount, 1, "After stop, local decider must not fire")
+        XCTAssertFalse(monitor.isActive)
+    }
+
+    // MARK: - Helpers
+
+    private func makeKeyDown(
         keyCode: UInt16,
         modifierFlags: NSEvent.ModifierFlags
-    ) throws -> NSEvent {
-        try XCTUnwrap(
-            NSEvent.keyEvent(
-                with: .keyDown,
-                location: .zero,
-                modifierFlags: modifierFlags,
-                timestamp: 1.0,
-                windowNumber: 0,
-                context: nil,
-                characters: "",
-                charactersIgnoringModifiers: "",
-                isARepeat: false,
-                keyCode: keyCode
-            )
+    ) -> HotkeyEvent {
+        HotkeyEvent(
+            type: .keyDown,
+            keyCode: keyCode,
+            modifierFlags: modifierFlags,
+            timestamp: 0,
+            isARepeat: false
         )
+    }
+
+    /// Stub router whose CG tap install is fake (no real Input
+    /// Monitoring permission required). Local + global NSEvent
+    /// installers no-op (return a sentinel) so the router's `start()`
+    /// is not exercised — tests drive registration through the router's
+    /// `handleLocal` / `handleGlobalObserved` test seams.
+    private func makeStubRouter() -> KeyEventRouter {
+        KeyEventRouter(
+            tapFactory: { decider in
+                HotkeyEventTap(
+                    decider: decider,
+                    installer: { _, _ in
+                        Self.makeFakePort()
+                    }
+                )
+            },
+            installLocal: { _, _ in NSObject() },
+            installGlobal: { _, _ in NSObject() },
+            uninstall: { _ in }
+        )
+    }
+
+    private static func makeFakePort() -> CFMachPort {
+        var context = CFMachPortContext(
+            version: 0,
+            info: nil,
+            retain: nil,
+            release: nil,
+            copyDescription: nil
+        )
+        return CFMachPortCreate(nil, { _, _, _, _ in }, &context, nil)!
     }
 }
