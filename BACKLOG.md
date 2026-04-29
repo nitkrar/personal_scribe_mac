@@ -746,6 +746,44 @@ Adapter layer for Qwen3 ASR, streaming EOU (parakeet-realtime), and offline diar
 
 ---
 
+### #089 — Modes editor (custom recipes, push-nav detail, autosave)
+
+`feature` · `P1` · `done` · `phase: 3` · `area: modes, ui, recipes`
+*Updated 2026-04-29*
+
+User-facing editor for `customModes` in the unified window's Modes tab. Today the tab is read-only — surfaces the single hardcoded `WorkflowMode.dictation` built-in, no create / edit / delete. This ticket ships a complete cohesive Modes UX: empty list on first launch → tap `+` → preset popover → mode appears → tap row → push-nav detail with autosave-on-change.
+
+**Design source.** `plans/089_modes_editor/` (CHECKLIST + BRIEF + DESIGN + IMPLEMENTATION). Locked premises in CHECKLIST.md.
+
+**Scope.**
+- Modes tab list shows `customModes` only. Empty on first launch (`WorkflowMode.dictation` stays in code as a fallback used when `customModes` is empty or `defaultModeID` points to a deleted mode — never rendered).
+- `+` opens preset popover with four named presets: Dictation, Notes, Meeting, Streaming Dictation. Pick → row appended to `customModes`, push to detail.
+- Detail surface: editable title, Realtime toggle, Voice model (read-only display + link to AI Models tab), Auto-stop on silence (toggle + threshold slider when on), Auto-paste, Restore clipboard, Identify Speakers (diarization), Delete this mode card at bottom.
+- Drag-reorder rows; persists as `customModes` array order; menu-bar / pill switcher iterates this order.
+- Two row glyphs: dot (current mode for next recording — set via menu-bar / pill switcher only) + star (user's default — set by tapping star on row).
+- App start: current = default. If `defaultModeID` unset or stale → fallback to `WorkflowMode.dictation`.
+- Push-nav detail with back arrow; autosaves every change; no Save / Cancel.
+- Glyph fixed-by-preset (no glyph picker).
+
+**Multi-language picker** — pending codex feasibility report (`plans/investigations/2026-04-28-multilang-feasibility-codex.md`, prompt at `2026-04-28-multilang-feasibility-prompt.md`). If FluidAudio supports per-call language hint, adds `language: String?` field on the transcriber processor and a Language picker in detail when active voice model is multilingual. If not, no picker.
+
+**Out of scope** (deferred to follow-up tickets when those features land):
+- Custom instructions / LLM model picker / Context fields → #020 / #021 / #022 territory
+- Activate-for-apps rules → #057
+- Per-mode keyboard shortcut → follow-up to #017
+- Autocapitalize → #053 territory
+- Playback during recording / Record-from-system-audio → #047 / #059
+- Per-mode model override (mode picks language only; voice model stays globally selected via AI Models tab)
+- Glyph picker
+
+**Why now.** Post-#078, the recipe-driven backbone is shipped; `WorkflowModeDocument.customModes` exists, validators enforce shape, but the user-facing editor surface is missing. Without it, every mode-shape change requires a code edit. Also: AI Models tab surfaces streaming + diarization model rows whose "Activate" persists per-kind selection but never runs at session time (no recipe consumes those kinds today). #089 lands the recipe consumer.
+
+**No phasing.** Ships as a single cohesive feature ticket. One commit at close. Future LLM / app-context features extend the editor in their own tickets when those features ship — not as "phase 2 of Modes editor."
+
+**Legacy:** replaces stale `plans/PHASE_2_unified_ui.md` Step 2.6 (BLOCKED on Q.M5 since 2026-04-22). Q.M5 sub-questions (new-mode dialog fields, single-active vs multi-active, delete affordance) resolved 2026-04-28 grilling session.
+
+---
+
 ### #057 — App-context rules for mode selection
 
 `feature` · `P2` · `open` · `area: dictation, session`
@@ -886,6 +924,57 @@ Replace pill ✕ with a pause/play toggle on pill-click-initiated recordings. Pa
 ---
 
 ## Refactors
+
+### #090 — Per-mode model picker + language hint
+
+`refactor` · `P2` · `open` · `area: transcription, models, modes, recipes`
+*Filed 2026-04-28*
+
+Two coupled features the Modes editor (#089) can't ship without a deeper schema change:
+
+1. **Per-mode voice-model picker** — each mode picks which `ModelDescriptor` it uses, instead of late-binding to whichever model is globally active. Lets the user have a "Japanese meeting" mode (Qwen3) and an "English dictation" mode (Parakeet) coexist.
+2. **Per-mode language hint** — when the picked model is multilingual, the user picks a target language for that mode.
+
+Both unblocked by the same architectural change: `ProcessorSpec.transcriber(kind:)` becomes `ProcessorSpec.transcriber(kind:, descriptorID:, language:)`.
+
+**Evidence**: `plans/investigations/2026-04-28-multilang-feasibility-codex.md` — codex investigation confirmed FluidAudio's per-engine language support is non-uniform.
+
+**Why these are coupled**:
+- Today `ProcessorSpec.transcriber(kind: ModelKind)` binds a model *kind*, not a descriptor. A mode can't say "use Qwen3 for Japanese, Parakeet for English." The per-mode model picker IS the architectural unblock.
+- Once modes can pin a descriptor, the language picker becomes a property of the picked descriptor (only multilingual descriptors expose the picker; the language travels with the recipe).
+- Qwen3 is disabled in our descriptor catalog today (was a memory hog pre-#078). Post-#078 eviction fix (`10a81f0`) may have addressed this — needs re-validation. Until Qwen3 is re-enabled, the language picker has no consumer (Parakeet doesn't accept hints).
+- Parakeet's "25 EU languages" is a model-internal capability with no FluidAudio API to control target language. Upstream FluidAudio question or PR needed for Parakeet to participate in the language picker.
+
+**Scope**:
+- **Per-mode model picker** — add `descriptorID: ModelDescriptor.ID?` to `ProcessorSpec.transcriber(...)` (and `.diarizedTurns(...)` for the per-turn ASR leg) and `.streamingTranscriber(...)`. nil = late-bind to global active descriptor (current #089 behavior); set = pin this mode to that specific descriptor.
+- **Per-mode language hint** — add `language: String?` (or `TranscriptionOptions` struct) to `ProcessorSpec.transcriber(...)`. Carry through `BoundRecipe` → `Transcriber.transcribe(_:options:)` → adapters.
+- Add `supportedLanguages: [String]?` to `ModelDescriptor`. nil = monolingual; otherwise the structured language list (replaces the freeform `worksWith` string for picker logic, keeps `worksWith` for human copy).
+- `WorkflowModeValidator`: validate language-present-on-supported-processor + language-supported-by-active-descriptor.
+- `RecipeBuilder`: late-bind respects per-mode `descriptorID` override.
+- Qwen3 adapter (`FluidAudioQwenTranscriberAdapter`): plumb language to `Qwen3AsrManager.transcribe(audioSamples:language:)`.
+- Re-enable Qwen3 in `BuiltInModelCatalog` after re-validating memory behavior post-`10a81f0`.
+- Modes editor (#089) detail view:
+  - **Voice model row flips from read-only display to a picker** populated from registered descriptors of the relevant kind. Selecting a descriptor writes `descriptorID` on the mode's transcriber processor.
+  - Language picker row appears only when the selected descriptor has `supportedLanguages != nil`.
+  - Both default to "Use globally active" (nil descriptorID) so existing #089 modes stay late-bound until the user pins.
+- Reconcile language-list inconsistencies: codex flagged 16-vs-30 for Qwen, 24-vs-25 for Parakeet. File upstream issue or pin a canonical list with citations.
+
+**Future-relevant**: when Whisper.cpp (or any other multilingual engine) lands, this seam already exists — adapter passes language through, validator enforces, picker surfaces.
+
+**Upstream blocker** (Parakeet): file FluidAudio issue requesting per-call language hint for Parakeet TDT batch + streaming. Until that lands, Parakeet rows hide the language picker even though the model card claims multilingual.
+
+**Effort estimate** (codex breakdown):
+- Descriptor metadata + mapping tables + validator wiring: 0.25-0.5d
+- Recipe schema + Codable fallout + orchestrator/diarized-turn-processor plumbing: 0.5-0.75d
+- Qwen adapter + live-manager + validation: 0.25-0.5d
+- Modes editor integration: 0.25d
+- Total: M (~1-1.5d) for "Qwen-only" scope; L (>1.5d) if waiting on upstream Parakeet.
+
+**Depends on**: #089 lands first (this extends the Modes editor with the picker row + descriptor pinning UI). Qwen3 memory re-validation independent.
+
+**Legacy:** session-generated 2026-04-28 from #089 grilling — language picker was originally V1 of #089, deferred per codex feasibility split.
+
+---
 
 ### #088 — Narrow FluidAudio model download to runtime-needed files
 
