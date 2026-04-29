@@ -24,15 +24,6 @@ import Foundation
 import PersonalScribeCore
 import PersonalScribeSession
 
-/// AppKit marks `NSEvent` as explicitly non-Sendable, but `NSEvent`
-/// monitor callbacks are documented to run on the main thread — there
-/// is no real cross-thread hop to guard against. This box lets us hand
-/// the event into a `MainActor.assumeIsolated` block without fighting
-/// the strict-concurrency checker.
-private struct NSEventBox: @unchecked Sendable {
-    let event: NSEvent
-}
-
 @MainActor
 public final class GlobalHotkeyMonitor {
     public typealias HoldScheduler = @MainActor (
@@ -40,11 +31,6 @@ public final class GlobalHotkeyMonitor {
         _ action: @escaping @MainActor () -> Void
     ) -> HoldCanceller
     public typealias HoldCanceller = @MainActor () -> Void
-    /// DI seam for substituting a fake `HotkeyEventTap` in tests —
-    /// production uses the default factory that builds a real one.
-    internal typealias EventTapFactory = @MainActor (
-        _ decider: @escaping HotkeyEventTap.Decider
-    ) -> HotkeyEventTap
 
     /// Threshold (seconds) separating tap vs hold. Matches spec §3
     /// ("press + release < 300 ms" = tap).
@@ -75,10 +61,14 @@ public final class GlobalHotkeyMonitor {
     private let permissionService: any PermissionService
     private let logger: PersonalScribeLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
-    private var eventTapFactory: EventTapFactory
+    private let router: KeyEventRouter
 
-    private var eventTap: HotkeyEventTap?
-    private var localMonitor: Any?
+    /// #028 — RAII registrations on the shared `KeyEventRouter`.
+    /// `localToken` covers events delivered to Ninimma (swallow on
+    /// match); `globalToken` covers events delivered to other apps via
+    /// the CG tap (swallow on match — fixes the `÷÷÷÷` leak).
+    private var localToken: KeyEventRouterToken?
+    private var globalToken: KeyEventRouterToken?
     private var keyDownTimestamp: TimeInterval?
     private var hotkeyKeyDownSwallowed = false
     private var isHolding = false
@@ -123,6 +113,7 @@ public final class GlobalHotkeyMonitor {
             }
         },
         permissionService: (any PermissionService)? = nil,
+        router: KeyEventRouter? = nil,
         logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
     ) {
@@ -134,104 +125,53 @@ public final class GlobalHotkeyMonitor {
         self.doubleTapWindow = doubleTapWindow
         self.scheduleHoldDetection = scheduleHoldDetection
         self.permissionService = permissionService ?? AppKitPermissionService()
+        // Tests that don't exercise the lifecycle pass `router: nil`
+        // and rely on the gesture-machine entry points (`handle(event:)`,
+        // `shouldSwallowLocal(_:)`) directly. A fresh, never-started
+        // `KeyEventRouter` is harmless for that mode.
+        self.router = router ?? KeyEventRouter()
         self.logger = logger
         self.logSink = logSink
-        self.eventTapFactory = { decider in
-            HotkeyEventTap(decider: decider, logger: logger)
-        }
-    }
-
-    internal convenience init(
-        onToggle: @escaping @MainActor () -> Void,
-        onHoldStart: @escaping @MainActor () -> Void = {},
-        onHoldRelease: @escaping @MainActor () -> Void = {},
-        recordingHotkey: HotkeyPreference = HotkeyPreference.resolve(),
-        holdThreshold: TimeInterval = GlobalHotkeyMonitor.holdThreshold,
-        doubleTapWindow: TimeInterval = GlobalHotkeyMonitor.doubleTapWindow,
-        scheduleHoldDetection: @escaping HoldScheduler = { delay, action in
-            let workItem = DispatchWorkItem {
-                Task { @MainActor in
-                    action()
-                }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
-            return {
-                workItem.cancel()
-            }
-        },
-        permissionService: (any PermissionService)? = nil,
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
-        logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil,
-        eventTapFactory: @escaping EventTapFactory
-    ) {
-        self.init(
-            onToggle: onToggle,
-            onHoldStart: onHoldStart,
-            onHoldRelease: onHoldRelease,
-            recordingHotkey: recordingHotkey,
-            holdThreshold: holdThreshold,
-            doubleTapWindow: doubleTapWindow,
-            scheduleHoldDetection: scheduleHoldDetection,
-            permissionService: permissionService,
-            logger: logger,
-            logSink: logSink
-        )
-        self.eventTapFactory = eventTapFactory
     }
 
     public var isActive: Bool {
-        eventTap != nil || localMonitor != nil
+        localToken != nil || globalToken != nil
     }
 
-    /// Introspection hooks for tests. `eventTap.isActive` reflects
-    /// whether the CGEventTap's `CFMachPort` was successfully created.
-    internal var isGlobalMonitorActive: Bool {
-        eventTap?.isActive == true
-    }
-    internal var isLocalMonitorActive: Bool { localMonitor != nil }
+    /// Introspection hooks for tests. Both reflect whether the
+    /// corresponding decider is currently registered with the router.
+    internal var isGlobalMonitorActive: Bool { globalToken != nil }
+    internal var isLocalMonitorActive: Bool { localToken != nil }
 
     public func start() {
-        guard eventTap == nil, localMonitor == nil else {
+        guard localToken == nil, globalToken == nil else {
             logger.info("Global hotkey monitor already active; ignoring duplicate start")
             return
         }
 
         resetState()
 
-        // Global path is now a CGEventTap — can swallow events headed to
-        // OTHER apps (fixes bug #5a: `÷÷÷÷` leak during hold). The tap
-        // runs at `.cgSessionEventTap` + `.headInsertEventTap`; see
-        // `HotkeyEventTap` for placement rationale.
-        let tap = eventTapFactory { [weak self] event in
+        // #028: register two deciders on the shared router — one for
+        // events delivered to other apps (CG tap path; swallows the
+        // `÷÷÷÷` leak during hold) and one for events delivered to
+        // Ninimma itself (local NSEvent path; needed so the hotkey
+        // works when our window is frontmost). Both share the same
+        // gesture-machine + swallow logic.
+        if !router.isTapActive {
+            // Router's tap install failed (Input Monitoring denied or
+            // transient OS failure). Surface the warning so the menu
+            // bar can prompt the user. Local NSEvent path keeps
+            // working — hotkey still fires when Ninimma is frontmost.
+            handleMonitorInstallFailure()
+        }
+
+        let decider: @MainActor (HotkeyEvent) -> Bool = { [weak self] event in
             guard let self else { return false }
             self.handle(event: event)
             return self.shouldSwallowEvent(event)
         }
-        guard tap.start() else {
-            // tap creation failed (Input Monitoring denied / OS failure).
-            // Keep `isActive` false by refusing partial local-only setup.
-            handleMonitorInstallFailure()
-            return
-        }
-        self.eventTap = tap
-
-        // Local monitor fires for events headed to our own app — needed
-        // so the hotkey works when Ninimma's window is frontmost (bug #4
-        // 2026-04-21 dogfood). The CGEventTap above covers other apps.
-        localMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.flagsChanged, .keyDown, .keyUp]
-        ) { [weak self] event in
-            guard let self else { return event }
-            let box = NSEventBox(event: event)
-            // Run gesture-state + swallow decision on main actor; return
-            // only `Bool` across the isolation boundary so NSEvent's
-            // non-Sendable status doesn't poison the transfer.
-            let shouldSwallow = MainActor.assumeIsolated {
-                self.handle(event: box.event)
-                return self.shouldSwallowLocal(box.event)
-            }
-            return shouldSwallow ? nil : event
-        }
+        localToken = router.registerLocalDecider(decider)
+        globalToken = router.registerGlobalDecider(decider)
     }
 
     /// Emits the Input Monitoring warning when `addGlobalMonitorForEvents`
@@ -260,12 +200,10 @@ public final class GlobalHotkeyMonitor {
     }
 
     public func stop() {
-        eventTap?.stop()
-        eventTap = nil
-        if let handle = localMonitor {
-            NSEvent.removeMonitor(handle)
-            localMonitor = nil
-        }
+        // RAII deinit on each token Task-dispatches the actual
+        // unregister. Setting to nil drops our strong refs.
+        localToken = nil
+        globalToken = nil
         resetState()
     }
 

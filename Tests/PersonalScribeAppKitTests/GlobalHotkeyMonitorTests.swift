@@ -46,18 +46,29 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         }
     }
 
-    /// Wraps the sentinel installer in an `EventTapFactory` for injection
-    /// into `GlobalHotkeyMonitor`'s internal init.
-    private static func succeedingEventTapFactory() -> GlobalHotkeyMonitor.EventTapFactory {
-        return { decider in
-            HotkeyEventTap(decider: decider, installer: succeedingInstaller())
-        }
+    /// Build a `KeyEventRouter` whose CG tap install will succeed
+    /// (sentinel `CFMachPort`) and whose NSEvent install/uninstall
+    /// no-ops. Used by lifecycle tests that call `monitor.start()` —
+    /// `monitor.start()` registers deciders on the router; the router's
+    /// `start()` is exercised so its `isTapActive` returns true.
+    @MainActor
+    private static func makeStubRouter() -> KeyEventRouter {
+        let router = KeyEventRouter(
+            tapFactory: { decider in
+                HotkeyEventTap(decider: decider, installer: succeedingInstaller())
+            },
+            installLocal: { _, _ in NSObject() },
+            installGlobal: { _, _ in NSObject() },
+            uninstall: { _ in }
+        )
+        router.start()
+        return router
     }
 
     func testStartStopLifecycle() {
         let monitor = GlobalHotkeyMonitor(
             onToggle: {},
-            eventTapFactory: Self.succeedingEventTapFactory()
+            router: Self.makeStubRouter()
         )
 
         monitor.start()
@@ -70,7 +81,7 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
     func testStartIsIdempotent() {
         let monitor = GlobalHotkeyMonitor(
             onToggle: {},
-            eventTapFactory: Self.succeedingEventTapFactory()
+            router: Self.makeStubRouter()
         )
 
         monitor.start()
@@ -378,7 +389,7 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
     func testStartInstallsBothLocalAndGlobalMonitors() {
         let monitor = GlobalHotkeyMonitor(
             onToggle: {},
-            eventTapFactory: Self.succeedingEventTapFactory()
+            router: Self.makeStubRouter()
         )
 
         monitor.start()
@@ -548,36 +559,43 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertFalse(monitor.shouldSwallowLocal(event))
     }
 
-    func testStartDoesNotInstallLocalMonitorWhenGlobalInstallFails() {
-        // Simulate CGEvent.tapCreate returning nil (Input Monitoring
-        // permission denied). HotkeyEventTap.start() returns false;
-        // GlobalHotkeyMonitor.start() must route that through
-        // handleMonitorInstallFailure and leave both monitors inactive.
+    func testStartContinuesWithLocalDeciderWhenTapInstallFails() {
+        // Post-#028: the router owns the CG tap. When tap install
+        // fails (Input Monitoring denied), the router's NSEvent
+        // monitors still install. GlobalHotkeyMonitor.start() routes
+        // the failure signal through handleMonitorInstallFailure but
+        // continues to register both deciders — the local decider is
+        // still useful for events delivered to Ninimma when the
+        // window is frontmost.
         var installerAttempts = 0
         let failingInstaller: HotkeyEventTap.Installer = { _, _ in
             installerAttempts += 1
             return nil
         }
+        let router = KeyEventRouter(
+            tapFactory: { decider in
+                HotkeyEventTap(decider: decider, installer: failingInstaller)
+            },
+            installLocal: { _, _ in NSObject() },
+            installGlobal: { _, _ in NSObject() },
+            uninstall: { _ in }
+        )
+        XCTAssertFalse(router.start(), "Stub installer returns nil → tap install fails")
+        XCTAssertFalse(router.isTapActive)
+
         let monitor = GlobalHotkeyMonitor(
             onToggle: {},
-            eventTapFactory: { decider in
-                HotkeyEventTap(decider: decider, installer: failingInstaller)
-            }
+            router: router
         )
 
         monitor.start()
 
         XCTAssertEqual(installerAttempts, 1)
-        XCTAssertFalse(monitor.isGlobalMonitorActive)
-        XCTAssertFalse(monitor.isLocalMonitorActive)
-
-        // Subsequent start() must retry — the guard at the top of
-        // start() is only triggered when a monitor is already active.
-        monitor.start()
-
-        XCTAssertEqual(installerAttempts, 2)
-        XCTAssertFalse(monitor.isGlobalMonitorActive)
-        XCTAssertFalse(monitor.isLocalMonitorActive)
+        // Both tokens are registered on the router (local + global)
+        // even though the global path won't dispatch through a failed
+        // tap — the local-NSEvent path stays usable.
+        XCTAssertTrue(monitor.isLocalMonitorActive)
+        XCTAssertTrue(monitor.isGlobalMonitorActive)
     }
 
     // MARK: - #017 live-apply (updateRecordingHotkey)

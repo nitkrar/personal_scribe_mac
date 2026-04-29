@@ -219,7 +219,8 @@ public enum AppComposition {
                     await coordinator.stopIfActive()
                 }
             },
-            permissionService: makePermissionServiceAdapter(wrapping: permissionService)
+            permissionService: makePermissionServiceAdapter(wrapping: permissionService),
+            router: AppComposition.keyEventRouter
         )
     }
 
