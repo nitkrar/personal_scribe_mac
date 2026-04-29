@@ -925,54 +925,74 @@ Replace pill ✕ with a pause/play toggle on pill-click-initiated recordings. Pa
 
 ## Refactors
 
-### #090 — Per-mode model picker + language hint
+### #090 — Per-mode descriptor pinning
+
+`refactor` · `P2` · `done` · `area: transcription, models, modes, recipes`
+*Updated 2026-04-29*
+
+Each mode can pin a specific `ModelDescriptor` instead of late-binding to whichever model is globally active. Lets the user have a "Japanese meeting" mode (Qwen3) and an "English dictation" mode (Parakeet) coexist; pinned modes survive a global active swap.
+
+**Shipped 2026-04-29**, 7 cycles `0fbfdf5..663b7e9` + dogfood-verified on the Air (Tests 1/2/3 in `Tests/ManualVerifications/ManualModesVerification.md` MV-MODES-13/14/15).
+
+- `0fbfdf5` #090.1 — `ProcessorSpec` schema: `descriptorID: String?` on `.transcriber` / `.streamingTranscriber`, `transcriberDescriptorID: String?` on `.diarizedTurns`. Codable round-trip via `encodeIfPresent` / `decodeIfPresent` so pre-#090 documents stay valid.
+- `3cb4f4e` #090.2 — Validator: pinned specs bypass `availableKinds` rule and validate against `registeredDescriptors` instead. New `pinnedDescriptorNotRegistered` / `pinnedDescriptorKindMismatch` error cases. Validator + registry signatures gain a `registeredDescriptors[Provider]` param defaulted to the catalog so existing tests/callers compile unchanged.
+- `54312b9` #090.3 — `RecipeBuilder.resolveDescriptor(for:pinnedID:)` honors the pin at session-start binding. Defensive `RecipeBuildError` cases mirror the validator's.
+- `e82efea` #090.4 — Mutator pin support: `withVoiceModelPin` covers all three transcriber-bearing case shapes including `.diarizedTurns` ASR leg. `withRealtime` clears pin (kind change); `withDiarization` carries pin through (kind preserved). `ModeDetailViewModel.voiceModelPinID` getter + `setVoiceModelPin` setter.
+- `89b05ba` #090.5 — Modes editor `voiceModelCard` becomes a SwiftUI Menu picker. Filters via `enabledModels(kind:)`. Caption + button-label handle three states (unpinned, pinned-known, pinned-unknown).
+- `c03f310` #090.6 — Selectors filter invalid modes: menu-bar mode submenu hides modes that fail validation. Shared `ActiveModelService.availableKinds()`. Three manual-verification entries MV-MODES-13/14/15.
+- `663b7e9` #090.7 — MV doc fix: invalid-pin chip is orange (validation warning), not red.
+- `addeeae` (#089 follow-up) — back button on `ModeDetailView` toolbar (macOS NavigationStack doesn't auto-render). Caught during #090 dogfood.
+- `e486f5b` (data fix) — `BuiltInModelCatalog.speakerDiarization.requiredRelativePaths` matches FluidAudio's offline diarizer artifacts (was inheriting the *online* diarizer's filenames). Caused `isDownloaded` to return false post-download → AI Models showed Download on a downloaded model + Modes rejected diarized recipes. Surfaced during #090 dogfood; not a #090 regression.
+
+**Scope decisions adjudicated during the session**:
+- Diarizer pin: **dropped**. Codex flagged that hidden state for a single-descriptor catalog creates a bug magnet. The `.diarizedTurns` case got `transcriberDescriptorID` only (the ASR leg); diarizer-leg pinning is deferred until a second diarization descriptor enters the catalog.
+- Language hint: **carved out to #091**. Qwen3 memory re-validation post-`10a81f0` is the prerequisite; Parakeet language-hint blocked on upstream FluidAudio. Neither was in scope for #090.
+- Per-mode hotkey filter: invalid modes still register their hotkeys today. Selector filtering (menu bar / future pill) hides them but the hotkey still fires + surfaces a session-start error. Open as a follow-up.
+
+**Architectural note**: L23 (`ProcessorSpec` references `ModelKind` only, never `descriptor.id`) was first-pass and got rewritten as part of this work. The lock test `testProcessorSpecReferencesKindNotDescriptorID` was replaced with positive-form round-trip tests.
+
+**Investigation artefacts**: `plans/investigations/2026-04-29-090-descriptor-pinning-claude.md` (pre-spin investigation) + `plans/investigations/2026-04-29-090-descriptor-pinning-codex.md` (codex review).
+
+**Legacy:** session-generated 2026-04-28 from #089 grilling — language picker was originally V1 of #089. Pinning + language deferred per codex feasibility split, then split again into #090 (pinning, shipped) + #091 (language hint, deferred).
+
+---
+
+### #091 — Per-mode language hint
 
 `refactor` · `P2` · `open` · `area: transcription, models, modes, recipes`
-*Filed 2026-04-28*
+*Filed 2026-04-29 (carved out of #090)*
 
-Two coupled features the Modes editor (#089) can't ship without a deeper schema change:
+When a pinned descriptor is multilingual, the user picks a target language for that mode. E.g. a "Japanese meeting" mode pinned to Qwen3 with `language: "ja"`.
 
-1. **Per-mode voice-model picker** — each mode picks which `ModelDescriptor` it uses, instead of late-binding to whichever model is globally active. Lets the user have a "Japanese meeting" mode (Qwen3) and an "English dictation" mode (Parakeet) coexist.
-2. **Per-mode language hint** — when the picked model is multilingual, the user picks a target language for that mode.
+**Why deferred from #090**: two prerequisites that #090 couldn't satisfy.
 
-Both unblocked by the same architectural change: `ProcessorSpec.transcriber(kind:)` becomes `ProcessorSpec.transcriber(kind:, descriptorID:, language:)`.
-
-**Evidence**: `plans/investigations/2026-04-28-multilang-feasibility-codex.md` — codex investigation confirmed FluidAudio's per-engine language support is non-uniform.
-
-**Why these are coupled**:
-- Today `ProcessorSpec.transcriber(kind: ModelKind)` binds a model *kind*, not a descriptor. A mode can't say "use Qwen3 for Japanese, Parakeet for English." The per-mode model picker IS the architectural unblock.
-- Once modes can pin a descriptor, the language picker becomes a property of the picked descriptor (only multilingual descriptors expose the picker; the language travels with the recipe).
-- Qwen3 is disabled in our descriptor catalog today (was a memory hog pre-#078). Post-#078 eviction fix (`10a81f0`) may have addressed this — needs re-validation. Until Qwen3 is re-enabled, the language picker has no consumer (Parakeet doesn't accept hints).
-- Parakeet's "25 EU languages" is a model-internal capability with no FluidAudio API to control target language. Upstream FluidAudio question or PR needed for Parakeet to participate in the language picker.
+1. **Qwen3 re-enablement**. Qwen3 is `isEnabled: false` in `BuiltInModelCatalog` today (was a memory hog pre-#078). Post-#078 eviction fix (`10a81f0`) may have addressed it — needs re-validation on the Air with the released DMG. Until Qwen3 is re-enabled, the language picker has no consumer (Parakeet doesn't accept hints).
+2. **Parakeet upstream blocker**. Parakeet's "25 EU languages" is a model-internal capability with no FluidAudio API to control target language at runtime. File a FluidAudio issue requesting per-call language hint for Parakeet TDT batch + streaming. Until that lands, Parakeet rows hide the language picker even though the model card claims multilingual.
 
 **Scope**:
-- **Per-mode model picker** — add `descriptorID: ModelDescriptor.ID?` to `ProcessorSpec.transcriber(...)` (and `.diarizedTurns(...)` for the per-turn ASR leg) and `.streamingTranscriber(...)`. nil = late-bind to global active descriptor (current #089 behavior); set = pin this mode to that specific descriptor.
-- **Per-mode language hint** — add `language: String?` (or `TranscriptionOptions` struct) to `ProcessorSpec.transcriber(...)`. Carry through `BoundRecipe` → `Transcriber.transcribe(_:options:)` → adapters.
-- Add `supportedLanguages: [String]?` to `ModelDescriptor`. nil = monolingual; otherwise the structured language list (replaces the freeform `worksWith` string for picker logic, keeps `worksWith` for human copy).
-- `WorkflowModeValidator`: validate language-present-on-supported-processor + language-supported-by-active-descriptor.
-- `RecipeBuilder`: late-bind respects per-mode `descriptorID` override.
-- Qwen3 adapter (`FluidAudioQwenTranscriberAdapter`): plumb language to `Qwen3AsrManager.transcribe(audioSamples:language:)`.
-- Re-enable Qwen3 in `BuiltInModelCatalog` after re-validating memory behavior post-`10a81f0`.
-- Modes editor (#089) detail view:
-  - **Voice model row flips from read-only display to a picker** populated from registered descriptors of the relevant kind. Selecting a descriptor writes `descriptorID` on the mode's transcriber processor.
-  - Language picker row appears only when the selected descriptor has `supportedLanguages != nil`.
-  - Both default to "Use globally active" (nil descriptorID) so existing #089 modes stay late-bound until the user pins.
+- Add `language: String?` to `.transcriber` / `.streamingTranscriber` / `.diarizedTurns` (or wrap in a `TranscriptionOptions` struct alongside `descriptorID`).
+- Add `supportedLanguages: [String]?` to `ModelDescriptor`. nil = monolingual; otherwise structured language list (replaces freeform `worksWith` for picker logic, keeps `worksWith` for human copy).
+- `WorkflowModeValidator`: validate language-present-on-supported-processor + language-supported-by-pinned-descriptor.
+- `RecipeBuilder` → `BoundRecipe` → `Transcriber.transcribe(_:options:)` → adapters: thread the language through.
+- `FluidAudioQwenTranscriberAdapter`: plumb language to `Qwen3AsrManager.transcribe(audioSamples:language:)`.
+- Re-enable Qwen3 in `BuiltInModelCatalog` after memory re-validation.
+- Modes editor: add a "Language" row that appears only when the selected descriptor has `supportedLanguages != nil`. Carries through to the `WorkflowMode` recipe.
 - Reconcile language-list inconsistencies: codex flagged 16-vs-30 for Qwen, 24-vs-25 for Parakeet. File upstream issue or pin a canonical list with citations.
 
-**Future-relevant**: when Whisper.cpp (or any other multilingual engine) lands, this seam already exists — adapter passes language through, validator enforces, picker surfaces.
+**Future-relevant**: when Whisper.cpp (or any other multilingual engine) lands, this seam already exists.
 
-**Upstream blocker** (Parakeet): file FluidAudio issue requesting per-call language hint for Parakeet TDT batch + streaming. Until that lands, Parakeet rows hide the language picker even though the model card claims multilingual.
-
-**Effort estimate** (codex breakdown):
+**Effort estimate** (carry-over from #090's codex breakdown):
 - Descriptor metadata + mapping tables + validator wiring: 0.25-0.5d
 - Recipe schema + Codable fallout + orchestrator/diarized-turn-processor plumbing: 0.5-0.75d
 - Qwen adapter + live-manager + validation: 0.25-0.5d
 - Modes editor integration: 0.25d
 - Total: M (~1-1.5d) for "Qwen-only" scope; L (>1.5d) if waiting on upstream Parakeet.
 
-**Depends on**: #089 lands first (this extends the Modes editor with the picker row + descriptor pinning UI). Qwen3 memory re-validation independent.
+**Depends on**: #090 (descriptor pinning, shipped). Qwen3 memory re-validation independent — schedule a 30-minute dogfood pass to confirm or deny the eviction fix's effect on Qwen.
 
-**Legacy:** session-generated 2026-04-28 from #089 grilling — language picker was originally V1 of #089, deferred per codex feasibility split.
+**Evidence**: `plans/investigations/2026-04-28-multilang-feasibility-codex.md`.
+
+**Legacy:** carved out of original #090 entry on 2026-04-29 when the descriptor-pinning slice shipped without language plumbing.
 
 ---
 
