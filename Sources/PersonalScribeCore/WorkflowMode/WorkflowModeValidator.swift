@@ -43,7 +43,7 @@ public enum WorkflowModeValidator {
         var streamingProcessorCount = 0
         for processor in mode.processors {
             switch processor {
-            case .transcriber(let kind):
+            case .transcriber(let kind, _):
                 if mode.pipelineShape != .batch {
                     throw WorkflowModeValidationError.streamingShapeMismatch(
                         processorKind: kind,
@@ -52,7 +52,7 @@ public enum WorkflowModeValidator {
                 }
                 try requireKindAvailable(kind, in: availableKinds)
 
-            case .streamingTranscriber(let kind):
+            case .streamingTranscriber(let kind, _):
                 if mode.pipelineShape != .streaming {
                     throw WorkflowModeValidationError.streamingShapeMismatch(
                         processorKind: kind,
@@ -62,7 +62,7 @@ public enum WorkflowModeValidator {
                 try requireKindAvailable(kind, in: availableKinds)
                 streamingProcessorCount += 1
 
-            case .diarizedTurns(let diarizerKind, let transcriberKind):
+            case .diarizedTurns(let diarizerKind, let transcriberKind, _):
                 if mode.pipelineShape != .batch {
                     throw WorkflowModeValidationError.streamingShapeMismatch(
                         processorKind: diarizerKind,

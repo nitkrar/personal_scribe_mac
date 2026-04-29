@@ -20,25 +20,56 @@ final class SpecCodableTests: XCTestCase {
         XCTAssertEqual(decoded, original)
     }
 
-    func testProcessorSpecReferencesKindNotDescriptorID() throws {
-        // L23 lock: recipes reference `ModelKind`, never a specific
-        // descriptor.id. Encoded JSON must carry kind values
-        // (matching `ModelKind.RawValue`) — never any field whose
-        // value looks like a descriptor identifier.
-        let spec = ProcessorSpec.transcriber(kind: .asr)
+    func testProcessorSpecOmitsDescriptorIDWhenUnpinned() throws {
+        // #090: unpinned processors (default `descriptorID: nil`) MUST
+        // round-trip without emitting a `descriptorID` /
+        // `transcriberDescriptorID` field, so existing
+        // `workflow-modes.json` documents written before #090 round-trip
+        // unchanged. Late-bind to the globally-active descriptor (per
+        // `ActiveModelService.activeDescriptor(for:)`) remains the
+        // default behavior when the field is absent.
+        let cases: [(ProcessorSpec, [String])] = [
+            (.transcriber(kind: .asr), ["descriptorID"]),
+            (.streamingTranscriber(kind: .streamingASR), ["descriptorID"]),
+            (
+                .diarizedTurns(diarizerKind: .diarization, transcriberKind: .asr),
+                ["transcriberDescriptorID"]
+            ),
+        ]
+        for (spec, forbiddenKeys) in cases {
+            let data = try JSONEncoder().encode(spec)
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            for key in forbiddenKeys {
+                XCTAssertNil(
+                    json?[key],
+                    "Unpinned \(spec) must omit \(key) on encode."
+                )
+            }
+        }
+    }
 
-        let data = try JSONEncoder().encode(spec)
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-
-        XCTAssertEqual(json?["kind"] as? String, ModelKind.asr.rawValue)
-        XCTAssertNil(
-            json?["descriptorID"],
-            "ProcessorSpec must not carry a descriptor identifier — recipes late-bind via Kind (L23)."
-        )
-        XCTAssertNil(
-            json?["modelID"],
-            "ProcessorSpec must not carry a descriptor identifier — recipes late-bind via Kind (L23)."
-        )
+    func testProcessorSpecRoundTripsDescriptorIDOverride() throws {
+        // #090: a pinned processor (non-nil `descriptorID`) MUST encode
+        // its descriptor id and decode back to the same pin, so the
+        // user's per-mode model selection survives Codable round-trip
+        // through `WorkflowModeDocument` storage.
+        let cases: [ProcessorSpec] = [
+            .transcriber(kind: .asr, descriptorID: "parakeet-tdt-0.6b-v2"),
+            .streamingTranscriber(
+                kind: .streamingASR,
+                descriptorID: "parakeet-realtime-eou-120m-160ms"
+            ),
+            .diarizedTurns(
+                diarizerKind: .diarization,
+                transcriberKind: .asr,
+                transcriberDescriptorID: "parakeet-tdt-0.6b-v2"
+            ),
+        ]
+        for original in cases {
+            let data = try JSONEncoder().encode(original)
+            let decoded = try JSONDecoder().decode(ProcessorSpec.self, from: data)
+            XCTAssertEqual(decoded, original, "Pinned spec did not round-trip: \(original)")
+        }
     }
 
     // MARK: - CaptureControllerSpec

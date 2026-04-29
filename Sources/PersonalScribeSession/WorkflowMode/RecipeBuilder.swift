@@ -51,17 +51,17 @@ public final class RecipeBuilder {
 
     private func buildProcessor(_ spec: ProcessorSpec) throws -> BoundProcessor {
         switch spec {
-        case .transcriber(let kind):
+        case .transcriber(let kind, _):
             let descriptor = try resolveDescriptor(for: kind)
             let transcriber = try processorProvider.transcriber(for: descriptor)
             return .transcriber(transcriber)
 
-        case .streamingTranscriber(let kind):
+        case .streamingTranscriber(let kind, _):
             let descriptor = try resolveDescriptor(for: kind)
             let transcriber = try processorProvider.streamingTranscriber(for: descriptor)
             return .streamingTranscriber(transcriber)
 
-        case .diarizedTurns(let diarizerKind, let transcriberKind):
+        case .diarizedTurns(let diarizerKind, let transcriberKind, _):
             let diarizerDescriptor = try resolveDescriptor(for: diarizerKind)
             let transcriberDescriptor = try resolveDescriptor(for: transcriberKind)
             let diarizer = try processorProvider.diarizer(for: diarizerDescriptor)

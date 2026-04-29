@@ -13,9 +13,9 @@ extension WorkflowMode {
         copy.pipelineShape = on ? .streaming : .batch
         copy.processors = copy.processors.map { spec -> ProcessorSpec in
             switch spec {
-            case .transcriber(let kind):
+            case .transcriber(let kind, _):
                 return on ? .streamingTranscriber(kind: .streamingASR) : .transcriber(kind: kind)
-            case .streamingTranscriber(let kind):
+            case .streamingTranscriber(let kind, _):
                 return on ? .streamingTranscriber(kind: kind) : .transcriber(kind: .asr)
             case .diarizedTurns:
                 // Diarization can't run in streaming mode V1 — drop the
@@ -31,9 +31,9 @@ extension WorkflowMode {
         var copy = self
         copy.processors = copy.processors.map { spec -> ProcessorSpec in
             switch spec {
-            case .transcriber(let kind) where on:
+            case .transcriber(let kind, _) where on:
                 return .diarizedTurns(diarizerKind: .diarization, transcriberKind: kind)
-            case .diarizedTurns(_, let transcriberKind) where !on:
+            case .diarizedTurns(_, let transcriberKind, _) where !on:
                 return .transcriber(kind: transcriberKind)
             default:
                 return spec
