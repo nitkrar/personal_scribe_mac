@@ -258,7 +258,7 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(clipboardOnlyNoticeCount, 0)
     }
 
-    func testSecondIdleTransitionDoesNotReDeliverWhenTranscriptIsUnchanged() async throws {
+    func testSecondIdleTransitionReDeliversWhenTranscriptIsUnchangedAcrossSessions() async throws {
         let coordinator = try makeCoordinator()
         let outputService = RecordingOutputService()
         let model = try makeModel(
@@ -281,9 +281,11 @@ final class MenuBarSceneModelTests: XCTestCase {
         await coordinator.toggle()
         await waitForState(.idle, on: model)
         await waitForTranscriptText("Stub transcript.", on: model)
-        await Task.yield()
+        await waitUntil {
+            outputService.deliveredTexts == ["Stub transcript.", "Stub transcript."]
+        }
 
-        XCTAssertEqual(outputService.deliveredTexts, ["Stub transcript."])
+        XCTAssertEqual(outputService.deliveredTexts, ["Stub transcript.", "Stub transcript."])
     }
 
     func testCopyLatestTranscriptWritesCurrentTranscriptToClipboard() async throws {

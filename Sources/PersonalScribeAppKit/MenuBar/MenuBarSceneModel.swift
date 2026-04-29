@@ -19,7 +19,6 @@ final class MenuBarSceneModel: ObservableObject {
     private let logger: PersonalScribeLogger
     private let onObservationCancelled: (@Sendable () -> Void)?
     private var snapshotObservation: AnyCancellable?
-    private var lastAutoPastedTranscript: String?
     private(set) var observationTaskCreationCount = 0
 
     var snapshot: AppStoreSnapshot {
@@ -141,9 +140,6 @@ final class MenuBarSceneModel: ObservableObject {
 
     private func autoPasteTranscriptIfNeeded(_ transcript: String?) {
         guard let transcript, !transcript.isEmpty else { return }
-        guard transcript != lastAutoPastedTranscript else { return }
-
-        lastAutoPastedTranscript = transcript
         let outputService = outputService
         let onClipboardOnlyCopy = onClipboardOnlyCopy
         let logger = logger
