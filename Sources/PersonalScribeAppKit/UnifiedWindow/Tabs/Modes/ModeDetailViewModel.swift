@@ -58,12 +58,27 @@ final class ModeDetailViewModel: ObservableObject {
         return .setting(PreferenceKeys.clipboardRestoreEnabled)
     }
 
+    /// #090 — Per-mode voice-model pin. Reads through to the first
+    /// transcriber-bearing processor's `descriptorID`. `nil` means
+    /// "use globally active", which is the default.
+    var voiceModelPinID: String? {
+        for spec in mode.processors {
+            switch spec {
+            case .transcriber(_, let id): return id
+            case .streamingTranscriber(_, let id): return id
+            case .diarizedTurns(_, _, let id): return id
+            }
+        }
+        return nil
+    }
+
     func setRealtime(_ on: Bool) { apply(mode.withRealtime(on)) }
     func setDiarization(_ on: Bool) { apply(mode.withDiarization(on)) }
     func setAutoStop(_ parameter: Parameter<Bool>) { apply(mode.withAutoStop(parameter: parameter)) }
     func setAutoPaste(_ parameter: Parameter<Bool>) { apply(mode.withAutoPaste(parameter: parameter)) }
     func setRestoreClipboard(_ parameter: Parameter<Bool>) { apply(mode.withRestoreClipboard(parameter: parameter)) }
     func setHotkey(_ hotkey: HotkeyPreference?) { apply(mode.withHotkey(hotkey)) }
+    func setVoiceModelPin(_ id: String?) { apply(mode.withVoiceModelPin(id)) }
 
     func setName(_ name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)

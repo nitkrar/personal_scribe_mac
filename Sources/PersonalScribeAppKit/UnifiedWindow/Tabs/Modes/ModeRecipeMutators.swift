@@ -14,6 +14,9 @@ extension WorkflowMode {
         copy.processors = copy.processors.map { spec -> ProcessorSpec in
             switch spec {
             case .transcriber(let kind, _):
+                // .asr ↔ .streamingASR are different kinds — a pin on
+                // the .asr leg is incompatible with .streamingASR, so
+                // toggling realtime CLEARS the pin in either direction.
                 return on ? .streamingTranscriber(kind: .streamingASR) : .transcriber(kind: kind)
             case .streamingTranscriber(let kind, _):
                 return on ? .streamingTranscriber(kind: kind) : .transcriber(kind: .asr)
@@ -31,12 +34,49 @@ extension WorkflowMode {
         var copy = self
         copy.processors = copy.processors.map { spec -> ProcessorSpec in
             switch spec {
-            case .transcriber(let kind, _) where on:
-                return .diarizedTurns(diarizerKind: .diarization, transcriberKind: kind)
-            case .diarizedTurns(_, let transcriberKind, _) where !on:
-                return .transcriber(kind: transcriberKind)
+            case .transcriber(let kind, let descriptorID) where on:
+                // Same ASR kind on both sides — CARRY the pin from
+                // `.transcriber.descriptorID` into the new
+                // `.diarizedTurns.transcriberDescriptorID`.
+                return .diarizedTurns(
+                    diarizerKind: .diarization,
+                    transcriberKind: kind,
+                    transcriberDescriptorID: descriptorID
+                )
+            case .diarizedTurns(_, let transcriberKind, let transcriberDescriptorID) where !on:
+                // Same direction in reverse — CARRY the pin out.
+                return .transcriber(kind: transcriberKind, descriptorID: transcriberDescriptorID)
             default:
                 return spec
+            }
+        }
+        return copy
+    }
+
+    /// #090 — Set or clear the per-mode voice-model pin. Operates on
+    /// the first transcriber-bearing processor (`.transcriber`,
+    /// `.streamingTranscriber`, or `.diarizedTurns`'s ASR leg). Modes
+    /// with multiple transcriber-bearing specs aren't producible by
+    /// the editor today, so "first match" is sufficient.
+    func withVoiceModelPin(_ id: String?) -> WorkflowMode {
+        var copy = self
+        var didReplace = false
+        copy.processors = copy.processors.map { spec -> ProcessorSpec in
+            guard !didReplace else { return spec }
+            switch spec {
+            case .transcriber(let kind, _):
+                didReplace = true
+                return .transcriber(kind: kind, descriptorID: id)
+            case .streamingTranscriber(let kind, _):
+                didReplace = true
+                return .streamingTranscriber(kind: kind, descriptorID: id)
+            case .diarizedTurns(let diarizerKind, let transcriberKind, _):
+                didReplace = true
+                return .diarizedTurns(
+                    diarizerKind: diarizerKind,
+                    transcriberKind: transcriberKind,
+                    transcriberDescriptorID: id
+                )
             }
         }
         return copy
