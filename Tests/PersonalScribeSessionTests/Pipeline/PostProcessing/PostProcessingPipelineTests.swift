@@ -37,6 +37,15 @@ final class PostProcessingPipelineTests: XCTestCase {
         XCTAssertEqual(output, "Hello world.")
     }
 
+    func testPreservesLineBreaksBetweenDiarizedTurns() async throws {
+        let output = try await pipeline.run(
+            "speaker_0: alpha\nspeaker_1: beta",
+            context: makeContext()
+        )
+
+        XCTAssertEqual(output, "Speaker_0: alpha.\nSpeaker_1: beta.")
+    }
+
     func testIsDeterministic() async throws {
         let input = "um hello uh world"
         let first = try await pipeline.run(input, context: makeContext())
