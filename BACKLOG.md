@@ -21,7 +21,7 @@ Each ticket has an `*Updated YYYY-MM-DD*` line under the tag row. Bump on meanin
 
 | Ticket | Owner | Started | Last update | Notes |
 |---|---|---|---|---|
-| #092 | slate | 2026-04-30 | 2026-04-30 | speaker separation sensitivity — **[needs user]** more debugging |
+| #092 | slate | 2026-04-30 | 2026-04-30 | speaker separation sensitivity — code on trunk through `30381cf` (#092.1–.5 + auto-paste dedup removal). **[needs user]** runtime verification on the other laptop: (1) prewarm-race fix unblocks Relaxed→Balanced/Strict cycles; (2) error-reporter shows on response card not pill. |
 
 **Session naming.** The **main** Claude session running in the user's terminal picks a short single-word identifier (nature words work well — `heron`, `cobalt`, `slate`, `olive`, `rust`) the first time it touches this file and uses it consistently. Subagents dispatched from a main session **inherit its name** — they do NOT claim their own. Only a parallel main session (e.g. a second terminal) picks a distinct name. Don't use `main session` / `parallel session` / `user` as owners — too ambiguous when >1 session is live.
 
@@ -1112,6 +1112,69 @@ Models considered but not in immediate scope. Left here so future readers don't 
 
 ---
 
+### #096 — Diagnostics system consolidation
+
+`refactor` · `P2` · `open` · `area: diagnostics, observability, errors, settings`
+*Filed 2026-04-30*
+
+Today's diagnostics is split across two adjacent mechanisms:
+
+- `Sources/PersonalScribeCore/Logger.swift` — `PersonalScribeLogger` wraps `os.Logger` for `debug / info / error` (~100 call sites in Sources/).
+- `Sources/PersonalScribeCore/SessionErrorReporter.swift` — structured session failures → `logs/errors.log` + `ReportedError` for the response-card path (added in `30381cf` / #092.5).
+
+That split is workable for the immediate error-display fix but is the wrong long-term shape — there's one event-emission concept being expressed twice. This ticket consolidates both into a single `DiagnosticsReporter` with one shared event model, optional `userFacing` payload that gates UI surfacing without coupling logging to UI, and adds Advanced-settings controls for verbose disk capture + a live diagnostics overlay panel.
+
+**Locked architectural decisions** (see design doc):
+
+- D1: One diagnostics system, one event model. No "logger vs reporter" split.
+- D2: `userFacing` is optional metadata on the event. **Not** a parallel `errorWithUserReport(...)` API.
+- D3: Diagnostics layer never imports AppKit. Session/UI layer converts `userFacing` payload to `SessionSnapshot.reportedError`. ResponseCard remains one consumer of that snapshot field.
+- D4: Error-level events always persist to `logs/errors.log` regardless of verbosity setting. Settings widen capture, never disable error logging.
+- D5: Advanced settings own `Diagnostic Logging` (`Errors Only` default / `Verbose`) + `Show Live Diagnostics Overlay` (off; only available when Verbose).
+- D6: `Diagnostics*` types live in `PersonalScribeCore`. Live overlay UI lives in `PersonalScribeAppKit`, consumes the in-memory ring buffer through public Core API.
+- D7: `DiagnosticsReporter` is constructed in `AppComposition` with sinks injected. Tests inject reporter with `InMemoryTestSink`. No `Diagnostics.shared` singleton.
+
+**Sinks** (all behind one fan-out reporter):
+
+- `OSLogSink` — replaces direct `PersonalScribeLogger` writes.
+- `ErrorFileSink` — `logs/errors.log` (always-on).
+- `VerboseFileSink` — `logs/diagnostics.log` (Verbose only). Errors NOT duplicated.
+- `RingBufferSink` — bounded (~200 events), feeds the live overlay.
+- `InMemoryTestSink` — unbounded + ordered; test-only, asserts emitted events.
+
+**PII redaction** at sink boundary via `PIIRedactor`:
+
+- Always-safe metadata keys: `level`, `category`, `mappedError`, `stage`, `mode`, `descriptorID`, `pipelineShape`, `errorType`.
+- Always-redacted metadata keys: `transcript`, `path`, `deviceName`, `windowTitle`, `appName`, `audioFile`, `userMessage`. Value → `<redacted>`; key preserved for grep.
+- Value-pattern: regex `/Users/[^/]+` → `/Users/<redacted>`.
+- `underlyingError` rendered as `String(describing: type(of: error))` + case name; never `String(describing: error)`.
+
+**Rollout** (Stage A–G; each stage leaves repo buildable):
+
+- A. Core diagnostics primitives (event/level/sinks/reporter/PIIRedactor).
+- B. Cut over `PersonalScribeLogger` — recommendation: retire after migration, mechanical rename of ~100 sites, delete `Logger.swift`. (Codex's plan currently keeps a permanent facade — pick before B starts.)
+- C. Session failure path migrated to emit through `DiagnosticsReporter` with `userFacing: .sessionError(...)`.
+- D. Non-session blind spots (`MenuBarSceneModel` auto-paste, `SessionCoordinator` persistence, orchestrator prewarm) emit via reporter; no `userFacing`.
+- E. Advanced-settings UI: `DiagnosticLoggingMode` enum + `showLiveDiagnosticsOverlay` bool. AppComposition wires sinks based on mode.
+- F. Live diagnostics overlay (`LiveDiagnosticsOverlayController/Presenter/View`) — separate floating panel, ResponseCard styling, persistent + scrollable + filterable + copy button. Read-only; no paste, no link actions.
+- G. Cleanup + docs + manual verification runbook (`MV-DIAG-1..5`).
+
+**Plans on disk** (read these first before implementation):
+
+- `plans/diagnostics-system-design.md` — locked decisions D1–D7 + Q1–Q4 + PII section.
+- `plans/diagnostics-system-implementation.md` — Stage A–G rollout, file lists, test expectations, exit criteria.
+- `plans/diagnostics-system-review.md` — concrete edits Codex should fold into both docs before starting (PII section, two-file model, retire-vs-facade, DI wiring example).
+
+**Effort estimate**: L (>1.5d) for full A–G; M (~1d) for Stage A alone.
+
+**Depends on**: nothing blocking. #092.5 (`30381cf`) is the precondition that proves the snapshot-driven UI seam works; this ticket consolidates the diagnostics backend the response-card seam already depends on.
+
+**Unblocks**: live debug overlay during dogfooding (currently no on-screen visibility into recent events); structured telemetry layer if ever needed; cleaner extension point for new categories without pollination across two systems.
+
+**Legacy:** none — net-new. Picks up where #092.5 left off.
+
+---
+
 ## Refactors
 
 ### #090 — Per-mode descriptor pinning
@@ -1227,8 +1290,8 @@ from `LiveFluidAudioQwenManager`. We're already one step from
 
 **Scope.** A shared narrower wrapper used by every adapter, not a
 Qwen-only special case. Per-adapter forks would re-introduce the
-duplication we just collapsed in #094 (the shared
-`FluidAudioDownloadProgressBroadcaster` consolidation).
+duplication we just collapsed in #078 (the shared
+`FluidAudioDownloadProgressBroadcaster` consolidation, `848c095`).
 
 Approach (sketch):
 - New `FluidAudioDirectDownloader` in `PersonalScribeTranscription`
