@@ -179,6 +179,7 @@ public final class PillOverlayController: ObservableObject {
 
         applyRecordingStatusCardState(
             sessionState: snapshot.sessionState,
+            reportedError: snapshot.session.reportedError,
             progress: snapshot.modelDownloadProgress,
             vadGracePending: snapshot.session.vadAutoStopGracePending,
             vadFireToken: snapshot.session.vadAutoStopFireToken
@@ -195,6 +196,7 @@ public final class PillOverlayController: ObservableObject {
     /// exactly once per auto-stop fire.
     private func applyRecordingStatusCardState(
         sessionState: SessionState,
+        reportedError: ReportedError?,
         progress: ModelDownloadProgress?,
         vadGracePending: Bool,
         vadFireToken: UUID?
@@ -208,6 +210,7 @@ public final class PillOverlayController: ObservableObject {
 
         let nextContent = RecordingStatusCardDriver.statusContent(
             sessionState: sessionState,
+            reportedError: reportedError,
             progress: progress,
             vadGracePending: vadGracePending,
             vadFireToken: vadFireToken,
@@ -221,7 +224,7 @@ public final class PillOverlayController: ObservableObject {
             presenter.showRecordingStatusCard(
                 text: next.text,
                 link: next.link,
-                autoDismissAfter: autoDismissDuration(for: next),
+                autoDismissAfter: next.autoDismissAfter,
                 onLinkTap: linkTapHandler(for: next)
             )
             recordingStatusCardContent = next
@@ -231,21 +234,21 @@ public final class PillOverlayController: ObservableObject {
             // in its text (no link on either side), keep using the
             // cheap `update(text:)` path so the record-without-
             // transcribe progress ticks don't flash the whole card in
-            // and out. Any change that touches the link region (or
-            // brings in a link where there was none) needs a full
-            // `show(...)` so the link-tap gesture + auto-dismiss timer
-            // are re-attached consistently. The notification contract
-            // — "2.0s OR new session start, whichever first" — is
-            // preserved because each notification token flip goes
-            // through `show(...)` (either link: nil → link: some or
-            // between two different link ranges).
-            if current.link == nil && next.link == nil {
+            // and out. Any change that touches the link region OR the
+            // auto-dismiss contract needs a full `show(...)` so the
+            // tap gesture + dismiss timer are re-attached consistently.
+            // That keeps both the VAD notification timer and the 4s
+            // error-card timer honest on replacement.
+            if current.link == nil,
+               next.link == nil,
+               current.autoDismissAfter == nil,
+               next.autoDismissAfter == nil {
                 presenter.updateRecordingStatusCard(text: next.text)
             } else {
                 presenter.showRecordingStatusCard(
                     text: next.text,
                     link: next.link,
-                    autoDismissAfter: autoDismissDuration(for: next),
+                    autoDismissAfter: next.autoDismissAfter,
                     onLinkTap: linkTapHandler(for: next)
                 )
             }
@@ -269,14 +272,6 @@ public final class PillOverlayController: ObservableObject {
         default:
             break
         }
-    }
-
-    /// The "Auto stopped. Update settings to change." notification
-    /// auto-dismisses after 2.0s per the locked Stage B spec. Every
-    /// other message (error, warning, record-without-transcribe)
-    /// sticks until the next state change hides or replaces it.
-    private func autoDismissDuration(for content: StatusCardContent) -> TimeInterval? {
-        content.link?.action == .openVadSettings ? 2.0 : nil
     }
 
     /// Builds a link-tap callback that invokes `openVadSettingsAction`
@@ -465,4 +460,3 @@ private final class LegacyPillOverlayPermissionService: PermissionService, @unch
         URL(string: "about:blank")!
     }
 }
-

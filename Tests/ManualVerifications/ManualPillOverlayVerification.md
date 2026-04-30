@@ -157,11 +157,14 @@ via `PillOverlayPresenter.showRecordingStatusCard(text:)` +
    transcribe → done flow. Only the clipboard-only notice (if triggered)
    should ever flash.
 
-**MV-RWT-4 — Card text never leaks during idle/error.**
-1. Trigger an error path (e.g. record-too-short by tapping stop within
-   500ms of start).
-2. Confirm the pill shows the error message and NO ResponseCard appears
-   concurrently.
+**MV-RWT-4 — Errors surface on the ResponseCard, not the pill.**
+1. Trigger a real session error (for example revoke microphone
+   permission, then attempt to record).
+2. Confirm the pill falls back to its normal idle / hidden visibility
+   for the selected mode instead of showing an error chip.
+3. Confirm a ResponseCard appears above the pill with the mapped error
+   message and auto-dismisses after roughly 4 seconds, or sooner if a
+   new session starts.
 
 ---
 

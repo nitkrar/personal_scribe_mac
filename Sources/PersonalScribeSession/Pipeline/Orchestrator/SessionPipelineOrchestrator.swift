@@ -5,6 +5,7 @@ import PersonalScribeVAD
 public actor SessionPipelineOrchestrator: SessionPipelining {
     private let capture: any AudioCapturer
     private let logger: PersonalScribeLogger
+    private let errorReporter: SessionErrorReporter
     private let postProcessingPipeline: any PostProcessingPipeline
     private let outputSink: any PipelineOutputSink
     private let contextProvider: any PipelineContextProviding
@@ -76,6 +77,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         capture: any AudioCapturer,
         transcriptRepository: TranscriptRepository? = nil,
         logger: PersonalScribeLogger,
+        errorReporter: SessionErrorReporter? = nil,
         postProcessingPipeline: any PostProcessingPipeline = DefaultPostProcessingPipeline(),
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
@@ -94,6 +96,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.init(
             capture: capture,
             logger: logger,
+            errorReporter: errorReporter,
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
             contextProvider: contextProvider,
@@ -107,6 +110,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     init(
         capture: any AudioCapturer,
         logger: PersonalScribeLogger,
+        errorReporter: SessionErrorReporter? = nil,
         postProcessingPipeline: any PostProcessingPipeline,
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
@@ -118,6 +122,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         let initialContext = contextProvider.currentContext()
         self.capture = capture
         self.logger = logger
+        self.errorReporter = errorReporter ?? SessionErrorReporter(logger: logger)
         self.postProcessingPipeline = postProcessingPipeline
         self.outputSink = outputSink
         self.contextProvider = contextProvider
@@ -263,11 +268,28 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// pipeline never starts, but observers (pill, ResponseCard) still
     /// see the error rendered through the same `.error(...)` channel
     /// they already drive off.
-    public func publishSessionStartError(_ error: PersonalScribeError) {
+    public func publishSessionStartError(
+        _ error: PersonalScribeError,
+        file: StaticString = #fileID,
+        function: StaticString = #function,
+        line: UInt = #line
+    ) {
+        let detail = String(describing: error)
+        let reportedError = errorReporter.report(
+            error,
+            mappedError: error,
+            category: PersonalScribeLogCategory.session,
+            detail: detail,
+            context: ["stage": PipelineStepID.capture.rawValue],
+            file: file,
+            function: function,
+            line: line
+        )
         let failure = PipelineStageFailure(
             stage: .capture,
-            detail: String(describing: error),
-            mappedError: error
+            detail: detail,
+            mappedError: error,
+            reportedError: reportedError
         )
         handleStageFailure(failure)
     }
@@ -330,6 +352,12 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private func publish(_ mutation: (inout SessionSnapshot) -> Void) {
         let previous = currentSnapshot
         mutation(&currentSnapshot)
+        if case .error = currentSnapshot.sessionState {
+            // Keep the failure payload attached to error snapshots until
+            // the next non-error transition.
+        } else {
+            currentSnapshot.reportedError = nil
+        }
         guard currentSnapshot != previous else {
             return
         }
@@ -998,9 +1026,17 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         // would see an intermediate `recording + no-grace` snapshot between
         // grace-clear and error-set. Per codex review #7 (#046 Stage B).
         cancelPendingGraceTimer()
+        let reportedError = failure.reportedError ?? errorReporter.report(
+            failure,
+            mappedError: failure.mappedError,
+            category: PersonalScribeLogCategory.session,
+            detail: failure.detail,
+            context: ["stage": failure.stage.rawValue]
+        )
         publish { snapshot in
             snapshot.sessionState = .error(failure.mappedError)
             snapshot.activeStage = failure.stage
+            snapshot.reportedError = reportedError
             snapshot.vadAutoStopGracePending = false
             snapshot.vadAutoStopGraceDeadline = nil
             snapshot.vadAutoStopFireToken = nil
@@ -1019,16 +1055,32 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private func makeStageFailure(
         stage: PipelineStepID,
         error: any Error,
-        fallback: PersonalScribeError
+        fallback: PersonalScribeError,
+        file: StaticString = #fileID,
+        function: StaticString = #function,
+        line: UInt = #line
     ) -> PipelineStageFailure {
         if let existingFailure = error as? PipelineStageFailure {
             return existingFailure
         }
 
+        let detail = detail(for: error)
+        let mappedError = map(error, default: fallback)
+        let reportedError = errorReporter.report(
+            error,
+            mappedError: mappedError,
+            category: PersonalScribeLogCategory.session,
+            detail: detail,
+            context: ["stage": stage.rawValue],
+            file: file,
+            function: function,
+            line: line
+        )
         return PipelineStageFailure(
             stage: stage,
-            detail: detail(for: error),
-            mappedError: map(error, default: fallback)
+            detail: detail,
+            mappedError: mappedError,
+            reportedError: reportedError
         )
     }
 

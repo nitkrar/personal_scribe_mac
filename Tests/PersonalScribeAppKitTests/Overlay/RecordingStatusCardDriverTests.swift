@@ -135,6 +135,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
     func testDriverEmitsWarningOnlyWhenPrefOn() {
         let onContent = RecordingStatusCardDriver.statusContent(
             sessionState: .capturing,
+            reportedError: nil,
             progress: nil,
             vadGracePending: true,
             vadFireToken: nil,
@@ -147,6 +148,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
 
         let offContent = RecordingStatusCardDriver.statusContent(
             sessionState: .capturing,
+            reportedError: nil,
             progress: nil,
             vadGracePending: true,
             vadFireToken: nil,
@@ -166,6 +168,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
 
         let firstContent = RecordingStatusCardDriver.statusContent(
             sessionState: .transcribing,
+            reportedError: nil,
             progress: nil,
             vadGracePending: false,
             vadFireToken: firstToken,
@@ -185,6 +188,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         // Consumer has seen the token — same token must go quiet.
         let secondContent = RecordingStatusCardDriver.statusContent(
             sessionState: .transcribing,
+            reportedError: nil,
             progress: nil,
             vadGracePending: false,
             vadFireToken: firstToken,
@@ -197,6 +201,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         // A fresh token reopens the notification.
         let thirdContent = RecordingStatusCardDriver.statusContent(
             sessionState: .transcribing,
+            reportedError: nil,
             progress: nil,
             vadGracePending: false,
             vadFireToken: secondToken,
@@ -215,6 +220,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
     func testDriverEmitsNothingForShortExit() {
         let content = RecordingStatusCardDriver.statusContent(
             sessionState: .shortExit,
+            reportedError: nil,
             progress: nil,
             vadGracePending: false,
             vadFireToken: nil,
@@ -232,6 +238,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         let token = UUID()
         let content = RecordingStatusCardDriver.statusContent(
             sessionState: .error(.resampleFailure),
+            reportedError: nil,
             progress: nil,
             vadGracePending: true,
             vadFireToken: token,
@@ -241,6 +248,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         )
         XCTAssertNotNil(content)
         XCTAssertNil(content?.link, "error branch must never carry a VAD settings link")
+        XCTAssertEqual(content?.autoDismissAfter, 4.0)
         XCTAssertNotEqual(
             content?.text,
             "…stopping, speak to continue",
@@ -255,5 +263,31 @@ final class RecordingStatusCardDriverTests: XCTestCase {
             content?.text,
             PersonalScribeError.resampleFailure.errorDescription
         )
+    }
+
+    func testDriverPrefersReportedErrorUserMessageWhenAvailable() {
+        let reportedError = ReportedError(
+            mappedError: .transcriptionFailure,
+            userMessage: "The meeting transcript failed. Try again.",
+            detail: "parakeet-short-audio",
+            timestamp: Date(timeIntervalSince1970: 123),
+            category: PersonalScribeLogCategory.session,
+            context: ["stage": PipelineStepID.transcription.rawValue]
+        )
+
+        let content = RecordingStatusCardDriver.statusContent(
+            sessionState: .error(.transcriptionFailure),
+            reportedError: reportedError,
+            progress: nil,
+            vadGracePending: false,
+            vadFireToken: nil,
+            vadLastSeenFireToken: nil,
+            showStoppingWarning: true,
+            showAutoStoppedNotification: true
+        )
+
+        XCTAssertEqual(content?.text, reportedError.userMessage)
+        XCTAssertEqual(content?.autoDismissAfter, 4.0)
+        XCTAssertNil(content?.link)
     }
 }

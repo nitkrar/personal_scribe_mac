@@ -328,7 +328,7 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
     }
 
-    func testErrorVisibilityIsTransientAfterErrorState() async {
+    func testErrorStateFallsBackToIdleVisibilityInsteadOfShowingErrorPill() async {
         let session = FakeAppStoreSessionProvider()
         let clock = ManualAppStoreClock()
         let store = makeStore(
@@ -344,20 +344,10 @@ final class AppStoreTests: XCTestCase {
 
         session.emitState(.error(.resampleFailure))
         await waitUntil {
-            store.snapshot.pillVisibility == .error(message: "Recording failed")
+            store.snapshot.sessionState == .error(.resampleFailure)
         }
 
-        await clock.advance(by: .milliseconds(1_499))
-        XCTAssertEqual(
-            store.snapshot.pillVisibility,
-            .error(message: "Recording failed")
-        )
-
-        await clock.advance(by: .milliseconds(1))
-        await waitUntil {
-            store.snapshot.pillVisibility == .hidden
-        }
-
+        await clock.advance(by: .seconds(5))
         XCTAssertEqual(store.snapshot.sessionState, .error(.resampleFailure))
         XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
     }

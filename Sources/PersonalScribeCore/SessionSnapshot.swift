@@ -7,6 +7,7 @@ public struct SessionSnapshot: Sendable, Equatable {
     public var lastCompletedResult: TranscriptionResult?
     public var recordingDuration: Duration?
     public var modelDownloadProgress: ModelDownloadProgress?
+    public var reportedError: ReportedError?
     /// True while a VAD auto-stop grace timer is pending (#046 Stage B).
     /// Cleared atomically when the grace resolves (fires, cancels, or errors).
     public var vadAutoStopGracePending: Bool
@@ -27,6 +28,7 @@ public struct SessionSnapshot: Sendable, Equatable {
         lastCompletedResult: TranscriptionResult? = nil,
         recordingDuration: Duration? = nil,
         modelDownloadProgress: ModelDownloadProgress? = nil,
+        reportedError: ReportedError? = nil,
         vadAutoStopGracePending: Bool = false,
         vadAutoStopGraceDeadline: Date? = nil,
         vadAutoStopFireToken: UUID? = nil
@@ -37,6 +39,7 @@ public struct SessionSnapshot: Sendable, Equatable {
         self.lastCompletedResult = lastCompletedResult
         self.recordingDuration = recordingDuration
         self.modelDownloadProgress = modelDownloadProgress
+        self.reportedError = reportedError
         self.vadAutoStopGracePending = vadAutoStopGracePending
         self.vadAutoStopGraceDeadline = vadAutoStopGraceDeadline
         self.vadAutoStopFireToken = vadAutoStopFireToken

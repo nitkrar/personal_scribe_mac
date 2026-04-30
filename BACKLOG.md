@@ -21,6 +21,7 @@ Each ticket has an `*Updated YYYY-MM-DD*` line under the tag row. Bump on meanin
 
 | Ticket | Owner | Started | Last update | Notes |
 |---|---|---|---|---|
+| #092 | slate | 2026-04-30 | 2026-04-30 | speaker separation sensitivity — **[needs user]** more debugging |
 
 **Session naming.** The **main** Claude session running in the user's terminal picks a short single-word identifier (nature words work well — `heron`, `cobalt`, `slate`, `olive`, `rust`) the first time it touches this file and uses it consistently. Subagents dispatched from a main session **inherit its name** — they do NOT claim their own. Only a parallel main session (e.g. a second terminal) picks a distinct name. Don't use `main session` / `parallel session` / `user` as owners — too ambiguous when >1 session is live.
 
@@ -705,9 +706,15 @@ Prefix a recording with a short tag word ("reminder", "email Alice", "todo") tha
 ### #056 — Streaming dictation mode (EOU partials + v3 final)
 
 `feature` · `P2` · `open` · `phase: 4` · `area: dictation, session`
-*Updated 2026-04-22*
+*Updated 2026-04-30*
 
-Separate hotkey from quick mode. EOU 120M partials render in the overlay pill only (no paste during streaming); v3 batch re-transcribes on stop to produce the final pasted text. ~850MB ANE footprint while active. English-only. Precondition for #057 (app-context rules).
+Separate hotkey from quick mode. EOU 120M partials render in the overlay pill; v3 batch re-transcribes on stop to produce the final pasted text. ~850MB ANE footprint while active. English-only. Precondition for #057 (app-context rules).
+
+**Status (2026-04-30 dogfood):** user reports **no partial render currently observed** in live dictation — the user-visible behavior is "auto-paste at end only", same as quick mode. Either the partial seam isn't wired through to the pill, or it regressed. Investigate before scoping the work.
+
+**Paste-during-streaming — reopened (2026-04-30):** the prior body said "(no paste during streaming)" as a hard line. Reframed: that was a deferral pending #033's transport decision (which was parked), not a deliberate product cap. When #033 picks a transport, revisit whether live dictation paste-streams to the cursor in addition to — or instead of — pill partials.
+
+**Depends on:** #033 (unparked + bumped to P2 on 2026-04-30) — transport decision unblocks the cursor-stream path; pill-partial path may be wireable independently but needs the dogfood-observed gap diagnosed first.
 
 **Legacy:** `plans/_legacy/BACKLOG_pre_migration.md` → "Streaming dictation mode"
 
@@ -874,7 +881,7 @@ Switch the active mode directly from the pill overlay (or the menu-bar status it
 ### #069 — Persist audio recordings on disk
 
 `feature` · `P2` · `open` · `phase: 3` · `area: audio, storage, session`
-*Updated 2026-04-22*
+*Updated 2026-04-30*
 
 Today audio lives only in `SessionCoordinator.bufferedAudio: [PCMBuffer]` in memory and is dropped after transcription. The `recordings/` directory name is aspirational — `AppConfig.swift:71` literally comments "Reserved for future recordings/ feature." This ticket fills that gap.
 
@@ -887,12 +894,13 @@ Today audio lives only in `SessionCoordinator.bufferedAudio: [PCMBuffer]` in mem
 **Open questions:**
 - Format: start `.wav` (no encoding, simplest) or jump straight to compressed? Recommend `.wav` for MVP.
 - Retention default: 30 days / 90 days / never? Lean 30 days with Settings slider.
+- **Retention shape — open discussion (2026-04-30):** "cap at last N recordings" (e.g. 1 or 3) raised as a possible alternative or complement to days-based retention; rationale would be that for the re-transcribe-after-error use case only the most recent recording matters. No concrete proposal — revisit during Stage B scoping alongside the days-based default question above.
 - Disk-space guardrail: warn or hard-stop when recordings dir exceeds X GB?
 - Transcript deletion (#011) — should it cascade to the audio file?
 - Filesystem permissions: mirror the DB's `0600`.
 
 **Depends on:** #026 (schema migration via `TranscriptsMigrator` — done).
-**Unlocks:** #058 retroactive diarization, #060 retroactive voice-ID re-tagging, "replay audio" UI in Transcriptions tab, "re-transcribe" action after upgrading the voice model.
+**Unlocks:** #058 retroactive diarization, #060 retroactive voice-ID re-tagging, "replay audio" UI in Transcriptions tab, "re-transcribe" action after upgrading the voice model, **#094 "re-transcribe last recording" UX (combined with #094's file-source pipeline path)**.
 **Legacy:** `Sources/PersonalScribeCore/Storage/AppConfig.swift:71` comment — "Reserved for future recordings/ feature" has been reserved since Phase 1.
 
 ---
@@ -920,6 +928,187 @@ Replace pill ✕ with a pause/play toggle on pill-click-initiated recordings. Pa
 
 **Depends on:** #002 (locks `✕ = true-discard` semantics first; #070 then reclaims that slot for pause/play and removes the ✕).
 **Legacy:** 2026-04-22 brainstorm (after #002 spec-literal lock).
+
+---
+
+### #092 — Speaker separation sensitivity (Relaxed / Balanced / Strict)
+
+`feature` · `P2` · `in-progress` · `area: transcription, modes, settings, ui`
+*Updated 2026-04-30*
+
+User-facing preset (`SpeakerSeparationSensitivity`: relaxed / balanced / strict) that translates into FluidAudio's `OfflineDiarizerConfig` knobs (`clusteringThreshold`, `minSegmentDurationSeconds`). Global pick in Settings → General; per-mode override on the Modes editor diarization card.
+
+**Status:** code landed across 3 commits on trunk (below); behavior **still needs more debugging** — sensitivity changes are not yet reliably reflected in diarization output across mode switches and short recordings. Don't claim done until the user reports the issue resolved on dogfood.
+
+**Commits on trunk:**
+- `fc989ca` `#092.1` — `SpeakerSeparationSensitivity` domain enum + `SpeakerSeparationParameters` (clustering threshold + min-segment duration; FluidAudio community-1 defaults at balanced).
+- `3cdffdc` `#092.2` — global + per-mode wiring. `ProcessorSpec.diarizedTurns` gains `sensitivity: Parameter<SpeakerSeparationSensitivity>` (Codable backward-compat: missing field defaults to `.setting(PreferenceKeys.speakerSeparationSensitivity)`). `BoundProcessor.diarizedTurns` carries the resolved value. New `OfflineDiarizerConfigBuilder` translates preset → `OfflineDiarizerConfig`. `SpeakerDiarizer` protocol gains `applySensitivity(_:)` (default no-op). `FluidAudioOfflineDiarizerAdapter` invalidates the cached `OfflineDiarizerManager` on preset change. `GeneralTab` sensitivity card; `ModeDetailView` `SensitivityParameterPickerView` under diarization toggle.
+- `3a44b73` `#092.3` — fix prewarm race that poisoned subsequent sessions. Codex root-cause: orchestrator-level `applySensitivity` lived in a `Task.detached` prewarm the live capture path doesn't await; short recordings raced past the prewarm so the fusion processor's `prepare()` short-circuited on the prior session's `hasPreparedModel = true` against a stale diarizer config. Fix: `DiarizedTurnTranscriptionProcessor` now carries the resolved sensitivity (via `BoundProcessor.diarizedTurns` at orchestrator line 645) and calls `applySensitivity` inside its own `prepare()` before the concurrent diarizer + transcriber prepare. Orchestrator-level call kept as belt-and-suspenders for the public `prepareTranscriber()` API path.
+
+**Open — needs more debugging (2026-04-30):**
+- User reports the issue is not yet fully resolved post-`3a44b73`. Capture the failing scenario (which preset, which mode, what diarization output diverged from expectation, whether short-vs-long recording matters, whether mode-switch order matters) before forming a next-fix hypothesis.
+- Investigation surface: trace the live capture path's `applySensitivity` ordering vs. the cached-manager invalidation in `FluidAudioOfflineDiarizerAdapter`; verify `hasPreparedModel` short-circuit logic against the per-session sensitivity; confirm per-mode override is read at session bind, not stale from a prior bind.
+
+**Tests** (in tree as of trunk HEAD): `testEachPresetProducesAValidConfig`, `testNonBalancedPresetsDifferFromFluidAudioDefaults`, `testProcessAppliesSensitivityBeforePreparingDiarizer` (pinning the prewarm-race fix's ordering contract). Suite green: 1100/0 (per `3a44b73` commit message).
+
+**Legacy:** none — net-new.
+
+---
+
+### #093 — Grouped Transcriptions list + bulk delete
+
+`feature` · `P2` · `open` · `area: ui, storage`
+*Updated 2026-04-30*
+
+Transcriptions tab today is a flat scrolling list with per-row delete (`#011` done). Two additions:
+
+1. **Grouping** — sectioned list with sticky-ish headers:
+   - **By date** (default): Today / Yesterday / This week / Earlier — derived from `TranscriptEntry.timestamp`. Ships against today's schema.
+   - **By type** (meeting / dictation / note): blocked on `#027` (`modeId` + `trigger` on `TranscriptEntry`). Until that lands, the type grouping has no source-of-truth field — picker hides "By type" or shows it disabled with a tooltip.
+
+2. **Bulk delete** — opt-in selection mode toggled by a global header button:
+   - Header shows `[ Bulk delete ]` button. Tap → enters select mode: reveals a checkbox in every row + every group header.
+   - Group-header checkbox is tri-state (none / some / all selected within that group). Toggling it selects/deselects every row in the group.
+   - Row checkboxes select individually; per-row trash icon (#011 affordance) hides while in select mode.
+   - Header button flips label → `[ Delete N selected ]` (or similar) once any row is selected; tap = confirm + delete.
+   - Exit select mode: explicit `Cancel` affordance, OR auto-exit after the delete completes.
+
+**Scope (date grouping path — shippable today):**
+- `TranscriptionsTabViewModel`: derive `[(GroupHeader, [TranscriptEntry])]` from the existing entry list. Group bucketing pure-fn, unit-testable.
+- New VM state: `selectionMode: Bool`, `selectedIDs: Set<UUID>`. `enterSelectionMode()` / `cancelSelectionMode()` / `toggleRow(id:)` / `toggleGroup(headerID:)` / `deleteSelected()` (calls `TranscriptRepository.delete(id:)` per ID; reload-on-success mirrors existing delete pattern).
+- `TranscriptionsTab` SwiftUI: section headers, conditional checkboxes, header button label state machine.
+- `TranscriptRepository.delete(ids:)` batched variant — optional optimization; per-ID loop is fine for v1 (typical bulk = ≤ tens of rows).
+- Tests: VM unit tests for group derivation, tri-state header logic, selection toggle, delete-selected reload. Manual-verification entries `MV-BULK-1..N` in `ManualTranscriptionsVerification.md`.
+
+**Scope (type grouping path — blocked):**
+- Lift after `#027` lands `modeId` + `trigger` on `TranscriptEntry`. Bucketing fn extends to read those fields; picker enables "By type".
+
+**Open questions:**
+- Confirmation step before delete (alert with row count) — yes/no? Worth pinning since bulk-delete is a higher-blast-radius action than per-row.
+- Search-active behavior: if the user has filtered by query, does "Delete N selected" delete only matched rows (current view) or all selected across the unfiltered list?
+- Group-by picker location — header next to the bulk-delete button, or in a dropdown menu?
+
+**Depends on:**
+- `#011` (done) — `TranscriptRepository.delete(id:)` + reload pattern.
+- `#027` (parked, phase 4) — required for the "by type" grouping option only; date grouping does not depend on it.
+
+**Legacy:** none — net-new.
+
+---
+
+### #094 — Offline file transcription (tab + menu-bar shortcut)
+
+`feature` · `P2` · `open` · `area: ui, transcription, dictation, diarization, menu-bar`
+*Updated 2026-04-30*
+
+Two entry points for offline transcription of audio files.
+
+**1. Right-pane tab** (rich entry):
+- **Batch ASR model picker** — selector for the transcriber descriptor used for the run.
+- **Speaker detection toggle** — binary on/off; on = wraps in `.diarizedTurns`, off = bare `.transcriber`. (Replaces the prior "dictation vs. meeting mode picker" idea — knobs, not modes; keeps the tab out of the WorkflowMode abstraction entirely.)
+- **File area** — click opens file picker defaulting to `<AppConfig.recordingsDirectory()>` (so users can re-transcribe their own past recordings without browsing); drag-drop also accepted. `.wav` for v1.
+- **Selected-files table** — 2 columns: filename + realtime progress. Multi-file accepted; processed **serially** (one in flight at a time, others queued — this reconciles "Light queue UI" + "minimal one-at-a-time concurrency"). Cancel mid-run for the in-progress file; queued files dequeueable.
+
+**2. Menu-bar item — "Retranscribe last recording"**:
+- Single click. No picker, no preview, no inline UI.
+- Always re-runs against the most recently persisted recording from #069.
+- **Hardcoded dictation-only recipe** (fixed default transcriber descriptor, no diarization). Streaming-active-mode wrinkle resolved by ignoring active mode entirely.
+- **Out-of-band**: does NOT mutate active mode, active model, or the menu-bar's currently-displayed chord/mode. Active-mode state machine never sees this action.
+- Users wanting batch + diarized re-transcription go through the tab.
+
+**Defaults (first launch / persistence):**
+- Tab batch-ASR model picker — first launch matches the user's current `activeModel`, then persists independently within the tab.
+- Speaker detection toggle — first launch off, thereafter persists last state.
+
+**Scope:**
+- **File-source audio adapter** — finite file-read stream emitting PCM frames at the rate the pipeline expects, replacing `AudioCaptureActor`'s live mic stream. Reuse existing transcriber + diarizer adapters (#078 protocols are source-agnostic).
+- Format conversion via `AVAudioFile`: read source, downmix to mono, resample to 16 kHz.
+- Right-pane tab SwiftUI: model picker + diarization toggle + drop zone + queue table + per-file progress.
+- Menu-bar item wired to a fixed dictation recipe + `<recordingsDirectory>/most-recent` lookup.
+
+**Open questions:**
+- Format breadth — start with `.wav` (matches what #069 will write) + `.m4a` (Voice Memos export)? Others on demand.
+- Long files — stream frames in, don't load whole file. Cancel button mid-run.
+- Live-capture interaction — block file transcription during an active session, queue it, or allow concurrently? Concurrent needs careful model-load management.
+- Tab placement — alongside Transcriptions / Modes / AI Models. Pick during design.
+
+**Connected work — "re-transcribe last recording":**
+- Falls out of #094 (menu-bar item) + #069 (persisted recording). No new pipeline work.
+- User's "cap at last N" retention shape captured as an open discussion on #069.
+
+**Depends on:**
+- None blocking the tab — the file-source adapter is the new piece; transcriber + diarizer protocols (#078) are already source-agnostic.
+- Menu-bar "Retranscribe last recording" item: #069 (persist audio recordings).
+
+**Unblocks:** error-recovery when pipeline fails post-capture, ad-hoc transcription of imported audio (Voice Memos, meeting MP3s).
+
+**Legacy:** none — net-new.
+
+---
+
+### #095 — Extend ASR catalog beyond Parakeet+Qwen
+
+`feature` · `P2` · `open` · `area: transcription, models, catalog, multilingual`
+*Filed 2026-04-30*
+
+Today the catalog ships English-only ASR (Parakeet TDT 0.6B v2/v3 + TDT-CTC 110M, plus Parakeet EOU streaming) and a single multilingual option (Qwen3 ASR, currently `isEnabled: false` per #091). Multilingual users have no working option. The English options are all NVIDIA Parakeet variants — same model family, no diversity in architecture or training data.
+
+This ticket tracks adding an additional ASR family beyond what FluidAudio supports, starting with Whisper.
+
+**No Tier 1 candidates exist today.** The only English-only Parakeet variant FluidAudio's `Repo` enum knows about that we haven't registered — `parakeet-ctc-0.6b-coreml` — is wired only into `CtcKeywordSpotter` (custom-vocabulary keyword detection), not the general `AsrManager`. Registering it as a transcriber descriptor would download the bytes but fail at session start because `AsrModelVersion` has no `ctc06b` case. Parakeet 1.1B has no CoreML conversion. Japanese/Chinese language-pinned variants are intentionally excluded from this scope (covered under per-language UX in #091).
+
+**Tier 2 — Whisper via WhisperKit** *(the actual scope of this ticket)*
+
+WhisperKit ([github.com/argmaxinc/WhisperKit](https://github.com/argmaxinc/WhisperKit)) is a pure-Swift Whisper runtime built on CoreML. Same author publishes pre-converted CoreML model bundles on HuggingFace (`argmaxinc/whisperkit-coreml`). Multilingual (~99 languages), gold-standard ASR accuracy, ANE-accelerated.
+
+Why WhisperKit specifically over whisper.cpp:
+- Pure Swift — no C++ bridging, no `module.modulemap` header juggling, less cross-platform glue.
+- Idiomatic async/await + Combine API matches our existing adapter shape (`Transcriber` protocol from #078).
+- Designed for Apple platforms; ANE acceleration on by default.
+- whisper.cpp is more mature and cross-platform but Ninimma is macOS-only — the cross-platform value doesn't apply.
+
+**Distil-Whisper note**: distilled smaller/faster Whisper variants from HuggingFace (`distil-large-v3`, `distil-medium`, `distil-small`). Loaded by the same WhisperKit runtime — not a separate runtime decision. If we want a "fast Whisper" tier alongside the accurate one, we ship a distil-* model bundle in addition to the standard one. Sub-decision under this ticket, not a separate ticket.
+
+**Scope**:
+
+1. **New Swift package dependency** — `argmaxinc/WhisperKit` in `Package.swift`. Pin a release (latest stable at filing time).
+2. **New `TranscriptionEngine` case** — `.whisper` (or `.whisperKit` if we want to keep engine cases vendor-bound). Single case covers all model sizes; size differentiation lives in the descriptor `id` + display metadata.
+3. **New `WhisperKitTranscriberAdapter`** — conforms to `Transcriber`. Mirrors `FluidAudioParakeetTranscriberAdapter`'s shape: `prepare()` loads the CoreML bundle via WhisperKit, `transcribe(_:)` runs inference, `modelDownloadProgress()` bridges WhisperKit's progress to our existing `ModelDownloadProgress` stream.
+4. **Model descriptors** (start with one or two; expand on demand):
+   - `whisper-large-v3-turbo` — accuracy/speed sweet spot. Most users.
+   - `whisper-large-v3` — slowest, highest accuracy. Optional second slot for power users.
+   - Optional `distil-large-v3` — fast English-focused tier. Defer until v2 if dogfooding shows demand.
+5. **AI Models tab integration** — the tab iterates over `BuiltInModelCatalog.registeredModels`, so new entries surface automatically. Validate per-row metadata (size, WER, license) renders correctly.
+6. **`worksWith` / `supportedLanguages`** — Whisper-large-v3 supports ~99 languages. Match against the schema decided in #091.
+7. **`requiredRelativePaths`** — WhisperKit's CoreML bundle has its own folder layout (encoder + decoder + tokenizer); confirm against `argmaxinc/whisperkit-coreml` HF tree at conversion time.
+8. **Tests** — `WhisperKitTranscriberAdapterTests` covering prepare/transcribe/progress flow against a stub WhisperKit; integration smoke test against a fixture audio if WhisperKit's API permits in-memory model injection.
+
+**Effort estimate**:
+- Package dependency + engine case + descriptor: 0.25d
+- Adapter (load + transcribe + progress bridge): 0.5–1d (depends on WhisperKit's internals; first integration always overruns)
+- Tests + fixtures: 0.25d
+- AI Models tab metadata sourcing (HF tree fetch, license, WER, RTFx): 0.25d
+- **Total**: M (~1.25–2d) for one model size; +0.25d per additional descriptor.
+
+**Depends on**: nothing blocking. Plays well with #091 (per-mode language hint) — Whisper's multilingual nature is the ideal consumer of the language picker once #091 lands.
+
+**Unblocks**: multilingual transcription for non-English users. Optional fallback when Parakeet underperforms on a recording's domain (medical, legal, accented speech).
+
+---
+
+## Tier 3 — reference notes (future / out-of-scope for this ticket)
+
+Models considered but not in immediate scope. Left here so future readers don't re-research the same ground.
+
+- **NVIDIA Canary** (`canary-1b`, `canary-180m-flash`) — multilingual ASR (en/de/es/fr) plus speech translation. Strong benchmarks. NeMo checkpoint format only; no CoreML conversion published. Adding requires NeMo→CoreML conversion pipeline (significant) or waiting for someone (FluidInference?) to publish.
+- **NVIDIA Parakeet 1.1B variants** (`parakeet-tdt-1.1b`, `parakeet-rnnt-1.1b`, `parakeet-ctc-1.1b`) — bigger sibling of the 0.6B. Same conversion blocker as Canary: NeMo only, no CoreML.
+- **Pure CTC 0.6B** (`FluidInference/parakeet-ctc-0.6b-coreml`) — CoreML exists but FluidAudio's `AsrModelVersion` enum has no `ctc06b` case, so `AsrManager` won't load it as a transcriber. Currently used internally by `CtcKeywordSpotter` only. Unblocks if FluidAudio adds the case OR if we write our own inference pipeline on top of the loaded models.
+- **IBM Granite Speech 3.3** — open weights, multilingual. CoreML ecosystem immature. Wait-and-see.
+- **Microsoft Phi-4 multimodal** — speech-aware multimodal model. New (early 2025); CoreML conversions immature.
+- **Meta SeamlessM4T** — speech-to-text + translation in one model. Heavy. Better fit if Ninimma ever adds a translation feature; not pure ASR.
+- **whisper.cpp** — alternative Whisper runtime. More mature than WhisperKit, but C++ bridging + cross-platform features that don't apply to a macOS-only app. Defer unless WhisperKit hits a wall.
+
+**Legacy:** none — net-new.
 
 ---
 
@@ -1151,6 +1340,28 @@ Preference + Settings toggle landed (`41c3f6c`); when disabled, should suppress 
 
 ---
 
+### #033 — Streaming output transport decision
+
+`refactor` · `P2` · `open` · `stage: design` · `area: output, session`
+*Updated 2026-04-30*
+
+`OutputService.beginStream()` API landed (L5 Stage 1); `PipelineOutputSink.deliverPartial` dormant (L7 Stage 1). Transport choice gated on review: `CGEvent` incremental typing vs. chunked pasteboard + synthetic ⌘V. No production consumer permitted until decision. Undo grouping, rate limit, EOU semantics, Unicode fidelity all open.
+
+**Unparked + bumped P3 → P2 on 2026-04-30** — #056's "live dictation" UX pushes on this. User reports the live mode currently emits no streaming output to the user (no cursor paste mid-stream, and per #056's update, no pill partials observed either). The `deliverPartial` seam is still dormant; pick a transport + wire the consumer so #056's partials and/or cursor-stream output can land.
+
+**Open sub-decisions** (carry from prior parked state — none of these have been adjudicated):
+- **Transport.** `CGEvent` incremental keystroke synthesis vs. chunked pasteboard + synthetic ⌘V.
+- **Undo grouping.** Single undoable unit per session vs. per-partial.
+- **Rate limit / coalescing.** Strategy for high-frequency partials.
+- **EOU semantics.** Re-emit on end-of-utterance vs. accumulate.
+- **Unicode fidelity.** Combining marks, surrogate pairs, IME interactions.
+
+**Pulls on:** #056 (consumer that will exercise this seam first).
+
+**Legacy:** `backlog/streaming-output-delivery-mechanism.md` + `backlog/pipeline-streaming-defer.md` *(merged — same decision from two layer seats)*
+
+---
+
 ## Parked
 
 ### #049 — Me-vs-other speaker verification *(superseded by #060)*
@@ -1177,17 +1388,6 @@ Mockup shows "Dictation Mode" / "Command Mode" pill on each row's trailing edge.
 
 **Depends on:** #027 (and implicitly #021)
 **Legacy:** `ui-mockup-gaps.md` Transcriptions row
-
----
-
-### #033 — Streaming output transport decision
-
-`refactor` · `P3` · `parked` · `stage: design` · `area: output, session`
-*Updated 2026-04-21*
-
-`OutputService.beginStream()` API landed (L5 Stage 1); `PipelineOutputSink.deliverPartial` dormant (L7 Stage 1). Transport choice gated on review: `CGEvent` incremental typing vs. chunked pasteboard + synthetic ⌘V. No production consumer permitted until decision. Undo grouping, rate limit, EOU semantics, Unicode fidelity all open.
-
-**Legacy:** `backlog/streaming-output-delivery-mechanism.md` + `backlog/pipeline-streaming-defer.md` *(merged — same decision from two layer seats)*
 
 ---
 

@@ -4,7 +4,6 @@ import Foundation
 @MainActor
 public final class AppStore: ObservableObject {
     public static let doneVisibilityDuration: Duration = .milliseconds(1_000)
-    public static let errorVisibilityDuration: Duration = .milliseconds(1_500)
     public static let recordingDurationTickInterval: Duration = .milliseconds(250)
 
     @Published public private(set) var snapshot: AppStoreSnapshot
@@ -144,18 +143,6 @@ public final class AppStore: ObservableObject {
                 snapshot.pillVisibility = .done
             }
             schedulePillTransition(after: Self.doneVisibilityDuration)
-            return
-        }
-
-        if case .error(let error) = newState {
-            guard previousState != newState else {
-                return
-            }
-
-            updateSnapshot { snapshot in
-                snapshot.pillVisibility = .error(message: Self.pillMessage(for: error))
-            }
-            schedulePillTransition(after: Self.errorVisibilityDuration)
             return
         }
 
@@ -326,10 +313,8 @@ public final class AppStore: ObservableObject {
             return .holdToRecord
         case .transcribing:
             return transcribingVisibility(progress: progress)
-        case .completed, .shortExit:
+        case .completed, .shortExit, .error:
             return idleVisibility(for: mode, progress: progress)
-        case .error:
-            return .hidden
         }
     }
 
@@ -370,25 +355,6 @@ public final class AppStore: ObservableObject {
             return .downloading(fractionCompleted: progress.fractionCompleted)
         case .loading:
             return .loading
-        }
-    }
-
-    private static func pillMessage(for error: PersonalScribeError) -> String {
-        switch error {
-        case .transcriptionFailure:
-            return "Transcription failed"
-        case .micPermissionDenied:
-            return "Microphone permission needed"
-        case .audioEngineFailure, .resampleFailure:
-            return "Recording failed"
-        case .modelLoadFailure:
-            return "Model unavailable"
-        case .cancelled:
-            return "Cancelled"
-        case .invalidState:
-            return "Session error"
-        case .invalidActiveMode:
-            return "Selected mode is invalid"
         }
     }
 }

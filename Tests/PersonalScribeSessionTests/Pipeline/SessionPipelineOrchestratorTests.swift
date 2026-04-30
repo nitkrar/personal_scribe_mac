@@ -87,6 +87,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertNil(finalSnapshot.activeStage)
         XCTAssertEqual(finalSnapshot.lastCompletedResult?.text, "Hello world.")
         XCTAssertEqual(finalSnapshot.recordingDuration, .seconds(1))
+        XCTAssertNil(finalSnapshot.reportedError)
         XCTAssertEqual(partials, [rawProgress, cleanedProgress])
         XCTAssertEqual(
             finals,
@@ -513,6 +514,10 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         XCTAssertEqual(snapshot.sessionState, .error(.transcriptionFailure))
         XCTAssertEqual(snapshot.activeStage, .postProcessing)
+        XCTAssertEqual(snapshot.reportedError?.mappedError, .transcriptionFailure)
+        XCTAssertEqual(snapshot.reportedError?.detail, "post-processing-failure")
+        XCTAssertEqual(snapshot.reportedError?.category, PersonalScribeLogCategory.session)
+        XCTAssertEqual(snapshot.reportedError?.context["stage"], PipelineStepID.postProcessing.rawValue)
         XCTAssertEqual(failure?.stage, .postProcessing)
         XCTAssertEqual(failure?.detail, "post-processing-failure")
         XCTAssertEqual(failure?.mappedError, .transcriptionFailure)

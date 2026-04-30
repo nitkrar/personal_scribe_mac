@@ -43,24 +43,14 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .transcribing)
     }
 
-    func testErrorSessionStateSurfacesAsVisibleErrorPillWithMessage() {
-        // Previously .error mapped to .hidden, which made transcription
-        // failures look like the pill had crashed. The fix surfaces the
-        // error as a brief visible `.error(message:)` pill. Here we
-        // verify for two representative PersonalScribeError cases.
-        let vmA = PillOverlayViewModel()
-        vmA.apply(sessionState: .error(.audioEngineFailure), preparationProgress: nil)
-        XCTAssertEqual(
-            vmA.visibility,
-            .error(message: PillOverlayViewModel.pillMessage(for: .audioEngineFailure))
-        )
+    func testErrorSessionStateFallsBackToIdleVisibility() {
+        let autoShow = PillOverlayViewModel()
+        autoShow.apply(sessionState: .error(.audioEngineFailure), preparationProgress: nil)
+        XCTAssertEqual(autoShow.visibility, .hidden)
 
-        let vmB = PillOverlayViewModel()
-        vmB.apply(sessionState: .error(.resampleFailure), preparationProgress: nil)
-        XCTAssertEqual(
-            vmB.visibility,
-            .error(message: PillOverlayViewModel.pillMessage(for: .resampleFailure))
-        )
+        let alwaysOn = PillOverlayViewModel(visibilityMode: .alwaysOn)
+        alwaysOn.apply(sessionState: .error(.resampleFailure), preparationProgress: nil)
+        XCTAssertEqual(alwaysOn.visibility, .idle)
     }
 
     func testDownloadingProgressOverridesIdleState() {
@@ -234,11 +224,10 @@ final class PillOverlayViewModelTests: XCTestCase {
     }
 
     func testTransitionSequenceIdleRecordingTranscribingIdleError() async {
-        // Error sessions render a visible error pill (fix per 16b5055 —
-        // prior behaviour routed errors through `.hidden`, which looked
-        // like the pill had crashed). The pill falls through to idle
-        // after `errorDisplayDuration`; this test stops before that.
-        //   recording → transcribing → done → error(message)
+        // Compatibility mode follows the AppStore mapping: success still
+        // shows `.done`, but an error falls back to the mode's idle
+        // visibility instead of surfacing a pill error state.
+        //   recording → transcribing → done → idle
         let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
         var emitted: [PillOverlayViewModel.Visibility] = []
         let expectation = expectation(description: "Collect published visibility updates")
@@ -262,11 +251,10 @@ final class PillOverlayViewModelTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 1.0)
         withExtendedLifetime(cancellable) {}
 
-        let expectedErrorMessage = PillOverlayViewModel.pillMessage(for: .audioEngineFailure)
-        XCTAssertEqual(viewModel.visibility, .error(message: expectedErrorMessage))
+        XCTAssertEqual(viewModel.visibility, .idle)
         XCTAssertEqual(
             emitted,
-            [.recording, .transcribing, .done, .error(message: expectedErrorMessage)]
+            [.recording, .transcribing, .done, .idle]
         )
     }
 

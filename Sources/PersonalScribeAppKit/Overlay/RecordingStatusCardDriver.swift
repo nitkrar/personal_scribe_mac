@@ -9,10 +9,16 @@ import PersonalScribeCore
 public struct StatusCardContent: Sendable, Equatable {
     public let text: String
     public let link: StatusCardLink?
+    public let autoDismissAfter: TimeInterval?
 
-    public init(text: String, link: StatusCardLink? = nil) {
+    public init(
+        text: String,
+        link: StatusCardLink? = nil,
+        autoDismissAfter: TimeInterval? = nil
+    ) {
         self.text = text
         self.link = link
+        self.autoDismissAfter = autoDismissAfter
     }
 }
 
@@ -46,7 +52,7 @@ public enum StatusCardLinkAction: Sendable, Equatable {
 enum RecordingStatusCardDriver {
     /// Stage B (#046) priority-ordered driver. First non-nil branch wins:
     ///
-    /// 1. `.error` state — error description, no link.
+    /// 1. `.error` state — reported user message, no link, 4s auto-dismiss.
     /// 2. VAD grace pending + pref on — "…stopping, speak to continue".
     /// 3. VAD fire-token present, not yet seen by consumer, + notify pref
     ///    on — "Auto stopped. Update settings to change." with a link on
@@ -56,6 +62,7 @@ enum RecordingStatusCardDriver {
     /// 5. `nil` — hide the card.
     static func statusContent(
         sessionState: SessionState,
+        reportedError: ReportedError?,
         progress: ModelDownloadProgress?,
         vadGracePending: Bool,
         vadFireToken: UUID?,
@@ -66,8 +73,9 @@ enum RecordingStatusCardDriver {
         // 1. Error overrides every VAD state.
         if case let .error(err) = sessionState {
             return StatusCardContent(
-                text: err.errorDescription ?? String(describing: err),
-                link: nil
+                text: reportedError?.userMessage ?? err.errorDescription ?? String(describing: err),
+                link: nil,
+                autoDismissAfter: 4.0
             )
         }
 
@@ -91,14 +99,15 @@ enum RecordingStatusCardDriver {
             if let range = text.range(of: linkSubstring) {
                 return StatusCardContent(
                     text: text,
-                    link: StatusCardLink(range: range, action: .openVadSettings)
+                    link: StatusCardLink(range: range, action: .openVadSettings),
+                    autoDismissAfter: 2.0
                 )
             } else {
                 // Defensive — text + substring are string literals in the
                 // same file, so the range should always exist. If a
                 // future edit desyncs them, fall back to a link-less
                 // notification rather than crash.
-                return StatusCardContent(text: text, link: nil)
+                return StatusCardContent(text: text, link: nil, autoDismissAfter: 2.0)
             }
         }
 

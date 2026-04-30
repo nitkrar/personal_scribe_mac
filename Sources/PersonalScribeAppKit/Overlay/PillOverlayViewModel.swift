@@ -131,11 +131,6 @@ public final class PillOverlayViewModel: ObservableObject {
             return
         }
 
-        if case .error(let seshatError) = sessionState {
-            visibility = .error(message: Self.pillMessage(for: seshatError))
-            return
-        }
-
         if case .capturing = sessionState {
             visibility = .recording
             return
@@ -153,26 +148,6 @@ public final class PillOverlayViewModel: ObservableObject {
 
         visibility = compatibilityIdleVisibility(progress: preparationProgress)
     }
-
-    static func pillMessage(for error: PersonalScribeError) -> String {
-        switch error {
-        case .transcriptionFailure:
-            return "Transcription failed"
-        case .micPermissionDenied:
-            return "Microphone permission needed"
-        case .audioEngineFailure, .resampleFailure:
-            return "Recording failed"
-        case .modelLoadFailure:
-            return "Model unavailable"
-        case .cancelled:
-            return "Cancelled"
-        case .invalidState:
-            return "Session error"
-        case .invalidActiveMode:
-            return "Selected mode is invalid"
-        }
-    }
-
     private func compatibilityIdleVisibility(
         progress: ModelDownloadProgress?
     ) -> Visibility {
