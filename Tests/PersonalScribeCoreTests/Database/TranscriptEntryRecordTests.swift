@@ -17,7 +17,8 @@ final class TranscriptEntryRecordTests: XCTestCase {
                     timestamp REAL NOT NULL,
                     text TEXT NOT NULL,
                     audio_duration REAL NOT NULL,
-                    processing_duration REAL NOT NULL
+                    processing_duration REAL NOT NULL,
+                    mode_id TEXT
                 )
                 """)
         }
@@ -75,6 +76,52 @@ final class TranscriptEntryRecordTests: XCTestCase {
                 "Debug description should mention the invalid UUID; got: \(context.debugDescription)"
             )
         }
+    }
+
+    /// #027 — modeId persists round-trip into the new `mode_id` column.
+    func testModeIDRoundTripsViaInsertAndFetch() throws {
+        let dbQueue = try makeInMemoryQueue()
+        let entry = TranscriptEntry(
+            id: UUID(),
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
+            text: "with mode",
+            audioDuration: 1.0,
+            processingDuration: 0.1,
+            modeId: "Meeting-7a3f1c"
+        )
+
+        try dbQueue.write { db in
+            try entry.insert(db)
+        }
+
+        let fetched = try dbQueue.read { db in
+            try TranscriptEntry.fetchAll(db, sql: "SELECT * FROM transcripts")
+        }
+        XCTAssertEqual(fetched, [entry])
+        XCTAssertEqual(fetched.first?.modeId, "Meeting-7a3f1c")
+    }
+
+    /// Pre-#027 rows have `mode_id IS NULL`. Fetch must decode them with
+    /// `modeId == nil` rather than throwing.
+    func testNullModeIDColumnDecodesAsNil() throws {
+        let dbQueue = try makeInMemoryQueue()
+        let id = UUID()
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO transcripts (
+                    id, timestamp, text, audio_duration, processing_duration, mode_id
+                ) VALUES (?, ?, ?, ?, ?, NULL)
+                """,
+                arguments: [id.uuidString, 1_700_000_000.0, "legacy row", 0.5, 0.05]
+            )
+        }
+
+        let fetched = try dbQueue.read { db in
+            try TranscriptEntry.fetchAll(db, sql: "SELECT * FROM transcripts")
+        }
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertNil(fetched.first?.modeId)
     }
 
     func testTimestampRoundTripPrecision() throws {

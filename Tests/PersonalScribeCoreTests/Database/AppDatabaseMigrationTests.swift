@@ -42,7 +42,7 @@ final class AppDatabaseMigrationTests: XCTestCase {
         text TEXT NOT NULL,
         audio_duration REAL NOT NULL,
         processing_duration REAL NOT NULL
-    )
+    , mode_id TEXT)
     ---
     table transcripts_fts
     CREATE VIRTUAL TABLE "transcripts_fts" USING fts5(text, tokenize='''unicode61'' ''remove_diacritics'' ''2''', content='transcripts')

@@ -48,6 +48,16 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
         self.availableKindsProvider = availableKindsProvider
         self.registeredDescriptorsProvider = registeredDescriptorsProvider
         var loaded = try store.load()
+        // #027 — one-time migration: re-mint legacy `custom-{UUID}`
+        // ids in the new `{cleanName}-{suffix}` format so transcript
+        // rows referencing an orphaned mode can recover a display
+        // fallback by splitting the id on `-`. Updates `defaultModeID`
+        // when it points at a re-minted entry. Soft-fail the save so
+        // init doesn't throw on a transient I/O hiccup.
+        if Self.documentNeedsIDMigration(loaded) {
+            loaded = Self.migrateLegacyIDs(in: loaded)
+            try? store.save(loaded)
+        }
         // Stale-ID auto-clear at init (#089 IMPL §H.1): if the persisted
         // defaultModeID points at a mode that no longer exists in
         // customModes, scrub it and persist. Soft-fail the save so init
@@ -59,6 +69,41 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
             try? store.save(loaded)
         }
         self.document = loaded
+    }
+
+    /// True when any custom mode in `document` still uses the pre-#027
+    /// `custom-{UUID}` id format. Drives the migration in `init`.
+    static func documentNeedsIDMigration(_ document: WorkflowModeDocument) -> Bool {
+        document.customModes.contains { WorkflowMode.isLegacyID($0.id) }
+    }
+
+    /// Re-mint legacy ids in `document` and remap `defaultModeID` if
+    /// it points at a migrated entry. Pure function — no I/O — so
+    /// `init` can call `try?` `store.save` once with the result.
+    static func migrateLegacyIDs(in document: WorkflowModeDocument) -> WorkflowModeDocument {
+        var rewritten = document
+        var idMap: [String: String] = [:]
+        rewritten.customModes = document.customModes.map { mode in
+            guard WorkflowMode.isLegacyID(mode.id) else { return mode }
+            let newID = WorkflowMode.makeID(name: mode.name)
+            idMap[mode.id] = newID
+            return WorkflowMode(
+                id: newID,
+                name: mode.name,
+                glyph: mode.glyph,
+                preset: mode.preset,
+                hotkey: mode.hotkey,
+                pipelineShape: mode.pipelineShape,
+                processors: mode.processors,
+                captureControllers: mode.captureControllers,
+                outputSinks: mode.outputSinks
+            )
+        }
+        if let oldDefault = rewritten.defaultModeID,
+           let newDefault = idMap[oldDefault] {
+            rewritten.defaultModeID = newDefault
+        }
+        return rewritten
     }
 
     // MARK: - Streams

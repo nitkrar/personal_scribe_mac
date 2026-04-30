@@ -491,6 +491,88 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(entries.first?.processingDuration ?? 0, 0.2, accuracy: 0.01)
     }
 
+    func testCurrentBoundRecipeStaysSessionFrozenDespiteMidTranscriptionRebind() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let transcriber = CountingTranscriber(
+            result: TranscriptionResult(
+                text: "hello",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(200)
+            ),
+            delay: .milliseconds(250)
+        )
+        let reboundTranscriber = CountingTranscriber(
+            result: TranscriptionResult(
+                text: "should not run",
+                audioDuration: .seconds(1),
+                processingDuration: .zero
+            )
+        )
+        let persisted = PersistedEntries()
+        let sessionRecipe = BoundRecipe(
+            recipeID: "notes-session",
+            recipeName: "Notes",
+            pipelineShape: .batch,
+            processors: [.transcriber(transcriber)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: true)]
+        )
+        let reboundRecipe = BoundRecipe(
+            recipeID: "meeting-next",
+            recipeName: "Meeting",
+            pipelineShape: .batch,
+            processors: [.transcriber(reboundTranscriber)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: true)]
+        )
+        let orchestrator = SessionPipelineOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
+            postProcessingPipeline: DefaultPostProcessingPipeline(),
+            outputSink: TestPipelineOutputSink(),
+            contextProvider: StaticPipelineContextProvider(
+                context: makeContext(streamingOutputEnabled: false)
+            ),
+            persistenceHandler: { entry in
+                await persisted.append(entry)
+            },
+            boundRecipe: sessionRecipe
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        for _ in 0..<100 {
+            if await transcriber.transcribeCallCount() >= 1 {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let didStartTranscribing = await transcriber.transcribeCallCount() >= 1
+        XCTAssertTrue(didStartTranscribing)
+
+        // Rebind the NEXT-session recipe while the current session is
+        // still transcribing. Persistence must continue to report the
+        // session-start recipe, not this new binding.
+        await orchestrator.bindRecipeForNextSession(reboundRecipe)
+        let currentRecipe = await orchestrator.currentBoundRecipe()
+        XCTAssertEqual(currentRecipe?.recipeID, "notes-session")
+
+        for _ in 0..<100 {
+            if await persisted.count() >= 1 {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let persistedCount = await persisted.count()
+        XCTAssertEqual(persistedCount, 1)
+
+        let capturedEntry = await persisted.first()
+        let entry = try XCTUnwrap(capturedEntry)
+        XCTAssertEqual(entry.modeId, "notes-session")
+        let reboundCalls = await reboundTranscriber.transcribeCallCount()
+        XCTAssertEqual(reboundCalls, 0)
+    }
+
     func testPostProcessingFailurePublishesTypedStageFailure() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let orchestrator = makeOrchestrator(
@@ -1051,10 +1133,15 @@ private actor CountingTranscriber: Transcriber {
     nonisolated let capabilities = TranscriberCapabilities()
 
     private let result: TranscriptionResult
+    private let delay: Duration?
     private var calls = 0
 
-    init(result: TranscriptionResult) {
+    init(
+        result: TranscriptionResult,
+        delay: Duration? = nil
+    ) {
         self.result = result
+        self.delay = delay
     }
 
     func prepare() async throws {}
@@ -1075,6 +1162,9 @@ private actor CountingTranscriber: Transcriber {
 
     func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
         calls += 1
+        if let delay {
+            try? await Task.sleep(for: delay)
+        }
         return result
     }
 
@@ -1192,6 +1282,22 @@ private actor TranscriberTracker {
 
     func transcribeCallCount() -> Int {
         transcribeCalls
+    }
+}
+
+private actor PersistedEntries {
+    private var entries: [TranscriptEntry] = []
+
+    func append(_ entry: TranscriptEntry) {
+        entries.append(entry)
+    }
+
+    func count() -> Int {
+        entries.count
+    }
+
+    func first() -> TranscriptEntry? {
+        entries.first
     }
 }
 

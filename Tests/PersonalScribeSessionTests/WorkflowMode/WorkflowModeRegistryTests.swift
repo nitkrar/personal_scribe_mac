@@ -252,6 +252,109 @@ final class WorkflowModeRegistryTests: XCTestCase {
                        "Reorder must rewrite the customModes array order on disk")
     }
 
+    // MARK: - #027 — legacy id migration
+
+    /// Init must rewrite any `custom-{UUID}`-style id (the pre-#027
+    /// `Preset.materialize` format) into the new `{cleanName}-{suffix}`
+    /// shape so transcript rows can recover a fallback display via
+    /// `id.split(separator: "-").first`.
+    func testInitRewritesLegacyCustomUUIDIDsIntoCleanNameSuffix() throws {
+        let legacy = WorkflowMode(
+            id: "custom-7a3f1c9e-0000-1111-2222-333333333333",
+            name: "Project Notes",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let store = InMemoryWorkflowModeStore(
+            initial: WorkflowModeDocument(
+                defaultModeID: nil,
+                customModes: [legacy]
+            )
+        )
+
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+
+        let migrated = try XCTUnwrap(registry.customModes.first)
+        XCTAssertFalse(WorkflowMode.isLegacyID(migrated.id),
+                       "Legacy id must be rewritten in init")
+        XCTAssertTrue(migrated.id.hasPrefix("Project Notes-"),
+                      "New id should encode the clean user-facing name; got \(migrated.id)")
+
+        // Migration must persist back through the store so the
+        // rewrite happens once per legacy file, not on every launch.
+        let persisted = try store.load()
+        XCTAssertEqual(persisted.customModes.map(\.id), [migrated.id])
+    }
+
+    /// `defaultModeID` must follow the rewrite when it pointed at a
+    /// migrated entry — otherwise the next default-mode resolution
+    /// scrubs it as stale.
+    func testInitMigrationRewritesDefaultModeIDReference() throws {
+        let legacyID = "custom-aaaaaaaa-0000-1111-2222-333333333333"
+        let legacy = WorkflowMode(
+            id: legacyID,
+            name: "Meeting",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let store = InMemoryWorkflowModeStore(
+            initial: WorkflowModeDocument(
+                defaultModeID: legacyID,
+                customModes: [legacy]
+            )
+        )
+
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+
+        let migrated = try XCTUnwrap(registry.customModes.first)
+        XCTAssertEqual(registry.defaultMode.id, migrated.id,
+                       "defaultModeID must point at the rewritten id, not be scrubbed as stale")
+    }
+
+    /// Migration is idempotent: re-running init on an already-migrated
+    /// document must NOT churn the ids.
+    func testInitMigrationIsIdempotentAcrossRestarts() throws {
+        let legacy = WorkflowMode(
+            id: "custom-bbbbbbbb-0000-1111-2222-333333333333",
+            name: "Notes",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let store = InMemoryWorkflowModeStore(
+            initial: WorkflowModeDocument(
+                defaultModeID: nil,
+                customModes: [legacy]
+            )
+        )
+
+        _ = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+        let firstPass = try store.load().customModes.map(\.id)
+
+        _ = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+        let secondPass = try store.load().customModes.map(\.id)
+
+        XCTAssertEqual(firstPass, secondPass,
+                       "Restart must not re-mint already-migrated ids")
+    }
+
     // MARK: - Helpers
 
     /// Custom mode that mirrors the built-in dictation shape but with a

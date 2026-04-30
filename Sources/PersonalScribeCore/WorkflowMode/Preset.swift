@@ -1,15 +1,16 @@
 import Foundation
-import PersonalScribeCore
 
 /// Code-defined templates the modes editor's `+` popover applies to
-/// seed a fresh `WorkflowMode` (#089 L-14). Not a stored type — once
-/// the user picks a preset, the `materialize(name:)` factory snapshots
-/// the preset's recipe shape into a custom mode that lives in
-/// `WorkflowModeDocument.customModes`.
+/// seed a fresh `WorkflowMode` (#089 L-14). Lives in `PersonalScribeCore`
+/// (#027) so `WorkflowMode.preset` can carry the lineage as a typed
+/// field — used by the transcript-row badge (#032) to render the preset
+/// family ("Notes", "Meeting", …) for both live and orphaned mode
+/// references.
 ///
 /// V1 ships four presets. Glyphs are fixed-by-preset (#089 L-16); no
-/// glyph picker.
-public enum Preset: String, CaseIterable, Sendable, Identifiable {
+/// glyph picker. Codable via `RawValue: String` so a `Preset` value can
+/// be encoded inline on `WorkflowMode`.
+public enum Preset: String, CaseIterable, Codable, Sendable, Identifiable {
     case dictation
     case notes
     case meeting
@@ -44,19 +45,36 @@ public enum Preset: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// Best-effort inference of a preset from a glyph name. Used only
+    /// to backfill `preset` on legacy `WorkflowMode` documents that
+    /// were persisted before #027 added the field. L-16 fixes glyph
+    /// per preset, so this lookup is exact for any document the editor
+    /// produced.
+    public static func inferred(fromGlyph glyph: String) -> Preset {
+        switch glyph {
+        case Preset.notes.glyph: return .notes
+        case Preset.meeting.glyph: return .meeting
+        case Preset.streamingDictation.glyph: return .streamingDictation
+        default: return .dictation
+        }
+    }
+
     /// Build the `WorkflowMode` instance from this preset. The caller
     /// (the modes-list view-model) supplies the user-facing `name`
     /// computed via `WorkflowModeRegistry.nextAvailableName(_:)`. The
-    /// id is generated fresh from a UUID — it never collides with
-    /// existing custom or built-in IDs.
+    /// `id` is `"{cleanName}-{suffix}"` (#027) so transcript rows that
+    /// reference an orphaned mode can render a sensible fallback by
+    /// splitting the id on `-`. The suffix guarantees uniqueness even
+    /// if the user reuses a name.
     public func materialize(name: String) -> WorkflowMode {
-        let id = "custom-\(UUID().uuidString.lowercased())"
+        let id = WorkflowMode.makeID(name: name)
         switch self {
         case .dictation:
             return WorkflowMode(
                 id: id,
                 name: name,
                 glyph: glyph,
+                preset: self,
                 hotkey: nil,
                 pipelineShape: .batch,
                 processors: [.transcriber(kind: .asr)],
@@ -86,6 +104,7 @@ public enum Preset: String, CaseIterable, Sendable, Identifiable {
                 id: id,
                 name: name,
                 glyph: glyph,
+                preset: self,
                 hotkey: nil,
                 pipelineShape: .batch,
                 processors: [.transcriber(kind: .asr)],
@@ -116,6 +135,7 @@ public enum Preset: String, CaseIterable, Sendable, Identifiable {
                 id: id,
                 name: name,
                 glyph: glyph,
+                preset: self,
                 hotkey: nil,
                 pipelineShape: .batch,
                 processors: [
@@ -151,6 +171,7 @@ public enum Preset: String, CaseIterable, Sendable, Identifiable {
                 id: id,
                 name: name,
                 glyph: glyph,
+                preset: self,
                 hotkey: nil,
                 pipelineShape: .streaming,
                 processors: [.streamingTranscriber(kind: .streamingASR)],

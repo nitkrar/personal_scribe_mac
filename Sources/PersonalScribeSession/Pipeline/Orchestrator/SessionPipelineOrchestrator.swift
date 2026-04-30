@@ -13,12 +13,19 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// OR the bundled model failed to load and the provider elected to go silent.
     /// Orchestrator treats either case identically: no VAD monitoring.
     private let vadProvider: (any VadProviding)?
-    /// #078.29 — eager-bound recipe (per L25). Set per-session by
-    /// `SessionCoordinator.bindRecipeForNextSession(_:)` immediately
-    /// before each `toggleCapture` / `startHoldCapture`. Remains stable
-    /// for the duration of an in-flight session: mid-session active-mode
-    /// / active-model changes only land on the NEXT session start.
+    /// #078.29 — recipe binding for the NEXT session start. Updated by
+    /// `SessionCoordinator.bindRecipeForNextSession(_:)` and by eager
+    /// prewarm paths (`prepareTranscriber()`). This value is mutable even
+    /// while a session is running; `activeSessionRecipe` below snapshots
+    /// the recipe actually in use so mid-session rebinds only affect the
+    /// next start.
     private var boundRecipe: BoundRecipe?
+    /// Session-frozen recipe captured at start and retained through the
+    /// completed state so downstream consumers (persistence, menu-bar
+    /// output) keep seeing the recipe that actually produced the
+    /// transcript. Cleared on true-discard / failed starts; overwritten
+    /// on the next successful session start.
+    private var activeSessionRecipe: BoundRecipe?
     /// #078.29 — observation Task that forwards the current bound
     /// recipe's processor download progress to
     /// `snapshot.modelDownloadProgress`. Cancelled + replaced when a
@@ -141,13 +148,13 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         progressForwardingTask = makeProgressForwardingTask(for: recipe)
     }
 
-    /// #089 — read the recipe currently bound to the orchestrator.
-    /// Returns nil only before the first session has bound a recipe.
-    /// `MenuBarSceneModel.deliverBatch(text:)` consumes this to drive
-    /// output via the session-frozen sink list (per L-24 — never falls
-    /// back to the live registry mid-delivery).
+    /// #089 — read the session-frozen recipe currently in effect. Falls
+    /// back to the next-session binding before the first successful
+    /// session has started. `MenuBarSceneModel.deliverBatch(text:)`
+    /// consumes this to drive output via the session-frozen sink list
+    /// (per L-24 — never falls back to the live registry mid-delivery).
     public func currentBoundRecipe() -> BoundRecipe? {
-        boundRecipe
+        activeSessionRecipe ?? boundRecipe
     }
 
     private func makeProgressForwardingTask(for recipe: BoundRecipe) -> Task<Void, Never>? {
@@ -374,6 +381,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         latestStageFailure = nil
         activeContext = contextProvider.currentContext()
         resetGraceForNewSession()
+        let sessionRecipe = boundRecipe
+        activeSessionRecipe = sessionRecipe
 
         do {
             let stream = try await capture.start()
@@ -397,7 +406,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             // then sit on `.loading` for minutes. See
             // `plans/backlog/model-download-ux-bug-research.md`
             // (session-start race).
-            prepareTranscriberInBackground()
+            prepareTranscriberInBackground(for: sessionRecipe)
 
             publish { snapshot in
                 snapshot.sessionState = .capturing
@@ -413,6 +422,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 await self?.consumeCaptureStream(stream)
             }
         } catch {
+            activeSessionRecipe = nil
             handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
         }
     }
@@ -433,6 +443,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         bufferedAudio.removeAll(keepingCapacity: true)
         nextRevision = 0
         latestStageFailure = nil
+        activeSessionRecipe = nil
 
         publish { snapshot in
             snapshot.sessionState = .idle
@@ -459,6 +470,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         latestStageFailure = nil
         activeContext = contextProvider.currentContext()
         resetGraceForNewSession()
+        let sessionRecipe = boundRecipe
+        activeSessionRecipe = sessionRecipe
 
         publish { snapshot in
             snapshot.sessionState = .holdRecording
@@ -483,12 +496,13 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 await self?.publishAudioLevel(0.0)
             }
 
-            prepareTranscriberInBackground()
+            prepareTranscriberInBackground(for: sessionRecipe)
 
             captureTask = Task { [weak self] in
                 await self?.consumeCaptureStream(stream)
             }
         } catch {
+            activeSessionRecipe = nil
             handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
         }
     }
@@ -644,7 +658,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private func runBoundProcessing(
         replayBuffers: [PCMBuffer]
     ) async throws -> TranscriptionResult {
-        guard let recipe = boundRecipe, let processor = recipe.processors.first else {
+        guard let recipe = activeSessionRecipe, let processor = recipe.processors.first else {
             throw makeStageFailure(
                 stage: .transcription,
                 error: PersonalScribeError.invalidState,
@@ -785,7 +799,16 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             timestamp: Date(),
             text: result.text,
             audioDuration: Self.seconds(from: result.audioDuration),
-            processingDuration: Self.seconds(from: result.processingDuration)
+            processingDuration: Self.seconds(from: result.processingDuration),
+            // #027 — bound recipe is the source of truth for "which mode
+            // produced this transcript" at session-start binding time.
+            // Read the session-frozen snapshot, not the mutable
+            // next-session binding, so eager prewarm / mode switches that
+            // happen while we are transcribing cannot rewrite history.
+            // `nil` only when no recipe was frozen for the session
+            // (legacy / fixed-recipe test paths); production
+            // session-starts always bind.
+            modeId: activeSessionRecipe?.recipeID
         )
 
         do {
@@ -877,7 +900,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// present `.vad` also returns nil — orchestrator skips VAD
     /// monitoring entirely (#089 L-4 / CHECKLIST critical-1).
     private func resolvedVadPreferencesForSession() -> VadPreferences? {
-        guard let recipe = boundRecipe else {
+        guard let recipe = activeSessionRecipe else {
             return nil
         }
         for controller in recipe.captureControllers {
@@ -1128,8 +1151,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         return fallback
     }
 
-    private func prepareTranscriberInBackground() {
-        guard let recipe = boundRecipe else {
+    private func prepareTranscriberInBackground(for recipe: BoundRecipe?) {
+        guard let recipe else {
             return
         }
         let logger = logger

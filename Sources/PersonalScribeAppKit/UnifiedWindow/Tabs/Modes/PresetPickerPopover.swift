@@ -1,3 +1,4 @@
+import PersonalScribeCore
 import SwiftUI
 
 @MainActor

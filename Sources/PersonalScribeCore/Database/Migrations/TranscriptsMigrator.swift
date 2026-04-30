@@ -61,6 +61,17 @@ enum TranscriptsMigrator {
             }
         }
 
+        migrator.registerMigration("v5_mode_id") { db in
+            try wrapMigration(version: "v5_mode_id") {
+                // #027 — record which `WorkflowMode` produced each
+                // transcript. Nullable for pre-#027 rows; new inserts
+                // capture `BoundRecipe.recipeID` from
+                // `SessionPipelineOrchestrator.persist`.
+                try db.execute(sql: "ALTER TABLE transcripts ADD COLUMN mode_id TEXT")
+                try db.execute(sql: "PRAGMA user_version = 5")
+            }
+        }
+
         return migrator
     }
 
