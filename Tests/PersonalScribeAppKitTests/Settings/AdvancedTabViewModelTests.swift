@@ -105,6 +105,62 @@ final class AdvancedTabViewModelTests: XCTestCase {
         let recordedDestinations = await migrator.recordedDestinations()
         XCTAssertEqual(recordedDestinations, [selectedBase])
     }
+
+    func testDiagnosticLoggingModePersistsAndDisablesOverlayWhenLeavingVerbose() {
+        let defaults = isolatedDefaults()
+        DiagnosticLoggingMode.verbose.persist(to: defaults)
+        ShowLiveDiagnosticsOverlayPreference.persist(true, to: defaults)
+
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            defaults: defaults,
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil }
+        )
+
+        XCTAssertEqual(viewModel.diagnosticLoggingMode, .verbose)
+        XCTAssertTrue(viewModel.showLiveDiagnosticsOverlay)
+
+        viewModel.setDiagnosticLoggingMode(.errorsOnly)
+
+        XCTAssertEqual(viewModel.diagnosticLoggingMode, .errorsOnly)
+        XCTAssertFalse(viewModel.showLiveDiagnosticsOverlay)
+        XCTAssertEqual(DiagnosticLoggingMode.resolve(from: defaults), .errorsOnly)
+        XCTAssertFalse(ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults))
+    }
+
+    func testLiveDiagnosticsOverlayTogglePersistsOnlyWhenVerbose() {
+        let defaults = isolatedDefaults()
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            defaults: defaults,
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil }
+        )
+
+        XCTAssertEqual(viewModel.diagnosticLoggingMode, .errorsOnly)
+        XCTAssertTrue(viewModel.isLiveDiagnosticsOverlayToggleDisabled)
+
+        viewModel.setShowLiveDiagnosticsOverlay(true)
+        XCTAssertFalse(viewModel.showLiveDiagnosticsOverlay)
+        XCTAssertFalse(ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults))
+
+        viewModel.setDiagnosticLoggingMode(.verbose)
+        viewModel.setShowLiveDiagnosticsOverlay(true)
+
+        XCTAssertTrue(viewModel.showLiveDiagnosticsOverlay)
+        XCTAssertTrue(ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults))
+    }
+
+    private func isolatedDefaults() -> UserDefaults {
+        let suiteName = "AdvancedTabViewModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        addTeardownBlock {
+            UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+        }
+        return defaults
+    }
 }
 
 private actor FakeBaseDirectoryMigrator: BaseDirectoryMigrating {

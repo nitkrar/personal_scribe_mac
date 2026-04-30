@@ -34,7 +34,7 @@ final class MenuBarSceneModel: ObservableObject {
         openURL: @escaping @MainActor (URL) -> Void,
         onClipboardOnlyCopy: @escaping @MainActor () -> Void = {},
         onObservationCancelled: (@Sendable () -> Void)? = nil,
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+        logger: PersonalScribeLogger
     ) {
         let snapshot = appStore.snapshot
         _state = Published(initialValue: snapshot.sessionState)
@@ -60,7 +60,7 @@ final class MenuBarSceneModel: ObservableObject {
         openURL: (@MainActor (URL) -> Void)? = nil,
         onClipboardOnlyCopy: @escaping @MainActor () -> Void = {},
         onObservationCancelled: (@Sendable () -> Void)? = nil,
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+        logger: PersonalScribeLogger
     ) {
         let resolvedPermissionService = permissionService ?? AppComposition.makePermissionService()
         let appStorePermissionService = Self.makePermissionServiceAdapter(
@@ -78,7 +78,7 @@ final class MenuBarSceneModel: ObservableObject {
             appStore: appStore,
             coordinator: coordinator,
             clipboardWriter: clipboardWriter,
-            outputService: outputService ?? ClipboardBatchOutput(),
+            outputService: outputService ?? ClipboardBatchOutput(logger: logger, defaults: .standard),
             permissionService: resolvedPermissionService,
             openURL: openURL ?? { _ in openSettings() },
             onClipboardOnlyCopy: onClipboardOnlyCopy,

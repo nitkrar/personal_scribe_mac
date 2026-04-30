@@ -41,7 +41,8 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
             return ActiveModelService(
                 activeIDsPreference: preference,
                 isDownloaded: { _ in true },
-                download: { _, _ in }
+                download: { _, _ in },
+                logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
             )
         }
         let processorProvider = FakeModelBoundProcessorProvider(
@@ -58,7 +59,7 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
             capture: FakeAudioCapturer(buffers: [buffer]),
             modelService: modelService,
             processorProvider: processorProvider,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
             workflowModeRegistry: registry,
             availableKindsProvider: { Set(ModelKind.allCases.filter(\.isEnabled)) }
         )
@@ -78,7 +79,7 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
         }
         await coordinator.toggle()
 
-        let firstStates = try await withTimeout(.seconds(1)) {
+        let firstStates: [SessionState] = try await withTimeout(.seconds(1)) {
             await firstObservedStates.value
         }
         let firstPrepareCount = try await withTimeout(.seconds(1)) {
@@ -92,7 +93,10 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
         let secondTranscribeCountAfterFirstSession = await secondTranscriber.transcribeCallCount
         let firstResultText = await coordinator.lastResult()?.text
 
-        XCTAssertEqual(firstStates, [.idle, .capturing, .transcribing, .idle])
+        XCTAssertEqual(
+            firstStates,
+            [SessionState.idle, .capturing, .transcribing, .idle]
+        )
         XCTAssertGreaterThanOrEqual(firstPrepareCount, 1)
         XCTAssertEqual(firstTranscribeCount, 1)
         XCTAssertEqual(secondPrepareCountAfterFirstSession, 0)
@@ -111,7 +115,7 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
         await coordinator.toggle()
         await coordinator.toggle()
 
-        let secondStates = try await withTimeout(.seconds(1)) {
+        let secondStates: [SessionState] = try await withTimeout(.seconds(1)) {
             await secondObservedStates.value
         }
         let secondPrepareCount = try await withTimeout(.seconds(1)) {
@@ -123,7 +127,10 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
         let secondTranscribeCount = await secondTranscriber.transcribeCallCount
         let secondResultText = await coordinator.lastResult()?.text
 
-        XCTAssertEqual(secondStates, [.idle, .capturing, .transcribing, .idle])
+        XCTAssertEqual(
+            secondStates,
+            [SessionState.idle, .capturing, .transcribing, .idle]
+        )
         XCTAssertGreaterThanOrEqual(secondPrepareCount, 1)
         XCTAssertEqual(secondTranscribeCount, 1)
         XCTAssertEqual(secondResultText, "Second model.")

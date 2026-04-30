@@ -35,10 +35,11 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
     public init(
         database: AppDatabase,
         operationObserver: any DatabaseOperationObserving = NullDatabaseOperationObserver(),
-        notificationCenter: NotificationCenter = .default
+        notificationCenter: NotificationCenter = .default,
+        logger: PersonalScribeLogger
     ) {
         self.database = database
-        self.logger = PersonalScribeLogger(category: PersonalScribeLogCategory.app)
+        self.logger = logger
         self.operationObserver = operationObserver
         self.notificationCenter = notificationCenter
     }

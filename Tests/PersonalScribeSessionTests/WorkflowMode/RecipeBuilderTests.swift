@@ -216,7 +216,8 @@ final class RecipeBuilderTests: XCTestCase {
         return ActiveModelService(
             activeIDsPreference: preference,
             isDownloaded: { _ in true },
-            download: { _, _ in }
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
     }
 }

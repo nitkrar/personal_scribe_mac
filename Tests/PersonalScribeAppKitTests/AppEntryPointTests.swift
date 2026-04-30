@@ -54,7 +54,7 @@ final class AppEntryPointTests: XCTestCase {
 
         XCTAssertTrue(entry.coordinator === coordinator)
         let state = await entry.coordinator.state()
-        XCTAssertEqual(state, .idle)
+        XCTAssertEqual(state, SessionState.idle)
     }
 
     /// Wall-clock polling loop (project memory: `condition-based-waiting`).

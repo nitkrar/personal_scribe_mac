@@ -21,7 +21,7 @@ final class AppStartupCoordinator {
         startHotkeyMonitor: @escaping HotkeyStarter,
         prepareTranscriber: @escaping @Sendable () async -> Void,
         sleep: @escaping Sleep = { try await Task.sleep(for: $0) },
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.app)
+        logger: PersonalScribeLogger
     ) {
         self.hotkeyDelay = hotkeyDelay
         self.prepareDelay = prepareDelay

@@ -292,7 +292,7 @@ public final class PillOverlayPresenter {
     private var panel: (any PillOverlayPaneling)?
     private var responseCard: (any ResponseCardPresenting)?
     private var visibilityCancellable: AnyCancellable?
-    private let diagnosticLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+    private let diagnosticLogger: PersonalScribeLogger
     private static let clipboardOnlyNoticeText = "Copied to clipboard · ⌘V to paste"
     private static let clipboardOnlyNoticeDismissAfter: TimeInterval = 3.0
 
@@ -318,13 +318,15 @@ public final class PillOverlayPresenter {
 
     public convenience init(
         model: PillOverlayViewModel,
-        onTap: @escaping @MainActor () -> Void = {}
+        onTap: @escaping @MainActor () -> Void = {},
+        diagnosticLogger: PersonalScribeLogger
     ) {
         self.init(
             model: model,
             onTap: onTap,
             panelBuilder: AppKitPillOverlayPanelBuilder(),
-            responseCardBuilder: LiveResponseCardBuilder()
+            responseCardBuilder: LiveResponseCardBuilder(),
+            diagnosticLogger: diagnosticLogger
         )
     }
 
@@ -332,12 +334,14 @@ public final class PillOverlayPresenter {
         model: PillOverlayViewModel,
         onTap: @escaping @MainActor () -> Void = {},
         panelBuilder: any PillOverlayPanelBuilding,
-        responseCardBuilder: any ResponseCardBuilding = LiveResponseCardBuilder()
+        responseCardBuilder: any ResponseCardBuilding = LiveResponseCardBuilder(),
+        diagnosticLogger: PersonalScribeLogger
     ) {
         self.model = model
         self.onTap = onTap
         self.panelBuilder = panelBuilder
         self.responseCardBuilder = responseCardBuilder
+        self.diagnosticLogger = diagnosticLogger
         visibilityCancellable = model.$visibility.sink { [weak self] visibility in
             guard let self else {
                 return

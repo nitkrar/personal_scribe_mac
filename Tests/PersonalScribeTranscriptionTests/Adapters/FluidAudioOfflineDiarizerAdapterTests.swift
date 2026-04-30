@@ -29,7 +29,8 @@ final class FluidAudioOfflineDiarizerAdapterTests: PersonalScribeTranscriptionFi
         let adapter = FluidAudioOfflineDiarizerAdapter(
             descriptor: BuiltInModelCatalog.speakerDiarization,
             storageLocator: storageLocator,
-            manager: manager
+            manager: manager,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.transcription)
         )
         let buffer = try PCMBuffer(
             samples: [0.1, 0.2, 0.3, 0.4],
@@ -72,7 +73,8 @@ final class FluidAudioOfflineDiarizerAdapterTests: PersonalScribeTranscriptionFi
         let adapter = FluidAudioOfflineDiarizerAdapter(
             descriptor: BuiltInModelCatalog.speakerDiarization,
             storageLocator: storageLocator,
-            manager: manager
+            manager: manager,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.transcription)
         )
 
         try await adapter.downloadIfNeeded()
@@ -95,7 +97,8 @@ final class FluidAudioOfflineDiarizerAdapterTests: PersonalScribeTranscriptionFi
         let adapter = FluidAudioOfflineDiarizerAdapter(
             descriptor: BuiltInModelCatalog.speakerDiarization,
             storageLocator: storageLocator,
-            manager: manager
+            manager: manager,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.transcription)
         )
 
         try await adapter.prepare()
@@ -118,7 +121,8 @@ final class FluidAudioOfflineDiarizerAdapterTests: PersonalScribeTranscriptionFi
         let adapter = FluidAudioOfflineDiarizerAdapter(
             descriptor: BuiltInModelCatalog.speakerDiarization,
             storageLocator: storageLocator,
-            manager: manager
+            manager: manager,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.transcription)
         )
 
         try await adapter.prepare()

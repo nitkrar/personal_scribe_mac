@@ -345,7 +345,7 @@ final class MenuBarSceneModelTests: XCTestCase {
         let coordinator = SessionCoordinator(
             capture: FakeAudioCapturer(),
             transcriber: transcriber,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
         )
         let model = try makeModel(coordinator: coordinator)
 
@@ -425,7 +425,7 @@ final class MenuBarSceneModelTests: XCTestCase {
         SessionCoordinator(
             capture: FakeAudioCapturer(buffers: [try makeBuffer()]),
             transcriber: FakeTranscriber(result: makeResult()),
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
         )
     }
 
@@ -463,7 +463,7 @@ final class MenuBarSceneModelTests: XCTestCase {
             permissionService: permissionService,
             onClipboardOnlyCopy: onClipboardOnlyCopy,
             onObservationCancelled: onObservationCancelled,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
         )
     }
 

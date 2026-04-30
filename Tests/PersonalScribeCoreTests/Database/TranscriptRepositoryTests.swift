@@ -72,7 +72,7 @@ final class TranscriptRepositoryTests: XCTestCase {
 
         let remaining = await harness.repository.all()
         XCTAssertEqual(
-            remaining.map(\.id),
+            remaining.map { $0.id },
             [retained.id],
             "Delete should remove the row from the current repository view"
         )
@@ -83,11 +83,14 @@ final class TranscriptRepositoryTests: XCTestCase {
             managedDirectoryOverrides: [.recordings: recordings]
         )
         let reopenedDatabase = try AppDatabase(locator: locator)
-        let reopenedRepository = TranscriptRepository(database: reopenedDatabase)
+        let reopenedRepository = TranscriptRepository(
+            database: reopenedDatabase,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
 
         let reopenedEntries = await reopenedRepository.all()
         XCTAssertEqual(
-            reopenedEntries.map(\.id),
+            reopenedEntries.map { $0.id },
             [retained.id],
             "Deleted row should stay gone after reopening the repository"
         )
@@ -100,7 +103,8 @@ final class TranscriptRepositoryTests: XCTestCase {
         let notificationCenter = NotificationCenter()
         let repository = TranscriptRepository(
             database: harness.database,
-            notificationCenter: notificationCenter
+            notificationCenter: notificationCenter,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
         )
         let entry = makeEntry(timestamp: Date(timeIntervalSince1970: 100), text: "delete me")
         try await repository.append(entry)
@@ -322,7 +326,10 @@ final class TranscriptRepositoryTests: XCTestCase {
             managedDirectoryOverrides: [.recordings: recordings]
         )
         let database = try AppDatabase(locator: locator)
-        let repository = TranscriptRepository(database: database)
+        let repository = TranscriptRepository(
+            database: database,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
         return Harness(database: database, repository: repository, base: base)
     }
 

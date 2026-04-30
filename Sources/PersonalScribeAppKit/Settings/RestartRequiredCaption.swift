@@ -17,7 +17,11 @@ import PersonalScribeCore
 /// rather than inventing a one-off footnote.
 struct RestartRequiredCaption: View {
     let message: String
-    var onRelaunch: @MainActor () -> Void = AppRelauncher.relaunch
+    var onRelaunch: @MainActor () -> Void = {
+        AppRelauncher.relaunch(
+            logger: AppComposition.makeLogger(PersonalScribeLogCategory.app)
+        )
+    }
 
     var body: some View {
         Button(action: onRelaunch) {

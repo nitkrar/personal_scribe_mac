@@ -16,6 +16,7 @@ final class AVAudioCaptureServiceDeviceSelectionTests: XCTestCase {
         let provider = FakeInputDeviceProvider(selectedDeviceID: "test-device")
 
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: driver,
             resamplerFactory: { rate, logger in
@@ -52,6 +53,7 @@ final class AVAudioCaptureServiceDeviceSelectionTests: XCTestCase {
         let provider = FakeInputDeviceProvider(selectedDeviceID: nil)
 
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: driver,
             resamplerFactory: { rate, logger in
@@ -83,6 +85,7 @@ final class AVAudioCaptureServiceDeviceSelectionTests: XCTestCase {
         let provider = FakeInputDeviceProvider(selectedDeviceID: "will-fail")
 
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: driver,
             resamplerFactory: { rate, logger in

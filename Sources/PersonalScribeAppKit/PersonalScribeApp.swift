@@ -17,7 +17,7 @@ struct PersonalScribeApp {
         permissionService: (any PermissionService)? = nil,
         clipboardWriter: @escaping @MainActor (String) -> Void = PersonalScribeApp.defaultClipboardWriter,
         openSettings: @escaping @MainActor () -> Void = PersonalScribeApp.defaultOpenSettings,
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+        logger: PersonalScribeLogger
     ) {
         let resolvedPermissionService = permissionService ?? AppComposition.makePermissionService()
 

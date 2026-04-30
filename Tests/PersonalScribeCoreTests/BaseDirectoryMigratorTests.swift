@@ -25,7 +25,11 @@ final class BaseDirectoryMigratorTests: XCTestCase {
         try writeData(count: 23, toManagedSubdirectory: "modes", named: "dictation.json", under: sourceBase)
         try writeData(count: 29, toManagedSubdirectory: "recordings", named: "clip.wav", under: sourceBase)
 
-        let migrator = BaseDirectoryMigrator(defaults: defaults, environment: [:])
+        let migrator = BaseDirectoryMigrator(
+            defaults: defaults,
+            environment: [:],
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
 
         let report = try await migrator.migrate(to: destinationBase)
 
@@ -65,7 +69,11 @@ final class BaseDirectoryMigratorTests: XCTestCase {
         AppConfig.setBaseDirectoryOverride(baseDirectory, defaults: defaults)
         try writeData(count: 11, toManagedSubdirectory: "models", named: "marker.bin", under: baseDirectory)
 
-        let migrator = BaseDirectoryMigrator(defaults: defaults, environment: [:])
+        let migrator = BaseDirectoryMigrator(
+            defaults: defaults,
+            environment: [:],
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
 
         let report = try await migrator.migrate(to: baseDirectory)
 
@@ -103,7 +111,11 @@ final class BaseDirectoryMigratorTests: XCTestCase {
             to: conflictingRecordingsDirectory.appendingPathComponent("existing.txt", isDirectory: false)
         )
 
-        let migrator = BaseDirectoryMigrator(defaults: defaults, environment: [:])
+        let migrator = BaseDirectoryMigrator(
+            defaults: defaults,
+            environment: [:],
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
 
         do {
             _ = try await migrator.migrate(to: destinationBase)
@@ -147,7 +159,11 @@ final class BaseDirectoryMigratorTests: XCTestCase {
         try writeData(count: 17, toManagedSubdirectory: "models", named: "ggml.bin", under: sourceBase)
         try Data(repeating: 0x41, count: 3).write(to: destinationFile)
 
-        let migrator = BaseDirectoryMigrator(defaults: defaults, environment: [:])
+        let migrator = BaseDirectoryMigrator(
+            defaults: defaults,
+            environment: [:],
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
 
         do {
             _ = try await migrator.migrate(to: destinationFile)

@@ -380,7 +380,7 @@ final class VadOrchestratorIntegrationTests: XCTestCase {
         )
         return SessionPipelineOrchestrator(
             capture: capture,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
             outputSink: TestPipelineOutputSink(),
             contextProvider: StaticPipelineContextProvider(
                 context: PipelineContextSnapshot(streamingOutputEnabled: false)

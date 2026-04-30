@@ -10,7 +10,7 @@ enum DevelopmentComposition {
         result: TranscriptionResult = defaultResult(),
         captureError: PersonalScribeError? = nil,
         transcribeError: PersonalScribeError? = nil,
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+        logger: PersonalScribeLogger = PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
     ) -> SessionCoordinator {
         SessionCoordinator(
             capture: FakeAudioCapturer(

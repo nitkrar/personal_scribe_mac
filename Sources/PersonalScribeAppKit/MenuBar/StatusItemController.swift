@@ -41,7 +41,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         modesProvider: @escaping @MainActor () -> [WorkflowMode] = { WorkflowModeRegistry.builtInModes },
         setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {},
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+        logger: PersonalScribeLogger
     ) {
         self.init(
             sceneModel: sceneModel,
@@ -79,7 +79,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         modesProvider: @escaping @MainActor () -> [WorkflowMode] = { WorkflowModeRegistry.builtInModes },
         setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
         prequitHandler: @escaping @MainActor () async -> Void = {},
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+        logger: PersonalScribeLogger
     ) {
         let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
         self.sceneModel = sceneModel

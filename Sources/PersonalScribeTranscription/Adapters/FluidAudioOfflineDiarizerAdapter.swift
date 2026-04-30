@@ -3,11 +3,10 @@ import Foundation
 import PersonalScribeCore
 
 public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, SpeakerDiarizer {
-    private static let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.transcription)
-
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
     private let manager: any FluidAudioOfflineDiarizerManaging
+    private let logger: PersonalScribeLogger
     private let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private let lock = NSLock()
 
@@ -36,23 +35,27 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
 
     public convenience init(
         descriptor: ModelDescriptor,
-        storageLocator: any StorageLocator = AppConfig.liveStorageLocator()
+        storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
+        logger: PersonalScribeLogger
     ) {
         self.init(
             descriptor: descriptor,
             storageLocator: storageLocator,
-            manager: PrivateFluidAudioOfflineDiarizerManager()
+            manager: PrivateFluidAudioOfflineDiarizerManager(),
+            logger: logger
         )
     }
 
     init(
         descriptor: ModelDescriptor,
         storageLocator: any StorageLocator,
-        manager: any FluidAudioOfflineDiarizerManaging
+        manager: any FluidAudioOfflineDiarizerManaging,
+        logger: PersonalScribeLogger
     ) {
         self.descriptor = descriptor
         self.storageLocator = storageLocator
         self.manager = manager
+        self.logger = logger
     }
 
     public func prepare() async throws {
@@ -151,7 +154,7 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
                     // silent empty transcript. Log first so the
                     // underlying FluidAudio error type / message is
                     // visible in Console.app for diagnosis.
-                    Self.logger.error("FluidAudioOfflineDiarizerAdapter.diarize failed", error: error)
+                    self.logger.error("FluidAudioOfflineDiarizerAdapter.diarize failed", error: error)
                     continuation.yield(.failed(reason: String(describing: error)))
                 }
 

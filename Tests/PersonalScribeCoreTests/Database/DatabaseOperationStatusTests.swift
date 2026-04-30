@@ -169,7 +169,8 @@ final class DatabaseOperationStatusTests: XCTestCase {
         let observer = DatabaseOperationObserver()
         let repository = TranscriptRepository(
             database: database,
-            operationObserver: observer
+            operationObserver: observer,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
         )
         return Harness(database: database, repository: repository, observer: observer, base: base)
     }

@@ -20,8 +20,7 @@ import PersonalScribeCore
 /// the current process alive (the user can retry or restart manually).
 @MainActor
 public enum AppRelauncher {
-    public static func relaunch() {
-        let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.app)
+    public static func relaunch(logger: PersonalScribeLogger) {
         let url = Bundle.main.bundleURL
         let config = NSWorkspace.OpenConfiguration()
         config.createsNewApplicationInstance = true

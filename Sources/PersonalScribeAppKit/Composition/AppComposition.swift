@@ -9,13 +9,37 @@ import PersonalScribeVAD
 
 @MainActor
 public enum AppComposition {
+    public static let diagnosticsStore = DiagnosticsStore(capacity: 200)
+
+    public static let diagnostics: DiagnosticsReporter = {
+        return DiagnosticsReporter(
+            sinks: [
+                OSLogDiagnosticsSink(),
+                ErrorFileDiagnosticsSink(),
+                VerboseFileDiagnosticsSink(
+                    isEnabled: { DiagnosticLoggingMode.resolve() == .verbose }
+                ),
+                RingBufferDiagnosticsSink(
+                    store: diagnosticsStore,
+                    minimumLevelProvider: {
+                        DiagnosticLoggingMode.resolve().minimumBufferedLevel
+                    }
+                ),
+            ]
+        )
+    }()
+
+    public static func makeLogger(_ category: String) -> PersonalScribeLogger {
+        PersonalScribeLogger(category: category, reporter: diagnostics)
+    }
+
     /// Single shared `AppDatabase` instance per plan §3: "exactly one instance
     /// per app process, held as a shared reference inside `AppComposition` —
     /// never re-constructed by callers." If init fails (disk read-only, path
     /// not writable), the whole persistence surface degrades to nil; callers
     /// treat missing history as "nothing to show" rather than crashing.
     public static let appDatabase: AppDatabase? = {
-        let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+        let logger = makeLogger(PersonalScribeLogCategory.session)
         do {
             return try AppDatabase(locator: AppConfig.liveStorageLocator())
         } catch {
@@ -36,13 +60,14 @@ public enum AppComposition {
         guard let appDatabase else { return nil }
         return TranscriptRepository(
             database: appDatabase,
-            operationObserver: databaseOperationObserver
+            operationObserver: databaseOperationObserver,
+            logger: makeLogger(PersonalScribeLogCategory.app)
         )
     }()
 
     public static let modelService: ActiveModelService = {
         ActiveModelService(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+            logger: makeLogger(PersonalScribeLogCategory.session)
         )
     }()
 
@@ -52,7 +77,7 @@ public enum AppComposition {
     /// still works exactly as it did pre-#046. Not routed through
     /// `SessionState.error` per design lock.
     public static let vadProvider: (any VadProviding)? = {
-        let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+        let logger = makeLogger(PersonalScribeLogCategory.session)
         do {
             return try FluidAudioVadProvider()
         } catch {
@@ -102,7 +127,7 @@ public enum AppComposition {
         } catch {
             // Fallback: in-memory registry so the app still launches.
             // Logged for diagnosis; built-in dictation still works.
-            PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+            makeLogger(PersonalScribeLogCategory.session)
                 .error("WorkflowModeRegistry init failed", error: error)
             // swiftlint:disable:next force_try
             return try! WorkflowModeRegistry(
@@ -115,7 +140,9 @@ public enum AppComposition {
     /// #078.31a — typed-accessor processor provider feeds both
     /// `ActiveModelService.download` and the orchestrator's
     /// recipe-driven dispatch (via `RecipeBuilder`, per L24).
-    public static let processorProvider: any ModelBoundProcessorProviding = ModelBoundProcessorProvider()
+    public static let processorProvider: any ModelBoundProcessorProviding = ModelBoundProcessorProvider(
+        logger: makeLogger(PersonalScribeLogCategory.transcription)
+    )
 
     /// #028 / 5a-v2 — central key-event router. Owns the single
     /// `HotkeyEventTap` (CGEvent), local NSEvent monitor, and global
@@ -125,12 +152,14 @@ public enum AppComposition {
     /// (`EscapeKeyMonitor`, `GlobalHotkeyMonitor`, `HotkeyRecorder`)
     /// register deciders/observers that auto-unregister via RAII tokens.
     @MainActor
-    public static let keyEventRouter: KeyEventRouter = KeyEventRouter()
+    public static let keyEventRouter: KeyEventRouter = KeyEventRouter(
+        logger: makeLogger(PersonalScribeLogCategory.ui)
+    )
 
     public static let sessionCoordinator: SessionCoordinator = {
-        let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+        let logger = makeLogger(PersonalScribeLogCategory.session)
         let capture = AVAudioCaptureService(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.audio),
+            logger: makeLogger(PersonalScribeLogCategory.audio),
             inputDeviceProvider: AVFoundationInputDeviceProvider(defaults: .standard),
             shouldMuteOutput: { MuteOutputWhileRecordingPreference.resolve() }
         )
@@ -164,14 +193,14 @@ public enum AppComposition {
         modelService: ActiveModelService,
         coordinator: SessionCoordinator
     ) {
+        let logger = makeLogger(PersonalScribeLogCategory.session)
         modelService.onSetActive = { [weak coordinator] in
             do {
                 try await coordinator?.prepareTranscriber()
             } catch is CancellationError {
                 return
             } catch {
-                PersonalScribeLogger(category: PersonalScribeLogCategory.session)
-                    .error("Post-setActive prewarm failed", error: error)
+                logger.error("Post-setActive prewarm failed", error: error)
             }
         }
     }
@@ -220,7 +249,8 @@ public enum AppComposition {
                 }
             },
             permissionService: makePermissionServiceAdapter(wrapping: permissionService),
-            router: AppComposition.keyEventRouter
+            router: AppComposition.keyEventRouter,
+            logger: makeLogger(PersonalScribeLogCategory.ui)
         )
     }
 
@@ -357,7 +387,7 @@ public enum AppComposition {
         coordinator: SessionCoordinator = AppComposition.sessionCoordinator,
         hotkeyMonitor: GlobalHotkeyMonitor = AppComposition.hotkeyMonitor
     ) -> AppStartupCoordinator {
-        let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.app)
+        let logger = makeLogger(PersonalScribeLogCategory.app)
 
         return AppStartupCoordinator(
             startHotkeyMonitor: {

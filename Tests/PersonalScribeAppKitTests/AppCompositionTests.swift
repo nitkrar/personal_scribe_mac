@@ -135,7 +135,7 @@ final class AppCompositionTests: XCTestCase {
         return ActiveModelService(
             defaults: defaults,
             physicalMemoryBytes: 8_000_000_000,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
     }
 

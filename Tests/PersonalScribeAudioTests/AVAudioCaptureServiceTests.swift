@@ -7,6 +7,7 @@ import PersonalScribeCore
 final class AuthorizationTests: XCTestCase {
     func testStartThrowsMicPermissionDeniedWhenStatusIsDenied() async throws {
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .denied },
             engineDriver: .testStub(),
             resamplerFactory: { rate, logger in
@@ -24,6 +25,7 @@ final class AuthorizationTests: XCTestCase {
 
     func testStartThrowsMicPermissionDeniedWhenStatusIsNotDetermined() async throws {
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .notDetermined },
             engineDriver: .testStub(),
             resamplerFactory: { rate, logger in
@@ -44,6 +46,7 @@ final class HappyPathCaptureTests: XCTestCase {
     func testStartReturnsStreamThatYieldsMono16000PCMBuffer() async throws {
         let box = ThreadSafeEngineBox()
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(sampleRate: 44_100, channels: 2, box: box),
             resamplerFactory: { rate, logger in
@@ -79,6 +82,7 @@ final class HappyPathCaptureTests: XCTestCase {
 final class SingleCaptureTests: XCTestCase {
     func testSecondStartWhileLiveThrowsAudioEngineFailure() async throws {
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(),
             resamplerFactory: { rate, logger in
@@ -103,6 +107,7 @@ final class StopBehaviorTests: XCTestCase {
     func testStopIsIdempotentAndFinishesStreamNormally() async throws {
         let box = ThreadSafeEngineBox()
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(box: box),
             resamplerFactory: { rate, logger in
@@ -131,6 +136,7 @@ final class EngineFailureTests: XCTestCase {
             startError: NSError(domain: "AudioEngineTests", code: 7)
         )
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(box: box),
             resamplerFactory: { rate, logger in
@@ -151,17 +157,20 @@ final class NSErrorMappingTests: XCTestCase {
     func testPlainNSErrorIsLoggedThenMappedToResampleFailure() async throws {
         let box = ThreadSafeEngineBox()
         let service = AVAudioCaptureService(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.audio),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(box: box),
             resamplerFactory: { _, _ in
-                AudioResampler { _, _ in
-                    throw NSError(
-                        domain: "TestDomain",
-                        code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: "Injected upstream resample failure"]
-                    )
-                }
+                AudioResampler(
+                    resampleImpl: { _, _ in
+                        throw NSError(
+                            domain: "TestDomain",
+                            code: -1,
+                            userInfo: [NSLocalizedDescriptionKey: "Injected upstream resample failure"]
+                        )
+                    },
+                    logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio)
+                )
             }
         )
 
@@ -232,10 +241,14 @@ final class FinishExactlyOnceRaceTests: XCTestCase {
         let box = ThreadSafeEngineBox()
         let failing = BlockingResampleBox(failOnCall: 3)
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(sampleRate: 16_000, box: box),
             resamplerFactory: { _, _ in
-                AudioResampler(resampleImpl: failing.resample(samples:timestamp:))
+                AudioResampler(
+                    resampleImpl: failing.resample(samples:timestamp:),
+                    logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio)
+                )
             }
         )
 

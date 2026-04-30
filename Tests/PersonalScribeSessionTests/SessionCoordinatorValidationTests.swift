@@ -56,7 +56,7 @@ final class SessionCoordinatorValidationTests: XCTestCase {
         let coordinator = SessionCoordinator(
             capture: capture,
             transcriber: transcriber,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
             workflowModeRegistry: registry,
             availableKindsProvider: { [.asr] }
         )
@@ -106,7 +106,7 @@ final class SessionCoordinatorValidationTests: XCTestCase {
         let coordinator = SessionCoordinator(
             capture: capture,
             transcriber: transcriber,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
             workflowModeRegistry: registry,
             availableKindsProvider: { [.asr] }
         )
@@ -143,7 +143,7 @@ final class SessionCoordinatorValidationTests: XCTestCase {
         let coordinator = SessionCoordinator(
             capture: capture,
             transcriber: transcriber,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         await coordinator.startIfIdle()

@@ -22,7 +22,7 @@ Verify that `FluidAudioTranscriber` downloads the pinned Parakeet v2 model on fi
    - `Decoder.mlmodelc/coremldata.bin`
    - `JointDecision.mlmodelc/coremldata.bin`
    - `parakeet_vocab.json`
-7. Confirm failures log through `PersonalScribeLogger(category: PersonalScribeLogCategory.transcription)`.
+7. Confirm failures emit through the unified diagnostics pipeline and appear in transcription diagnostics output.
 8. Confirm there is no production `print()` path in the transcription module.
 
 ## Phase 1 Step 1.1b — Launch signposts

@@ -48,7 +48,10 @@ func makeMetricsAppDatabaseContext() throws -> MetricsAppDatabaseContext {
         managedDirectoryOverrides: [.recordings: recordingsDirectory]
     )
     let database = try AppDatabase(locator: locator)
-    let repository = TranscriptRepository(database: database)
+    let repository = TranscriptRepository(
+        database: database,
+        logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+    )
 
     return MetricsAppDatabaseContext(
         baseDirectory: baseDirectory,

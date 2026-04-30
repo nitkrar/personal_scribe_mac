@@ -28,12 +28,8 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
     private let pasteShortcutPoster: @MainActor () -> Bool
     private let focusedElementIsInAnotherApp: FocusedElementExternalityProbe
 
-    public convenience init() {
-        self.init(logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui))
-    }
-
     init(
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+        logger: PersonalScribeLogger,
         defaults: UserDefaults = .standard,
         frontmostAppProvider: any FrontmostAppProviding = WorkspaceFrontmostAppProvider(),
         selfBundleIdentifier: String = AppBrand.bundleIdentifier,

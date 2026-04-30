@@ -23,7 +23,7 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
             outputService: outputService,
             openSettings: {},
             permissionService: FakePermissionService(),
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
         )
 
         model.startObserving()

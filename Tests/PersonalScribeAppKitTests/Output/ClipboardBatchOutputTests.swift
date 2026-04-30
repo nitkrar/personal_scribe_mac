@@ -65,7 +65,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var promptCount = 0
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -95,7 +95,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var promptCount = 0
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -124,7 +124,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let pasteboard = makePasteboard()
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -157,7 +157,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let pasteboard = makePasteboard()
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.nitkrar.personal_scribe"
@@ -188,7 +188,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var promptCount = 0
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -219,7 +219,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         // exercises the scheduled-restore path, so turn it on in sinks.
         var scheduledRestores: [(delay: TimeInterval, action: @MainActor () -> Void)] = []
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -270,7 +270,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         // restoreEnabled: false explicitly to document intent.
         var scheduledRestores: [(delay: TimeInterval, action: @MainActor () -> Void)] = []
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -306,7 +306,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let defaults = isolatedDefaults()
         var scheduledRestores: [(delay: TimeInterval, action: @MainActor () -> Void)] = []
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -354,7 +354,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let defaults = isolatedDefaults()
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -384,7 +384,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         _ = pasteboard.setString("existing value", forType: .string)
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -415,7 +415,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var shortcutPostCount = 0
         var probeCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -448,7 +448,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var shortcutPostCount = 0
         var probeCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -479,7 +479,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -507,7 +507,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let pasteboard = makePasteboard()
         var probeCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -536,7 +536,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var probeCount = 0
         var promptCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
@@ -575,7 +575,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         var scheduledRestores = 0
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
             frontmostAppProvider: FakeFrontmostAppProvider(
                 frontmostApplicationBundleIdentifier: "com.apple.TextEdit"

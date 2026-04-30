@@ -28,7 +28,7 @@ final class SessionCoordinatorAudioLevelTests: XCTestCase {
         let coordinator = SessionCoordinator(
             capture: capture,
             transcriber: transcriber,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         let levelStream = await coordinator.audioLevelStream()
@@ -75,7 +75,7 @@ final class SessionCoordinatorAudioLevelTests: XCTestCase {
         let coordinator = SessionCoordinator(
             capture: capture,
             transcriber: transcriber,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         let streamA = await coordinator.audioLevelStream()

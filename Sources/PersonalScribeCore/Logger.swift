@@ -1,45 +1,80 @@
 import Foundation
-import os
 
 public struct PersonalScribeLogger: Sendable {
     public static let subsystem = AppBrand.logSubsystem
 
-    private let logger: Logger
+    private let category: String
+    private let reporter: DiagnosticsReporter
 
-    public init(category: String) {
-        logger = Logger(subsystem: Self.subsystem, category: category)
+    public static func testing(
+        category: String,
+        now: @escaping @Sendable () -> Date = Date.init
+    ) -> PersonalScribeLogger {
+        PersonalScribeLogger(
+            category: category,
+            reporter: DiagnosticsReporter.testing(now: now)
+        )
+    }
+
+    public init(category: String, reporter: DiagnosticsReporter) {
+        self.category = category
+        self.reporter = reporter
     }
 
     public func debug(
         _ message: @autoclosure () -> String,
+        metadata: [String: String] = [:],
         file: StaticString = #fileID,
+        function: StaticString = #function,
         line: UInt = #line
     ) {
-        let renderedMessage = message()
-        let renderedFile = String(describing: file)
-        logger.debug("\(renderedMessage, privacy: .public) [\(renderedFile, privacy: .public):\(line)]")
+        reporter.debug(
+            message(),
+            category: category,
+            metadata: metadata,
+            file: file,
+            function: function,
+            line: line
+        )
     }
 
     public func info(
         _ message: @autoclosure () -> String,
+        metadata: [String: String] = [:],
         file: StaticString = #fileID,
+        function: StaticString = #function,
         line: UInt = #line
     ) {
-        let renderedMessage = message()
-        let renderedFile = String(describing: file)
-        logger.info("\(renderedMessage, privacy: .public) [\(renderedFile, privacy: .public):\(line)]")
+        reporter.info(
+            message(),
+            category: category,
+            metadata: metadata,
+            file: file,
+            function: function,
+            line: line
+        )
     }
 
+    @discardableResult
     public func error(
         _ message: @autoclosure () -> String,
         error: (any Error)? = nil,
+        metadata: [String: String] = [:],
+        userFacing: UserFacingDiagnostic? = nil,
         file: StaticString = #fileID,
+        function: StaticString = #function,
         line: UInt = #line
-    ) {
-        let renderedMessage = message()
-        let renderedFile = String(describing: file)
-        let detail = error.map { " \($0.localizedDescription)" } ?? ""
-        logger.error("\(renderedMessage, privacy: .public)\(detail, privacy: .public) [\(renderedFile, privacy: .public):\(line)]")
+    ) -> DiagnosticsEvent {
+        reporter.error(
+            message(),
+            error: error,
+            category: category,
+            metadata: metadata,
+            userFacing: userFacing,
+            file: file,
+            function: function,
+            line: line
+        )
     }
 }
 

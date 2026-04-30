@@ -33,7 +33,7 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
                     processingDuration: .zero
                 )
             ),
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         // First hold: short release produces `.shortExit`.
@@ -316,7 +316,7 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
                 ),
                 delay: transcriberDelay
             ),
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
     }
 

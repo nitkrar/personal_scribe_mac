@@ -30,10 +30,11 @@ final class ActiveModelServiceTests: XCTestCase {
         let service = ActiveModelService(
             activeIDsPreference: preference,
             isDownloaded: { _ in true },
-            download: { _, _ in }
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
-        XCTAssertNil(service.activeDescriptor(for: .asr))
+        XCTAssertNil(service.activeDescriptor(for: ModelKind.asr))
         XCTAssertEqual(preference.resolve(), [:])
     }
 
@@ -63,7 +64,8 @@ final class ActiveModelServiceTests: XCTestCase {
             isDownloaded: { _ in false },
             download: { descriptor, _ in
                 await recorder.record(descriptor)
-            }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         // Subscribe to the post-setActive publish only — drop the
@@ -88,7 +90,7 @@ final class ActiveModelServiceTests: XCTestCase {
 
         XCTAssertTrue(recordedDescriptors.isEmpty, "setActive must not invoke the download handler")
         XCTAssertEqual(published?[.asr], target.id, "setActive must publish through $activeModelIDs")
-        XCTAssertEqual(service.activeDescriptor(for: .asr)?.id, target.id)
+        XCTAssertEqual(service.activeDescriptor(for: ModelKind.asr)?.id, target.id)
         XCTAssertEqual(preference.resolve()[.asr], target.id)
     }
 
@@ -125,7 +127,8 @@ final class ActiveModelServiceTests: XCTestCase {
             isDownloaded: { descriptor in
                 descriptor == target
             },
-            download: { _, _ in }
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         XCTAssertTrue(service.isDownloaded(shadowDescriptor))
@@ -155,7 +158,8 @@ final class ActiveModelServiceTests: XCTestCase {
             isDownloaded: { _ in false },
             download: { descriptor, _ in
                 descriptorRecorder.record(descriptor)
-            }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         try await service.download(shadowDescriptor)
@@ -175,7 +179,8 @@ final class ActiveModelServiceTests: XCTestCase {
             isDownloaded: { _ in false },
             download: { _, _ in
                 throw DownloadTestError.handlerFailure
-            }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         do {
@@ -199,11 +204,12 @@ final class ActiveModelServiceTests: XCTestCase {
         let defaults = isolatedDefaults()
         let service = ActiveModelService(
             defaults: defaults,
-            physicalMemoryBytes: 8 * 1024 * 1024 * 1024
+            physicalMemoryBytes: 8 * 1024 * 1024 * 1024,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         XCTAssertEqual(
-            service.activeDescriptor(for: .asr)?.id,
+            service.activeDescriptor(for: ModelKind.asr)?.id,
             BuiltInModelCatalog.parakeetTDTCTC110M.id
         )
     }
@@ -215,11 +221,12 @@ final class ActiveModelServiceTests: XCTestCase {
         let defaults = isolatedDefaults()
         let service = ActiveModelService(
             defaults: defaults,
-            physicalMemoryBytes: 16 * 1024 * 1024 * 1024
+            physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         XCTAssertEqual(
-            service.activeDescriptor(for: .asr)?.id,
+            service.activeDescriptor(for: ModelKind.asr)?.id,
             BuiltInModelCatalog.parakeetTDT06Bv2.id
         )
     }
@@ -239,11 +246,12 @@ final class ActiveModelServiceTests: XCTestCase {
         // 8 GB — RAM probe would otherwise route to CTC-110M.
         let service = ActiveModelService(
             defaults: defaults,
-            physicalMemoryBytes: 8 * 1024 * 1024 * 1024
+            physicalMemoryBytes: 8 * 1024 * 1024 * 1024,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         XCTAssertEqual(
-            service.activeDescriptor(for: .asr)?.id,
+            service.activeDescriptor(for: ModelKind.asr)?.id,
             BuiltInModelCatalog.parakeetTDT06Bv2.id
         )
     }
@@ -277,7 +285,8 @@ final class ActiveModelServiceTests: XCTestCase {
             download: { _, _ in },
             removeDownloaded: { descriptor in
                 spy.record(descriptor)
-            }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         // Sanity: constructor seeded `.ready` for `target` via the
@@ -306,7 +315,8 @@ final class ActiveModelServiceTests: XCTestCase {
                 defaults: isolatedDefaults()
             ),
             isDownloaded: { _ in true },
-            download: { _, _ in }
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
         let counter = LockedSetActiveCounter()
         let firedExpectation = expectation(description: "onSetActive fires")
@@ -348,27 +358,28 @@ final class ActiveModelServiceTests: XCTestCase {
             ),
             registeredModels: BuiltInModelCatalog.registeredModels + [streamingDescriptor],
             isDownloaded: { _ in true },
-            download: { _, _ in }
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         service.setActive(v2)
-        XCTAssertEqual(service.activeDescriptor(for: .asr)?.id, v2.id)
+        XCTAssertEqual(service.activeDescriptor(for: ModelKind.asr)?.id, v2.id)
 
         service.setActive(v3)
         XCTAssertEqual(
-            service.activeDescriptor(for: .asr)?.id,
+            service.activeDescriptor(for: ModelKind.asr)?.id,
             v3.id,
             "Setting another .asr descriptor must evict the prior .asr entry"
         )
 
         service.setActive(streamingDescriptor)
         XCTAssertEqual(
-            service.activeDescriptor(for: .asr)?.id,
+            service.activeDescriptor(for: ModelKind.asr)?.id,
             v3.id,
             "Setting a .streamingASR descriptor must NOT touch the .asr slot"
         )
         XCTAssertEqual(
-            service.activeDescriptor(for: .streamingASR)?.id,
+            service.activeDescriptor(for: ModelKind.streamingASR)?.id,
             streamingDescriptor.id
         )
     }
@@ -391,7 +402,8 @@ final class ActiveModelServiceTests: XCTestCase {
             ),
             isDownloaded: { _ in true },
             download: { _, _ in },
-            evict: { descriptor in evictRecorder.record(descriptor) }
+            evict: { descriptor in evictRecorder.record(descriptor) },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         // First activation has no previous — must NOT call evict.
@@ -440,7 +452,8 @@ final class ActiveModelServiceTests: XCTestCase {
             registeredModels: BuiltInModelCatalog.registeredModels + [streamingDescriptor],
             isDownloaded: { _ in true },
             download: { _, _ in },
-            evict: { descriptor in evictRecorder.record(descriptor) }
+            evict: { descriptor in evictRecorder.record(descriptor) },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         service.setActive(v3)

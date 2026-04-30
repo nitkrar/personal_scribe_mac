@@ -122,7 +122,8 @@ public final class PillOverlayController: ObservableObject {
         self.presenter = PillOverlayPresenter(
             model: viewModel,
             onTap: onTap,
-            panelBuilder: panelBuilder
+            panelBuilder: panelBuilder,
+            diagnosticLogger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
         )
 
         applySnapshot(appStore.snapshot)

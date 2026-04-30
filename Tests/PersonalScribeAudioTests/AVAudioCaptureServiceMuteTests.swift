@@ -11,6 +11,7 @@ final class AVAudioCaptureServiceMuteTests: XCTestCase {
             write: { recorder.record(.write($0)) }
         )
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(),
             resamplerFactory: { rate, logger in
@@ -33,6 +34,7 @@ final class AVAudioCaptureServiceMuteTests: XCTestCase {
             write: { recorder.record(.write($0)) }
         )
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(),
             resamplerFactory: { rate, logger in
@@ -56,12 +58,16 @@ final class AVAudioCaptureServiceMuteTests: XCTestCase {
         )
         let box = ThreadSafeEngineBox()
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(box: box),
             resamplerFactory: { _, _ in
-                AudioResampler { _, _ in
+                AudioResampler(
+                    resampleImpl: { _, _ in
                     throw PersonalScribeError.resampleFailure
-                }
+                    },
+                    logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio)
+                )
             },
             shouldMuteOutput: { true },
             systemAudioMuter: muter
@@ -94,6 +100,7 @@ final class AVAudioCaptureServiceMuteTests: XCTestCase {
             write: { recorder.record(.write($0)) }
         )
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(),
             resamplerFactory: { rate, logger in

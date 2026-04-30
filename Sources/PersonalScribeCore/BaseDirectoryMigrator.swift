@@ -65,7 +65,7 @@ public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable
         fileManager: FileManager = .default,
         defaults: UserDefaults = .standard,
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.app)
+        logger: PersonalScribeLogger
     ) {
         self.fileManager = fileManager
         self.defaults = defaults

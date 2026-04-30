@@ -4,7 +4,10 @@ import PersonalScribeCore
 
 final class AudioResamplerTests: XCTestCase {
     func testResampleConvertsMono44100ToMono16000PCMBuffer() async throws {
-        let resampler = try AudioResampler(inputSampleRate: 44_100)
+        let resampler = try AudioResampler(
+            inputSampleRate: 44_100,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio)
+        )
 
         // 1 second of a 440 Hz sine @ 44.1kHz
         let frameCount = 44_100
@@ -29,7 +32,10 @@ final class AudioResamplerTests: XCTestCase {
     }
 
     func testResamplePassthroughAt16000() async throws {
-        let resampler = try AudioResampler(inputSampleRate: 16_000)
+        let resampler = try AudioResampler(
+            inputSampleRate: 16_000,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio)
+        )
         let samples: [Float] = Array(repeating: 0.25, count: 1_600)
         let ts = ContinuousClock.now
         let buffer = try await resampler.resample(monoSamples: samples, timestamp: ts)
@@ -38,4 +44,3 @@ final class AudioResamplerTests: XCTestCase {
         XCTAssertEqual(buffer.frameCount, 1_600)
     }
 }
-

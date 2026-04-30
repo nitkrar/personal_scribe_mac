@@ -30,7 +30,7 @@ final class SessionCoordinatorHappyPathTests: XCTestCase {
         let coordinator = SessionCoordinator(
             capture: capture,
             transcriber: transcriber,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         let stream = await coordinator.stateStream()

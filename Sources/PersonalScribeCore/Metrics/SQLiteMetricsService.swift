@@ -19,11 +19,12 @@ public final class SQLiteMetricsService: MetricsSnapshotLoading, MetricsReading,
 
     public init(
         appDatabase: AppDatabase,
+        logger: PersonalScribeLogger,
         calendar: Calendar = .current,
         referenceDateProvider: @escaping @Sendable () -> Date = Date.init,
         recentLimit: Int = SQLiteMetricsService.defaultRecentLimit
     ) {
-        self.repository = TranscriptRepository(database: appDatabase)
+        self.repository = TranscriptRepository(database: appDatabase, logger: logger)
         self.calendar = calendar
         self.referenceDateProvider = referenceDateProvider
         self.recentLimit = max(0, recentLimit)

@@ -77,9 +77,7 @@ public final class KeyEventRouter {
     private var globalMonitor: Any?
 
     public init(
-        tapFactory: @escaping TapFactory = { decider in
-            HotkeyEventTap(decider: decider)
-        },
+        tapFactory: TapFactory? = nil,
         installLocal: @escaping LocalInstaller = { mask, handler in
             NSEvent.addLocalMonitorForEvents(matching: mask, handler: handler)
         },
@@ -88,9 +86,15 @@ public final class KeyEventRouter {
         },
         uninstall: @escaping Uninstaller = { handle in
             NSEvent.removeMonitor(handle)
-        }
+        },
+        logger: PersonalScribeLogger
     ) {
-        self.tapFactory = tapFactory
+        self.tapFactory = tapFactory ?? { decider in
+            HotkeyEventTap(
+                decider: decider,
+                logger: logger
+            )
+        }
         self.installLocal = installLocal
         self.installGlobal = installGlobal
         self.uninstall = uninstall

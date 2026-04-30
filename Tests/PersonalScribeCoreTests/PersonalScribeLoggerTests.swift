@@ -3,7 +3,7 @@ import XCTest
 
 final class PersonalScribeLoggerTests: XCTestCase {
     func testLoggerFacadeCompilesAndUsesSharedSubsystem() {
-        let logger = PersonalScribeLogger(category: PersonalScribeLogCategory.audio)
+        let logger = PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio)
 
         XCTAssertEqual(PersonalScribeLogger.subsystem, "com.nitkrar.personal_scribe")
         XCTAssertEqual(PersonalScribeLogCategory.audio, "audio")

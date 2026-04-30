@@ -339,7 +339,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         _ = vadPreferences
         return SessionPipelineOrchestrator(
             capture: capture,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
             outputSink: outputSink,
             contextProvider: StaticPipelineContextProvider(
                 context: PipelineContextSnapshot(streamingOutputEnabled: false)

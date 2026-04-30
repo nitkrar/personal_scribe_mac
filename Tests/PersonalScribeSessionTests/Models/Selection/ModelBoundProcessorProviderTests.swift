@@ -12,7 +12,8 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
                     descriptorID: descriptor.id,
                     streamingTranscriber: MarkerStreamingTranscriber()
                 )
-            }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         XCTAssertThrowsError(
@@ -33,7 +34,8 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
                     descriptorID: descriptor.id,
                     transcriber: MarkerTranscriber()
                 )
-            }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         XCTAssertThrowsError(
@@ -54,7 +56,8 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
                     descriptorID: descriptor.id,
                     transcriber: MarkerTranscriber()
                 )
-            }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         XCTAssertThrowsError(
@@ -77,7 +80,8 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
                     descriptorID: descriptor.id,
                     streamingTranscriber: MarkerStreamingTranscriber()
                 )
-            }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
         let descriptor = BuiltInModelCatalog.parakeetEou160ms
 
@@ -133,7 +137,8 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
                         transcriber: MarkerTranscriber()
                     )
                 }
-            }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         let seededBatch = try provider.transcriber(for: batchDescriptor)
@@ -196,7 +201,8 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
                     descriptorID: d.id,
                     transcriber: MarkerTranscriber()
                 )
-            }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         // Seed both leaves on disk.
@@ -235,7 +241,8 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
                     descriptorID: d.id,
                     transcriber: MarkerTranscriber()
                 )
-            }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
         try seedQwenTwoModelLayout(

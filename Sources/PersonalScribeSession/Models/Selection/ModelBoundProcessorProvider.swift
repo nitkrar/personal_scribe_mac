@@ -10,7 +10,8 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
     private var records: [String: AdapterRecord] = [:]
 
     public init(
-        storageLocator: any StorageLocator = AppConfig.liveStorageLocator()
+        storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
+        logger: PersonalScribeLogger
     ) {
         let registeredDescriptors = BuiltInModelCatalog.registeredModels
         self.storageLocator = storageLocator
@@ -48,7 +49,8 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                     descriptorID: descriptor.id,
                     diarizer: FluidAudioOfflineDiarizerAdapter(
                         descriptor: descriptor,
-                        storageLocator: storageLocator
+                        storageLocator: storageLocator,
+                        logger: logger
                     )
                 )
             }
@@ -58,7 +60,8 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
     init(
         storageLocator: any StorageLocator,
         registeredDescriptors: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
-        adapterFactory: @escaping @Sendable (ModelDescriptor) -> AdapterRecord
+        adapterFactory: @escaping @Sendable (ModelDescriptor) -> AdapterRecord,
+        logger: PersonalScribeLogger
     ) {
         self.storageLocator = storageLocator
         self.registeredDescriptorsByID = Dictionary(

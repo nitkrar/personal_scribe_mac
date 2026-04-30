@@ -39,11 +39,12 @@ final class MetricsSnapshotStoreTests: XCTestCase {
             metricsService: metricsService,
             notificationCenter: notificationCenter,
             calendar: calendar,
-            referenceDateProvider: { referenceDate }
+            referenceDateProvider: { referenceDate },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
         )
 
         XCTAssertEqual(store.rollups, MetricsRollups.empty(window: window))
-        XCTAssertEqual(store.recentTranscriptions, [])
+        XCTAssertEqual(store.recentTranscriptions, [TranscriptEntry]())
         XCTAssertNil(store.lastUpdatedAt)
         XCTAssertNil(store.lastRefreshReason)
         XCTAssertFalse(store.isRefreshing)
@@ -59,7 +60,7 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         }
         await metricsService.completeNextLoad(with: .success(initialSnapshot))
         try await waitForCondition(description: "initial load publish") {
-            await store.lastRefreshReason == .initialLoad
+            await store.lastRefreshReason == MetricsRefreshReason.initialLoad
         }
 
         XCTAssertEqual(store.rollups, initialSnapshot.rollups)
@@ -78,7 +79,7 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         }
         await metricsService.completeNextLoad(with: .success(commitSnapshot))
         try await waitForCondition(description: "commit snapshot publish") {
-            await store.lastRefreshReason == .transcriptCommit
+            await store.lastRefreshReason == MetricsRefreshReason.transcriptCommit
         }
 
         XCTAssertEqual(store.rollups, commitSnapshot.rollups)
@@ -116,7 +117,8 @@ final class MetricsSnapshotStoreTests: XCTestCase {
             metricsService: metricsService,
             notificationCenter: notificationCenter,
             calendar: calendar,
-            referenceDateProvider: { referenceDate }
+            referenceDateProvider: { referenceDate },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
         )
 
         let firstRefresh = Task { @MainActor in
@@ -174,7 +176,8 @@ final class MetricsSnapshotStoreTests: XCTestCase {
             metricsService: metricsService,
             notificationCenter: notificationCenter,
             calendar: calendar,
-            referenceDateProvider: { referenceDate }
+            referenceDateProvider: { referenceDate },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
         )
 
         let firstRefresh = Task { @MainActor in
@@ -229,6 +232,7 @@ final class SQLiteMetricsServiceAppDatabaseInitTests: XCTestCase {
 
         let service = SQLiteMetricsService(
             appDatabase: context.database,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app),
             calendar: calendar,
             referenceDateProvider: { referenceDate }
         )

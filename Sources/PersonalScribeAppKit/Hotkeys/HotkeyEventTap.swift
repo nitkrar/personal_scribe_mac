@@ -62,7 +62,7 @@ public final class HotkeyEventTap {
         installer: @escaping Installer = { callback, userInfo in
             CGHotkeyEventTapInstaller.createTap(callback: callback, userInfo: userInfo)
         },
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+        logger: PersonalScribeLogger
     ) {
         self.decider = decider
         self.installer = installer

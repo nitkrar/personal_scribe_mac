@@ -75,7 +75,7 @@ enum RecordingStatusCardDriver {
             return StatusCardContent(
                 text: reportedError?.userMessage ?? err.errorDescription ?? String(describing: err),
                 link: nil,
-                autoDismissAfter: 4.0
+                autoDismissAfter: reportedError?.autoDismissAfter ?? 4.0
             )
         }
 

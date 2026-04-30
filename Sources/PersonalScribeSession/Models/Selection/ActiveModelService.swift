@@ -69,9 +69,12 @@ public final class ActiveModelService: ObservableObject {
         storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
         defaults: UserDefaults = .standard,
         physicalMemoryBytes: Int64 = Int64(ProcessInfo.processInfo.physicalMemory),
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+        logger: PersonalScribeLogger
     ) {
-        let provider = ModelBoundProcessorProvider(storageLocator: storageLocator)
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: storageLocator,
+            logger: logger
+        )
 
         // #016: RAM-aware first-launch default. The Preference layer's
         // `default:` is only consulted when no value is persisted, so
@@ -123,7 +126,7 @@ public final class ActiveModelService: ObservableObject {
         evict: @escaping @Sendable (ModelDescriptor) -> Void = { _ in },
         modelsDirectoryProvider: @escaping @Sendable () -> URL? = { nil },
         diskSpaceProvider: @escaping @Sendable (URL) -> Int64? = { _ in nil },
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.session)
+        logger: PersonalScribeLogger
     ) {
         self.activeIDsPreference = activeIDsPreference
         self.registeredModels = registeredModels

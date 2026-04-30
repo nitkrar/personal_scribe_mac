@@ -62,6 +62,7 @@ final class AVAudioCaptureServiceLevelStreamTests: XCTestCase {
     func testAudioLevelStreamEmitsSamplesAtRoughly10Hz() async throws {
         let box = ThreadSafeEngineBox()
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(sampleRate: 16_000, channels: 1, box: box),
             resamplerFactory: { rate, logger in
@@ -137,6 +138,7 @@ final class AVAudioCaptureServiceLevelStreamTests: XCTestCase {
     func testAudioLevelStreamFinishesWhenCaptureStops() async throws {
         let box = ThreadSafeEngineBox()
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(sampleRate: 16_000, channels: 1, box: box),
             resamplerFactory: { rate, logger in
@@ -165,6 +167,7 @@ final class AVAudioCaptureServiceLevelStreamTests: XCTestCase {
     func testAudioLevelStreamEmitsSilenceAsZero() async throws {
         let box = ThreadSafeEngineBox()
         let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
             authorizationStatusProvider: { .authorized },
             engineDriver: .testStub(sampleRate: 16_000, channels: 1, box: box),
             resamplerFactory: { rate, logger in

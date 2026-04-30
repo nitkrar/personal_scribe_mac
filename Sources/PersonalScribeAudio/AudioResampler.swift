@@ -12,7 +12,7 @@ private final class FeedFlag: @unchecked Sendable {
 internal actor AudioResampler {
     internal init(
         inputSampleRate: Double,
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.audio)
+        logger: PersonalScribeLogger
     ) throws {
         self.customResampleImpl = nil
         self.logger = logger
@@ -20,10 +20,11 @@ internal actor AudioResampler {
     }
 
     internal init(
-        resampleImpl: @escaping @Sendable ([Float], ContinuousClock.Instant) throws -> PCMBuffer
+        resampleImpl: @escaping @Sendable ([Float], ContinuousClock.Instant) throws -> PCMBuffer,
+        logger: PersonalScribeLogger
     ) {
         self.customResampleImpl = resampleImpl
-        self.logger = PersonalScribeLogger(category: PersonalScribeLogCategory.audio)
+        self.logger = logger
         self.inputSampleRate = AppConfig.sampleRate
     }
 

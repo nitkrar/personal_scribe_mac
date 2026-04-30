@@ -29,7 +29,7 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
         calendar: Calendar = .current,
         referenceDateProvider: @escaping @Sendable () -> Date = Date.init,
         recentLimit: Int = SQLiteMetricsService.defaultRecentLimit,
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.app)
+        logger: PersonalScribeLogger
     ) {
         self.metricsService = metricsService
         self.notificationCenter = notificationCenter

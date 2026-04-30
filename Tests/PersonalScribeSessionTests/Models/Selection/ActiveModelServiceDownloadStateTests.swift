@@ -383,13 +383,15 @@ final class ActiveModelServiceDownloadStateTests: XCTestCase {
                 isDownloaded: isDownloaded,
                 download: download,
                 modelsDirectoryProvider: modelsDirectoryProvider,
-                diskSpaceProvider: diskSpaceProvider
+                diskSpaceProvider: diskSpaceProvider,
+                logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
             )
         }
         return ActiveModelService(
             activeIDsPreference: preference,
             isDownloaded: isDownloaded,
-            download: download
+            download: download,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
     }
 }

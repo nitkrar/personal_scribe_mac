@@ -840,7 +840,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         if let persistenceHandler {
             return SessionPipelineOrchestrator(
                 capture: capture,
-                logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
+                logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
                 postProcessingPipeline: postProcessingPipeline,
                 outputSink: outputSink,
                 contextProvider: contextProvider,
@@ -852,7 +852,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         return SessionPipelineOrchestrator(
             capture: capture,
             transcriptRepository: transcriptRepository,
-            logger: PersonalScribeLogger(category: PersonalScribeLogCategory.session),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
             contextProvider: contextProvider,
@@ -916,7 +916,10 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             managedDirectoryOverrides: [.recordings: recordings]
         )
         let database = try AppDatabase(locator: locator)
-        return TranscriptRepository(database: database)
+        return TranscriptRepository(
+            database: database,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
     }
 
     private func waitUntilRepositoryHasEntries(

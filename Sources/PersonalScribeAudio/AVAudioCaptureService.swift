@@ -7,7 +7,7 @@ import PersonalScribeCore
 /// values until `stop()` (or a runtime error) terminates the stream exactly once.
 public actor AVAudioCaptureService: AudioCapturer {
     public init(
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.audio),
+        logger: PersonalScribeLogger,
         inputDeviceProvider: any AudioInputDeviceProviding = NoOpAudioInputDeviceProvider(),
         shouldMuteOutput: @escaping @Sendable () -> Bool = { false }
     ) {
@@ -30,7 +30,7 @@ public actor AVAudioCaptureService: AudioCapturer {
     }
 
     internal init(
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.audio),
+        logger: PersonalScribeLogger,
         authorizationStatusProvider: @escaping @Sendable () -> AVAuthorizationStatus,
         engineDriver: AudioEngineDriver,
         resamplerFactory: @escaping @Sendable (Double, PersonalScribeLogger) throws -> AudioResampler,

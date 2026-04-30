@@ -19,6 +19,7 @@ struct PersonalScribeAppMain: App {
     @StateObject private var unifiedWindowController: UnifiedWindowControllerHost
     @StateObject private var pasteboardSnapshotHost: PasteboardSnapshotHost
     @StateObject private var escapeKeyMonitorHost: EscapeKeyMonitorHost
+    @StateObject private var diagnosticsOverlayController: LiveDiagnosticsOverlayController
 
     init() {
         self.init(
@@ -64,6 +65,7 @@ struct PersonalScribeAppMain: App {
         let sharedSnapshotService = PasteboardSnapshotService()
         let resolvedOutputService = outputService
             ?? ClipboardBatchOutput(
+                logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui),
                 defaults: defaults,
                 snapshotService: sharedSnapshotService,
                 isAccessibilityTrusted: isAccessibilityTrusted
@@ -86,7 +88,8 @@ struct PersonalScribeAppMain: App {
             },
             onClipboardOnlyCopy: {
                 clipboardOnlyNotice?()
-            }
+            },
+            logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
         )
         // Bridge SessionCoordinator's `AsyncStream<Float>` audio-level
         // source to the Combine `AnyPublisher<Double, Never>` the pill
@@ -108,7 +111,8 @@ struct PersonalScribeAppMain: App {
             onTap: {
                 Task { await coordinator.toggle() }
             },
-            panelBuilder: overlayPanelBuilder
+            panelBuilder: overlayPanelBuilder,
+            openVadSettingsAction: nil
         )
         clipboardOnlyNotice = {
             pillController.showClipboardOnlyNotice()
@@ -125,6 +129,10 @@ struct PersonalScribeAppMain: App {
             appStore: appStore,
             viewModel: pillController.viewModel,
             service: sharedSnapshotService
+        )
+        let diagnosticsOverlayController = LiveDiagnosticsOverlayController(
+            store: AppComposition.diagnosticsStore,
+            defaults: defaults
         )
 
         // #002: global Esc truly discards an active recording — no
@@ -170,10 +178,13 @@ struct PersonalScribeAppMain: App {
             }
             return SQLiteMetricsService(
                 appDatabase: appDatabase,
+                logger: AppComposition.makeLogger(PersonalScribeLogCategory.app),
                 referenceDateProvider: Date.init
             )
         }()
-        let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader()
+        let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader(
+            logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
+        )
         let modelService = AppComposition.modelService
         // Shared input-device provider — one `AVFoundationInputDeviceProvider`
         // instance backs both the menu-bar Microphone submenu AND the
@@ -234,7 +245,7 @@ struct PersonalScribeAppMain: App {
         // no auto-paste, no AX probe. The paste-at-cursor flow is
         // served by the hotkey / pill path where cursor context is
         // preserved. See bug #9 (2026-04-21 dogfood).
-        let copyLastTranscriptLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+        let copyLastTranscriptLogger = AppComposition.makeLogger(PersonalScribeLogCategory.ui)
         let copyLastTranscriptAction = CopyLastTranscriptAction(
             transcriptReader: unifiedTranscriptReader,
             clipboardWriter: CopyLastTranscriptAction.defaultClipboardWriter,
@@ -306,6 +317,9 @@ struct PersonalScribeAppMain: App {
         )
         _escapeKeyMonitorHost = StateObject(
             wrappedValue: EscapeKeyMonitorHost(monitor: escapeKeyMonitor)
+        )
+        _diagnosticsOverlayController = StateObject(
+            wrappedValue: diagnosticsOverlayController
         )
 
         sceneModel.startObserving()
@@ -387,7 +401,7 @@ extension PersonalScribeAppMain {
     }
 
     static func defaultTranscriptReader(
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui)
+        logger: PersonalScribeLogger
     ) -> any TranscriptReading {
         guard let repository = AppComposition.transcriptRepository else {
             logger.error("NotesWindow transcript reader: shared AppDatabase unavailable; falling back to empty history")
@@ -446,7 +460,8 @@ final class StatusItemControllerHost: ObservableObject {
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
         modesProvider: @escaping @MainActor () -> [WorkflowMode] = { WorkflowModeRegistry.builtInModes },
         setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
-        prequitHandler: @escaping @MainActor () async -> Void = {}
+        prequitHandler: @escaping @MainActor () async -> Void = {},
+        logger: PersonalScribeLogger = AppComposition.makeLogger(PersonalScribeLogCategory.ui)
     ) {
         self.controller = StatusItemController(
             sceneModel: sceneModel,
@@ -459,7 +474,8 @@ final class StatusItemControllerHost: ObservableObject {
             inputDeviceProvider: inputDeviceProvider,
             modesProvider: modesProvider,
             setActiveMode: setActiveMode,
-            prequitHandler: prequitHandler
+            prequitHandler: prequitHandler,
+            logger: logger
         )
     }
 

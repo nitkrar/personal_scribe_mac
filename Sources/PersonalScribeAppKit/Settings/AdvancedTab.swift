@@ -8,7 +8,10 @@ public struct AdvancedTab: View {
 
     public init(
         baseDirectoryResult: Result<URL, Error> = Result { try AppConfig.baseDirectory() },
-        migrator: any BaseDirectoryMigrating = BaseDirectoryMigrator(),
+        defaults: UserDefaults = .standard,
+        migrator: any BaseDirectoryMigrating = BaseDirectoryMigrator(
+            logger: AppComposition.makeLogger(PersonalScribeLogCategory.app)
+        ),
         selectDirectory: @escaping @MainActor (URL?) -> URL? = Self.presentDirectoryPicker,
         openInFinder: @escaping @MainActor (URL) -> Void = { url in
             // Bug #006: previously used `activateFileViewerSelecting([url])`,
@@ -23,6 +26,7 @@ public struct AdvancedTab: View {
         _viewModel = StateObject(
             wrappedValue: AdvancedTabViewModel(
                 baseDirectoryResult: baseDirectoryResult,
+                defaults: defaults,
                 migrator: migrator,
                 selectDirectory: selectDirectory,
                 openInFinder: openInFinder
@@ -34,7 +38,7 @@ public struct AdvancedTab: View {
         SettingsTabContainer {
             SettingsSection(
                 title: "Advanced",
-                description: "Filesystem location for \(AppBrand.displayName)'s app support data."
+                description: "Filesystem location and local diagnostics controls."
             ) {
                 switch viewModel.baseDirectoryResult {
                 case .success(let baseDirectory):
@@ -46,6 +50,7 @@ public struct AdvancedTab: View {
                             migrationStatusView
                         }
                     }
+                    diagnosticsCard
                 case .failure(let error):
                     SettingsCard {
                         Text("Failed to resolve the base directory.")
@@ -54,7 +59,48 @@ public struct AdvancedTab: View {
                             .font(PersonalScribeTheme.Typography.caption.font)
                             .foregroundStyle(.secondary)
                     }
+                    diagnosticsCard
                 }
+            }
+        }
+    }
+
+    private var diagnosticsCard: some View {
+        SettingsCard {
+            Text("Diagnostics")
+                .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+
+            Picker(
+                "Diagnostic logging",
+                selection: Binding(
+                    get: { viewModel.diagnosticLoggingMode },
+                    set: { viewModel.setDiagnosticLoggingMode($0) }
+                )
+            ) {
+                Text("Errors Only").tag(DiagnosticLoggingMode.errorsOnly)
+                Text("Verbose").tag(DiagnosticLoggingMode.verbose)
+            }
+            .pickerStyle(.segmented)
+
+            Text(viewModel.diagnosticLoggingModeDescription)
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            Toggle(
+                "Show live diagnostics overlay",
+                isOn: Binding(
+                    get: { viewModel.showLiveDiagnosticsOverlay },
+                    set: { viewModel.setShowLiveDiagnosticsOverlay($0) }
+                )
+            )
+            .disabled(viewModel.isLiveDiagnosticsOverlayToggleDisabled)
+
+            if viewModel.isLiveDiagnosticsOverlayToggleDisabled {
+                Text("Set Diagnostic logging to Verbose to enable the overlay.")
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -161,23 +207,47 @@ final class AdvancedTabViewModel: ObservableObject {
     @Published private(set) var baseDirectoryResult: Result<URL, Error>
     @Published private(set) var isMigrating = false
     @Published private(set) var feedback: Feedback?
+    @Published private(set) var diagnosticLoggingMode: DiagnosticLoggingMode
+    @Published private(set) var showLiveDiagnosticsOverlay: Bool
 
+    private let defaults: UserDefaults
     private let migrator: any BaseDirectoryMigrating
     private let selectDirectory: @MainActor (URL?) -> URL?
     private let openInFinder: @MainActor (URL) -> Void
 
     init(
         baseDirectoryResult: Result<URL, Error> = Result { try AppConfig.baseDirectory() },
-        migrator: any BaseDirectoryMigrating = BaseDirectoryMigrator(),
+        defaults: UserDefaults = .standard,
+        migrator: any BaseDirectoryMigrating = BaseDirectoryMigrator(
+            logger: AppComposition.makeLogger(PersonalScribeLogCategory.app)
+        ),
         selectDirectory: @escaping @MainActor (URL?) -> URL?,
         openInFinder: @escaping @MainActor (URL) -> Void = { url in
             NSWorkspace.shared.open(url)
         }
     ) {
         self.baseDirectoryResult = baseDirectoryResult
+        self.defaults = defaults
         self.migrator = migrator
         self.selectDirectory = selectDirectory
         self.openInFinder = openInFinder
+        let diagnosticLoggingMode = DiagnosticLoggingMode.resolve(from: defaults)
+        self.diagnosticLoggingMode = diagnosticLoggingMode
+        let storedOverlay = ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults)
+        showLiveDiagnosticsOverlay = diagnosticLoggingMode == .verbose && storedOverlay
+    }
+
+    var diagnosticLoggingModeDescription: String {
+        switch diagnosticLoggingMode {
+        case .errorsOnly:
+            return "Persist only error diagnostics to disk and the Console."
+        case .verbose:
+            return "Capture debug, info, notice, and error diagnostics locally."
+        }
+    }
+
+    var isLiveDiagnosticsOverlayToggleDisabled: Bool {
+        diagnosticLoggingMode != .verbose
     }
 
     func changeBaseDirectory() async {
@@ -204,6 +274,27 @@ final class AdvancedTabViewModel: ObservableObject {
     func revealInFinder() {
         guard let currentBaseDirectory else { return }
         openInFinder(currentBaseDirectory)
+    }
+
+    func setDiagnosticLoggingMode(_ mode: DiagnosticLoggingMode) {
+        diagnosticLoggingMode = mode
+        mode.persist(to: defaults)
+
+        if mode != .verbose {
+            showLiveDiagnosticsOverlay = false
+            ShowLiveDiagnosticsOverlayPreference.persist(false, to: defaults)
+        }
+    }
+
+    func setShowLiveDiagnosticsOverlay(_ isEnabled: Bool) {
+        guard diagnosticLoggingMode == .verbose else {
+            showLiveDiagnosticsOverlay = false
+            ShowLiveDiagnosticsOverlayPreference.persist(false, to: defaults)
+            return
+        }
+
+        showLiveDiagnosticsOverlay = isEnabled
+        ShowLiveDiagnosticsOverlayPreference.persist(isEnabled, to: defaults)
     }
 
     private var currentBaseDirectory: URL? {

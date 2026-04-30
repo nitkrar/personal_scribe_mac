@@ -114,7 +114,7 @@ public final class GlobalHotkeyMonitor {
         },
         permissionService: (any PermissionService)? = nil,
         router: KeyEventRouter? = nil,
-        logger: PersonalScribeLogger = PersonalScribeLogger(category: PersonalScribeLogCategory.ui),
+        logger: PersonalScribeLogger,
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
     ) {
         self.onToggle = onToggle
@@ -129,7 +129,7 @@ public final class GlobalHotkeyMonitor {
         // and rely on the gesture-machine entry points (`handle(event:)`,
         // `shouldSwallowLocal(_:)`) directly. A fresh, never-started
         // `KeyEventRouter` is harmless for that mode.
-        self.router = router ?? KeyEventRouter()
+        self.router = router ?? KeyEventRouter(logger: logger)
         self.logger = logger
         self.logSink = logSink
     }
