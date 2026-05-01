@@ -12,6 +12,7 @@ public final class PillOverlayController: ObservableObject {
     private let presenter: PillOverlayPresenter
     private var cancellables: Set<AnyCancellable> = []
     private var recordingStatusCardContent: StatusCardContent?
+    private var streamCardText: String?
     /// Stage B (#046) consumer-side cache of the last VAD fire-token
     /// this controller rendered a notification for. Compared against
     /// `SessionSnapshot.vadAutoStopFireToken` by the driver to guarantee
@@ -182,9 +183,11 @@ public final class PillOverlayController: ObservableObject {
             sessionState: snapshot.sessionState,
             reportedError: snapshot.session.reportedError,
             progress: snapshot.modelDownloadProgress,
+            isStreamingSession: snapshot.session.isStreamingSession,
             vadGracePending: snapshot.session.vadAutoStopGracePending,
             vadFireToken: snapshot.session.vadAutoStopFireToken
         )
+        applyStreamCardState(session: snapshot.session)
     }
 
     /// Feeds the snapshot-derived inputs (plus the two Stage B VAD
@@ -199,6 +202,7 @@ public final class PillOverlayController: ObservableObject {
         sessionState: SessionState,
         reportedError: ReportedError?,
         progress: ModelDownloadProgress?,
+        isStreamingSession: Bool,
         vadGracePending: Bool,
         vadFireToken: UUID?
     ) {
@@ -213,6 +217,7 @@ public final class PillOverlayController: ObservableObject {
             sessionState: sessionState,
             reportedError: reportedError,
             progress: progress,
+            isStreamingSession: isStreamingSession,
             vadGracePending: vadGracePending,
             vadFireToken: vadFireToken,
             vadLastSeenFireToken: lastSeenVadFireToken,
@@ -229,6 +234,7 @@ public final class PillOverlayController: ObservableObject {
                 onLinkTap: linkTapHandler(for: next)
             )
             recordingStatusCardContent = next
+            streamCardText = nil
             advanceLastSeenFireToken(renderedContent: next, snapshotToken: vadFireToken)
         case (let current?, let next?) where current != next:
             // When the new content only differs from the current card
@@ -254,6 +260,7 @@ public final class PillOverlayController: ObservableObject {
                 )
             }
             recordingStatusCardContent = next
+            streamCardText = nil
             advanceLastSeenFireToken(renderedContent: next, snapshotToken: vadFireToken)
         case (let current?, nil):
             // Notifications self-dismiss via the ResponseCard's 2.0s timer
@@ -272,6 +279,47 @@ public final class PillOverlayController: ObservableObject {
             }
         default:
             break
+        }
+    }
+
+    private func applyStreamCardState(session: SessionSnapshot) {
+        guard recordingStatusCardContent == nil else {
+            presenter.hideStreamCard()
+            streamCardText = nil
+            return
+        }
+
+        let isLiveCaptureState: Bool
+        switch session.sessionState {
+        case .capturing, .holdRecording:
+            isLiveCaptureState = true
+        case .idle, .completed, .shortExit, .transcribing, .error:
+            isLiveCaptureState = false
+        }
+
+        guard session.isStreamingSession, isLiveCaptureState else {
+            presenter.hideStreamCard()
+            streamCardText = nil
+            return
+        }
+
+        let nextText = session.transcriptProgress?.text
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !nextText.isEmpty else {
+            presenter.hideStreamCard()
+            streamCardText = nil
+            return
+        }
+
+        switch streamCardText {
+        case nil:
+            presenter.showStreamCard(text: nextText)
+            streamCardText = nextText
+        case nextText:
+            break
+        case .some:
+            presenter.updateStreamCard(text: nextText)
+            streamCardText = nextText
         }
     }
 

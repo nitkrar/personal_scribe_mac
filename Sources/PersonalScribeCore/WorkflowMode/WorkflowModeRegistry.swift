@@ -96,7 +96,8 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
                 pipelineShape: mode.pipelineShape,
                 processors: mode.processors,
                 captureControllers: mode.captureControllers,
-                outputSinks: mode.outputSinks
+                outputSinks: mode.outputSinks,
+                streamingBehavior: mode.streamingBehavior
             )
         }
         if let oldDefault = rewritten.defaultModeID,

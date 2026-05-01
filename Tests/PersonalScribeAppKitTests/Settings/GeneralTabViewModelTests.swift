@@ -87,4 +87,33 @@ final class GeneralTabViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.clipboardRestoreDelay.seconds, 2.4, accuracy: 0.0001)
         XCTAssertEqual(ClipboardRestoreDelay.resolve(from: defaults).seconds, 2.4, accuracy: 0.0001)
     }
+
+    func testInitResolvesPersistedStreamingDefaults() {
+        let defaults = isolatedDefaults()
+        StreamingLiveCardEnabledPreference.persist(false, to: defaults)
+        StreamingLiveCursorEnabledPreference.persist(true, to: defaults)
+        StreamingSecondPassEnabledPreference.persist(false, to: defaults)
+
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        XCTAssertFalse(viewModel.streamingLiveCardEnabled)
+        XCTAssertTrue(viewModel.streamingLiveCursorEnabled)
+        XCTAssertFalse(viewModel.streamingSecondPassEnabled)
+    }
+
+    func testSetStreamingDefaultsPersistAndPublish() {
+        let defaults = isolatedDefaults()
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        viewModel.setStreamingLiveCardEnabled(false)
+        viewModel.setStreamingLiveCursorEnabled(true)
+        viewModel.setStreamingSecondPassEnabled(false)
+
+        XCTAssertFalse(viewModel.streamingLiveCardEnabled)
+        XCTAssertTrue(viewModel.streamingLiveCursorEnabled)
+        XCTAssertFalse(viewModel.streamingSecondPassEnabled)
+        XCTAssertFalse(StreamingLiveCardEnabledPreference.resolve(from: defaults))
+        XCTAssertTrue(StreamingLiveCursorEnabledPreference.resolve(from: defaults))
+        XCTAssertFalse(StreamingSecondPassEnabledPreference.resolve(from: defaults))
+    }
 }

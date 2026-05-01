@@ -105,9 +105,39 @@ struct ModeDetailView: View {
             Toggle(isOn: realtimeBinding) {
                 VStack(alignment: .leading) {
                     Text("Realtime").font(PersonalScribeTheme.Typography.body.font.weight(.medium))
-                    Text("Stream partial results as you speak.")
+                    Text("Show a live on-screen transcript as you speak.")
                         .font(PersonalScribeTheme.Typography.caption.font)
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            if viewModel.realtimeOn {
+                Divider()
+                VStack(spacing: PersonalScribeTheme.Spacing.sm) {
+                    ParameterPickerView(
+                        title: "Live transcript card",
+                        settingKey: PreferenceKeys.streamingLiveCardEnabled,
+                        parameter: viewModel.liveTranscriptCardParameter,
+                        onChange: { viewModel.setLiveTranscriptCard($0) }
+                    )
+                    Divider()
+                    ParameterPickerView(
+                        title: "Live cursor streaming",
+                        settingKey: PreferenceKeys.streamingLiveCursorEnabled,
+                        parameter: viewModel.liveCursorStreamingParameter,
+                        onChange: { viewModel.setLiveCursorStreaming($0) }
+                    )
+                    Text("Saved now for streaming recipes. Live cursor transport is not active in this build.")
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Divider()
+                    ParameterPickerView(
+                        title: "Authoritative second pass",
+                        settingKey: PreferenceKeys.streamingSecondPassEnabled,
+                        parameter: viewModel.authoritativeSecondPassParameter,
+                        onChange: { viewModel.setAuthoritativeSecondPass($0) }
+                    )
                 }
             }
         }

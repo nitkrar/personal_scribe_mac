@@ -57,6 +57,26 @@ public enum PreferenceKeys {
         default: true
     )
 
+    /// Streaming dictation live transcript card toggle. Mirrors
+    /// `StreamingLiveCardEnabledPreference.userDefaultsKey`.
+    public static let streamingLiveCardEnabled = SettingKey<Bool>(
+        key: "StreamingLiveCardEnabled",
+        default: true
+    )
+
+    /// Streaming dictation live cursor streaming toggle. Schema/UI land
+    /// in #056; runtime honor stays deferred to #033.
+    public static let streamingLiveCursorEnabled = SettingKey<Bool>(
+        key: "StreamingLiveCursorEnabled",
+        default: false
+    )
+
+    /// Streaming dictation stop-time authoritative second-pass toggle.
+    public static let streamingSecondPassEnabled = SettingKey<Bool>(
+        key: "StreamingSecondPassEnabled",
+        default: true
+    )
+
     /// Speaker separation sensitivity preset for the offline diarizer.
     /// Matches `SpeakerSeparationSensitivityPreference.userDefaultsKey`
     /// + `default`. The FluidAudio adapter reads this at session start

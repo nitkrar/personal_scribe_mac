@@ -49,6 +49,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
     public var processors: [ProcessorSpec]
     public var captureControllers: [CaptureControllerSpec]
     public var outputSinks: [OutputSinkSpec]
+    public var streamingBehavior: StreamingBehaviorSpec?
 
     public init(
         id: String,
@@ -59,7 +60,8 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         pipelineShape: PipelineShape,
         processors: [ProcessorSpec],
         captureControllers: [CaptureControllerSpec],
-        outputSinks: [OutputSinkSpec]
+        outputSinks: [OutputSinkSpec],
+        streamingBehavior: StreamingBehaviorSpec? = nil
     ) {
         self.id = id
         self.name = name
@@ -70,6 +72,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         self.processors = processors
         self.captureControllers = captureControllers
         self.outputSinks = outputSinks
+        self.streamingBehavior = streamingBehavior
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -82,6 +85,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         case processors
         case captureControllers
         case outputSinks
+        case streamingBehavior
     }
 
     public init(from decoder: Decoder) throws {
@@ -102,6 +106,16 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
             forKey: .captureControllers
         )
         self.outputSinks = try container.decode([OutputSinkSpec].self, forKey: .outputSinks)
+        if let streamingBehavior = try container.decodeIfPresent(
+            StreamingBehaviorSpec.self,
+            forKey: .streamingBehavior
+        ) {
+            self.streamingBehavior = streamingBehavior
+        } else if pipelineShape == .streaming {
+            self.streamingBehavior = .defaultSettings
+        } else {
+            self.streamingBehavior = nil
+        }
     }
 
     // MARK: - ID generation (#027)
@@ -181,6 +195,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
                 enabled: .setting(PreferenceKeys.autoPasteEnabled)
             ),
             .transcriptHistorySQLite
-        ]
+        ],
+        streamingBehavior: nil
     )
 }

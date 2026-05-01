@@ -80,6 +80,25 @@ System Settings does NOT re-trigger first-run auto-open.
   The top-level `Shortcuts` sub-tab must NOT exist. Regression guard for
   bug #14 (2026-04-21 dogfood).
 
+## Streaming dictation defaults (#056)
+
+- **MV-SETT-STREAM-1 — General card renders all streaming controls:** open
+  `Settings → General`. Confirm a `Streaming dictation` card appears
+  with toggles for `Live transcript card`, `Live cursor streaming`, and
+  `Authoritative second pass`, plus an `Overflow mode` picker.
+- **MV-SETT-STREAM-2 — Live cursor note is explicit:** under the
+  `Live cursor streaming` toggle, confirm the helper copy says the flag
+  is saved now but live cursor transport is not active in this build.
+- **MV-SETT-STREAM-3 — Streaming defaults persist across relaunch:**
+  change all three toggles and the overflow picker to non-default
+  values, relaunch Ninimma, reopen `Settings → General`, and confirm
+  the same values are still selected.
+- **MV-SETT-STREAM-4 — New streaming modes inherit the current global
+  defaults:** change the global streaming defaults, create a fresh
+  `Streaming Dictation` mode from the Modes tab, and confirm its
+  realtime-only rows resolve to the same defaults until you override
+  them per-mode.
+
 ## Change base directory
 
 - Pick a new writable folder from `Advanced > Change Base Directory…` and confirm the tab shows an in-progress spinner followed by a success message naming the migrated subdirectories.

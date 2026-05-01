@@ -196,10 +196,84 @@ final class RecipeBuilderTests: XCTestCase {
         XCTAssertEqual(bound.processors.count, 1)
     }
 
+    func testBuilderResolvesStreamingBehaviorAndSecondPassSnapshot() throws {
+        defaults.set(false, forKey: PreferenceKeys.streamingLiveCardEnabled.key)
+        defaults.set(true, forKey: PreferenceKeys.streamingLiveCursorEnabled.key)
+        defaults.set(true, forKey: PreferenceKeys.streamingSecondPassEnabled.key)
+
+        let service = makeServiceWithActive(
+            asr: BuiltInModelCatalog.parakeetTDT06Bv2.id,
+            streamingAsr: BuiltInModelCatalog.parakeetEou160ms.id
+        )
+        let provider = StubProcessorProvider()
+        let builder = RecipeBuilder(
+            modelService: service,
+            processorProvider: provider,
+            defaults: defaults
+        )
+
+        let bound = try builder.build(
+            Preset.streamingDictation.materialize(name: "Streaming Dictation")
+        )
+
+        XCTAssertEqual(
+            bound.streamingBehavior,
+            BoundStreamingBehavior(
+                liveCardEnabled: false,
+                liveCursorEnabled: true,
+                secondPassEnabled: true
+            )
+        )
+        XCTAssertNotNil(bound.streamingSecondPassTranscriber)
+        XCTAssertEqual(
+            provider.transcriberRequests.map(\.id),
+            [BuiltInModelCatalog.parakeetTDT06Bv2.id]
+        )
+        XCTAssertEqual(
+            provider.streamingTranscriberRequests.map(\.id),
+            [BuiltInModelCatalog.parakeetEou160ms.id]
+        )
+    }
+
+    func testBuilderAllowsStreamingSecondPassWhenNoActiveAsrDescriptorExists() throws {
+        defaults.set(true, forKey: PreferenceKeys.streamingSecondPassEnabled.key)
+
+        let service = makeServiceWithActive(
+            asr: nil,
+            streamingAsr: BuiltInModelCatalog.parakeetEou160ms.id
+        )
+        let provider = StubProcessorProvider()
+        let builder = RecipeBuilder(
+            modelService: service,
+            processorProvider: provider,
+            defaults: defaults
+        )
+
+        let bound = try builder.build(
+            Preset.streamingDictation.materialize(name: "Streaming Dictation")
+        )
+
+        XCTAssertEqual(
+            bound.streamingBehavior,
+            BoundStreamingBehavior(
+                liveCardEnabled: true,
+                liveCursorEnabled: false,
+                secondPassEnabled: true
+            )
+        )
+        XCTAssertNil(bound.streamingSecondPassTranscriber)
+        XCTAssertEqual(provider.transcriberRequests.count, 0)
+        XCTAssertEqual(
+            provider.streamingTranscriberRequests.map(\.id),
+            [BuiltInModelCatalog.parakeetEou160ms.id]
+        )
+    }
+
     // MARK: - Helpers
 
     private func makeServiceWithActive(
         asr asrID: String?,
+        streamingAsr streamingAsrID: String? = nil,
         diarization diarizationID: String? = nil
     ) -> ActiveModelService {
         let preference = Preference<[ModelKind: String]>(
@@ -209,6 +283,7 @@ final class RecipeBuilderTests: XCTestCase {
         )
         var seed: [ModelKind: String] = [:]
         if let asrID { seed[.asr] = asrID }
+        if let streamingAsrID { seed[.streamingASR] = streamingAsrID }
         if let diarizationID { seed[.diarization] = diarizationID }
         if !seed.isEmpty {
             preference.persist(seed)
@@ -228,6 +303,7 @@ private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchec
     private let lock = NSLock()
     private var transcribers: [String: any Transcriber] = [:]
     private(set) var transcriberRequests: [ModelDescriptor] = []
+    private(set) var streamingTranscriberRequests: [ModelDescriptor] = []
 
     func transcriber(for descriptor: ModelDescriptor) throws -> any Transcriber {
         lock.withLock {
@@ -242,7 +318,10 @@ private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchec
     }
 
     func streamingTranscriber(for descriptor: ModelDescriptor) throws -> any StreamingTranscriber {
-        StubStreamingTranscriber()
+        lock.withLock {
+            streamingTranscriberRequests.append(descriptor)
+        }
+        return StubStreamingTranscriber()
     }
 
     func diarizer(for descriptor: ModelDescriptor) throws -> any SpeakerDiarizer {

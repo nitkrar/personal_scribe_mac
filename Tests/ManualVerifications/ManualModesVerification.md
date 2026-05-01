@@ -173,3 +173,28 @@ Limitation: the hotkey table re-fires only on mode-list changes
 of a model state change (e.g. user deleted the active descriptor in
 AI Models tab), the hotkey stays registered until the next
 mode-list event or app restart. Acceptable trade-off for V1.
+
+## MV-MODES-17 — Streaming preset seeds #056 defaults
+1. Tap `+` in the toolbar.
+2. Pick `Streaming Dictation`.
+3. Expect: the detail view opens with `Realtime` already ON.
+4. Expect: the realtime-only rows are visible:
+   `Live transcript card`, `Live cursor streaming`, and
+   `Authoritative second pass`.
+5. Expect: `Live transcript card` resolves ON, `Live cursor streaming`
+   resolves OFF, and `Authoritative second pass` resolves ON unless you
+   have changed the global defaults in Settings.
+6. Expect: VAD auto-stop resolves OFF for this preset by default.
+
+## MV-MODES-18 — Per-mode streaming overrides beat globals
+1. In `Settings → General`, set global `Live transcript card` OFF and
+   `Authoritative second pass` OFF.
+2. Return to the streaming mode from MV-MODES-17.
+3. Override that mode to `Live transcript card = ON` and
+   `Authoritative second pass = ON`.
+4. Quit + relaunch.
+5. Expect: the mode still shows the explicit overrides, not the global
+   OFF defaults.
+6. Record with that mode. Expect: a live StreamCard appears during
+   capture and stop-time finalization still uses the authoritative
+   second pass when an ASR model is available.

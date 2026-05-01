@@ -289,8 +289,10 @@ public final class PillOverlayPresenter {
     private let onTap: @MainActor () -> Void
     private let panelBuilder: any PillOverlayPanelBuilding
     private let responseCardBuilder: any ResponseCardBuilding
+    private let streamCardBuilder: any StreamCardBuilding
     private var panel: (any PillOverlayPaneling)?
     private var responseCard: (any ResponseCardPresenting)?
+    private var streamCard: (any StreamCardPresenting)?
     private var visibilityCancellable: AnyCancellable?
     private let diagnosticLogger: PersonalScribeLogger
     private static let clipboardOnlyNoticeText = "Copied to clipboard · ⌘V to paste"
@@ -326,6 +328,7 @@ public final class PillOverlayPresenter {
             onTap: onTap,
             panelBuilder: AppKitPillOverlayPanelBuilder(),
             responseCardBuilder: LiveResponseCardBuilder(),
+            streamCardBuilder: LiveStreamCardBuilder(),
             diagnosticLogger: diagnosticLogger
         )
     }
@@ -335,12 +338,16 @@ public final class PillOverlayPresenter {
         onTap: @escaping @MainActor () -> Void = {},
         panelBuilder: any PillOverlayPanelBuilding,
         responseCardBuilder: any ResponseCardBuilding = LiveResponseCardBuilder(),
-        diagnosticLogger: PersonalScribeLogger
+        streamCardBuilder: any StreamCardBuilding = LiveStreamCardBuilder(),
+        diagnosticLogger: PersonalScribeLogger = PersonalScribeLogger.testing(
+            category: PersonalScribeLogCategory.ui
+        )
     ) {
         self.model = model
         self.onTap = onTap
         self.panelBuilder = panelBuilder
         self.responseCardBuilder = responseCardBuilder
+        self.streamCardBuilder = streamCardBuilder
         self.diagnosticLogger = diagnosticLogger
         visibilityCancellable = model.$visibility.sink { [weak self] visibility in
             guard let self else {
@@ -424,6 +431,7 @@ public final class PillOverlayPresenter {
         // `.animation` on the card itself is not viable (NSPanel-based),
         // so reanchor on every pill resize where the card is visible.
         reanchorResponseCard(pillFrame: newFrame)
+        reanchorStreamCard(pillFrame: newFrame)
     }
 
     public var isVisible: Bool {
@@ -489,12 +497,17 @@ public final class PillOverlayPresenter {
         responseCard?.reanchor(abovePillFrame: pillFrame)
     }
 
+    private func reanchorStreamCard(pillFrame: NSRect) {
+        streamCard?.reanchor(abovePillFrame: pillFrame)
+    }
+
     func showClipboardOnlyNotice() {
         guard let anchorWindow = panel?.anchorWindow else {
             diagnosticLogger.info("PillOverlayPresenter.showClipboardOnlyNotice — skipped because no anchor window is available")
             return
         }
 
+        hideStreamCard()
         let responseCard = responseCard ?? responseCardBuilder.makeResponseCard()
         self.responseCard = responseCard
         responseCard.show(
@@ -534,6 +547,7 @@ public final class PillOverlayPresenter {
             return
         }
 
+        hideStreamCard()
         let responseCard = responseCard ?? responseCardBuilder.makeResponseCard()
         self.responseCard = responseCard
         responseCard.show(
@@ -557,9 +571,34 @@ public final class PillOverlayPresenter {
         responseCard?.hide()
     }
 
+    func showStreamCard(text: String) {
+        guard let anchorWindow = panel?.anchorWindow else {
+            diagnosticLogger.info("PillOverlayPresenter.showStreamCard — skipped because no anchor window is available")
+            return
+        }
+
+        let streamCard = streamCard ?? streamCardBuilder.makeStreamCard()
+        self.streamCard = streamCard
+        streamCard.show(text: text, above: anchorWindow)
+    }
+
+    func updateStreamCard(text: String) {
+        guard let streamCard else {
+            showStreamCard(text: text)
+            return
+        }
+
+        streamCard.update(text: text)
+    }
+
+    func hideStreamCard() {
+        streamCard?.hide()
+    }
+
     public func hide() {
         intendsToShow = false
         panel?.orderOut(nil)
+        hideStreamCard()
         // Clear the "last sized" flag so the next transition out of
         // `.hidden` performs a non-animated initial size (panel arrives
         // already at the target footprint instead of morphing from the

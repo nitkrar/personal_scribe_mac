@@ -47,6 +47,19 @@ final class GeneralTabViewModelStyleTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "PillStyle"), "Mini")
     }
 
+    func testSetStreamingCardOverflowModePersistsAndPublishes() {
+        let defaults = Self.isolatedDefaults()
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        viewModel.setStreamingCardOverflowMode(.marquee)
+
+        XCTAssertEqual(viewModel.streamingCardOverflowMode, .marquee)
+        XCTAssertEqual(
+            StreamingCardOverflowModePreference.resolve(from: defaults),
+            .marquee
+        )
+    }
+
     private static func isolatedDefaults() -> UserDefaults {
         let suiteName = "GeneralTabViewModelStyleTests-\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {

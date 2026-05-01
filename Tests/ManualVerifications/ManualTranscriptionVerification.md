@@ -25,6 +25,44 @@ Verify that `FluidAudioTranscriber` downloads the pinned Parakeet v2 model on fi
 7. Confirm failures emit through the unified diagnostics pipeline and appear in transcription diagnostics output.
 8. Confirm there is no production `print()` path in the transcription module.
 
+## Streaming dictation finalization (#056)
+
+Prerequisites:
+- a streaming ASR model is downloaded and valid
+- a batch ASR model is active if you want to verify authoritative
+  second-pass behavior
+
+### MV-STREAM-TX-1 — streaming-only final
+1. Activate a `Streaming Dictation` mode.
+2. Turn `Authoritative second pass` OFF for that mode.
+3. Record a short phrase and stop.
+4. Confirm the final text in transcript history, clipboard, and optional
+   stop-time paste matches the streaming model's final output.
+
+### MV-STREAM-TX-2 — authoritative second pass wins when available
+1. Leave the same mode active but turn `Authoritative second pass` ON.
+2. Ensure a normal ASR model is active in `Settings → AI Models`.
+3. Record the same phrase and stop.
+4. Confirm transcript history and clipboard now use the batch
+   authoritative final, even though the live StreamCard showed the
+   streaming partials during capture.
+
+### MV-STREAM-TX-3 — second pass unavailable falls back cleanly
+1. Leave `Authoritative second pass` ON.
+2. Remove the active batch ASR selection (or switch to a state where no
+   plain ASR descriptor is active) while keeping the streaming ASR model
+   valid.
+3. Record and stop.
+4. Confirm the session still completes and the final text falls back to
+   the streaming final rather than erroring out.
+
+### MV-STREAM-TX-4 — live cursor flag is runtime-inert in #056
+1. Turn `Live cursor streaming` ON globally or per-mode.
+2. Record into a text field while watching the insertion point.
+3. Confirm no text is injected during capture.
+4. Stop the recording and confirm the existing stop-time clipboard/paste
+   path still runs exactly once.
+
 ## Phase 1 Step 1.1b — Launch signposts
 
 Signposts emitted under subsystem `com.nitkrar.personal_scribe`, category `prepare`:

@@ -11,6 +11,7 @@ extension WorkflowMode {
     func withRealtime(_ on: Bool) -> WorkflowMode {
         var copy = self
         copy.pipelineShape = on ? .streaming : .batch
+        copy.streamingBehavior = on ? (copy.streamingBehavior ?? .defaultSettings) : nil
         copy.processors = copy.processors.map { spec -> ProcessorSpec in
             switch spec {
             case .transcriber(let kind, _):
@@ -28,6 +29,24 @@ extension WorkflowMode {
             }
         }
         return copy
+    }
+
+    func withLiveTranscriptCard(parameter: Parameter<Bool>) -> WorkflowMode {
+        rewritingStreamingBehavior { behavior in
+            behavior.liveCardEnabled = parameter
+        }
+    }
+
+    func withLiveCursorStreaming(parameter: Parameter<Bool>) -> WorkflowMode {
+        rewritingStreamingBehavior { behavior in
+            behavior.liveCursorEnabled = parameter
+        }
+    }
+
+    func withAuthoritativeSecondPass(parameter: Parameter<Bool>) -> WorkflowMode {
+        rewritingStreamingBehavior { behavior in
+            behavior.secondPassEnabled = parameter
+        }
     }
 
     func withDiarization(_ on: Bool) -> WorkflowMode {
@@ -193,6 +212,16 @@ extension WorkflowMode {
     func withName(_ name: String) -> WorkflowMode {
         var copy = self
         copy.name = name
+        return copy
+    }
+
+    private func rewritingStreamingBehavior(
+        _ mutate: (inout StreamingBehaviorSpec) -> Void
+    ) -> WorkflowMode {
+        var copy = self
+        var behavior = copy.streamingBehavior ?? .defaultSettings
+        mutate(&behavior)
+        copy.streamingBehavior = behavior
         return copy
     }
 }

@@ -70,6 +70,52 @@ final class WorkflowModeTests: XCTestCase {
         XCTAssertEqual(decoded, original)
     }
 
+    func testLegacyStreamingDecodeWithoutStreamingBehaviorSynthesizesDefaultSettings() throws {
+        let decoded = try JSONDecoder().decode(
+            WorkflowMode.self,
+            from: legacyStreamingJSONWithoutStreamingBehavior()
+        )
+
+        XCTAssertEqual(decoded.pipelineShape, .streaming)
+        let streamingBehavior = try XCTUnwrap(decoded.streamingBehavior)
+        XCTAssertEqual(
+            streamingBehavior.liveCardEnabled,
+            .setting(PreferenceKeys.streamingLiveCardEnabled)
+        )
+        XCTAssertEqual(
+            streamingBehavior.liveCursorEnabled,
+            .setting(PreferenceKeys.streamingLiveCursorEnabled)
+        )
+        XCTAssertEqual(
+            streamingBehavior.secondPassEnabled,
+            .setting(PreferenceKeys.streamingSecondPassEnabled)
+        )
+    }
+
+    func testStreamingDictationPresetSeedsStreamingBehaviorAndDisablesVad() throws {
+        let mode = Preset.streamingDictation.materialize(name: "Streaming Dictation")
+
+        XCTAssertEqual(mode.pipelineShape, .streaming)
+        XCTAssertEqual(
+            mode.streamingBehavior,
+            StreamingBehaviorSpec(
+                liveCardEnabled: .setting(PreferenceKeys.streamingLiveCardEnabled),
+                liveCursorEnabled: .setting(PreferenceKeys.streamingLiveCursorEnabled),
+                secondPassEnabled: .setting(PreferenceKeys.streamingSecondPassEnabled)
+            )
+        )
+
+        let vad = try XCTUnwrap(mode.captureControllers.first { controller in
+            if case .vad = controller { return true }
+            return false
+        })
+        guard case .vad(let enabled, _, _, _) = vad else {
+            XCTFail("Expected VAD controller")
+            return
+        }
+        XCTAssertEqual(enabled, .override(false))
+    }
+
     // MARK: - #027 — `preset` field
 
     func testPresetFieldRoundTripsViaCodable() throws {
@@ -159,6 +205,21 @@ final class WorkflowModeTests: XCTestCase {
           "outputSinks": [{"type": "transcriptHistorySQLite"}]
         }
         """
+        return body.data(using: .utf8)!
+    }
+
+    private func legacyStreamingJSONWithoutStreamingBehavior() -> Data {
+        let body = #"""
+        {
+          "id": "legacy-streaming",
+          "name": "Legacy Streaming",
+          "glyph": "bolt.horizontal",
+          "pipelineShape": "streaming",
+          "processors": [{"type": "streamingTranscriber", "kind": "streamingASR"}],
+          "captureControllers": [{"type": "manualHotkey"}],
+          "outputSinks": [{"type": "transcriptHistorySQLite"}]
+        }
+        """#
         return body.data(using: .utf8)!
     }
 }

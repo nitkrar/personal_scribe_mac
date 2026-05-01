@@ -58,6 +58,21 @@ final class ModeDetailViewModel: ObservableObject {
         return .setting(PreferenceKeys.clipboardRestoreEnabled)
     }
 
+    var liveTranscriptCardParameter: Parameter<Bool> {
+        mode.streamingBehavior?.liveCardEnabled
+            ?? .setting(PreferenceKeys.streamingLiveCardEnabled)
+    }
+
+    var liveCursorStreamingParameter: Parameter<Bool> {
+        mode.streamingBehavior?.liveCursorEnabled
+            ?? .setting(PreferenceKeys.streamingLiveCursorEnabled)
+    }
+
+    var authoritativeSecondPassParameter: Parameter<Bool> {
+        mode.streamingBehavior?.secondPassEnabled
+            ?? .setting(PreferenceKeys.streamingSecondPassEnabled)
+    }
+
     /// #090 — Per-mode voice-model pin. Reads through to the first
     /// transcriber-bearing processor's `descriptorID`. `nil` means
     /// "use globally active", which is the default.
@@ -90,6 +105,15 @@ final class ModeDetailViewModel: ObservableObject {
     func setAutoStop(_ parameter: Parameter<Bool>) { apply(mode.withAutoStop(parameter: parameter)) }
     func setAutoPaste(_ parameter: Parameter<Bool>) { apply(mode.withAutoPaste(parameter: parameter)) }
     func setRestoreClipboard(_ parameter: Parameter<Bool>) { apply(mode.withRestoreClipboard(parameter: parameter)) }
+    func setLiveTranscriptCard(_ parameter: Parameter<Bool>) {
+        apply(mode.withLiveTranscriptCard(parameter: parameter))
+    }
+    func setLiveCursorStreaming(_ parameter: Parameter<Bool>) {
+        apply(mode.withLiveCursorStreaming(parameter: parameter))
+    }
+    func setAuthoritativeSecondPass(_ parameter: Parameter<Bool>) {
+        apply(mode.withAuthoritativeSecondPass(parameter: parameter))
+    }
     func setHotkey(_ hotkey: HotkeyPreference?) { apply(mode.withHotkey(hotkey)) }
     func setVoiceModelPin(_ id: String?) { apply(mode.withVoiceModelPin(id)) }
     func setSpeakerSeparationSensitivity(_ parameter: Parameter<SpeakerSeparationSensitivity>) {

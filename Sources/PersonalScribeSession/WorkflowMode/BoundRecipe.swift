@@ -19,6 +19,8 @@ public struct BoundRecipe: Sendable {
     public let processors: [BoundProcessor]
     public let captureControllers: [BoundCaptureController]
     public let outputSinks: [BoundOutputSink]
+    public let streamingBehavior: BoundStreamingBehavior?
+    public let streamingSecondPassTranscriber: (any Transcriber)?
 
     public init(
         recipeID: String,
@@ -26,7 +28,9 @@ public struct BoundRecipe: Sendable {
         pipelineShape: PipelineShape,
         processors: [BoundProcessor],
         captureControllers: [BoundCaptureController],
-        outputSinks: [BoundOutputSink]
+        outputSinks: [BoundOutputSink],
+        streamingBehavior: BoundStreamingBehavior? = nil,
+        streamingSecondPassTranscriber: (any Transcriber)? = nil
     ) {
         self.recipeID = recipeID
         self.recipeName = recipeName
@@ -34,6 +38,24 @@ public struct BoundRecipe: Sendable {
         self.processors = processors
         self.captureControllers = captureControllers
         self.outputSinks = outputSinks
+        self.streamingBehavior = streamingBehavior
+        self.streamingSecondPassTranscriber = streamingSecondPassTranscriber
+    }
+}
+
+public struct BoundStreamingBehavior: Sendable, Equatable {
+    public let liveCardEnabled: Bool
+    public let liveCursorEnabled: Bool
+    public let secondPassEnabled: Bool
+
+    public init(
+        liveCardEnabled: Bool,
+        liveCursorEnabled: Bool,
+        secondPassEnabled: Bool
+    ) {
+        self.liveCardEnabled = liveCardEnabled
+        self.liveCursorEnabled = liveCursorEnabled
+        self.secondPassEnabled = secondPassEnabled
     }
 }
 

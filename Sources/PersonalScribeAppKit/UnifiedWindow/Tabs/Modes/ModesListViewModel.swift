@@ -188,6 +188,10 @@ final class ModesListViewModel: ObservableObject {
                 return "Diarization requires an ASR transcriber."
             case .streamingShapeRequiresExactlyOneStreamingProcessor:
                 return "Realtime needs a single streaming transcriber."
+            case .streamingShapeRequiresStreamingBehavior:
+                return "Realtime needs streaming settings."
+            case .batchShapeForbidsStreamingBehavior:
+                return "Batch modes can't keep realtime-only settings."
             case .pinnedDescriptorNotRegistered(let id):
                 return "Pinned model \"\(id)\" is no longer available. Pick another in the mode's settings."
             case .pinnedDescriptorKindMismatch(let id, let expected, _):

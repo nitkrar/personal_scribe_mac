@@ -166,6 +166,34 @@ via `PillOverlayPresenter.showRecordingStatusCard(text:)` +
    message and auto-dismisses after roughly 4 seconds, or sooner if a
    new session starts.
 
+## Streaming dictation StreamCard (#056)
+
+- [ ] **MV-STREAM-1 — Live StreamCard appears during capture:** with a
+  streaming ASR model downloaded, activate a `Streaming Dictation`
+  mode and start recording. Confirm a separate single-line StreamCard
+  appears above the pill and updates continuously with partial text as
+  you speak. The pill itself stays compact; transcript text never
+  appears inside the pill.
+- [ ] **MV-STREAM-2 — ResponseCard and StreamCard never coexist:** while
+  MV-STREAM-1 is active, stop the recording. Confirm the StreamCard
+  disappears immediately and a ResponseCard replaces it with
+  `Finalizing…`. The two cards must never be visible at the same time.
+- [ ] **MV-STREAM-3 — Live transcript toggle suppresses only the
+  StreamCard:** turn `Live transcript card` OFF for the active streaming
+  mode and record again. Confirm there is no StreamCard during capture,
+  but stop-time `Finalizing…` / clipboard-only / error notices still use
+  the ResponseCard as normal.
+- [ ] **MV-STREAM-4 — Overflow mode changes rendering without changing
+  height:** with a long streaming utterance, cycle `Overflow mode`
+  between `Tail-pinned head ellipsis`, `Marquee`, and `Word-by-word fade`
+  in `Settings → General`. Confirm the StreamCard stays single-line while
+  its overflow behavior visibly changes.
+- [ ] **MV-STREAM-5 — Streaming-session errors replace the StreamCard:**
+  trigger a real streaming-session failure (for example remove the
+  streaming ASR model, activate the invalid mode, then try to record).
+  Confirm the live StreamCard never lingers once the error surfaces; the
+  mapped error renders on the ResponseCard instead.
+
 ---
 
 ## Non-activating panel (Issue 6 — 2026-04-21)

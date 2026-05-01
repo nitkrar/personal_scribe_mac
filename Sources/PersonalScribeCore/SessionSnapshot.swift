@@ -8,6 +8,9 @@ public struct SessionSnapshot: Sendable, Equatable {
     public var recordingDuration: Duration?
     public var modelDownloadProgress: ModelDownloadProgress?
     public var reportedError: ReportedError?
+    /// Session-owned flag for overlay routing. Set at session start from
+    /// the bound recipe, not derived from the mutable active-mode picker.
+    public var isStreamingSession: Bool
     /// True while a VAD auto-stop grace timer is pending (#046 Stage B).
     /// Cleared atomically when the grace resolves (fires, cancels, or errors).
     public var vadAutoStopGracePending: Bool
@@ -29,6 +32,7 @@ public struct SessionSnapshot: Sendable, Equatable {
         recordingDuration: Duration? = nil,
         modelDownloadProgress: ModelDownloadProgress? = nil,
         reportedError: ReportedError? = nil,
+        isStreamingSession: Bool = false,
         vadAutoStopGracePending: Bool = false,
         vadAutoStopGraceDeadline: Date? = nil,
         vadAutoStopFireToken: UUID? = nil
@@ -40,6 +44,7 @@ public struct SessionSnapshot: Sendable, Equatable {
         self.recordingDuration = recordingDuration
         self.modelDownloadProgress = modelDownloadProgress
         self.reportedError = reportedError
+        self.isStreamingSession = isStreamingSession
         self.vadAutoStopGracePending = vadAutoStopGracePending
         self.vadAutoStopGraceDeadline = vadAutoStopGraceDeadline
         self.vadAutoStopFireToken = vadAutoStopFireToken

@@ -110,6 +110,19 @@ final class SpecCodableTests: XCTestCase {
 
     // MARK: - OutputSinkSpec
 
+    func testStreamingBehaviorSpecRoundTripsParameters() throws {
+        let original = StreamingBehaviorSpec(
+            liveCardEnabled: .setting(PreferenceKeys.streamingLiveCardEnabled),
+            liveCursorEnabled: .override(true),
+            secondPassEnabled: .override(false)
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(StreamingBehaviorSpec.self, from: data)
+
+        XCTAssertEqual(decoded, original)
+    }
+
     func testOutputSinkSpecClipboardCarriesRestoreParameter() throws {
         let original = OutputSinkSpec.clipboard(
             restoreEnabled: .override(false)

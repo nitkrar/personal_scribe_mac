@@ -97,7 +97,8 @@ public enum Preset: String, CaseIterable, Codable, Sendable, Identifiable {
                         enabled: .setting(PreferenceKeys.autoPasteEnabled)
                     ),
                     .transcriptHistorySQLite,
-                ]
+                ],
+                streamingBehavior: nil
             )
         case .notes:
             return WorkflowMode(
@@ -128,7 +129,8 @@ public enum Preset: String, CaseIterable, Codable, Sendable, Identifiable {
                     // note app on their schedule.
                     .frontmostPaste(enabled: .override(false)),
                     .transcriptHistorySQLite,
-                ]
+                ],
+                streamingBehavior: nil
             )
         case .meeting:
             return WorkflowMode(
@@ -164,7 +166,8 @@ public enum Preset: String, CaseIterable, Codable, Sendable, Identifiable {
                     ),
                     .frontmostPaste(enabled: .override(false)),
                     .transcriptHistorySQLite,
-                ]
+                ],
+                streamingBehavior: nil
             )
         case .streamingDictation:
             return WorkflowMode(
@@ -178,7 +181,7 @@ public enum Preset: String, CaseIterable, Codable, Sendable, Identifiable {
                 captureControllers: [
                     .manualHotkey,
                     .vad(
-                        enabled: .setting(PreferenceKeys.vadAutoStopEnabled),
+                        enabled: .override(false),
                         silenceThreshold: .setting(PreferenceKeys.vadSilenceThreshold),
                         showWarning: .setting(PreferenceKeys.vadShowStoppingWarning),
                         showAutoStoppedNotification: .setting(
@@ -194,7 +197,8 @@ public enum Preset: String, CaseIterable, Codable, Sendable, Identifiable {
                         enabled: .setting(PreferenceKeys.autoPasteEnabled)
                     ),
                     .transcriptHistorySQLite,
-                ]
+                ],
+                streamingBehavior: .defaultSettings
             )
         }
     }

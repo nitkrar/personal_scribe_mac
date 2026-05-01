@@ -47,6 +47,7 @@ public struct GeneralTab: View {
                     visibilityCard
                     applicationCard
                     transcribeOutputCard
+                    streamingDictationCard
                     autoStopCard
                     speakerSeparationCard
                     behaviorCard
@@ -311,6 +312,61 @@ public struct GeneralTab: View {
                 .font(PersonalScribeTheme.Typography.caption.font)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var streamingDictationCard: some View {
+        SettingsCard {
+            Text("Streaming dictation")
+                .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+
+            Toggle(
+                "Live transcript card",
+                isOn: Binding(
+                    get: { viewModel.streamingLiveCardEnabled },
+                    set: { viewModel.setStreamingLiveCardEnabled($0) }
+                )
+            )
+
+            Divider()
+
+            Toggle(
+                "Live cursor streaming",
+                isOn: Binding(
+                    get: { viewModel.streamingLiveCursorEnabled },
+                    set: { viewModel.setStreamingLiveCursorEnabled($0) }
+                )
+            )
+
+            Text("Saved now for streaming recipes. Live cursor transport is not active in this build.")
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+
+            Toggle(
+                "Authoritative second pass",
+                isOn: Binding(
+                    get: { viewModel.streamingSecondPassEnabled },
+                    set: { viewModel.setStreamingSecondPassEnabled($0) }
+                )
+            )
+
+            Divider()
+
+            Picker(
+                "Overflow mode",
+                selection: Binding(
+                    get: { viewModel.streamingCardOverflowMode },
+                    set: { viewModel.setStreamingCardOverflowMode($0) }
+                )
+            ) {
+                ForEach(StreamingCardOverflowMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
         }
     }
 
@@ -628,6 +684,10 @@ final class GeneralTabViewModel: ObservableObject {
     /// "Auto stopped. Update settings to change." after VAD-triggered stop.
     /// Default `false`.
     @Published private(set) var vadShowAutoStoppedNotification: Bool
+    @Published private(set) var streamingLiveCardEnabled: Bool
+    @Published private(set) var streamingLiveCursorEnabled: Bool
+    @Published private(set) var streamingSecondPassEnabled: Bool
+    @Published private(set) var streamingCardOverflowMode: StreamingCardOverflowMode
     /// Master theme (Light / Dark / System). Drives
     /// `showsTintPicker` — tint is hidden when the effective scheme
     /// is dark (mockup-gaps G, 2026-04-21).
@@ -703,6 +763,10 @@ final class GeneralTabViewModel: ObservableObject {
         self.vadSilenceThresholdSeconds = VadSilenceThresholdPreference.resolve(from: defaults)
         self.vadShowStoppingWarning = VadShowStoppingWarningPreference.resolve(from: defaults)
         self.vadShowAutoStoppedNotification = VadShowAutoStoppedNotificationPreference.resolve(from: defaults)
+        self.streamingLiveCardEnabled = StreamingLiveCardEnabledPreference.resolve(from: defaults)
+        self.streamingLiveCursorEnabled = StreamingLiveCursorEnabledPreference.resolve(from: defaults)
+        self.streamingSecondPassEnabled = StreamingSecondPassEnabledPreference.resolve(from: defaults)
+        self.streamingCardOverflowMode = StreamingCardOverflowModePreference.resolve(from: defaults)
         self.appTheme = AppTheme.resolve(from: defaults)
         self.speakerSeparationSensitivity = SpeakerSeparationSensitivityPreference.resolve(from: defaults)
         self.currentSystemIsDark = systemIsDarkProvider()
@@ -811,6 +875,26 @@ final class GeneralTabViewModel: ObservableObject {
     func setVadShowAutoStoppedNotification(_ enabled: Bool) {
         vadShowAutoStoppedNotification = enabled
         VadShowAutoStoppedNotificationPreference.persist(enabled, to: defaults)
+    }
+
+    func setStreamingLiveCardEnabled(_ enabled: Bool) {
+        streamingLiveCardEnabled = enabled
+        StreamingLiveCardEnabledPreference.persist(enabled, to: defaults)
+    }
+
+    func setStreamingLiveCursorEnabled(_ enabled: Bool) {
+        streamingLiveCursorEnabled = enabled
+        StreamingLiveCursorEnabledPreference.persist(enabled, to: defaults)
+    }
+
+    func setStreamingSecondPassEnabled(_ enabled: Bool) {
+        streamingSecondPassEnabled = enabled
+        StreamingSecondPassEnabledPreference.persist(enabled, to: defaults)
+    }
+
+    func setStreamingCardOverflowMode(_ mode: StreamingCardOverflowMode) {
+        streamingCardOverflowMode = mode
+        StreamingCardOverflowModePreference.persist(mode, to: defaults)
     }
 
     func setWindowTint(_ tint: WindowTint) {

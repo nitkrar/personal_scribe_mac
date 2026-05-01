@@ -24,6 +24,12 @@ public enum WorkflowModeValidationError: Error, Equatable, Sendable {
     /// does not contain exactly one streaming-transcriber processor.
     case streamingShapeRequiresExactlyOneStreamingProcessor(count: Int)
 
+    /// Streaming recipes persist an explicit `streamingBehavior`.
+    case streamingShapeRequiresStreamingBehavior
+
+    /// Batch recipes must not persist streaming-only behavior.
+    case batchShapeForbidsStreamingBehavior
+
     /// #090: a pinned `descriptorID` references a descriptor that is
     /// not in the supplied `registeredDescriptors` list. Either the
     /// catalog entry was removed or the recipe has a typo. Surfaces

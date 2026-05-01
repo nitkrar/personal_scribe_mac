@@ -263,6 +263,49 @@ final class PillOverlayPresenterTests: XCTestCase {
         )
     }
 
+    func testStreamCardShowAndUpdateReuseSingleCardInstance() {
+        let viewModel = PillOverlayViewModel(visibility: .recording, visibilityMode: .alwaysOn)
+        let panelBuilder = RecordingPanelBuilder()
+        let streamCardBuilder = RecordingStreamCardBuilder()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            streamCardBuilder: streamCardBuilder
+        )
+
+        presenter.showStreamCard(text: "hello")
+        presenter.updateStreamCard(text: "hello world")
+
+        XCTAssertEqual(streamCardBuilder.makeStreamCardCallCount, 1)
+        XCTAssertEqual(streamCardBuilder.card.showCallCount, 1)
+        XCTAssertEqual(streamCardBuilder.card.updateCallCount, 1)
+        XCTAssertEqual(streamCardBuilder.card.lastText, "hello world")
+        XCTAssertEqual(
+            streamCardBuilder.card.lastAnchorWindow,
+            panelBuilder.panel.anchorWindow
+        )
+    }
+
+    func testResponseCardPreemptsVisibleStreamCard() {
+        let viewModel = PillOverlayViewModel(visibility: .recording, visibilityMode: .alwaysOn)
+        let panelBuilder = RecordingPanelBuilder()
+        let responseCardBuilder = RecordingResponseCardBuilder()
+        let streamCardBuilder = RecordingStreamCardBuilder()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            responseCardBuilder: responseCardBuilder,
+            streamCardBuilder: streamCardBuilder
+        )
+
+        presenter.showStreamCard(text: "live transcript")
+        presenter.showRecordingStatusCard(text: "Finalizing…")
+
+        XCTAssertEqual(streamCardBuilder.card.hideCallCount, 1)
+        XCTAssertEqual(responseCardBuilder.makeResponseCardCallCount, 1)
+        XCTAssertEqual(responseCardBuilder.card.lastText, "Finalizing…")
+    }
+
     // MARK: - #044 — panel resizes per visibility state
 
     /// Visibility transition from `.idle` to `.recording` must drive
@@ -411,6 +454,30 @@ final class PillOverlayPresenterTests: XCTestCase {
         let lastPillFrame = responseCardBuilder.card.reanchorCalls.last!
         XCTAssertEqual(lastPillFrame.size, PillOverlayView.transcribingSize,
                        "Reanchor frame must be the freshly-resized pill frame")
+    }
+
+    func testStreamCardReanchorsOnPillResize() {
+        let viewModel = PillOverlayViewModel(visibility: .recording, visibilityMode: .alwaysOn)
+        let panelBuilder = RecordingPanelBuilder()
+        let streamCardBuilder = RecordingStreamCardBuilder()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            streamCardBuilder: streamCardBuilder
+        )
+        presenter.showStreamCard(text: "live transcript")
+
+        let reanchorCallsBefore = streamCardBuilder.card.reanchorCalls.count
+
+        viewModel.apply(visibility: PillVisibilityState.transcribing)
+
+        XCTAssertGreaterThan(
+            streamCardBuilder.card.reanchorCalls.count,
+            reanchorCallsBefore,
+            "Stream card must reanchor above the pill's new frame on resize"
+        )
+        let lastPillFrame = streamCardBuilder.card.reanchorCalls.last!
+        XCTAssertEqual(lastPillFrame.size, PillOverlayView.transcribingSize)
     }
 
     // MARK: - Non-activating panel contract (Issue 6)
@@ -572,6 +639,7 @@ private final class RecordingResponseCard: ResponseCardPresenting {
     private(set) var lastAutoDismissAfter: TimeInterval?
     private(set) var showCallCount = 0
     private(set) var updateCallCount = 0
+    private(set) var hideCallCount = 0
     private(set) var reanchorCalls: [NSRect] = []
 
     func show(
@@ -594,5 +662,47 @@ private final class RecordingResponseCard: ResponseCardPresenting {
         reanchorCalls.append(pillFrame)
     }
 
-    func hide() {}
+    func hide() {
+        hideCallCount += 1
+    }
+}
+
+@MainActor
+private final class RecordingStreamCardBuilder: StreamCardBuilding {
+    let card = RecordingStreamCard()
+    private(set) var makeStreamCardCallCount = 0
+
+    func makeStreamCard() -> any StreamCardPresenting {
+        makeStreamCardCallCount += 1
+        return card
+    }
+}
+
+@MainActor
+private final class RecordingStreamCard: StreamCardPresenting {
+    private(set) var lastText: String?
+    private(set) var lastAnchorWindow: NSWindow?
+    private(set) var showCallCount = 0
+    private(set) var updateCallCount = 0
+    private(set) var hideCallCount = 0
+    private(set) var reanchorCalls: [NSRect] = []
+
+    func show(text: String, above pillWindow: NSWindow) {
+        lastText = text
+        lastAnchorWindow = pillWindow
+        showCallCount += 1
+    }
+
+    func update(text: String) {
+        lastText = text
+        updateCallCount += 1
+    }
+
+    func reanchor(abovePillFrame pillFrame: NSRect) {
+        reanchorCalls.append(pillFrame)
+    }
+
+    func hide() {
+        hideCallCount += 1
+    }
 }

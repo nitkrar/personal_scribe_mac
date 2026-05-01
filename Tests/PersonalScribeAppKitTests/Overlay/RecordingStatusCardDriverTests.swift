@@ -137,6 +137,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
             sessionState: .capturing,
             reportedError: nil,
             progress: nil,
+            isStreamingSession: false,
             vadGracePending: true,
             vadFireToken: nil,
             vadLastSeenFireToken: nil,
@@ -150,6 +151,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
             sessionState: .capturing,
             reportedError: nil,
             progress: nil,
+            isStreamingSession: false,
             vadGracePending: true,
             vadFireToken: nil,
             vadLastSeenFireToken: nil,
@@ -170,6 +172,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
             sessionState: .transcribing,
             reportedError: nil,
             progress: nil,
+            isStreamingSession: false,
             vadGracePending: false,
             vadFireToken: firstToken,
             vadLastSeenFireToken: nil,
@@ -190,6 +193,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
             sessionState: .transcribing,
             reportedError: nil,
             progress: nil,
+            isStreamingSession: false,
             vadGracePending: false,
             vadFireToken: firstToken,
             vadLastSeenFireToken: firstToken,
@@ -203,6 +207,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
             sessionState: .transcribing,
             reportedError: nil,
             progress: nil,
+            isStreamingSession: false,
             vadGracePending: false,
             vadFireToken: secondToken,
             vadLastSeenFireToken: firstToken,
@@ -222,6 +227,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
             sessionState: .shortExit,
             reportedError: nil,
             progress: nil,
+            isStreamingSession: false,
             vadGracePending: false,
             vadFireToken: nil,
             vadLastSeenFireToken: nil,
@@ -240,6 +246,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
             sessionState: .error(.resampleFailure),
             reportedError: nil,
             progress: nil,
+            isStreamingSession: false,
             vadGracePending: true,
             vadFireToken: token,
             vadLastSeenFireToken: nil,
@@ -279,6 +286,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
             sessionState: .error(.transcriptionFailure),
             reportedError: reportedError,
             progress: nil,
+            isStreamingSession: false,
             vadGracePending: false,
             vadFireToken: nil,
             vadLastSeenFireToken: nil,
@@ -288,6 +296,23 @@ final class RecordingStatusCardDriverTests: XCTestCase {
 
         XCTAssertEqual(content?.text, reportedError.userMessage)
         XCTAssertEqual(content?.autoDismissAfter, 4.0)
+        XCTAssertNil(content?.link)
+    }
+
+    func testStreamingSessionTranscribingShowsFinalizingWhenNoHigherPriorityMessageApplies() {
+        let content = RecordingStatusCardDriver.statusContent(
+            sessionState: .transcribing,
+            reportedError: nil,
+            progress: nil,
+            isStreamingSession: true,
+            vadGracePending: false,
+            vadFireToken: nil,
+            vadLastSeenFireToken: nil,
+            showStoppingWarning: false,
+            showAutoStoppedNotification: false
+        )
+
+        XCTAssertEqual(content?.text, "Finalizing…")
         XCTAssertNil(content?.link)
     }
 }

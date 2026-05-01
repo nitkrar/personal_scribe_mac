@@ -334,6 +334,270 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                        "startRecording must have published `.capturing` by the time prepare has entered")
     }
 
+    func testStreamingRecipePublishesTranscriptProgressDuringCapture() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.1),
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.2),
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.3),
+        ]
+        let streamingTranscriber = ScriptedStreamingTranscriber(
+            perBufferEvents: [
+                [.partial(text: "hello")],
+                [.partial(text: "hello world")],
+                [.endOfUtterance(text: "hello world again")],
+            ],
+            terminalResult: TranscriptionResult(
+                text: "hello world again",
+                audioDuration: .milliseconds(300),
+                processingDuration: .milliseconds(40)
+            )
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: buffers,
+                delayPerBuffer: .milliseconds(50)
+            ),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: false
+                )
+            )
+        )
+
+        let stream = await orchestrator.snapshotStream()
+        let observedTask = Task { () -> [SessionSnapshot] in
+            var snapshots: [SessionSnapshot] = []
+            for await snapshot in stream {
+                snapshots.append(snapshot)
+                if snapshot.sessionState == .capturing,
+                   snapshot.transcriptProgress?.text == "hello world again" {
+                    break
+                }
+            }
+            return snapshots
+        }
+
+        await orchestrator.toggleCapture()
+        let observed = try await withTimeout(.seconds(2)) {
+            await observedTask.value
+        }
+
+        XCTAssertTrue(
+            observed.contains {
+                $0.sessionState == .capturing &&
+                $0.transcriptProgress?.text == "hello"
+            }
+        )
+        XCTAssertTrue(
+            observed.contains {
+                $0.sessionState == .capturing &&
+                $0.transcriptProgress?.text == "hello world"
+            }
+        )
+        XCTAssertTrue(
+            observed.contains {
+                $0.sessionState == .capturing &&
+                $0.transcriptProgress?.text == "hello world again"
+            }
+        )
+
+        await orchestrator.toggleCapture()
+    }
+
+    func testStreamingLiveCardDisabledSuppressesCaptureTimeTranscriptPublication() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600),
+            try makeBuffer(sampleCount: 1_600),
+        ]
+        let streamingTranscriber = ScriptedStreamingTranscriber(
+            perBufferEvents: [
+                [.partial(text: "hidden")],
+                [.endOfUtterance(text: "hidden transcript")],
+            ],
+            terminalResult: TranscriptionResult(
+                text: "hidden transcript",
+                audioDuration: .milliseconds(200),
+                processingDuration: .milliseconds(10)
+            )
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: buffers,
+                delayPerBuffer: .milliseconds(40)
+            ),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: false,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: false
+                )
+            )
+        )
+
+        let stream = await orchestrator.snapshotStream()
+        let observedTask = Task { () -> [SessionSnapshot] in
+            var snapshots: [SessionSnapshot] = []
+            for await snapshot in stream {
+                snapshots.append(snapshot)
+                if snapshot.sessionState == .completed,
+                   snapshot.lastCompletedResult != nil {
+                    break
+                }
+            }
+            return snapshots
+        }
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(120))
+        await orchestrator.toggleCapture()
+
+        let observed = try await withTimeout(.seconds(2)) {
+            await observedTask.value
+        }
+
+        XCTAssertFalse(
+            observed.contains {
+                ($0.sessionState == .capturing || $0.sessionState == .holdRecording) &&
+                $0.transcriptProgress != nil
+            }
+        )
+        XCTAssertEqual(observed.last?.lastCompletedResult?.text, "Hidden transcript.")
+    }
+
+    func testStreamingMissingFinalizedFallsBackToAccumulatorTerminalText() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600),
+            try makeBuffer(sampleCount: 1_600),
+        ]
+        let streamingTranscriber = ScriptedStreamingTranscriber(
+            perBufferEvents: [
+                [.partial(text: "hello")],
+                [.endOfUtterance(text: "hello world")],
+            ],
+            terminalResult: nil
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: buffers),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: false
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.lastCompletedResult?.text, "Hello world.")
+    }
+
+    func testStreamingSecondPassBecomesAuthoritativeWhenAvailable() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600),
+            try makeBuffer(sampleCount: 1_600),
+        ]
+        let streamingTranscriber = ScriptedStreamingTranscriber(
+            perBufferEvents: [
+                [.partial(text: "streaming")],
+                [.endOfUtterance(text: "streaming final")],
+            ],
+            terminalResult: TranscriptionResult(
+                text: "streaming final",
+                audioDuration: .milliseconds(200),
+                processingDuration: .milliseconds(10)
+            )
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: buffers),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: true
+                ),
+                secondPassTranscriber: ReturningTranscriber(
+                    result: TranscriptionResult(
+                        text: "authoritative final",
+                        audioDuration: .milliseconds(200),
+                        processingDuration: .milliseconds(15)
+                    )
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.lastCompletedResult?.text, "Authoritative final.")
+    }
+
+    func testStreamingSecondPassBlankResultFallsBackToStreamingFinal() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600),
+            try makeBuffer(sampleCount: 1_600),
+        ]
+        let streamingTranscriber = ScriptedStreamingTranscriber(
+            perBufferEvents: [
+                [.partial(text: "streaming")],
+                [.endOfUtterance(text: "streaming final")],
+            ],
+            terminalResult: TranscriptionResult(
+                text: "streaming final",
+                audioDuration: .milliseconds(200),
+                processingDuration: .milliseconds(10)
+            )
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: buffers),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: true
+                ),
+                secondPassTranscriber: ReturningTranscriber(
+                    result: TranscriptionResult(
+                        text: "   ",
+                        audioDuration: .milliseconds(200),
+                        processingDuration: .milliseconds(15)
+                    )
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.lastCompletedResult?.text, "Streaming final.")
+    }
+
     func testStopCompletesWhileBackgroundPrepareIsStillRunning() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
         let transcriber = SlowPrepareTranscriber(
@@ -904,13 +1168,14 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         postProcessingPipeline: any PostProcessingPipeline = DefaultPostProcessingPipeline(),
         outputSink: any PipelineOutputSink = TestPipelineOutputSink(),
         context: PipelineContextSnapshot = PipelineContextSnapshot(streamingOutputEnabled: false),
-        persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)? = nil
+        persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)? = nil,
+        boundRecipe: BoundRecipe? = nil
     ) -> SessionPipelineOrchestrator {
         // #078.31b: orchestrator init takes a `BoundRecipe` post-cutover.
         // Wrap the `transcriber:` arg as the asr processor of a built-in
         // batch dictation recipe so existing test names + bodies stay
         // unchanged.
-        let boundRecipe = BoundRecipe(
+        let resolvedRecipe = boundRecipe ?? BoundRecipe(
             recipeID: "dictation",
             recipeName: "Dictation",
             pipelineShape: .batch,
@@ -927,7 +1192,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                 outputSink: outputSink,
                 contextProvider: contextProvider,
                 persistenceHandler: persistenceHandler,
-                boundRecipe: boundRecipe
+                boundRecipe: resolvedRecipe
             )
         }
 
@@ -938,7 +1203,24 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
             contextProvider: contextProvider,
-            boundRecipe: boundRecipe
+            boundRecipe: resolvedRecipe
+        )
+    }
+
+    private func makeStreamingRecipe(
+        streamingTranscriber: any StreamingTranscriber,
+        streamingBehavior: BoundStreamingBehavior,
+        secondPassTranscriber: (any Transcriber)? = nil
+    ) -> BoundRecipe {
+        BoundRecipe(
+            recipeID: "streaming-dictation",
+            recipeName: "Streaming Dictation",
+            pipelineShape: .streaming,
+            processors: [.streamingTranscriber(streamingTranscriber)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: true)],
+            streamingBehavior: streamingBehavior,
+            streamingSecondPassTranscriber: secondPassTranscriber
         )
     }
 
@@ -1235,6 +1517,75 @@ private actor SlowPrepareTranscriber: Transcriber {
 
     func transcribeCallCount() -> Int {
         transcribeCount
+    }
+}
+
+private actor ReturningTranscriber: Transcriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+    private let result: TranscriptionResult
+
+    init(result: TranscriptionResult) {
+        self.result = result
+    }
+
+    func prepare() async throws {}
+
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+
+    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+        result
+    }
+}
+
+private actor ScriptedStreamingTranscriber: StreamingTranscriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+
+    private let perBufferEvents: [[StreamingTranscriptionEvent]]
+    private let terminalResult: TranscriptionResult?
+
+    init(
+        perBufferEvents: [[StreamingTranscriptionEvent]],
+        terminalResult: TranscriptionResult?
+    ) {
+        self.perBufferEvents = perBufferEvents
+        self.terminalResult = terminalResult
+    }
+
+    func prepare() async throws {}
+
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+
+    nonisolated func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>
+    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
+        let perBufferEvents = self.perBufferEvents
+        let terminalResult = self.terminalResult
+        return AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    var index = 0
+                    for try await _ in stream {
+                        if index < perBufferEvents.count {
+                            for event in perBufferEvents[index] {
+                                continuation.yield(event)
+                            }
+                        }
+                        index += 1
+                    }
+
+                    if let terminalResult {
+                        continuation.yield(.finalized(terminalResult))
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
     }
 }
 

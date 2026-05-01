@@ -127,6 +127,57 @@ final class WorkflowModeValidatorTests: XCTestCase {
         )
     }
 
+    func testStreamingRecipeRequiresStreamingBehavior() {
+        let recipe = WorkflowMode(
+            id: "streaming",
+            name: "Streaming",
+            pipelineShape: .streaming,
+            processors: [.streamingTranscriber(kind: .streamingASR)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        XCTAssertThrowsError(
+            try WorkflowModeValidator.validate(
+                recipe,
+                availableKinds: [.streamingASR]
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? WorkflowModeValidationError,
+                .streamingShapeRequiresStreamingBehavior
+            )
+        }
+    }
+
+    func testBatchRecipeRejectsPersistedStreamingBehavior() {
+        let recipe = WorkflowMode(
+            id: "batch-with-streaming-behavior",
+            name: "Batch With Streaming Behavior",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite],
+            streamingBehavior: StreamingBehaviorSpec(
+                liveCardEnabled: .setting(PreferenceKeys.streamingLiveCardEnabled),
+                liveCursorEnabled: .setting(PreferenceKeys.streamingLiveCursorEnabled),
+                secondPassEnabled: .setting(PreferenceKeys.streamingSecondPassEnabled)
+            )
+        )
+
+        XCTAssertThrowsError(
+            try WorkflowModeValidator.validate(
+                recipe,
+                availableKinds: [.asr]
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? WorkflowModeValidationError,
+                .batchShapeForbidsStreamingBehavior
+            )
+        }
+    }
+
     // MARK: - #090: per-mode descriptor pinning
 
     /// A pinned `.transcriber` MUST validate even when its kind is

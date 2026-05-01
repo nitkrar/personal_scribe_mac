@@ -37,13 +37,19 @@ public final class RecipeBuilder {
         let processors = try mode.processors.map { try buildProcessor($0) }
         let captureControllers = mode.captureControllers.map { buildCaptureController($0) }
         let outputSinks = mode.outputSinks.map { buildOutputSink($0) }
+        let streamingBehavior = buildStreamingBehavior(mode.streamingBehavior)
+        let streamingSecondPassTranscriber = try buildStreamingSecondPassTranscriber(
+            streamingBehavior: streamingBehavior
+        )
         return BoundRecipe(
             recipeID: mode.id,
             recipeName: mode.name,
             pipelineShape: mode.pipelineShape,
             processors: processors,
             captureControllers: captureControllers,
-            outputSinks: outputSinks
+            outputSinks: outputSinks,
+            streamingBehavior: streamingBehavior,
+            streamingSecondPassTranscriber: streamingSecondPassTranscriber
         )
     }
 
@@ -110,6 +116,32 @@ public final class RecipeBuilder {
         case .transcriptHistorySQLite:
             return .transcriptHistorySQLite
         }
+    }
+
+    private func buildStreamingBehavior(
+        _ spec: StreamingBehaviorSpec?
+    ) -> BoundStreamingBehavior? {
+        guard let spec else {
+            return nil
+        }
+
+        return BoundStreamingBehavior(
+            liveCardEnabled: ParameterResolver.resolve(spec.liveCardEnabled, from: defaults),
+            liveCursorEnabled: ParameterResolver.resolve(spec.liveCursorEnabled, from: defaults),
+            secondPassEnabled: ParameterResolver.resolve(spec.secondPassEnabled, from: defaults)
+        )
+    }
+
+    private func buildStreamingSecondPassTranscriber(
+        streamingBehavior: BoundStreamingBehavior?
+    ) throws -> (any Transcriber)? {
+        guard let streamingBehavior,
+              streamingBehavior.secondPassEnabled,
+              let descriptor = modelService.activeDescriptor(for: .asr)
+        else {
+            return nil
+        }
+        return try processorProvider.transcriber(for: descriptor)
     }
 
     /// Resolve the descriptor for a processor spec.

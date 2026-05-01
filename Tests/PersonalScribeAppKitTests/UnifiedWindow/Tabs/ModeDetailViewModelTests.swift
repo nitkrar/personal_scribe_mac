@@ -64,4 +64,41 @@ final class ModeDetailViewModelTests: XCTestCase {
         }
         XCTAssertEqual(savedID, "parakeet-tdt-ctc-110m")
     }
+
+    func testStreamingParametersRoundTripThroughRegistry() throws {
+        let custom = WorkflowMode(
+            id: "streaming-rt",
+            name: "Streaming Round Trip",
+            pipelineShape: .streaming,
+            processors: [.streamingTranscriber(kind: .streamingASR)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite],
+            streamingBehavior: StreamingBehaviorSpec(
+                liveCardEnabled: .setting(PreferenceKeys.streamingLiveCardEnabled),
+                liveCursorEnabled: .setting(PreferenceKeys.streamingLiveCursorEnabled),
+                secondPassEnabled: .setting(PreferenceKeys.streamingSecondPassEnabled)
+            )
+        )
+        let store = InMemoryWorkflowModeStore(
+            initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+        )
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.streamingASR] }
+        )
+        let viewModel = ModeDetailViewModel(mode: custom, registry: registry)
+
+        viewModel.setLiveTranscriptCard(.override(false))
+        viewModel.setLiveCursorStreaming(.override(true))
+        viewModel.setAuthoritativeSecondPass(.override(false))
+
+        XCTAssertEqual(viewModel.liveTranscriptCardParameter, .override(false))
+        XCTAssertEqual(viewModel.liveCursorStreamingParameter, .override(true))
+        XCTAssertEqual(viewModel.authoritativeSecondPassParameter, .override(false))
+
+        let saved = registry.customModes.first { $0.id == "streaming-rt" }
+        XCTAssertEqual(saved?.streamingBehavior?.liveCardEnabled, .override(false))
+        XCTAssertEqual(saved?.streamingBehavior?.liveCursorEnabled, .override(true))
+        XCTAssertEqual(saved?.streamingBehavior?.secondPassEnabled, .override(false))
+    }
 }

@@ -65,6 +65,43 @@ final class ModeRecipeMutatorsTests: XCTestCase {
         XCTAssertNil(id, "Realtime toggle should clear an .asr pin (kind changes to .streamingASR)")
     }
 
+    func testWithRealtimeOnSynthesizesStreamingBehavior() {
+        let mode = Self.makeBatchTranscriberMode(descriptorID: nil)
+
+        let realtime = mode.withRealtime(true)
+
+        XCTAssertEqual(
+            realtime.streamingBehavior,
+            StreamingBehaviorSpec(
+                liveCardEnabled: .setting(PreferenceKeys.streamingLiveCardEnabled),
+                liveCursorEnabled: .setting(PreferenceKeys.streamingLiveCursorEnabled),
+                secondPassEnabled: .setting(PreferenceKeys.streamingSecondPassEnabled)
+            )
+        )
+    }
+
+    func testWithRealtimeOffClearsStreamingBehavior() {
+        let mode = Self.makeStreamingMode().withLiveTranscriptCard(
+            parameter: .override(false)
+        )
+
+        let batch = mode.withRealtime(false)
+
+        XCTAssertNil(batch.streamingBehavior)
+    }
+
+    func testStreamingBehaviorMutatorsRewriteParameters() {
+        let mode = Self.makeStreamingMode()
+            .withLiveTranscriptCard(parameter: .override(false))
+            .withLiveCursorStreaming(parameter: .override(true))
+            .withAuthoritativeSecondPass(parameter: .override(false))
+
+        let streamingBehavior = mode.streamingBehavior
+        XCTAssertEqual(streamingBehavior?.liveCardEnabled, .override(false))
+        XCTAssertEqual(streamingBehavior?.liveCursorEnabled, .override(true))
+        XCTAssertEqual(streamingBehavior?.secondPassEnabled, .override(false))
+    }
+
     // MARK: - withDiarization: kind preserved → CARRY pin
 
     func testWithDiarizationOnCarriesTranscriberPinIntoDiarizedTurns() {
@@ -124,6 +161,22 @@ final class ModeRecipeMutatorsTests: XCTestCase {
             ],
             captureControllers: [.manualHotkey],
             outputSinks: [.transcriptHistorySQLite]
+        )
+    }
+
+    private static func makeStreamingMode() -> WorkflowMode {
+        WorkflowMode(
+            id: "test-streaming",
+            name: "Test Streaming",
+            pipelineShape: .streaming,
+            processors: [.streamingTranscriber(kind: .streamingASR)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite],
+            streamingBehavior: StreamingBehaviorSpec(
+                liveCardEnabled: .setting(PreferenceKeys.streamingLiveCardEnabled),
+                liveCursorEnabled: .setting(PreferenceKeys.streamingLiveCursorEnabled),
+                secondPassEnabled: .setting(PreferenceKeys.streamingSecondPassEnabled)
+            )
         )
     }
 }

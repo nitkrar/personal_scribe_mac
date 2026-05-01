@@ -34,7 +34,8 @@ final class SessionCoordinatorValidationTests: XCTestCase {
             pipelineShape: .streaming,
             processors: [.streamingTranscriber(kind: .streamingASR)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste(enabled: .override(true))]
+            outputSinks: [.frontmostPaste(enabled: .override(true))],
+            streamingBehavior: .defaultSettings
         )
         let store = InMemoryWorkflowModeStore(
             initial: WorkflowModeDocument(
@@ -182,7 +183,8 @@ final class SessionCoordinatorValidationTests: XCTestCase {
             pipelineShape: .streaming,
             processors: [.streamingTranscriber(kind: .streamingASR)],
             captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste(enabled: .override(true))]
+            outputSinks: [.frontmostPaste(enabled: .override(true))],
+            streamingBehavior: .defaultSettings
         )
         let store = InMemoryWorkflowModeStore(
             initial: WorkflowModeDocument(

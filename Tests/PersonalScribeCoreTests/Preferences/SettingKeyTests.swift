@@ -62,4 +62,26 @@ final class SettingKeyTests: XCTestCase {
             accuracy: 0.0001
         )
     }
+
+    func testRegistryIncludesStreamingLiveCardKey() {
+        XCTAssertEqual(
+            PreferenceKeys.streamingLiveCardEnabled.key,
+            "StreamingLiveCardEnabled"
+        )
+        XCTAssertEqual(
+            PreferenceKeys.streamingLiveCardEnabled.default,
+            true
+        )
+    }
+
+    func testRegistryIncludesStreamingSecondPassKey() {
+        XCTAssertEqual(
+            PreferenceKeys.streamingSecondPassEnabled.key,
+            "StreamingSecondPassEnabled"
+        )
+        XCTAssertEqual(
+            PreferenceKeys.streamingSecondPassEnabled.default,
+            true
+        )
+    }
 }

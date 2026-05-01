@@ -64,6 +64,7 @@ enum RecordingStatusCardDriver {
         sessionState: SessionState,
         reportedError: ReportedError?,
         progress: ModelDownloadProgress?,
+        isStreamingSession: Bool,
         vadGracePending: Bool,
         vadFireToken: UUID?,
         vadLastSeenFireToken: UUID?,
@@ -117,7 +118,14 @@ enum RecordingStatusCardDriver {
             return StatusCardContent(text: text, link: nil)
         }
 
-        // 5. Nothing to show.
+        // 5. Streaming sessions show a finalizing notice while the
+        //    authoritative stop-time pipeline runs, unless a higher
+        //    priority branch above already claimed the card.
+        if isStreamingSession, case .transcribing = sessionState {
+            return StatusCardContent(text: "Finalizing…", link: nil)
+        }
+
+        // 6. Nothing to show.
         return nil
     }
 

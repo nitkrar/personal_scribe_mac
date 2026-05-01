@@ -49,6 +49,17 @@ public enum WorkflowModeValidator {
             throw WorkflowModeValidationError.emptyProcessors
         }
 
+        switch mode.pipelineShape {
+        case .streaming:
+            guard mode.streamingBehavior != nil else {
+                throw WorkflowModeValidationError.streamingShapeRequiresStreamingBehavior
+            }
+        case .batch:
+            guard mode.streamingBehavior == nil else {
+                throw WorkflowModeValidationError.batchShapeForbidsStreamingBehavior
+            }
+        }
+
         // Per-processor checks.
         var streamingProcessorCount = 0
         for processor in mode.processors {
