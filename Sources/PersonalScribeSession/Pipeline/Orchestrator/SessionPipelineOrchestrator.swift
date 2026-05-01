@@ -559,11 +559,24 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         let bufferedDuration = replayBuffers.reduce(Duration.zero) { $0 + $1.duration }
         currentSnapshot.recordingDuration = bufferedDuration
         let isStreamingSession = activeSessionRecipe?.streamingBehavior != nil
-        let canFinalizeShortStreamingCapture = isStreamingSession &&
-            (liveStreamingAccumulator?.hasTranscriptContent ?? false)
+        var finishedLiveStreamingState:
+            (accumulator: StreamingTranscriptAccumulator?, failure: PipelineStageFailure?)?
+        let canFinalizeShortStreamingCapture: Bool
+        if isStreamingSession, bufferedDuration < .milliseconds(1_000) {
+            let liveState = await finishLiveStreamingSessionForStop()
+            finishedLiveStreamingState = liveState
+            canFinalizeShortStreamingCapture = resolveStreamingFallbackResult(
+                accumulator: liveState.accumulator,
+                bufferedDuration: bufferedDuration
+            ) != nil
+        } else {
+            canFinalizeShortStreamingCapture = false
+        }
 
         guard bufferedDuration >= .milliseconds(1_000) || canFinalizeShortStreamingCapture else {
-            await cancelLiveStreamingSession()
+            if isStreamingSession, finishedLiveStreamingState == nil {
+                await cancelLiveStreamingSession()
+            }
             publish { snapshot in
                 // `#075`: Short-hold is a pipeline shortcut (nothing to
                 // transcribe), not an error. Publishing `.shortExit`
@@ -572,9 +585,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 // occurs.
                 //
                 // Streaming sessions only bypass the sub-1s short-exit
-                // guard when the live path has already accumulated
-                // non-blank transcript text. Blank/no-event short clips
-                // still exit here.
+                // guard when the stop-finalized live path has
+                // accumulated non-blank transcript text. Blank/no-event
+                // short clips still exit here.
                 snapshot.sessionState = .shortExit
                 snapshot.activeStage = nil
                 snapshot.recordingDuration = bufferedDuration
@@ -599,7 +612,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
 
         do {
-            let rawResult = try await runBoundProcessing(replayBuffers: replayBuffers)
+            let rawResult = try await runBoundProcessing(
+                replayBuffers: replayBuffers,
+                finishedLiveStreamingState: finishedLiveStreamingState
+            )
             let rawProgress = nextTranscriptProgress(
                 text: rawResult.text,
                 isFinal: true,
@@ -689,7 +705,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// uses the first entry. Multi-processor recipes (e.g. ASR +
     /// voice-ID labelling) land in a follow-up step.
     private func runBoundProcessing(
-        replayBuffers: [PCMBuffer]
+        replayBuffers: [PCMBuffer],
+        finishedLiveStreamingState:
+            (accumulator: StreamingTranscriptAccumulator?, failure: PipelineStageFailure?)? = nil
     ) async throws -> TranscriptionResult {
         guard let recipe = activeSessionRecipe, let processor = recipe.processors.first else {
             throw makeStageFailure(
@@ -706,7 +724,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 return try await transcriber.transcribe(coalesced)
 
             case .streamingTranscriber:
-                return try await runBoundStreamingTranscription(replayBuffers: replayBuffers)
+                return try await runBoundStreamingTranscription(
+                    replayBuffers: replayBuffers,
+                    finishedLiveStreamingState: finishedLiveStreamingState
+                )
 
             case .diarizedTurns(let diarizer, let perTurnTranscriber, let sensitivity):
                 let fusion = DiarizedTurnTranscriptionProcessor(
@@ -728,10 +749,16 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// Finalize a capture-time live streaming session and optionally
     /// run an authoritative second pass over the buffered audio.
     private func runBoundStreamingTranscription(
-        replayBuffers: [PCMBuffer]
+        replayBuffers: [PCMBuffer],
+        finishedLiveStreamingState:
+            (accumulator: StreamingTranscriptAccumulator?, failure: PipelineStageFailure?)? = nil
     ) async throws -> TranscriptionResult {
         let bufferedDuration = replayBuffers.reduce(Duration.zero) { $0 + $1.duration }
-        let (accumulator, liveFailure) = await finishLiveStreamingSessionForStop()
+        let (accumulator, liveFailure) = if let finishedLiveStreamingState {
+            finishedLiveStreamingState
+        } else {
+            await finishLiveStreamingSessionForStop()
+        }
 
         let streamingFallbackResult = resolveStreamingFallbackResult(
             accumulator: accumulator,
@@ -1298,16 +1325,13 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     private func finishLiveStreamingSessionForStop()
-        async -> (StreamingTranscriptAccumulator?, PipelineStageFailure?)
+        async -> (accumulator: StreamingTranscriptAccumulator?, failure: PipelineStageFailure?)
     {
         liveStreamingInputContinuation?.finish()
         liveStreamingInputContinuation = nil
 
         if let liveStreamingEventTask {
-            await awaitLiveStreamingEventTaskShutdown(
-                liveStreamingEventTask,
-                cancelImmediately: true
-            )
+            await awaitLiveStreamingEventTaskShutdown(liveStreamingEventTask)
         }
 
         let accumulator = liveStreamingAccumulator
@@ -1324,10 +1348,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         liveStreamingInputContinuation = nil
 
         if let liveStreamingEventTask {
-            await awaitLiveStreamingEventTaskShutdown(
-                liveStreamingEventTask,
-                cancelImmediately: true
-            )
+            await awaitLiveStreamingEventTaskShutdown(liveStreamingEventTask)
         }
 
         liveStreamingEventTask = nil
@@ -1335,25 +1356,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         liveStreamingFailure = nil
     }
 
-    private func awaitLiveStreamingEventTaskShutdown(
-        _ task: Task<Void, Never>,
-        cancelImmediately: Bool
-    ) async {
-        if cancelImmediately {
-            task.cancel()
-        }
-
-        if await Self.waitForTaskCompletion(
-            task,
-            timeout: liveStreamingEventShutdownTimeout
-        ) {
-            return
-        }
-
-        logger.error(
-            "Live streaming event task exceeded shutdown timeout; cancelling task",
-            metadata: ["timeout": "\(liveStreamingEventShutdownTimeout)"]
-        )
+    private func awaitLiveStreamingEventTaskShutdown(_ task: Task<Void, Never>) async {
         task.cancel()
 
         if await Self.waitForTaskCompletion(
@@ -1364,7 +1367,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
 
         logger.error(
-            "Live streaming event task remained active after cancel fallback",
+            "Live streaming event task exceeded cooperative shutdown timeout",
             metadata: ["timeout": "\(liveStreamingEventShutdownTimeout)"]
         )
     }
@@ -1373,6 +1376,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         _ task: Task<Void, Never>,
         timeout: Duration
     ) async -> Bool {
+        // Cooperative timeout only. We race task completion against a sleep,
+        // but the task-group cancellation still relies on `task.value`
+        // unwinding. A pathological adapter that never lets the task return can
+        // still extend shutdown beyond this timeout.
         await withTaskGroup(of: Bool.self) { group in
             group.addTask {
                 await task.value
