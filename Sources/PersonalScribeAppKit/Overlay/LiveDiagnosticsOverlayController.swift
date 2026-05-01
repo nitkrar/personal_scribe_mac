@@ -20,17 +20,24 @@ extension NSPanel: LiveDiagnosticsOverlayPaneling {
 
 @MainActor
 protocol LiveDiagnosticsOverlayPanelBuilding {
-    func makePanel(initialSize: NSSize) -> any LiveDiagnosticsOverlayPaneling
+    func makePanel(
+        initialSize: NSSize,
+        dismissAction: @escaping () -> Void
+    ) -> any LiveDiagnosticsOverlayPaneling
 }
 
 @MainActor
 struct AppKitLiveDiagnosticsOverlayPanelBuilder: LiveDiagnosticsOverlayPanelBuilding {
-    func makePanel(initialSize: NSSize) -> any LiveDiagnosticsOverlayPaneling {
-        let panel = NSPanel(
+    func makePanel(
+        initialSize: NSSize,
+        dismissAction: @escaping () -> Void
+    ) -> any LiveDiagnosticsOverlayPaneling {
+        let panel = LiveDiagnosticsOverlayPanel(
             contentRect: NSRect(origin: .zero, size: initialSize),
             styleMask: [.titled, .utilityWindow, .fullSizeContentView],
             backing: .buffered,
-            defer: false
+            defer: false,
+            dismissAction: dismissAction
         )
         panel.isFloatingPanel = true
         panel.level = .floating
@@ -45,13 +52,39 @@ struct AppKitLiveDiagnosticsOverlayPanelBuilder: LiveDiagnosticsOverlayPanelBuil
     }
 }
 
+private final class LiveDiagnosticsOverlayPanel: NSPanel {
+    private let dismissAction: () -> Void
+
+    init(
+        contentRect: NSRect,
+        styleMask: NSWindow.StyleMask,
+        backing: NSWindow.BackingStoreType,
+        defer flag: Bool,
+        dismissAction: @escaping () -> Void
+    ) {
+        self.dismissAction = dismissAction
+        super.init(
+            contentRect: contentRect,
+            styleMask: styleMask,
+            backing: backing,
+            defer: flag
+        )
+    }
+
+    override var canBecomeKey: Bool { true }
+
+    override func cancelOperation(_ sender: Any?) {
+        dismissAction()
+    }
+}
+
 @MainActor
 final class LiveDiagnosticsOverlayController: ObservableObject {
     private let defaults: UserDefaults
     private let notificationCenter: NotificationCenter
     private let store: DiagnosticsStore
     private let panel: any LiveDiagnosticsOverlayPaneling
-    private let viewModel = LiveDiagnosticsOverlayViewModel()
+    let viewModel: LiveDiagnosticsOverlayViewModel
     private let panelSize = NSSize(width: 480, height: 320)
 
     private var defaultsDidChangeObserver: NSObjectProtocol?
@@ -66,7 +99,11 @@ final class LiveDiagnosticsOverlayController: ObservableObject {
         self.store = store
         self.defaults = defaults
         self.notificationCenter = notificationCenter
-        panel = panelBuilder.makePanel(initialSize: panelSize)
+        let dismissAction: () -> Void = { [defaults] in
+            ShowLiveDiagnosticsOverlayPreference.persist(false, to: defaults)
+        }
+        viewModel = LiveDiagnosticsOverlayViewModel(dismissAction: dismissAction)
+        panel = panelBuilder.makePanel(initialSize: panelSize, dismissAction: dismissAction)
 
         configurePanel()
         startObservingDiagnostics()
