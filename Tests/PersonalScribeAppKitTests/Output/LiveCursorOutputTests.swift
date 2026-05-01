@@ -135,6 +135,31 @@ final class LiveCursorOutputTests: XCTestCase {
         XCTAssertEqual(pasteCount, 0)
     }
 
+    func testResetForNewSessionCapturesClipboardBeforeFirstChunkArrives() async throws {
+        let pasteboard = makePasteboard()
+        pasteboard.clearContents()
+        pasteboard.setString("user-pre-session", forType: .string)
+        let output = makeOutput(pasteboard: pasteboard)
+
+        await output.resetForNewSession()
+
+        // Simulate the user copying something else after recording starts
+        // but before the first EOU chunk lands.
+        pasteboard.clearContents()
+        pasteboard.setString("copied-during-recording-before-first-chunk", forType: .string)
+
+        try await output.deliverPartial(makeProgress("hello"))
+        XCTAssertEqual(pasteboard.string(forType: .string), "hello")
+
+        await output.endSession()
+
+        XCTAssertEqual(
+            pasteboard.string(forType: .string),
+            "user-pre-session",
+            "Live cursor restore must use the session-start snapshot, not clipboard contents captured on first chunk"
+        )
+    }
+
     func testEndSessionRestoresPreSessionClipboard() async throws {
         let pasteboard = makePasteboard()
         pasteboard.clearContents()
@@ -158,6 +183,30 @@ final class LiveCursorOutputTests: XCTestCase {
         await output.endSession()
 
         XCTAssertEqual(pasteboard.string(forType: .string), "user-pre-session")
+    }
+
+    func testEndSessionWithoutChunkWritesPreservesMidSessionClipboardChange() async throws {
+        let pasteboard = makePasteboard()
+        pasteboard.clearContents()
+        pasteboard.setString("user-pre-session", forType: .string)
+        let output = makeOutput(pasteboard: pasteboard)
+
+        await output.resetForNewSession()
+
+        // Simulates a non-streaming (or live-cursor-disabled) session where
+        // the orchestrator still brackets the sink lifecycle, but no EOU chunk
+        // was ever written by this sink. A user clipboard change during the
+        // session must survive cancel/short-exit teardown.
+        pasteboard.clearContents()
+        pasteboard.setString("copied-during-session", forType: .string)
+
+        await output.endSession()
+
+        XCTAssertEqual(
+            pasteboard.string(forType: .string),
+            "copied-during-session",
+            "endSession must not restore a session-start snapshot when no live cursor chunk was written"
+        )
     }
 
     func testEndSessionTwiceRestoresOnceOnly() async throws {

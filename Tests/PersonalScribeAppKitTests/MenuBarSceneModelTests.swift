@@ -288,6 +288,45 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertEqual(outputService.deliveredTexts, ["Stub transcript.", "Stub transcript."])
     }
 
+    func testIdleTransitionWaitsForPipelineEndSessionBeforeAutoDeliveringTranscript() async throws {
+        let outputSink = BlockingMenuBarEndSessionOutputSink()
+        let coordinator = try makeCoordinator(outputSink: outputSink)
+        let outputService = PhaseRecordingOutputService(outputSink: outputSink)
+        let model = try makeModel(
+            coordinator: coordinator,
+            outputService: outputService
+        )
+
+        model.startObserving()
+        await coordinator.toggle()
+        await waitForState(.capturing, on: model)
+
+        let stopTask = Task {
+            await coordinator.toggle()
+        }
+
+        await waitUntilAsync {
+            await outputSink.phase() == .started
+        }
+
+        try? await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(
+            outputService.deliveredTexts.isEmpty,
+            "Menu-bar auto-delivery must wait until pipeline endSession() cleanup has completed"
+        )
+
+        await outputSink.release()
+        await stopTask.value
+
+        await waitForState(.idle, on: model)
+        await waitForTranscriptText("Stub transcript.", on: model)
+        await waitUntil {
+            outputService.deliveredTexts == ["Stub transcript."]
+        }
+
+        XCTAssertEqual(outputService.observedPhases, [.finished])
+    }
+
     func testCopyLatestTranscriptWritesCurrentTranscriptToClipboard() async throws {
         let coordinator = try makeCoordinator()
         var copiedText: String?
@@ -421,11 +460,14 @@ final class MenuBarSceneModelTests: XCTestCase {
         XCTAssertNotNil(app)
     }
 
-    private func makeCoordinator() throws -> SessionCoordinator {
+    private func makeCoordinator(
+        outputSink: (any PipelineOutputSink)? = nil
+    ) throws -> SessionCoordinator {
         SessionCoordinator(
             capture: FakeAudioCapturer(buffers: [try makeBuffer()]),
             transcriber: FakeTranscriber(result: makeResult()),
-            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
+            outputSink: outputSink
         )
     }
 
@@ -514,6 +556,21 @@ final class MenuBarSceneModelTests: XCTestCase {
         }
 
         XCTFail("Timed out waiting for condition")
+    }
+
+    private func waitUntilAsync(
+        maxIterations: Int = 500,
+        condition: @escaping () async -> Bool
+    ) async {
+        for _ in 0..<maxIterations {
+            if await condition() {
+                return
+            }
+
+            await Task.yield()
+        }
+
+        XCTFail("Timed out waiting for async condition")
     }
 }
 
@@ -675,5 +732,61 @@ private final class ProgressRelay: @unchecked Sendable {
         let continuation = continuation
         lock.unlock()
         continuation?.yield(progress)
+    }
+}
+
+private actor BlockingMenuBarEndSessionOutputSink: PipelineOutputSink {
+    enum Phase: Sendable, Equatable {
+        case idle
+        case started
+        case finished
+    }
+
+    private var phaseState: Phase = .idle
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func deliverPartial(_ revision: TranscriptProgress) async throws {}
+
+    func deliverFinal(_ result: TranscriptionResult) async throws {}
+
+    func resetForNewSession() async {
+        phaseState = .idle
+        continuation = nil
+    }
+
+    func endSession() async {
+        phaseState = .started
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+        phaseState = .finished
+    }
+
+    func release() {
+        let continuation = continuation
+        self.continuation = nil
+        continuation?.resume()
+    }
+
+    func phase() -> Phase {
+        phaseState
+    }
+}
+
+@MainActor
+private final class PhaseRecordingOutputService: OutputService, @unchecked Sendable {
+    private let outputSink: BlockingMenuBarEndSessionOutputSink
+    private(set) var deliveredTexts: [String] = []
+    private(set) var observedPhases: [BlockingMenuBarEndSessionOutputSink.Phase] = []
+
+    init(outputSink: BlockingMenuBarEndSessionOutputSink) {
+        self.outputSink = outputSink
+    }
+
+    func deliverBatch(text: String, sinks: [BoundOutputSink]) async -> OutputResult {
+        let phase = await outputSink.phase()
+        observedPhases.append(phase)
+        deliveredTexts.append(text)
+        return .delivered(target: .frontmostApp, delivery: .paste)
     }
 }

@@ -13,17 +13,17 @@ import PersonalScribeSession
 ///
 /// Lifecycle:
 /// - `resetForNewSession()` is called at session start by the
-///   orchestrator before any chunks arrive. Drops any leftover handle
-///   defensively (should already be nil from a prior `endSession()`).
-/// - `deliverPartial(_:)` is called on every EOU chunk. The first call
-///   captures the user's pre-recording clipboard via
-///   `PasteboardSnapshotService.captureTransientSnapshot()` (lazy —
-///   sessions that emit no chunks don't leave a phantom snapshot).
-///   Subsequent calls overwrite the clipboard with the new chunk and
-///   post `Cmd+V` if AX trust + externality probe agree.
+///   orchestrator before any chunks arrive. Captures the user's
+///   pre-recording clipboard once per session so restore semantics are
+///   anchored to session start, not first-chunk timing.
+/// - `deliverPartial(_:)` is called on every EOU chunk. It overwrites
+///   the clipboard with the new chunk and posts `Cmd+V` if AX trust +
+///   externality probe agree.
 /// - `endSession()` is called on every termination path (success,
-///   cancel, error, short-exit). Restores the captured snapshot to
-///   the pasteboard and discards the handle.
+///   cancel, error, short-exit). Restores the captured snapshot only
+///   if this sink actually wrote at least one live chunk; otherwise it
+///   discards the unused session snapshot so unrelated clipboard
+///   changes made during dormant sessions survive.
 /// - `deliverFinal(_:)` is a no-op. Authoritative second-pass output
 ///   travels through `MenuBarSceneModel` + `ClipboardBatchOutput`'s
 ///   stop-time path — not this sink. Per #056 DESIGN: when live cursor
@@ -48,6 +48,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
     private let focusedElementIsInAnotherApp: FocusedElementExternalityProbe
 
     private var sessionSnapshotHandle: PasteboardSnapshotService.Handle?
+    private var didWriteChunkThisSession = false
 
     init(
         logger: PersonalScribeLogger,
@@ -69,6 +70,10 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         guard !chunk.isEmpty else { return }
 
         if sessionSnapshotHandle == nil {
+            // Defensive fallback for direct unit tests or future callers
+            // that invoke `deliverPartial` without a preceding
+            // `resetForNewSession()`. Production flow snapshots at
+            // session start.
             sessionSnapshotHandle = snapshotService.captureTransientSnapshot()
         }
 
@@ -76,6 +81,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
             logger.error("LiveCursorOutput: failed to write chunk to clipboard; skipping paste for this EOU")
             return
         }
+        didWriteChunkThisSession = true
 
         guard isAccessibilityTrusted() else {
             logger.info("LiveCursorOutput: Accessibility not trusted; chunk left on clipboard, skipping ⌘V")
@@ -99,20 +105,26 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
     }
 
     public func resetForNewSession() async {
-        // Defensive: an `endSession()` call should already have
-        // restored + cleared. If we somehow reach a new session with
-        // a stale handle, discard it rather than restore — we don't
-        // know what's on the pasteboard between sessions.
+        // Drop any stale handle left behind by an unexpected caller
+        // pattern, then snapshot the clipboard immediately so restore
+        // semantics are anchored to session start.
         if let handle = sessionSnapshotHandle {
             snapshotService.discardSnapshot(handle)
-            sessionSnapshotHandle = nil
         }
+        didWriteChunkThisSession = false
+        sessionSnapshotHandle = snapshotService.captureTransientSnapshot()
     }
 
     public func endSession() async {
         guard let handle = sessionSnapshotHandle else { return }
         sessionSnapshotHandle = nil
-        snapshotService.restoreSnapshot(handle)
+        let shouldRestore = didWriteChunkThisSession
+        didWriteChunkThisSession = false
+        if shouldRestore {
+            snapshotService.restoreSnapshot(handle)
+        } else {
+            snapshotService.discardSnapshot(handle)
+        }
     }
 
     // MARK: - Live AX probe + paste poster

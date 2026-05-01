@@ -579,6 +579,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             if isStreamingSession, finishedLiveStreamingState == nil {
                 await cancelLiveStreamingSession()
             }
+            await outputSink.endSession()
             publish { snapshot in
                 // `#075`: Short-hold is a pipeline shortcut (nothing to
                 // transcribe), not an error. Publishing `.shortExit`
@@ -598,7 +599,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.vadAutoStopGraceDeadline = nil
                 snapshot.vadAutoStopFireToken = nil
             }
-            await outputSink.endSession()
             return
         }
 
@@ -682,6 +682,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             }
 
             try await deliverFinal(finalResult)
+            await outputSink.endSession()
 
             publish { snapshot in
                 snapshot.sessionState = .completed
@@ -691,13 +692,12 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.recordingDuration = rawResult.audioDuration
                 snapshot.isStreamingSession = false
             }
-            await outputSink.endSession()
         } catch let failure as PipelineStageFailure {
+            await outputSink.endSession()
             handleStageFailure(failure)
-            await outputSink.endSession()
         } catch {
-            handleStageFailure(makeStageFailure(stage: .transcription, error: error, fallback: .transcriptionFailure))
             await outputSink.endSession()
+            handleStageFailure(makeStageFailure(stage: .transcription, error: error, fallback: .transcriptionFailure))
         }
     }
 
@@ -970,8 +970,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             }
         } catch {
             await cancelLiveStreamingSession()
-            handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
             await outputSink.endSession()
+            handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
         }
     }
 
@@ -1364,7 +1364,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         liveStreamingInputContinuation = nil
 
         if let liveStreamingEventTask {
-            await awaitLiveStreamingEventTaskShutdown(liveStreamingEventTask)
+            await awaitLiveStreamingEventTaskShutdown(
+                liveStreamingEventTask,
+                cancelImmediately: false
+            )
         }
 
         let accumulator = liveStreamingAccumulator
@@ -1381,7 +1384,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         liveStreamingInputContinuation = nil
 
         if let liveStreamingEventTask {
-            await awaitLiveStreamingEventTaskShutdown(liveStreamingEventTask)
+            await awaitLiveStreamingEventTaskShutdown(
+                liveStreamingEventTask,
+                cancelImmediately: true
+            )
         }
 
         liveStreamingEventTask = nil
@@ -1389,8 +1395,13 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         liveStreamingFailure = nil
     }
 
-    private func awaitLiveStreamingEventTaskShutdown(_ task: Task<Void, Never>) async {
-        task.cancel()
+    private func awaitLiveStreamingEventTaskShutdown(
+        _ task: Task<Void, Never>,
+        cancelImmediately: Bool
+    ) async {
+        if cancelImmediately {
+            task.cancel()
+        }
 
         if await Self.waitForTaskCompletion(
             task,
@@ -1399,34 +1410,59 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             return
         }
 
+        if !cancelImmediately {
+            logger.error(
+                "Live streaming event task exceeded graceful shutdown timeout; cancelling",
+                metadata: ["timeout": "\(liveStreamingEventShutdownTimeout)"]
+            )
+            task.cancel()
+            if await Self.waitForTaskCompletion(
+                task,
+                timeout: liveStreamingEventShutdownTimeout
+            ) {
+                return
+            }
+        }
+
         logger.error(
-            "Live streaming event task exceeded cooperative shutdown timeout",
-            metadata: ["timeout": "\(liveStreamingEventShutdownTimeout)"]
+            "Live streaming event task exceeded shutdown timeout",
+            metadata: [
+                "timeout": "\(liveStreamingEventShutdownTimeout)",
+                "cancelImmediately": "\(cancelImmediately)"
+            ]
         )
+    }
+
+    private actor TaskCompletionTracker {
+        private(set) var isCompleted = false
+
+        func markCompleted() {
+            isCompleted = true
+        }
     }
 
     private static func waitForTaskCompletion(
         _ task: Task<Void, Never>,
         timeout: Duration
     ) async -> Bool {
-        // Cooperative timeout only. We race task completion against a sleep,
-        // but the task-group cancellation still relies on `task.value`
-        // unwinding. A pathological adapter that never lets the task return can
-        // still extend shutdown beyond this timeout.
-        await withTaskGroup(of: Bool.self) { group in
-            group.addTask {
-                await task.value
+        let tracker = TaskCompletionTracker()
+        let waiter = Task {
+            await task.value
+            await tracker.markCompleted()
+        }
+
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if await tracker.isCompleted {
+                waiter.cancel()
                 return true
             }
-            group.addTask {
-                try? await Task.sleep(for: timeout)
-                return false
-            }
-
-            let finished = await group.next() ?? false
-            group.cancelAll()
-            return finished
+            try? await Task.sleep(for: .milliseconds(5))
         }
+
+        waiter.cancel()
+        return await tracker.isCompleted
     }
 
     private func resolveStreamingFallbackResult(

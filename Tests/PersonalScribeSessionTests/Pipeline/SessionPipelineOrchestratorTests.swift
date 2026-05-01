@@ -643,17 +643,10 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         let partials = await sink.partialDeliveries()
         let chunkTexts = partials.map { $0.text }
-        XCTAssertTrue(
-            chunkTexts.contains("hello"),
-            "Expected partials to contain EOU chunk 'hello'; got \(chunkTexts)"
-        )
-        XCTAssertTrue(
-            chunkTexts.contains("world"),
-            "Expected partials to contain EOU chunk 'world'; got \(chunkTexts)"
-        )
-        XCTAssertFalse(
-            chunkTexts.contains("hello world"),
-            "Expected per-EOU chunks (not cumulative); got \(chunkTexts)"
+        XCTAssertEqual(
+            chunkTexts,
+            ["hello", "world"],
+            "Expected exactly one ordered delivery per EOU chunk; got \(chunkTexts)"
         )
     }
 
@@ -851,6 +844,54 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         let count = await sink.endSessionCount()
         XCTAssertEqual(count, 1, "Expected endSession to fire exactly once after error; got \(count)")
+    }
+
+    func testSuccessfulCompletionWaitsForEndSessionBeforePublishingCompleted() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let sink = BlockingEndSessionPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: ReturningTranscriber(
+                result: TranscriptionResult(
+                    text: "hello",
+                    audioDuration: .seconds(1),
+                    processingDuration: .milliseconds(10)
+                )
+            ),
+            outputSink: sink
+        )
+
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().sessionState != .capturing {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let stopTask = Task {
+            await orchestrator.toggleCapture()
+        }
+
+        try await withTimeout(.seconds(2)) {
+            while await sink.phase() != .started {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let interimState = await orchestrator.snapshot().sessionState
+        XCTAssertNotEqual(
+            interimState,
+            .completed,
+            "The pipeline must not publish .completed until endSession() has finished cleanup"
+        )
+
+        await sink.release()
+        await stopTask.value
+
+        let finalSnapshot = await orchestrator.snapshot()
+        XCTAssertEqual(finalSnapshot.sessionState, .completed)
+        XCTAssertEqual(finalSnapshot.lastCompletedResult?.text, "Hello.")
     }
 
     func testStreamingShortCaptureWithoutTranscriptStillShortExits() async throws {
@@ -1807,6 +1848,44 @@ private actor TestPipelineOutputSink: PipelineOutputSink {
 
     func endSessionCount() -> Int {
         endSessions
+    }
+}
+
+private actor BlockingEndSessionPipelineOutputSink: PipelineOutputSink {
+    enum Phase: Sendable {
+        case idle
+        case started
+        case finished
+    }
+
+    private var phaseState: Phase = .idle
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func deliverPartial(_ revision: TranscriptProgress) async throws {}
+
+    func deliverFinal(_ result: TranscriptionResult) async throws {}
+
+    func resetForNewSession() async {
+        phaseState = .idle
+        continuation = nil
+    }
+
+    func endSession() async {
+        phaseState = .started
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+        phaseState = .finished
+    }
+
+    func release() {
+        let continuation = continuation
+        self.continuation = nil
+        continuation?.resume()
+    }
+
+    func phase() -> Phase {
+        phaseState
     }
 }
 
