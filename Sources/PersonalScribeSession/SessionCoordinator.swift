@@ -47,7 +47,8 @@ public actor SessionCoordinator {
         transcriptRepository: TranscriptRepository? = nil,
         vadProvider: (any VadProviding)? = nil,
         workflowModeRegistry: WorkflowModeRegistry? = nil,
-        availableKindsProvider: (@Sendable () -> Set<ModelKind>)? = nil
+        availableKindsProvider: (@Sendable () -> Set<ModelKind>)? = nil,
+        outputSink: (any PipelineOutputSink)? = nil
     ) {
         self.capture = capture
         self.fixedRecipe = BoundRecipe(
@@ -68,7 +69,8 @@ public actor SessionCoordinator {
             capture: capture,
             transcriptRepository: transcriptRepository,
             logger: logger,
-            vadProvider: vadProvider
+            vadProvider: vadProvider,
+            outputSink: outputSink
         )
         Task { [weak self] in
             await self?.installAutoStopHandler()
@@ -87,7 +89,8 @@ public actor SessionCoordinator {
         transcriptRepository: TranscriptRepository? = nil,
         vadProvider: (any VadProviding)? = nil,
         workflowModeRegistry: WorkflowModeRegistry,
-        availableKindsProvider: @escaping @Sendable () -> Set<ModelKind>
+        availableKindsProvider: @escaping @Sendable () -> Set<ModelKind>,
+        outputSink: (any PipelineOutputSink)? = nil
     ) {
         self.capture = capture
         self.fixedRecipe = nil
@@ -101,7 +104,8 @@ public actor SessionCoordinator {
             capture: capture,
             transcriptRepository: transcriptRepository,
             logger: logger,
-            vadProvider: vadProvider
+            vadProvider: vadProvider,
+            outputSink: outputSink
         )
         Task { [weak self] in
             await self?.installAutoStopHandler()
@@ -440,13 +444,14 @@ public actor SessionCoordinator {
         capture: any AudioCapturer,
         transcriptRepository: TranscriptRepository?,
         logger: PersonalScribeLogger,
-        vadProvider: (any VadProviding)?
+        vadProvider: (any VadProviding)?,
+        outputSink: (any PipelineOutputSink)? = nil
     ) -> SessionPipelineOrchestrator {
         SessionPipelineOrchestrator(
             capture: capture,
             logger: logger,
             postProcessingPipeline: DefaultPostProcessingPipeline(),
-            outputSink: CoordinatorPipelineOutputSink(),
+            outputSink: outputSink ?? CoordinatorPipelineOutputSink(),
             contextProvider: CoordinatorPipelineContextProvider(),
             persistenceHandler: makePersistenceHandler(
                 transcriptRepository: transcriptRepository,

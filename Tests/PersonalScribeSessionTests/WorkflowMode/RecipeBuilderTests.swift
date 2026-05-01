@@ -235,6 +235,84 @@ final class RecipeBuilderTests: XCTestCase {
         )
     }
 
+    func testBuilderFiltersFrontmostPasteWhenLiveCursorEnabled() throws {
+        defaults.set(false, forKey: PreferenceKeys.streamingLiveCardEnabled.key)
+        defaults.set(true, forKey: PreferenceKeys.streamingLiveCursorEnabled.key)
+        defaults.set(false, forKey: PreferenceKeys.streamingSecondPassEnabled.key)
+        defaults.set(true, forKey: PreferenceKeys.autoPasteEnabled.key)
+
+        let service = makeServiceWithActive(
+            asr: BuiltInModelCatalog.parakeetTDT06Bv2.id,
+            streamingAsr: BuiltInModelCatalog.parakeetEou160ms.id
+        )
+        let provider = StubProcessorProvider()
+        let builder = RecipeBuilder(
+            modelService: service,
+            processorProvider: provider,
+            defaults: defaults
+        )
+
+        let bound = try builder.build(
+            Preset.streamingDictation.materialize(name: "Streaming Dictation")
+        )
+
+        XCTAssertTrue(bound.streamingBehavior?.liveCursorEnabled == true)
+        let pasteSinks = bound.outputSinks.filter { sink in
+            if case .frontmostPaste = sink {
+                return true
+            }
+            return false
+        }
+        XCTAssertTrue(
+            pasteSinks.isEmpty,
+            "Expected .frontmostPaste to be filtered when liveCursorEnabled = true; got \(bound.outputSinks)"
+        )
+        // Sanity: clipboard sink should still be present (live cursor needs
+        // it to write per-chunk text).
+        let clipboardSinks = bound.outputSinks.filter { sink in
+            if case .clipboard = sink {
+                return true
+            }
+            return false
+        }
+        XCTAssertEqual(clipboardSinks.count, 1, "Clipboard sink should survive the live-cursor filter")
+    }
+
+    func testBuilderRetainsFrontmostPasteWhenLiveCursorDisabled() throws {
+        defaults.set(true, forKey: PreferenceKeys.streamingLiveCardEnabled.key)
+        defaults.set(false, forKey: PreferenceKeys.streamingLiveCursorEnabled.key)
+        defaults.set(false, forKey: PreferenceKeys.streamingSecondPassEnabled.key)
+        defaults.set(true, forKey: PreferenceKeys.autoPasteEnabled.key)
+
+        let service = makeServiceWithActive(
+            asr: BuiltInModelCatalog.parakeetTDT06Bv2.id,
+            streamingAsr: BuiltInModelCatalog.parakeetEou160ms.id
+        )
+        let provider = StubProcessorProvider()
+        let builder = RecipeBuilder(
+            modelService: service,
+            processorProvider: provider,
+            defaults: defaults
+        )
+
+        let bound = try builder.build(
+            Preset.streamingDictation.materialize(name: "Streaming Dictation")
+        )
+
+        XCTAssertTrue(bound.streamingBehavior?.liveCursorEnabled == false)
+        let pasteSinks = bound.outputSinks.filter { sink in
+            if case .frontmostPaste = sink {
+                return true
+            }
+            return false
+        }
+        XCTAssertEqual(
+            pasteSinks.count,
+            1,
+            "Expected .frontmostPaste to survive when liveCursorEnabled = false; got \(bound.outputSinks)"
+        )
+    }
+
     func testBuilderAllowsStreamingSecondPassWhenNoActiveAsrDescriptorExists() throws {
         defaults.set(true, forKey: PreferenceKeys.streamingSecondPassEnabled.key)
 

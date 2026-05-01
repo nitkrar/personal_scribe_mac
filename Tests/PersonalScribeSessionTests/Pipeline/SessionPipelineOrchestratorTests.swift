@@ -598,6 +598,261 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(snapshot.lastCompletedResult?.text, "Streaming final.")
     }
 
+    func testStreamingLiveCursorDeliversEachEouChunkToOutputSink() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.1),
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.2),
+        ]
+        let streamingTranscriber = ScriptedStreamingTranscriber(
+            perBufferEvents: [
+                [.partial(text: "hello"), .endOfUtterance(text: "hello")],
+                [.partial(text: "world"), .endOfUtterance(text: "world")],
+            ],
+            terminalResult: TranscriptionResult(
+                text: "hello world",
+                audioDuration: .milliseconds(200),
+                processingDuration: .milliseconds(20)
+            )
+        )
+        let sink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: buffers,
+                delayPerBuffer: .milliseconds(40)
+            ),
+            outputSink: sink,
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: false,
+                    liveCursorEnabled: true,
+                    secondPassEnabled: false
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(150))
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let partials = await sink.partialDeliveries()
+        let chunkTexts = partials.map { $0.text }
+        XCTAssertTrue(
+            chunkTexts.contains("hello"),
+            "Expected partials to contain EOU chunk 'hello'; got \(chunkTexts)"
+        )
+        XCTAssertTrue(
+            chunkTexts.contains("world"),
+            "Expected partials to contain EOU chunk 'world'; got \(chunkTexts)"
+        )
+        XCTAssertFalse(
+            chunkTexts.contains("hello world"),
+            "Expected per-EOU chunks (not cumulative); got \(chunkTexts)"
+        )
+    }
+
+    func testStreamingLiveCursorDoesNotDeliverWhenDisabled() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.1),
+        ]
+        let streamingTranscriber = ScriptedStreamingTranscriber(
+            perBufferEvents: [
+                [.endOfUtterance(text: "hello")],
+            ],
+            terminalResult: TranscriptionResult(
+                text: "hello",
+                audioDuration: .milliseconds(100),
+                processingDuration: .milliseconds(10)
+            )
+        )
+        let sink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: buffers,
+                delayPerBuffer: .milliseconds(40)
+            ),
+            outputSink: sink,
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: false
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(80))
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let partials = await sink.partialDeliveries()
+        XCTAssertTrue(
+            partials.isEmpty,
+            "Expected no partial deliveries when liveCursorEnabled = false; got \(partials.map { $0.text })"
+        )
+    }
+
+    func testStreamingLiveCursorIgnoresPartialEvents() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.1),
+        ]
+        let streamingTranscriber = ScriptedStreamingTranscriber(
+            perBufferEvents: [
+                [.partial(text: "hel"), .partial(text: "hello")],
+            ],
+            terminalResult: TranscriptionResult(
+                text: "hello",
+                audioDuration: .milliseconds(100),
+                processingDuration: .milliseconds(10)
+            )
+        )
+        let sink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: buffers,
+                delayPerBuffer: .milliseconds(40)
+            ),
+            outputSink: sink,
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: false,
+                    liveCursorEnabled: true,
+                    secondPassEnabled: false
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(80))
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let partials = await sink.partialDeliveries()
+        XCTAssertTrue(
+            partials.isEmpty,
+            "Expected no partial deliveries from .partial events; got \(partials.map { $0.text })"
+        )
+    }
+
+    func testEndSessionFiresOnSuccessfulCompletion() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let transcriber = ReturningTranscriber(
+            result: TranscriptionResult(
+                text: "hello",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(10)
+            )
+        )
+        let sink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: transcriber,
+            outputSink: sink
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let count = await sink.endSessionCount()
+        XCTAssertEqual(count, 1, "Expected endSession to fire exactly once after successful completion; got \(count)")
+    }
+
+    func testEndSessionFiresOnShortExit() async throws {
+        // Sub-1s buffer in a non-streaming recipe → shortExit path.
+        let buffer = try makeBuffer(sampleCount: 1_600)
+        let sink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            outputSink: sink
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().sessionState != .shortExit {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let count = await sink.endSessionCount()
+        XCTAssertEqual(count, 1, "Expected endSession to fire exactly once after shortExit; got \(count)")
+    }
+
+    func testEndSessionFiresOnCancel() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let sink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: [buffer],
+                delayPerBuffer: .milliseconds(50)
+            ),
+            outputSink: sink
+        )
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(20))
+        await orchestrator.cancelCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().sessionState != .idle {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let count = await sink.endSessionCount()
+        XCTAssertEqual(count, 1, "Expected endSession to fire exactly once after cancel; got \(count)")
+    }
+
+    func testEndSessionFiresOnError() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let sink = TestPipelineOutputSink(failurePoint: .final)
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            outputSink: sink
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while true {
+                if case .error = await orchestrator.snapshot().sessionState {
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let count = await sink.endSessionCount()
+        XCTAssertEqual(count, 1, "Expected endSession to fire exactly once after error; got \(count)")
+    }
+
     func testStreamingShortCaptureWithoutTranscriptStillShortExits() async throws {
         let buffer = try makeBuffer(sampleCount: 1_600)
         let orchestrator = makeOrchestrator(
@@ -1511,6 +1766,7 @@ private actor TestPipelineOutputSink: PipelineOutputSink {
     private var partials: [TranscriptProgress] = []
     private var finals: [TranscriptionResult] = []
     private var resets = 0
+    private var endSessions = 0
 
     init(failurePoint: FailurePoint? = nil) {
         self.failurePoint = failurePoint
@@ -1533,6 +1789,10 @@ private actor TestPipelineOutputSink: PipelineOutputSink {
         finals.removeAll()
     }
 
+    func endSession() async {
+        endSessions += 1
+    }
+
     func partialDeliveries() -> [TranscriptProgress] {
         partials
     }
@@ -1543,6 +1803,10 @@ private actor TestPipelineOutputSink: PipelineOutputSink {
 
     func resetCount() -> Int {
         resets
+    }
+
+    func endSessionCount() -> Int {
+        endSessions
     }
 }
 

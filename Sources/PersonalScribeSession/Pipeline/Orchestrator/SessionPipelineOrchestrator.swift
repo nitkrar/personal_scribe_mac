@@ -463,6 +463,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         latestStageFailure = nil
         activeSessionRecipe = nil
 
+        await outputSink.endSession()
+
         publish { snapshot in
             snapshot.sessionState = .idle
             snapshot.activeStage = nil
@@ -596,6 +598,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.vadAutoStopGraceDeadline = nil
                 snapshot.vadAutoStopFireToken = nil
             }
+            await outputSink.endSession()
             return
         }
 
@@ -688,10 +691,13 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.recordingDuration = rawResult.audioDuration
                 snapshot.isStreamingSession = false
             }
+            await outputSink.endSession()
         } catch let failure as PipelineStageFailure {
             handleStageFailure(failure)
+            await outputSink.endSession()
         } catch {
             handleStageFailure(makeStageFailure(stage: .transcription, error: error, fallback: .transcriptionFailure))
+            await outputSink.endSession()
         }
     }
 
@@ -965,6 +971,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         } catch {
             await cancelLiveStreamingSession()
             handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
+            await outputSink.endSession()
         }
     }
 
@@ -1258,13 +1265,18 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         let (inputStream, continuation) = Self.makeLiveStreamingInputStream()
         let events = streamingTranscriber.transcribe(stream: inputStream)
         let liveCardEnabled = recipe.streamingBehavior?.liveCardEnabled ?? false
+        let liveCursorEnabled = recipe.streamingBehavior?.liveCursorEnabled ?? false
 
         liveStreamingInputContinuation = continuation
         liveStreamingAccumulator = StreamingTranscriptAccumulator()
         liveStreamingEventTask = Task { [weak self] in
             do {
                 for try await event in events {
-                    await self?.consumeLiveStreamingEvent(event, liveCardEnabled: liveCardEnabled)
+                    await self?.consumeLiveStreamingEvent(
+                        event,
+                        liveCardEnabled: liveCardEnabled,
+                        liveCursorEnabled: liveCursorEnabled
+                    )
                 }
             } catch {
                 await self?.recordLiveStreamingFailure(error, liveCardEnabled: liveCardEnabled)
@@ -1274,8 +1286,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
     private func consumeLiveStreamingEvent(
         _ event: StreamingTranscriptionEvent,
-        liveCardEnabled: Bool
-    ) {
+        liveCardEnabled: Bool,
+        liveCursorEnabled: Bool
+    ) async {
         guard var accumulator = liveStreamingAccumulator else {
             return
         }
@@ -1283,24 +1296,44 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         let text = accumulator.apply(event)
         liveStreamingAccumulator = accumulator
 
-        guard liveCardEnabled else {
-            return
+        if liveCardEnabled {
+            switch event {
+            case .partial, .endOfUtterance:
+                let nextText = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                publish { snapshot in
+                    snapshot.transcriptProgress = nextText.isEmpty
+                        ? nil
+                        : nextTranscriptProgress(
+                            text: nextText,
+                            isFinal: false,
+                            sourceStage: .transcription
+                        )
+                }
+            case .finalized:
+                break
+            }
         }
 
-        switch event {
-        case .partial, .endOfUtterance:
-            let nextText = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            publish { snapshot in
-                snapshot.transcriptProgress = nextText.isEmpty
-                    ? nil
-                    : nextTranscriptProgress(
-                        text: nextText,
-                        isFinal: false,
-                        sourceStage: .transcription
-                    )
+        // #033 — append-only EOU cursor delivery. Each end-of-utterance
+        // chunk is the new text to append to the user's frontmost text
+        // field via the live cursor output sink. `.partial` events do
+        // not deliver (per #056 DESIGN locked: "EOU chunks only").
+        // Failure is logged-and-continued — a transient cursor delivery
+        // glitch should not tear down the session.
+        if liveCursorEnabled, case .endOfUtterance(let chunkText) = event {
+            let trimmed = chunkText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                let progress = nextTranscriptProgress(
+                    text: trimmed,
+                    isFinal: false,
+                    sourceStage: .transcription
+                )
+                do {
+                    try await outputSink.deliverPartial(progress)
+                } catch {
+                    logger.error("Live cursor chunk delivery failed; continuing session", error: error)
+                }
             }
-        case .finalized:
-            break
         }
     }
 

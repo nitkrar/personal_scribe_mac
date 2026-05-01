@@ -36,8 +36,21 @@ public final class RecipeBuilder {
     public func build(_ mode: WorkflowMode) throws -> BoundRecipe {
         let processors = try mode.processors.map { try buildProcessor($0) }
         let captureControllers = mode.captureControllers.map { buildCaptureController($0) }
-        let outputSinks = mode.outputSinks.map { buildOutputSink($0) }
+        let rawOutputSinks = mode.outputSinks.map { buildOutputSink($0) }
         let streamingBehavior = buildStreamingBehavior(mode.streamingBehavior)
+        // #033 paired Q4 gate — when live cursor streaming is on, the
+        // capture-time path posts ⌘V per EOU chunk; the stop-time
+        // `.frontmostPaste` sink would re-paste the authoritative final
+        // and double-deliver. Filter it out at bind time so the bound
+        // recipe matches the locked semantics from #056 DESIGN
+        // ("If live cursor streaming is on, there is never an extra
+        // stop-time cursor write").
+        let outputSinks = streamingBehavior?.liveCursorEnabled == true
+            ? rawOutputSinks.filter { sink in
+                if case .frontmostPaste = sink { return false }
+                return true
+            }
+            : rawOutputSinks
         let streamingSecondPassTranscriber = try buildStreamingSecondPassTranscriber(
             streamingBehavior: streamingBehavior
         )

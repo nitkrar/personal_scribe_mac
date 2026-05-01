@@ -164,6 +164,16 @@ public enum AppComposition {
             shouldMuteOutput: { MuteOutputWhileRecordingPreference.resolve() }
         )
 
+        // #033 — live cursor stream output for streaming-with-liveCursorEnabled
+        // sessions. Routed through the orchestrator's `PipelineOutputSink`
+        // seam; gated on `bound.streamingBehavior?.liveCursorEnabled` inside
+        // `consumeLiveStreamingEvent`. For non-live-cursor sessions, the
+        // sink is dormant (no chunks arrive) and `endSession()` is a no-op
+        // (no snapshot was captured).
+        let liveCursorOutput = LiveCursorOutput(
+            logger: makeLogger(PersonalScribeLogCategory.ui)
+        )
+
         let coordinator = SessionCoordinator(
             capture: capture,
             modelService: modelService,
@@ -174,7 +184,8 @@ public enum AppComposition {
             workflowModeRegistry: workflowModeRegistry,
             availableKindsProvider: {
                 Set(ModelKind.allCases.filter(\.isEnabled))
-            }
+            },
+            outputSink: liveCursorOutput
         )
 
         wirePostSetActivePrewarm(modelService: modelService, coordinator: coordinator)
