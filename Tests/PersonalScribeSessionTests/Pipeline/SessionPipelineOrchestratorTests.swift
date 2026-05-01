@@ -598,6 +598,168 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(snapshot.lastCompletedResult?.text, "Streaming final.")
     }
 
+    func testStreamingShortCaptureWithoutTranscriptStillShortExits() async throws {
+        let buffer = try makeBuffer(sampleCount: 1_600)
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: ScriptedStreamingTranscriber(
+                    perBufferEvents: [[]],
+                    terminalResult: nil
+                ),
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: false
+                )
+            )
+        )
+
+        let stream = await orchestrator.snapshotStream()
+        let observedTask = Task { () -> [SessionSnapshot] in
+            var snapshots: [SessionSnapshot] = []
+            for await snapshot in stream {
+                snapshots.append(snapshot)
+                switch snapshot.sessionState {
+                case .shortExit, .completed, .error:
+                    return snapshots
+                default:
+                    continue
+                }
+            }
+            return snapshots
+        }
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(50))
+        await orchestrator.toggleCapture()
+
+        let observed = try await withTimeout(.seconds(1)) {
+            await observedTask.value
+        }
+
+        XCTAssertEqual(
+            deduplicatedSessionStates(from: observed),
+            [.idle, .capturing, .shortExit]
+        )
+        XCTAssertNil(observed.last?.lastCompletedResult)
+    }
+
+    func testStreamingFailureMidCaptureStillPreservesBufferedAudioForSecondPass() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 8_000, sampleValue: 0.1),
+            try makeBuffer(sampleCount: 8_000, sampleValue: 0.2),
+        ]
+        let secondPassTranscriber = InspectingTranscriber(resultText: "authoritative final")
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: buffers,
+                delayPerBuffer: .milliseconds(40)
+            ),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: FailingStreamingTranscriber(
+                    perBufferEvents: [
+                        [.partial(text: "streaming")],
+                        [],
+                    ],
+                    failureAfterBufferCount: 2,
+                    error: StreamTestError.streamFailed
+                ),
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: true
+                ),
+                secondPassTranscriber: secondPassTranscriber
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(120))
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.lastCompletedResult?.text, "Authoritative final.")
+        let sampleCount = await secondPassTranscriber.lastSampleCount()
+        XCTAssertEqual(sampleCount, 16_000)
+    }
+
+    func testCancelCaptureTerminatesLiveStreamingEventStream() async throws {
+        let tracker = StreamTerminationTracker()
+        let streamingTranscriber = HangingStreamingTranscriber(
+            perBufferEvents: [[.partial(text: "live")]],
+            tracker: tracker
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: [try makeBuffer(sampleCount: 16_000)],
+                delayPerBuffer: .milliseconds(30)
+            ),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: false
+                )
+            ),
+            liveStreamingEventShutdownTimeout: .milliseconds(20)
+        )
+
+        await orchestrator.toggleCapture()
+        try await withTimeout(.seconds(1)) {
+            await tracker.waitUntilStarted()
+        }
+
+        await orchestrator.cancelCapture()
+
+        try await withTimeout(.seconds(1)) {
+            await tracker.waitUntilTerminated()
+        }
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .idle)
+        XCTAssertNil(snapshot.lastCompletedResult)
+    }
+
+    func testStopStreamingCompletesWhenEventConsumerHangsAfterInputFinishes() async throws {
+        let tracker = StreamTerminationTracker()
+        let streamingTranscriber = HangingStreamingTranscriber(
+            perBufferEvents: [[.endOfUtterance(text: "hello world")]],
+            tracker: tracker
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: false
+                )
+            ),
+            liveStreamingEventShutdownTimeout: .milliseconds(20)
+        )
+
+        await orchestrator.toggleCapture()
+        try await withTimeout(.seconds(1)) {
+            await tracker.waitUntilStarted()
+        }
+        try await withTimeout(.seconds(1)) {
+            await orchestrator.toggleCapture()
+        }
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .completed)
+        XCTAssertEqual(snapshot.lastCompletedResult?.text, "Hello world.")
+    }
+
     func testStopCompletesWhileBackgroundPrepareIsStillRunning() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
         let transcriber = SlowPrepareTranscriber(
@@ -1169,7 +1331,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         outputSink: any PipelineOutputSink = TestPipelineOutputSink(),
         context: PipelineContextSnapshot = PipelineContextSnapshot(streamingOutputEnabled: false),
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)? = nil,
-        boundRecipe: BoundRecipe? = nil
+        boundRecipe: BoundRecipe? = nil,
+        liveStreamingEventShutdownTimeout: Duration = .seconds(2)
     ) -> SessionPipelineOrchestrator {
         // #078.31b: orchestrator init takes a `BoundRecipe` post-cutover.
         // Wrap the `transcriber:` arg as the asr processor of a built-in
@@ -1192,7 +1355,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                 outputSink: outputSink,
                 contextProvider: contextProvider,
                 persistenceHandler: persistenceHandler,
-                boundRecipe: resolvedRecipe
+                boundRecipe: resolvedRecipe,
+                liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout
             )
         }
 
@@ -1203,7 +1367,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
             contextProvider: contextProvider,
-            boundRecipe: resolvedRecipe
+            boundRecipe: resolvedRecipe,
+            liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout
         )
     }
 
@@ -1539,6 +1704,35 @@ private actor ReturningTranscriber: Transcriber {
     }
 }
 
+private actor InspectingTranscriber: Transcriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+    private let resultText: String
+    private var lastObservedSampleCount: Int?
+
+    init(resultText: String) {
+        self.resultText = resultText
+    }
+
+    func prepare() async throws {}
+
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+
+    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+        lastObservedSampleCount = audio.samples.count
+        return TranscriptionResult(
+            text: resultText,
+            audioDuration: audio.duration,
+            processingDuration: .zero
+        )
+    }
+
+    func lastSampleCount() -> Int? {
+        lastObservedSampleCount
+    }
+}
+
 private actor ScriptedStreamingTranscriber: StreamingTranscriber {
     nonisolated let capabilities = TranscriberCapabilities()
 
@@ -1587,6 +1781,172 @@ private actor ScriptedStreamingTranscriber: StreamingTranscriber {
             }
         }
     }
+}
+
+private actor FailingStreamingTranscriber: StreamingTranscriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+
+    private let perBufferEvents: [[StreamingTranscriptionEvent]]
+    private let failureAfterBufferCount: Int
+    private let error: any Error
+
+    init(
+        perBufferEvents: [[StreamingTranscriptionEvent]],
+        failureAfterBufferCount: Int,
+        error: any Error
+    ) {
+        self.perBufferEvents = perBufferEvents
+        self.failureAfterBufferCount = failureAfterBufferCount
+        self.error = error
+    }
+
+    func prepare() async throws {}
+
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+
+    nonisolated func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>
+    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
+        let perBufferEvents = self.perBufferEvents
+        let failureAfterBufferCount = self.failureAfterBufferCount
+        let error = self.error
+        return AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    var processedBufferCount = 0
+                    for try await _ in stream {
+                        if processedBufferCount < perBufferEvents.count {
+                            for event in perBufferEvents[processedBufferCount] {
+                                continuation.yield(event)
+                            }
+                        }
+                        processedBufferCount += 1
+                        if processedBufferCount >= failureAfterBufferCount {
+                            continuation.finish(throwing: error)
+                            return
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+}
+
+private actor HangingStreamingTranscriber: StreamingTranscriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+
+    private let perBufferEvents: [[StreamingTranscriptionEvent]]
+    private let tracker: StreamTerminationTracker
+
+    init(
+        perBufferEvents: [[StreamingTranscriptionEvent]],
+        tracker: StreamTerminationTracker
+    ) {
+        self.perBufferEvents = perBufferEvents
+        self.tracker = tracker
+    }
+
+    func prepare() async throws {}
+
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+
+    nonisolated func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>
+    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
+        let perBufferEvents = self.perBufferEvents
+        let tracker = self.tracker
+        return AsyncThrowingStream { continuation in
+            Task {
+                await tracker.recordStart()
+            }
+
+            let inputObserver = Task {
+                do {
+                    var index = 0
+                    for try await _ in stream {
+                        if index < perBufferEvents.count {
+                            for event in perBufferEvents[index] {
+                                continuation.yield(event)
+                            }
+                        }
+                        index += 1
+                    }
+                    // Intentionally leave the continuation open after
+                    // input closes. This simulates a buggy adapter that
+                    // never terminates its event stream at stop-time.
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { _ in
+                inputObserver.cancel()
+                Task {
+                    await tracker.recordTermination()
+                }
+            }
+        }
+    }
+}
+
+private actor StreamTerminationTracker {
+    private var started = false
+    private var terminated = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var terminationWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func recordStart() {
+        guard !started else {
+            return
+        }
+        started = true
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+
+    func recordTermination() {
+        guard !terminated else {
+            return
+        }
+        terminated = true
+        let waiters = terminationWaiters
+        terminationWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+
+    func waitUntilStarted() async {
+        if started {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func waitUntilTerminated() async {
+        if terminated {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            terminationWaiters.append(continuation)
+        }
+    }
+}
+
+private enum StreamTestError: Error {
+    case streamFailed
 }
 
 private struct TrackedTranscriber: Transcriber {

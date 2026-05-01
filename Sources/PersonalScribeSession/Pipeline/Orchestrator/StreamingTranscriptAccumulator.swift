@@ -45,6 +45,10 @@ struct StreamingTranscriptAccumulator: Sendable {
         return cumulativeText
     }
 
+    var hasTranscriptContent: Bool {
+        !terminalText.isEmpty
+    }
+
     private static func normalize(_ text: String) -> String {
         text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }

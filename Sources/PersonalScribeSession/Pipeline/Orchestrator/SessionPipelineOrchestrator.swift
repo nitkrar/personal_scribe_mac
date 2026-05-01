@@ -45,6 +45,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// Overridable at init for tests that want to exercise the timer
     /// without sleeping a full grace window.
     private let graceDurationSeconds: Double
+    /// Bound the live-stream shutdown wait so a misbehaving adapter
+    /// cannot wedge stop/cancel forever by never terminating its event
+    /// stream after input closes.
+    private let liveStreamingEventShutdownTimeout: Duration
 
     /// Local phase owned by the orchestrator actor. `.pending` carries the
     /// timer task + a UUID token so concurrent timer-fire vs. session-cleanup
@@ -93,7 +97,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         contextProvider: any PipelineContextProviding,
         vadProvider: (any VadProviding)? = nil,
         boundRecipe: BoundRecipe? = nil,
-        graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
+        graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds,
+        liveStreamingEventShutdownTimeout: Duration = .seconds(2)
     ) {
         let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
         if let repository = transcriptRepository {
@@ -112,7 +117,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             persistenceHandler: persistenceHandler,
             vadProvider: vadProvider,
             boundRecipe: boundRecipe,
-            graceDurationSeconds: graceDurationSeconds
+            graceDurationSeconds: graceDurationSeconds,
+            liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout
         )
     }
 
@@ -125,7 +131,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?,
         vadProvider: (any VadProviding)? = nil,
         boundRecipe: BoundRecipe? = nil,
-        graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
+        graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds,
+        liveStreamingEventShutdownTimeout: Duration = .seconds(2)
     ) {
         let initialContext = contextProvider.currentContext()
         self.capture = capture
@@ -137,6 +144,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.vadProvider = vadProvider
         self.boundRecipe = boundRecipe
         self.graceDurationSeconds = graceDurationSeconds
+        self.liveStreamingEventShutdownTimeout = liveStreamingEventShutdownTimeout
         self.activeContext = initialContext
         self.currentSnapshot = SessionSnapshot()
     }
@@ -551,7 +559,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         let bufferedDuration = replayBuffers.reduce(Duration.zero) { $0 + $1.duration }
         currentSnapshot.recordingDuration = bufferedDuration
         let isStreamingSession = activeSessionRecipe?.streamingBehavior != nil
-        let canFinalizeShortStreamingCapture = isStreamingSession && bufferedDuration > .zero
+        let canFinalizeShortStreamingCapture = isStreamingSession &&
+            (liveStreamingAccumulator?.hasTranscriptContent ?? false)
 
         guard bufferedDuration >= .milliseconds(1_000) || canFinalizeShortStreamingCapture else {
             await cancelLiveStreamingSession()
@@ -561,6 +570,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 // routes through the `.idle` display mapping so entry
                 // guards accept the next user action and no wedge
                 // occurs.
+                //
+                // Streaming sessions only bypass the sub-1s short-exit
+                // guard when the live path has already accumulated
+                // non-blank transcript text. Blank/no-event short clips
+                // still exit here.
                 snapshot.sessionState = .shortExit
                 snapshot.activeStage = nil
                 snapshot.recordingDuration = bufferedDuration
@@ -1267,6 +1281,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         _ error: any Error,
         liveCardEnabled: Bool
     ) {
+        guard liveStreamingEventTask != nil || liveStreamingAccumulator != nil else {
+            return
+        }
         logger.error("Live streaming transcription failed; falling back at stop", error: error)
         liveStreamingFailure = makeStageFailure(
             stage: .transcription,
@@ -1287,7 +1304,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         liveStreamingInputContinuation = nil
 
         if let liveStreamingEventTask {
-            await liveStreamingEventTask.value
+            await awaitLiveStreamingEventTaskShutdown(
+                liveStreamingEventTask,
+                cancelImmediately: true
+            )
         }
 
         let accumulator = liveStreamingAccumulator
@@ -1304,13 +1324,69 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         liveStreamingInputContinuation = nil
 
         if let liveStreamingEventTask {
-            liveStreamingEventTask.cancel()
-            await liveStreamingEventTask.value
+            await awaitLiveStreamingEventTaskShutdown(
+                liveStreamingEventTask,
+                cancelImmediately: true
+            )
         }
 
         liveStreamingEventTask = nil
         liveStreamingAccumulator = nil
         liveStreamingFailure = nil
+    }
+
+    private func awaitLiveStreamingEventTaskShutdown(
+        _ task: Task<Void, Never>,
+        cancelImmediately: Bool
+    ) async {
+        if cancelImmediately {
+            task.cancel()
+        }
+
+        if await Self.waitForTaskCompletion(
+            task,
+            timeout: liveStreamingEventShutdownTimeout
+        ) {
+            return
+        }
+
+        logger.error(
+            "Live streaming event task exceeded shutdown timeout; cancelling task",
+            metadata: ["timeout": "\(liveStreamingEventShutdownTimeout)"]
+        )
+        task.cancel()
+
+        if await Self.waitForTaskCompletion(
+            task,
+            timeout: liveStreamingEventShutdownTimeout
+        ) {
+            return
+        }
+
+        logger.error(
+            "Live streaming event task remained active after cancel fallback",
+            metadata: ["timeout": "\(liveStreamingEventShutdownTimeout)"]
+        )
+    }
+
+    private static func waitForTaskCompletion(
+        _ task: Task<Void, Never>,
+        timeout: Duration
+    ) async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await task.value
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return false
+            }
+
+            let finished = await group.next() ?? false
+            group.cancelAll()
+            return finished
+        }
     }
 
     private func resolveStreamingFallbackResult(
