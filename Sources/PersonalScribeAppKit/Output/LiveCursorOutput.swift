@@ -93,7 +93,13 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
             return
         }
 
-        _ = pasteShortcutPoster()
+        // Surface paste-poster failures (e.g. CGEventSource creation
+        // returning nil) — otherwise this is a silent live-paint loss
+        // path: the chunk landed on the clipboard but no ⌘V actually
+        // posted, and the user sees nothing in the target app.
+        if !pasteShortcutPoster() {
+            logger.error("LiveCursorOutput: paste shortcut poster reported failure; chunk on clipboard but ⌘V was not posted")
+        }
     }
 
     public func deliverFinal(_ result: TranscriptionResult) async throws {

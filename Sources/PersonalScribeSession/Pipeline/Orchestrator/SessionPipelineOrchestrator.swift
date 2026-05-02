@@ -75,6 +75,16 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private var currentSnapshot: SessionSnapshot
     private var activeContext: PipelineContextSnapshot
     private var latestStageFailure: PipelineStageFailure?
+    /// Re-entry guard for `startRecording()`. The actor releases during
+    /// `await capture.start()`, but `currentSnapshot.sessionState` is still
+    /// `.idle` until the post-await `publish(.capturing)` runs (preserving
+    /// the deliberate prepare-before-publish invariant at `:415-425`). A
+    /// second `toggleCapture()` landing in that window used to re-enter
+    /// `startRecording()`, double-call `capture.start()`, and have its
+    /// catch null `activeSessionRecipe` out from under the first session.
+    /// Set true at the top of `startRecording()`, cleared via `defer` when
+    /// the function returns (success or failure).
+    private var startRecordingInFlight = false
     private var snapshotContinuations: [UUID: AsyncStream<SessionSnapshot>.Continuation] = [:]
     private var bufferedAudio: [PCMBuffer] = []
     private var captureTask: Task<Void, Never>?
@@ -391,6 +401,13 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     private func startRecording() async {
+        guard !startRecordingInFlight else {
+            logger.info("Ignored re-entrant startRecording while a prior start is still awaiting capture.start()")
+            return
+        }
+        startRecordingInFlight = true
+        defer { startRecordingInFlight = false }
+
         bufferedAudio.removeAll(keepingCapacity: true)
         nextRevision = 0
         latestStageFailure = nil
@@ -439,7 +456,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 await self?.consumeCaptureStream(stream)
             }
         } catch {
-            activeSessionRecipe = nil
+            // Do NOT null `activeSessionRecipe` here. The intentional
+            // clear lives on the cancel/discard path
+            // (`discardActiveCapture`); nulling here would corrupt a
+            // concurrent winning session whose recipe we share. The
+            // next `startRecording()` / `startHoldRecording()`
+            // overwrites `activeSessionRecipe` unconditionally, so a
+            // stale value after a solo failed start is harmless.
+            // (Codex review 2026-05-02.)
             handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
         }
     }
@@ -525,7 +549,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 await self?.consumeCaptureStream(stream)
             }
         } catch {
-            activeSessionRecipe = nil
+            // Do NOT null `activeSessionRecipe` here. The intentional
+            // clear lives on the cancel/discard path
+            // (`discardActiveCapture`); nulling here would corrupt a
+            // concurrent winning session whose recipe we share. The
+            // next `startRecording()` / `startHoldRecording()`
+            // overwrites `activeSessionRecipe` unconditionally, so a
+            // stale value after a solo failed start is harmless.
+            // (Codex review 2026-05-02.)
             handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
         }
     }

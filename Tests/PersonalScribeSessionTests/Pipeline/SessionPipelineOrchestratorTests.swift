@@ -1442,6 +1442,41 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
     /// `toggleCapture()` observes `.holdRecording` instead of `.idle`.
     /// Without this ordering, hold-release silently no-ops and the
     /// session wedges (#071 root cause).
+    /// Race regression: `startRecording()` runs `prepareTranscriberInBackground`
+    /// **before** publishing `.capturing`, so during `await capture.start()`
+    /// the snapshot still reads `.idle`. A second `toggleCapture()` landing
+    /// in that window used to re-enter `startRecording()` and call
+    /// `capture.start()` again — which `AVAudioCaptureService` correctly
+    /// rejected, but the catch path then nulled `activeSessionRecipe`
+    /// out from under the first session, causing later
+    /// `runBoundProcessing()` to throw `invalidState` at stop time
+    /// (observed in dogfood logs, 2026-05-02).
+    func testReentrantToggleCaptureWhileFirstStartIsHangingDoesNotTriggerSecondCaptureStart() async throws {
+        let capture = HangingStartCapture()
+        let orchestrator = makeOrchestrator(capture: capture)
+
+        let firstToggle = Task { await orchestrator.toggleCapture() }
+        try await Task.sleep(for: .milliseconds(50))
+
+        // First call is now suspended inside capture.start(). State is
+        // still .idle. A second toggle MUST NOT re-enter startRecording's
+        // body (which would call capture.start() a second time and, on
+        // failure, null activeSessionRecipe).
+        let secondToggle = Task { await orchestrator.toggleCapture() }
+        try await Task.sleep(for: .milliseconds(50))
+
+        let observedStartCount = await capture.startCallCount
+        XCTAssertEqual(
+            observedStartCount,
+            1,
+            "Re-entrant toggleCapture during in-flight start triggered a second capture.start() call"
+        )
+
+        await capture.release()
+        firstToggle.cancel()
+        secondToggle.cancel()
+    }
+
     func testStartHoldCapturePublishesHoldRecordingBeforeAwaitingCaptureStart() async throws {
         let capture = HangingStartCapture()
         let orchestrator = makeOrchestrator(capture: capture)
@@ -2361,8 +2396,10 @@ private actor PersistedEntries {
 private actor HangingStartCapture: AudioCapturer {
     private var waiters: [CheckedContinuation<AsyncThrowingStream<PCMBuffer, Error>, Error>] = []
     private var released = false
+    private(set) var startCallCount = 0
 
     func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
+        startCallCount += 1
         if released {
             return AsyncThrowingStream { $0.finish() }
         }
