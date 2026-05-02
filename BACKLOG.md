@@ -21,7 +21,7 @@ Each ticket has an `*Updated YYYY-MM-DD*` line under the tag row. Bump on meanin
 
 | Ticket | Owner | Started | Last update | Notes |
 |---|---|---|---|---|
-| #056 | slate | 2026-05-01 | 2026-05-02 | **[needs user]** Code complete (StreamCard + second pass + #033 live cursor transport). Runtime-verifying on the other laptop. |
+| #056 | slate | 2026-05-01 | 2026-05-02 | **[needs user]** Code complete + race + chain bugs fixed in `80f9bf0`. Awaiting rebuild + retest. EOU silent-paint inconsistency open — `.finalized`-backfill UX call pending. |
 
 **Session naming.** The **main** Claude session running in the user's terminal picks a short single-word identifier (nature words work well — `heron`, `cobalt`, `slate`, `olive`, `rust`) the first time it touches this file and uses it consistently. Subagents dispatched from a main session **inherit its name** — they do NOT claim their own. Only a parallel main session (e.g. a second terminal) picks a distinct name. Don't use `main session` / `parallel session` / `user` as owners — too ambiguous when >1 session is live.
 
@@ -874,6 +874,7 @@ Live cursor stream transport for #056's streaming dictation. The live seam is `P
 **Commits**
 - `2a6e91f` — initial cohesive implementation (transport, paired gate, lifecycle hook, 19 tests).
 - `46e2ed8` — Codex review follow-up: snapshot eagerly at session start (anchors locked Q1 wording, not first-chunk timing); `didWriteChunkThisSession` flag so non-streaming sessions don't over-restore; `endSession()` runs **before** `publish(.completed)` / `handleStageFailure` / short-exit publish (closes the ordering hole where menu-bar idle-transition observers could race the snapshot restore); `awaitLiveStreamingEventTaskShutdown` gains graceful-vs-immediate split (stop drains naturally, cancel cancels immediately); `waitForTaskCompletion` replaced with polling-loop + actor tracker (the previous `withTaskGroup` shape had a latent hang — `cancelAll()` doesn't unwind `await task.value` for `Task<Void, Never>`); 5 additional regression tests.
+- `80f9bf0` — race + recipe-clear fix from dogfood errors at 2026-05-02 00:22:23.777Z (per `plans/investigations/2026-05-02-033-runtime-bugs-codex.md`). `startRecording()` gains `startRecordingInFlight` re-entry guard (preserves the prepare-before-publish invariant; closes the duplicate-`capture.start()` race that produced the `audioEngineFailure` errors). Catch-time `activeSessionRecipe = nil` removed from both `startRecording` and `startHoldRecording` — root cause of the downstream `runBoundProcessing → invalidState` chain (call B's catch nulled call A's recipe). `LiveCursorOutput.deliverPartial` now logs when `pasteShortcutPoster()` returns `false` (silent live-paint loss path Codex flagged). 1 new race regression test.
 
 **Implementation surfaces:**
 - `PipelineOutputSink.endSession()` — default no-op extension; called on success / cancel / error / short-exit / discard. Exists for session-scoped sinks like `LiveCursorOutput`.
@@ -889,7 +890,7 @@ Live cursor stream transport for #056's streaming dictation. The live seam is `P
 - `RecipeBuilderTests`: `.frontmostPaste` filtered when live cursor on; preserved when off.
 - `LiveCursorOutputTests`: writes chunk + posts paste, overwrites prior chunk, skips paste when AX untrusted or focus is in self, ignores blank text, `endSession` restores when chunk wrote, `endSession` discards (preserves mid-session clipboard) when no chunk wrote, `resetForNewSession` captures session-start snapshot before first chunk arrives.
 
-Full suite at close: **1189 tests / 1 skipped / 0 failures**.
+Full suite at close: **1190 tests / 1 skipped / 0 failures** (post-`80f9bf0`).
 
 **Known stale UI to clean up before next dogfood**
 - `Sources/PersonalScribeAppKit/UnifiedWindow/Tabs/Modes/ModeDetailView.swift:130` and `Sources/PersonalScribeAppKit/Settings/GeneralTab.swift:341` still ship the caption *"Saved now for streaming recipes. Live cursor transport is not active in this build."* That text was added under #056 when transport was pending #033; now stale. Risk: users won't enable the toggle thinking it's a no-op. One-line removal in each file (or rewrite to reflect actual gating: AX trust + active streaming-ASR model + `liveCursorEnabled`).
@@ -899,7 +900,7 @@ Full suite at close: **1189 tests / 1 skipped / 0 failures**.
 - ResponseCard "click into a text field" notice during cursorless period.
 - Hybrid transport (CGEvent for short chunks, paste for long).
 
-**Runtime verification:** in progress 2026-05-02 on the user's other laptop. Reopen if regression observed.
+**Runtime verification:** in progress 2026-05-02 on the user's other laptop. First dogfood pass surfaced two errors (race + invalidState chain) — fixed in `80f9bf0`. EOU silent-paint inconsistency observed across tests 1-4: per Codex audit the cause is **EOU-only delivery + stop-before-EOU emission** (not a CGEvent paste race — app-side serialization is sound); `.finalized` event at stream-end intentionally doesn't backfill, so short utterances or VAD-pre-empted sessions paste nothing live. Decision pending: ship `.finalized`-backfill (Option B from the debate file) so single-utterance recordings paste at session end, or accept the locked "EOU chunks only" semantics. Reopen ticket if regression observed after rebuild on `80f9bf0`+.
 
 **Legacy:** `backlog/streaming-output-delivery-mechanism.md` + `backlog/pipeline-streaming-defer.md` *(merged — same decision from two layer seats)*
 
