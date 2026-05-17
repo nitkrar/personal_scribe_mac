@@ -23,6 +23,10 @@ final class TranscriptionEngineKindTests: XCTestCase {
         XCTAssertEqual(TranscriptionEngine.qwen3ASR.kind, .asr)
     }
 
+    func testWhisperKitMapsToAsr() {
+        XCTAssertEqual(TranscriptionEngine.whisperKit.kind, .asr)
+    }
+
     func testDiarizationMapsToDiarization() {
         XCTAssertEqual(TranscriptionEngine.diarization.kind, .diarization)
     }

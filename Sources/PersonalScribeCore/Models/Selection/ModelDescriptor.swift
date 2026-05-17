@@ -10,15 +10,18 @@ public enum TranscriptionEngine: Sendable, Equatable {
     /// manager class (`Qwen3AsrManager`). Catalog includes both f32
     /// and int8 precision variants.
     case qwen3ASR
+    /// Whisper via WhisperKit. Stage A scaffolds the engine and
+    /// catalog metadata behind disabled descriptors; Stage B wires the
+    /// real adapter.
+    case whisperKit
     /// Speaker diarization (pyannote segmentation + WeSpeaker
     /// embedding). Different manager class
     /// (`OfflineDiarizerManager`).
     case diarization
-    // Adapters in `PersonalScribeTranscription` exist only for
-    // `.parakeetTDT` today. Catalog entries with other engines are
-    // surfaced for visibility in the AI Models tab; downloads will
-    // fail with `unknownVoiceModelID` until per-engine inference
-    // clients land.
+    // The batch, streaming, and diarization engines below their
+    // shipped adapters today. `.whisperKit` is introduced in #095's
+    // Stage A behind disabled descriptors; Stage B swaps in the real
+    // adapter.
 }
 
 /// Broad capability category for a registered model. Used by the

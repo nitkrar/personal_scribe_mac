@@ -19,6 +19,8 @@ extension TranscriptionEngine {
             return .asr
         case .qwen3ASR:
             return .asr
+        case .whisperKit:
+            return .asr
         case .parakeetEOU:
             return .streamingASR
         case .diarization:
