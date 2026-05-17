@@ -56,6 +56,7 @@ public final class ActiveModelService: ObservableObject {
     private let evictHandler: @Sendable (ModelDescriptor) -> Void
     private let modelsDirectoryProvider: @Sendable () -> URL?
     private let diskSpaceProvider: @Sendable (URL) -> Int64?
+    private let chipFamilyProvider: @Sendable () -> ChipFamily
     private let logger: PersonalScribeLogger
 
     /// Hook fired after `setActive` succeeds. The composition root wires
@@ -110,6 +111,7 @@ public final class ActiveModelService: ObservableObject {
             },
             modelsDirectoryProvider: { storageLocator.url(for: .models) },
             diskSpaceProvider: Self.liveDiskSpaceProvider,
+            chipFamily: ChipFamily.current,
             logger: logger
         )
     }
@@ -126,6 +128,7 @@ public final class ActiveModelService: ObservableObject {
         evict: @escaping @Sendable (ModelDescriptor) -> Void = { _ in },
         modelsDirectoryProvider: @escaping @Sendable () -> URL? = { nil },
         diskSpaceProvider: @escaping @Sendable (URL) -> Int64? = { _ in nil },
+        chipFamily: @escaping @Sendable () -> ChipFamily = ChipFamily.current,
         logger: PersonalScribeLogger
     ) {
         self.activeIDsPreference = activeIDsPreference
@@ -136,11 +139,13 @@ public final class ActiveModelService: ObservableObject {
         self.evictHandler = evict
         self.modelsDirectoryProvider = modelsDirectoryProvider
         self.diskSpaceProvider = diskSpaceProvider
+        self.chipFamilyProvider = chipFamily
         self.logger = logger
         self._activeModelIDs = Published(
             initialValue: Self.resolveInitialActiveIDs(
                 activeIDsPreference: activeIDsPreference,
                 registeredModels: registeredModels,
+                chipFamily: chipFamily(),
                 logger: logger
             )
         )
@@ -156,7 +161,13 @@ public final class ActiveModelService: ObservableObject {
     /// when nothing is active for that kind.
     public func activeDescriptor(for kind: ModelKind) -> ModelDescriptor? {
         guard let id = activeModelIDs[kind] else { return nil }
-        return registeredModels.first { $0.id == id }
+        guard let descriptor = registeredModels.first(where: { $0.id == id }) else {
+            return nil
+        }
+        guard canActivate(descriptor) else {
+            return nil
+        }
+        return descriptor
     }
 
     /// Activate `descriptor` for its `kind`. Evicts any previously
@@ -166,6 +177,12 @@ public final class ActiveModelService: ObservableObject {
     /// the new active descriptor's adapter (load weights at activate
     /// time rather than at download time — see #078 follow-up).
     public func setActive(_ descriptor: ModelDescriptor) {
+        guard canActivate(descriptor) else {
+            logger.error(
+                "Rejected active-model selection unsupported on this Mac: \(descriptor.id)"
+            )
+            return
+        }
         let previousID = activeModelIDs[descriptor.kind]
         var updated = activeModelIDs
         updated[descriptor.kind] = descriptor.id
@@ -185,8 +202,12 @@ public final class ActiveModelService: ObservableObject {
     /// kind is enabled today. Optional `kind:` narrows further.
     public func enabledModels(kind: ModelKind? = nil) -> [ModelDescriptor] {
         registeredModels.filter { d in
-            d.kind.isEnabled && d.isEnabled && (kind == nil || d.kind == kind)
+            d.kind.isEnabled && canActivate(d) && (kind == nil || d.kind == kind)
         }
+    }
+
+    func canActivate(_ descriptor: ModelDescriptor) -> Bool {
+        Self.canActivate(descriptor, chipFamily: chipFamilyProvider())
     }
 
     /// Kinds for which an active descriptor exists AND its artifacts
@@ -444,14 +465,21 @@ private extension ActiveModelService {
     static func resolveInitialActiveIDs(
         activeIDsPreference: Preference<[ModelKind: String]>,
         registeredModels: [ModelDescriptor],
+        chipFamily: ChipFamily,
         logger: PersonalScribeLogger
     ) -> [ModelKind: String] {
         let stored = activeIDsPreference.resolve()
-        let registeredIDs = Set(registeredModels.map(\.id))
+        let registeredByID = Dictionary(uniqueKeysWithValues: registeredModels.map { ($0.id, $0) })
 
         var cleaned: [ModelKind: String] = [:]
         for (kind, id) in stored {
-            if registeredIDs.contains(id) {
+            if let descriptor = registeredByID[id] {
+                guard canActivate(descriptor, chipFamily: chipFamily) else {
+                    logger.error(
+                        "Stored active-model id unsupported on \(chipFamily.rawValue): \(id)"
+                    )
+                    continue
+                }
                 cleaned[kind] = id
             } else {
                 logger.error(
@@ -461,10 +489,30 @@ private extension ActiveModelService {
             }
         }
 
+        for (kind, id) in activeIDsPreference.default where cleaned[kind] == nil {
+            guard
+                let descriptor = registeredByID[id],
+                canActivate(descriptor, chipFamily: chipFamily)
+            else {
+                continue
+            }
+            cleaned[kind] = id
+        }
+
         if cleaned != stored {
             activeIDsPreference.persist(cleaned)
         }
 
         return cleaned
+    }
+
+    static func canActivate(_ descriptor: ModelDescriptor, chipFamily: ChipFamily) -> Bool {
+        descriptor.isEnabled && chipFamilyAllows(descriptor, chipFamily: chipFamily)
+    }
+
+    static func chipFamilyAllows(_ descriptor: ModelDescriptor, chipFamily: ChipFamily) -> Bool {
+        descriptor.requiredChipFamily == nil
+            || descriptor.requiredChipFamily == chipFamily
+            || (descriptor.requiredChipFamily == .m2OrLater && chipFamily == .m2OrLater)
     }
 }

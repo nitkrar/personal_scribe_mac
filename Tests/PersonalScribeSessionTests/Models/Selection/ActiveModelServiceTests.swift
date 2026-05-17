@@ -476,6 +476,178 @@ final class ActiveModelServiceTests: XCTestCase {
             "Activating a different-kind descriptor must not evict the existing kind's active descriptor"
         )
     }
+
+    // MARK: - #095 A.4 — chip-family gating
+
+    func testCanActivateAcceptsNilChipRequirement() {
+        let descriptor = makeASRDescriptor(id: "chip-gating-nil")
+        let service = makeService(
+            registeredModels: [descriptor],
+            chipFamily: { .m1 }
+        )
+
+        XCTAssertTrue(service.canActivate(descriptor))
+    }
+
+    func testCanActivateRejectsM2RequirementOnM1() {
+        let descriptor = makeASRDescriptor(
+            id: "chip-gating-m2-on-m1",
+            requiredChipFamily: .m2OrLater
+        )
+        let service = makeService(
+            registeredModels: [descriptor],
+            chipFamily: { .m1 }
+        )
+
+        XCTAssertFalse(service.canActivate(descriptor))
+    }
+
+    func testCanActivateAcceptsM2RequirementOnM2() {
+        let descriptor = makeASRDescriptor(
+            id: "chip-gating-m2-on-m2",
+            requiredChipFamily: .m2OrLater
+        )
+        let service = makeService(
+            registeredModels: [descriptor],
+            chipFamily: { .m2OrLater }
+        )
+
+        XCTAssertTrue(service.canActivate(descriptor))
+    }
+
+    func testEnabledModelsHidesUnsupportedDescriptor() {
+        let supported = makeASRDescriptor(id: "chip-gating-supported")
+        let unsupported = makeASRDescriptor(
+            id: "chip-gating-unsupported",
+            requiredChipFamily: .m2OrLater
+        )
+        let service = makeService(
+            registeredModels: [supported, unsupported],
+            chipFamily: { .m1 }
+        )
+
+        XCTAssertEqual(service.enabledModels(kind: .asr), [supported])
+    }
+
+    func testSetActiveRejectsUnsupportedDescriptor() {
+        let defaults = isolatedDefaults()
+        let supported = makeASRDescriptor(id: "chip-gating-default")
+        let unsupported = makeASRDescriptor(
+            id: "chip-gating-reject",
+            requiredChipFamily: .m2OrLater
+        )
+        let preference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [.asr: supported.id],
+            defaults: defaults
+        )
+        let service = ActiveModelService(
+            activeIDsPreference: preference,
+            registeredModels: [supported, unsupported],
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            chipFamily: { .m1 },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        service.setActive(unsupported)
+
+        XCTAssertEqual(service.activeDescriptor(for: .asr)?.id, supported.id)
+        XCTAssertEqual(preference.resolve()[.asr], supported.id)
+    }
+
+    func testActiveDescriptorReturnsNilWhenChipMismatch() {
+        let chipFamily = MutableChipFamily(.m2OrLater)
+        let unsupported = makeASRDescriptor(
+            id: "chip-gating-active-mismatch",
+            requiredChipFamily: .m2OrLater
+        )
+        let defaults = isolatedDefaults()
+        let preference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [:],
+            defaults: defaults
+        )
+        preference.persist([.asr: unsupported.id])
+
+        let service = ActiveModelService(
+            activeIDsPreference: preference,
+            registeredModels: [unsupported],
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            chipFamily: { chipFamily.value },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+        chipFamily.value = .m1
+
+        XCTAssertNil(service.activeDescriptor(for: .asr))
+    }
+
+    func testResolveInitialActiveIDsFallsBackOnChipMismatch() {
+        let defaults = isolatedDefaults()
+        let fallback = makeASRDescriptor(id: "chip-gating-fallback")
+        let unsupported = makeASRDescriptor(
+            id: "chip-gating-fallback-unsupported",
+            requiredChipFamily: .m2OrLater
+        )
+        let preference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [.asr: fallback.id],
+            defaults: defaults
+        )
+        preference.persist([.asr: unsupported.id])
+
+        let service = ActiveModelService(
+            activeIDsPreference: preference,
+            registeredModels: [fallback, unsupported],
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            chipFamily: { .m1 },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        XCTAssertEqual(service.activeDescriptor(for: .asr)?.id, fallback.id)
+        XCTAssertEqual(preference.resolve()[.asr], fallback.id)
+    }
+
+    private func makeService(
+        registeredModels: [ModelDescriptor],
+        chipFamily: @escaping @Sendable () -> ChipFamily
+    ) -> ActiveModelService {
+        ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
+                defaults: isolatedDefaults()
+            ),
+            registeredModels: registeredModels,
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            chipFamily: chipFamily,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+    }
+
+    private func makeASRDescriptor(
+        id: String,
+        isEnabled: Bool = true,
+        requiredChipFamily: ChipFamily? = nil
+    ) -> ModelDescriptor {
+        ModelDescriptor(
+            id: id,
+            displayName: "Descriptor \(id)",
+            shortDescription: "Synthetic ASR descriptor for chip gating tests.",
+            architecture: "Test",
+            repository: "argmaxinc/\(id)",
+            revision: "test",
+            requiredRelativePaths: [],
+            approximateSizeBytes: 0,
+            isEnabled: isEnabled,
+            engine: .whisperKit,
+            tokenizerSource: nil,
+            requiredChipFamily: requiredChipFamily
+        )
+    }
 }
 
 private actor DownloadRecorder {
@@ -521,6 +693,28 @@ private final class LockedSetActiveCounter: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return storage
+    }
+}
+
+private final class MutableChipFamily: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: ChipFamily
+
+    init(_ initialValue: ChipFamily) {
+        self.storage = initialValue
+    }
+
+    var value: ChipFamily {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storage
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            storage = newValue
+        }
     }
 }
 
