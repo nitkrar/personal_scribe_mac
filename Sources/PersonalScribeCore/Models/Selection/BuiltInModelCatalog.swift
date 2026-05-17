@@ -128,6 +128,140 @@ public enum BuiltInModelCatalog {
         license: "Apache 2.0"
     )
 
+    // MARK: - WhisperKit ASR
+    //
+    // Argmax's CoreML Whisper bundles plus OpenAI tokenizer assets.
+    // Stage A.5 keeps these rows in the catalog but hidden
+    // (`isEnabled: false`) until the real adapter lands in Stage B.
+    // `approximateSizeBytes` includes the bundle plus the tokenizer
+    // support files we pre-stage under `<leaf>/tokenizer/`.
+    private static let whisperKitTokenizerRequiredPaths = [
+        "tokenizer/config.json",
+        "tokenizer/tokenizer.json",
+        "tokenizer/tokenizer_config.json",
+        "tokenizer/vocab.json",
+        "tokenizer/merges.txt",
+        "tokenizer/added_tokens.json",
+        "tokenizer/special_tokens_map.json",
+        "tokenizer/normalizer.json",
+    ]
+
+    private static let whisperKitCommonRequiredPaths = [
+        "AudioEncoder.mlmodelc/coremldata.bin",
+        "MelSpectrogram.mlmodelc/coremldata.bin",
+        "TextDecoder.mlmodelc/coremldata.bin",
+        "config.json",
+        "generation_config.json",
+    ] + whisperKitTokenizerRequiredPaths
+
+    private static let whisperKitTurboRequiredPaths = [
+        "AudioEncoder.mlmodelc/coremldata.bin",
+        "MelSpectrogram.mlmodelc/coremldata.bin",
+        "TextDecoder.mlmodelc/coremldata.bin",
+        "TextDecoderContextPrefill.mlmodelc/coremldata.bin",
+        "config.json",
+        "generation_config.json",
+    ] + whisperKitTokenizerRequiredPaths
+
+    public static let whisperKitTiny = ModelDescriptor(
+        id: "whisperkit-tiny",
+        displayName: "Whisper Tiny (WhisperKit)",
+        repoFolderName: "openai_whisper-tiny",
+        shortDescription: "Fastest Whisper option - tiny multilingual model, lowest accuracy.",
+        architecture: "Whisper (WhisperKit runtime)",
+        repository: "argmaxinc/whisperkit-coreml",
+        // Decorative only for WhisperKit bundle descriptors today;
+        // runtime loads by bundle leaf, not a pinned HF revision.
+        revision: "main",
+        requiredRelativePaths: whisperKitCommonRequiredPaths,
+        // HF tree audit (2026-05-18): bundle + tokenizer support files.
+        approximateSizeBytes: 80_819_412,
+        isEnabled: false,
+        engine: .whisperKit,
+        madeBy: "OpenAI · Argmax",
+        worksWith: "Multilingual (~99 languages)",
+        goodFor: "Quick multilingual dictation, smoke tests, low-RAM Macs",
+        license: "MIT (WhisperKit) + Apache 2.0 (Whisper weights)",
+        tokenizerSource: "openai/whisper-tiny"
+    )
+
+    public static let whisperKitSmall216MB = ModelDescriptor(
+        id: "whisperkit-small-216mb",
+        displayName: "Whisper Small (WhisperKit, 216MB)",
+        repoFolderName: "openai_whisper-small_216MB",
+        shortDescription: "Balanced Whisper model - multilingual, smaller RAM than large v3.",
+        architecture: "Whisper (WhisperKit runtime)",
+        repository: "argmaxinc/whisperkit-coreml",
+        revision: "main",
+        requiredRelativePaths: whisperKitCommonRequiredPaths,
+        approximateSizeBytes: 221_534_762,
+        isEnabled: false,
+        engine: .whisperKit,
+        madeBy: "OpenAI · Argmax",
+        worksWith: "Multilingual (~99 languages)",
+        goodFor: "Multilingual dictation on everyday Apple Silicon Macs",
+        license: "MIT (WhisperKit) + Apache 2.0 (Whisper weights)",
+        tokenizerSource: "openai/whisper-small"
+    )
+
+    public static let whisperKitSmallEn217MB = ModelDescriptor(
+        id: "whisperkit-small-en-217mb",
+        displayName: "Whisper Small English (WhisperKit, 217MB)",
+        repoFolderName: "openai_whisper-small.en_217MB",
+        shortDescription: "English-only Whisper small - focused dictation at lower RAM.",
+        architecture: "Whisper (WhisperKit runtime)",
+        repository: "argmaxinc/whisperkit-coreml",
+        revision: "main",
+        requiredRelativePaths: whisperKitCommonRequiredPaths,
+        approximateSizeBytes: 221_630_409,
+        isEnabled: false,
+        engine: .whisperKit,
+        madeBy: "OpenAI · Argmax",
+        worksWith: "English",
+        goodFor: "English dictation when you prefer Whisper over Parakeet",
+        license: "MIT (WhisperKit) + Apache 2.0 (Whisper weights)",
+        tokenizerSource: "openai/whisper-small.en"
+    )
+
+    public static let whisperKitLargeV3626MB = ModelDescriptor(
+        id: "whisperkit-large-v3-626mb",
+        displayName: "Whisper Large v3 (WhisperKit, 626MB)",
+        repoFolderName: "openai_whisper-large-v3-v20240930_626MB",
+        shortDescription: "High-accuracy Whisper - multilingual large v3 for better quality.",
+        architecture: "Whisper (WhisperKit runtime)",
+        repository: "argmaxinc/whisperkit-coreml",
+        revision: "main",
+        requiredRelativePaths: whisperKitCommonRequiredPaths,
+        approximateSizeBytes: 631_102_783,
+        isEnabled: false,
+        engine: .whisperKit,
+        madeBy: "OpenAI · Argmax",
+        worksWith: "Multilingual (~99 languages)",
+        goodFor: "Higher-accuracy multilingual dictation",
+        license: "MIT (WhisperKit) + Apache 2.0 (Whisper weights)",
+        tokenizerSource: "openai/whisper-large-v3"
+    )
+
+    public static let whisperKitLargeV3Turbo632MB = ModelDescriptor(
+        id: "whisperkit-large-v3-turbo-632mb",
+        displayName: "Whisper Large v3 Turbo (WhisperKit, 632MB)",
+        repoFolderName: "openai_whisper-large-v3-v20240930_turbo_632MB",
+        shortDescription: "Large v3 Turbo - faster Whisper decode on M2 and later.",
+        architecture: "Whisper (WhisperKit runtime)",
+        repository: "argmaxinc/whisperkit-coreml",
+        revision: "main",
+        requiredRelativePaths: whisperKitTurboRequiredPaths,
+        approximateSizeBytes: 650_053_458,
+        isEnabled: false,
+        engine: .whisperKit,
+        madeBy: "OpenAI · Argmax",
+        worksWith: "Multilingual (~99 languages)",
+        goodFor: "Higher-accuracy multilingual dictation on M2+ with faster decode",
+        license: "MIT (WhisperKit) + Apache 2.0 (Whisper weights)",
+        tokenizerSource: "openai/whisper-large-v3",
+        requiredChipFamily: .m2OrLater
+    )
+
     // MARK: - Streaming ASR (parakeet realtime EOU)
     //
     // Parakeet 120M with end-of-utterance detection. Three chunk-size
@@ -285,6 +419,11 @@ public enum BuiltInModelCatalog {
         parakeetTDT06Bv2,
         parakeetTDTCTC110M,
         parakeetTDT06Bv3,
+        whisperKitTiny,
+        whisperKitSmall216MB,
+        whisperKitSmallEn217MB,
+        whisperKitLargeV3626MB,
+        whisperKitLargeV3Turbo632MB,
         parakeetEou160ms,
         parakeetEou320ms,
         parakeetEou1280ms,

@@ -101,4 +101,133 @@ final class BuiltInModelCatalogTests: XCTestCase {
             "CTC-110M should have a worse (higher) WER than 0.6B v2"
         )
     }
+
+    func testWhisperKitDescriptorsAreRegisteredButDisabled() {
+        let whisperKitDescriptors = BuiltInModelCatalog.registeredModels
+            .filter { $0.engine == .whisperKit }
+        let expectedIDs: Set<String> = [
+            BuiltInModelCatalog.whisperKitTiny.id,
+            BuiltInModelCatalog.whisperKitSmall216MB.id,
+            BuiltInModelCatalog.whisperKitSmallEn217MB.id,
+            BuiltInModelCatalog.whisperKitLargeV3626MB.id,
+            BuiltInModelCatalog.whisperKitLargeV3Turbo632MB.id,
+        ]
+
+        XCTAssertEqual(Set(whisperKitDescriptors.map(\.id)), expectedIDs)
+        for descriptor in whisperKitDescriptors {
+            XCTAssertFalse(descriptor.isEnabled, "\(descriptor.id) should stay hidden until #095 B.5")
+        }
+    }
+
+    func testWhisperKitDescriptorsPinExpectedCatalogContract() {
+        let commonRequiredPaths = [
+            "AudioEncoder.mlmodelc/coremldata.bin",
+            "MelSpectrogram.mlmodelc/coremldata.bin",
+            "TextDecoder.mlmodelc/coremldata.bin",
+            "config.json",
+            "generation_config.json",
+            "tokenizer/config.json",
+            "tokenizer/tokenizer.json",
+            "tokenizer/tokenizer_config.json",
+            "tokenizer/vocab.json",
+            "tokenizer/merges.txt",
+            "tokenizer/added_tokens.json",
+            "tokenizer/special_tokens_map.json",
+            "tokenizer/normalizer.json",
+        ]
+        let expected: [(descriptor: ModelDescriptor, repoFolderName: String, tokenizerSource: String, worksWith: String, requiredChipFamily: ChipFamily?, requiredPaths: [String])] = [
+            (
+                BuiltInModelCatalog.whisperKitTiny,
+                "openai_whisper-tiny",
+                "openai/whisper-tiny",
+                "Multilingual (~99 languages)",
+                nil,
+                commonRequiredPaths
+            ),
+            (
+                BuiltInModelCatalog.whisperKitSmall216MB,
+                "openai_whisper-small_216MB",
+                "openai/whisper-small",
+                "Multilingual (~99 languages)",
+                nil,
+                commonRequiredPaths
+            ),
+            (
+                BuiltInModelCatalog.whisperKitSmallEn217MB,
+                "openai_whisper-small.en_217MB",
+                "openai/whisper-small.en",
+                "English",
+                nil,
+                commonRequiredPaths
+            ),
+            (
+                BuiltInModelCatalog.whisperKitLargeV3626MB,
+                "openai_whisper-large-v3-v20240930_626MB",
+                "openai/whisper-large-v3",
+                "Multilingual (~99 languages)",
+                nil,
+                commonRequiredPaths
+            ),
+            (
+                BuiltInModelCatalog.whisperKitLargeV3Turbo632MB,
+                "openai_whisper-large-v3-v20240930_turbo_632MB",
+                "openai/whisper-large-v3",
+                "Multilingual (~99 languages)",
+                .m2OrLater,
+                [
+                    "AudioEncoder.mlmodelc/coremldata.bin",
+                    "MelSpectrogram.mlmodelc/coremldata.bin",
+                    "TextDecoder.mlmodelc/coremldata.bin",
+                    "TextDecoderContextPrefill.mlmodelc/coremldata.bin",
+                    "config.json",
+                    "generation_config.json",
+                    "tokenizer/config.json",
+                    "tokenizer/tokenizer.json",
+                    "tokenizer/tokenizer_config.json",
+                    "tokenizer/vocab.json",
+                    "tokenizer/merges.txt",
+                    "tokenizer/added_tokens.json",
+                    "tokenizer/special_tokens_map.json",
+                    "tokenizer/normalizer.json",
+                ]
+            ),
+        ]
+
+        for item in expected {
+            XCTAssertEqual(item.descriptor.engine, .whisperKit)
+            XCTAssertEqual(item.descriptor.kind, .asr)
+            XCTAssertEqual(item.descriptor.repository, "argmaxinc/whisperkit-coreml")
+            XCTAssertEqual(item.descriptor.revision, "main")
+            XCTAssertFalse(item.descriptor.shortDescription.isEmpty)
+            XCTAssertTrue(item.descriptor.displayName.contains("(WhisperKit"))
+            XCTAssertEqual(item.descriptor.repoFolderName, item.repoFolderName)
+            XCTAssertEqual(item.descriptor.tokenizerSource, item.tokenizerSource)
+            XCTAssertEqual(item.descriptor.madeBy, "OpenAI · Argmax")
+            XCTAssertEqual(item.descriptor.worksWith, item.worksWith)
+            XCTAssertFalse(item.descriptor.goodFor?.isEmpty ?? true)
+            XCTAssertEqual(
+                item.descriptor.license,
+                "MIT (WhisperKit) + Apache 2.0 (Whisper weights)"
+            )
+            XCTAssertEqual(item.descriptor.requiredChipFamily, item.requiredChipFamily)
+            XCTAssertEqual(item.descriptor.requiredRelativePaths, item.requiredPaths)
+        }
+    }
+
+    func testWhisperKitDescriptorSizesStayWithinExpectedRanges() {
+        let expectedRanges: [(ModelDescriptor, ClosedRange<Int64>)] = [
+            (BuiltInModelCatalog.whisperKitTiny, 73_000_000...81_000_000),
+            (BuiltInModelCatalog.whisperKitSmall216MB, 205_000_000...227_000_000),
+            (BuiltInModelCatalog.whisperKitSmallEn217MB, 206_000_000...228_000_000),
+            (BuiltInModelCatalog.whisperKitLargeV3626MB, 595_000_000...657_000_000),
+            (BuiltInModelCatalog.whisperKitLargeV3Turbo632MB, 600_000_000...664_000_000),
+        ]
+
+        for (descriptor, expectedRange) in expectedRanges {
+            XCTAssertTrue(
+                expectedRange.contains(descriptor.approximateSizeBytes),
+                "\(descriptor.id) expected size \(descriptor.approximateSizeBytes) not in \(expectedRange)"
+            )
+        }
+    }
 }
