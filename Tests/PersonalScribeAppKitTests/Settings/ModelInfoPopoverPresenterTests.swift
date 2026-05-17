@@ -102,7 +102,9 @@ final class ModelInfoPopoverPresenterTests: XCTestCase {
             revision: "abc123",
             requiredRelativePaths: [],
             approximateSizeBytes: 1,
-            engine: .parakeetTDT
+            engine: .parakeetTDT,
+            tokenizerSource: nil,
+            requiredChipFamily: nil
         )
         let p = presenter(for: descriptor, siblings: [descriptor])
         XCTAssertNil(p.speedRow)
@@ -148,7 +150,9 @@ final class ModelInfoPopoverPresenterTests: XCTestCase {
             revision: "xyz",
             requiredRelativePaths: [],
             approximateSizeBytes: 1,
-            engine: .parakeetTDT
+            engine: .parakeetTDT,
+            tokenizerSource: nil,
+            requiredChipFamily: nil
         )
         let p = presenter(
             for: target,
@@ -219,7 +223,9 @@ final class ModelInfoPopoverPresenterTests: XCTestCase {
             revision: "abcdef12",
             requiredRelativePaths: [],
             approximateSizeBytes: 1,
-            engine: .parakeetTDT
+            engine: .parakeetTDT,
+            tokenizerSource: nil,
+            requiredChipFamily: nil
         )
         let p = presenter(for: descriptor, siblings: [descriptor])
         XCTAssertFalse(p.detailRows.contains(where: { $0.title == "Parameters" }))
@@ -269,7 +275,9 @@ final class ModelInfoPopoverPresenterTests: XCTestCase {
             revision: "00000000",
             requiredRelativePaths: [],
             approximateSizeBytes: 1,
-            engine: .parakeetTDT
+            engine: .parakeetTDT,
+            tokenizerSource: nil,
+            requiredChipFamily: nil
         )
         let p = presenter(for: descriptor, siblings: [descriptor])
         XCTAssertEqual(p.humanFriendlyRows.map(\.title), ["Model type"])

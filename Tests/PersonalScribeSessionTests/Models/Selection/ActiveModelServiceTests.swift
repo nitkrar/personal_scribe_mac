@@ -105,7 +105,9 @@ final class ActiveModelServiceTests: XCTestCase {
             revision: "shadow",
             requiredRelativePaths: [],
             approximateSizeBytes: 0,
-            engine: .parakeetTDT
+            engine: .parakeetTDT,
+            tokenizerSource: nil,
+            requiredChipFamily: nil
         )
         let missingDescriptor = ModelDescriptor(
             id: "missing-model",
@@ -116,7 +118,9 @@ final class ActiveModelServiceTests: XCTestCase {
             revision: "missing",
             requiredRelativePaths: [],
             approximateSizeBytes: 0,
-            engine: .parakeetTDT
+            engine: .parakeetTDT,
+            tokenizerSource: nil,
+            requiredChipFamily: nil
         )
         let service = ActiveModelService(
             activeIDsPreference: Preference<[ModelKind: String]>(
@@ -146,7 +150,9 @@ final class ActiveModelServiceTests: XCTestCase {
             revision: "shadow",
             requiredRelativePaths: [],
             approximateSizeBytes: 0,
-            engine: .parakeetTDT
+            engine: .parakeetTDT,
+            tokenizerSource: nil,
+            requiredChipFamily: nil
         )
         let descriptorRecorder = LockedDescriptorRecorder()
         let service = ActiveModelService(
@@ -273,7 +279,9 @@ final class ActiveModelServiceTests: XCTestCase {
             revision: "shadow",
             requiredRelativePaths: [],
             approximateSizeBytes: 0,
-            engine: .parakeetTDT
+            engine: .parakeetTDT,
+            tokenizerSource: nil,
+            requiredChipFamily: nil
         )
         let service = ActiveModelService(
             activeIDsPreference: Preference<[ModelKind: String]>(
@@ -348,7 +356,9 @@ final class ActiveModelServiceTests: XCTestCase {
             revision: "test",
             requiredRelativePaths: [],
             approximateSizeBytes: 0,
-            engine: .parakeetEOU
+            engine: .parakeetEOU,
+            tokenizerSource: nil,
+            requiredChipFamily: nil
         )
         let service = ActiveModelService(
             activeIDsPreference: Preference<[ModelKind: String]>(
@@ -440,7 +450,9 @@ final class ActiveModelServiceTests: XCTestCase {
             revision: "test",
             requiredRelativePaths: [],
             approximateSizeBytes: 0,
-            engine: .parakeetEOU
+            engine: .parakeetEOU,
+            tokenizerSource: nil,
+            requiredChipFamily: nil
         )
         let evictRecorder = LockedDescriptorRecorder()
         let service = ActiveModelService(
