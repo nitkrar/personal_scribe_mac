@@ -102,7 +102,7 @@ final class BuiltInModelCatalogTests: XCTestCase {
         )
     }
 
-    func testWhisperKitDescriptorsAreRegisteredButDisabled() {
+    func testWhisperKitDescriptorsAreRegisteredAndEnabled() {
         let whisperKitDescriptors = BuiltInModelCatalog.registeredModels
             .filter { $0.engine == .whisperKit }
         let expectedIDs: Set<String> = [
@@ -115,7 +115,7 @@ final class BuiltInModelCatalogTests: XCTestCase {
 
         XCTAssertEqual(Set(whisperKitDescriptors.map(\.id)), expectedIDs)
         for descriptor in whisperKitDescriptors {
-            XCTAssertFalse(descriptor.isEnabled, "\(descriptor.id) should stay hidden until #095 B.5")
+            XCTAssertTrue(descriptor.isEnabled, "\(descriptor.id) should be live after #095 B.5")
         }
     }
 

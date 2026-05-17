@@ -70,6 +70,20 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
         }
     }
 
+    func testWhisperKitDescriptorResolvesToWhisperKitTranscriberAdapter() throws {
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: TestStorageLocator.make(),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        let transcriber = try provider.transcriber(for: BuiltInModelCatalog.whisperKitTiny)
+
+        XCTAssertTrue(
+            transcriber is WhisperKitTranscriberAdapter,
+            "WhisperKit descriptors should route to the real adapter after #095 B.5"
+        )
+    }
+
     func testSameDescriptorReturnsSharedCacheRecord() throws {
         let factoryCallCount = AtomicIntBox()
         let provider = ModelBoundProcessorProvider(

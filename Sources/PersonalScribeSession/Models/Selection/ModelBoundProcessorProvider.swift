@@ -39,9 +39,9 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
             case .whisperKit:
                 return AdapterRecord(
                     descriptorID: descriptor.id,
-                    transcriber: NoOpDisabledTranscriber(
+                    transcriber: WhisperKitTranscriberAdapter(
                         descriptor: descriptor,
-                        logger: logger
+                        storageLocator: storageLocator
                     )
                 )
             case .parakeetEOU:
@@ -223,48 +223,6 @@ private extension ModelBoundProcessorProvider {
             for: descriptor,
             storageLocator: storageLocator
         )
-    }
-}
-
-private actor NoOpDisabledTranscriber: Transcriber {
-    nonisolated let capabilities = TranscriberCapabilities()
-
-    private let descriptor: ModelDescriptor
-    private let logger: PersonalScribeLogger
-
-    init(descriptor: ModelDescriptor, logger: PersonalScribeLogger) {
-        self.descriptor = descriptor
-        self.logger = logger
-    }
-
-    func prepare() async throws {
-        throw unavailableError()
-    }
-
-    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        AsyncStream { continuation in
-            continuation.yield(ModelDownloadProgress(
-                phase: .idle,
-                fractionCompleted: 0,
-                receivedBytes: 0,
-                expectedBytes: nil
-            ))
-            continuation.finish()
-        }
-    }
-
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        throw unavailableError()
-    }
-
-    private func unavailableError() -> PersonalScribeError {
-        let error = PersonalScribeError.modelLoadFailure
-        logger.error(
-            "WhisperKit adapter not yet wired — Stage B will replace this",
-            error: error,
-            metadata: ["descriptorID": descriptor.id]
-        )
-        return error
     }
 }
 

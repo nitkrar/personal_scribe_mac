@@ -183,6 +183,29 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(await manager.lastSamples(), audio.samples)
     }
 
+    func testTranscribeReturnsValueOnlyResult() async throws {
+        let descriptor = BuiltInModelCatalog.whisperKitTiny
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let manager = StubWhisperKitManager(
+            result: [WhisperKitManagerResult(text: "hello world")]
+        )
+        let adapter = WhisperKitTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+        let audio = try PCMBuffer(
+            samples: [0.2, -0.1, 0.4, -0.2],
+            sampleRate: 2_000,
+            channelCount: 1,
+            timestamp: ContinuousClock.now
+        )
+
+        let result = try await adapter.transcribe(audio)
+
+        assertContainsNoReferenceTypes(result)
+    }
+
     func testTranscribeReturnsEmptyTextForEmptyManagerResults() async throws {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
@@ -484,5 +507,28 @@ private func XCTAssertThrowsErrorAsync<T>(
         XCTFail("Expected error to be thrown", file: file, line: line)
     } catch {
         handler(error)
+    }
+}
+
+private func assertContainsNoReferenceTypes(
+    _ value: Any,
+    path: String = "root",
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    let mirror = Mirror(reflecting: value)
+    if mirror.displayStyle == .class {
+        XCTFail("Reference type found at \(path): \(type(of: value))", file: file, line: line)
+        return
+    }
+
+    for child in mirror.children {
+        let label = child.label ?? "_"
+        assertContainsNoReferenceTypes(
+            child.value,
+            path: "\(path).\(label)",
+            file: file,
+            line: line
+        )
     }
 }

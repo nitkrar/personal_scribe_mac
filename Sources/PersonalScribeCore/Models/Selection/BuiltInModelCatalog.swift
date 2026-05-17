@@ -131,8 +131,6 @@ public enum BuiltInModelCatalog {
     // MARK: - WhisperKit ASR
     //
     // Argmax's CoreML Whisper bundles plus OpenAI tokenizer assets.
-    // Stage A.5 keeps these rows in the catalog but hidden
-    // (`isEnabled: false`) until the real adapter lands in Stage B.
     // `approximateSizeBytes` includes the bundle plus the tokenizer
     // support files we pre-stage under `<leaf>/tokenizer/`.
     private static let whisperKitTokenizerRequiredPaths = [
@@ -176,7 +174,7 @@ public enum BuiltInModelCatalog {
         requiredRelativePaths: whisperKitCommonRequiredPaths,
         // HF tree audit (2026-05-18): bundle + tokenizer support files.
         approximateSizeBytes: 80_819_412,
-        isEnabled: false,
+        isEnabled: true,
         engine: .whisperKit,
         madeBy: "OpenAI · Argmax",
         worksWith: "Multilingual (~99 languages)",
@@ -195,7 +193,7 @@ public enum BuiltInModelCatalog {
         revision: "main",
         requiredRelativePaths: whisperKitCommonRequiredPaths,
         approximateSizeBytes: 221_534_762,
-        isEnabled: false,
+        isEnabled: true,
         engine: .whisperKit,
         madeBy: "OpenAI · Argmax",
         worksWith: "Multilingual (~99 languages)",
@@ -214,7 +212,7 @@ public enum BuiltInModelCatalog {
         revision: "main",
         requiredRelativePaths: whisperKitCommonRequiredPaths,
         approximateSizeBytes: 221_630_409,
-        isEnabled: false,
+        isEnabled: true,
         engine: .whisperKit,
         madeBy: "OpenAI · Argmax",
         worksWith: "English",
@@ -233,7 +231,7 @@ public enum BuiltInModelCatalog {
         revision: "main",
         requiredRelativePaths: whisperKitCommonRequiredPaths,
         approximateSizeBytes: 631_102_783,
-        isEnabled: false,
+        isEnabled: true,
         engine: .whisperKit,
         madeBy: "OpenAI · Argmax",
         worksWith: "Multilingual (~99 languages)",
@@ -252,7 +250,7 @@ public enum BuiltInModelCatalog {
         revision: "main",
         requiredRelativePaths: whisperKitTurboRequiredPaths,
         approximateSizeBytes: 650_053_458,
-        isEnabled: false,
+        isEnabled: true,
         engine: .whisperKit,
         madeBy: "OpenAI · Argmax",
         worksWith: "Multilingual (~99 languages)",
