@@ -53,16 +53,19 @@ enum RecordingStatusCardDriver {
     /// Stage B (#046) priority-ordered driver. First non-nil branch wins:
     ///
     /// 1. `.error` state — reported user message, no link, 4s auto-dismiss.
-    /// 2. VAD grace pending + pref on — "…stopping, speak to continue".
-    /// 3. VAD fire-token present, not yet seen by consumer, + notify pref
+    /// 2. Capture-time streaming fallback notice.
+    /// 3. VAD grace pending + pref on — "…stopping, speak to continue".
+    /// 4. VAD fire-token present, not yet seen by consumer, + notify pref
     ///    on — "Auto stopped. Update settings to change." with a link on
     ///    the trailing substring.
-    /// 4. Record-without-transcribe messaging (Stage A) — falls through
+    /// 5. Record-without-transcribe messaging (Stage A) — falls through
     ///    to `statusText(sessionState:progress:)` wrapped as plain text.
-    /// 5. `nil` — hide the card.
+    /// 6. Streaming finalization notice.
+    /// 7. `nil` — hide the card.
     static func statusContent(
         sessionState: SessionState,
         reportedError: ReportedError?,
+        liveStreamingFallbackNotice: String?,
         progress: ModelDownloadProgress?,
         isStreamingSession: Bool,
         vadGracePending: Bool,
@@ -80,7 +83,18 @@ enum RecordingStatusCardDriver {
             )
         }
 
-        // 2. Grace-window warning, gated by pref.
+        // 2. Live streaming fallback notice preempts the StreamCard and
+        // lower-priority capture-time messages while recording continues.
+        if isStreamingSession, let liveStreamingFallbackNotice {
+            switch sessionState {
+            case .capturing, .holdRecording:
+                return StatusCardContent(text: liveStreamingFallbackNotice, link: nil)
+            default:
+                break
+            }
+        }
+
+        // 3. Grace-window warning, gated by pref.
         if vadGracePending && showStoppingWarning {
             return StatusCardContent(
                 text: Self.warningText,
@@ -88,7 +102,7 @@ enum RecordingStatusCardDriver {
             )
         }
 
-        // 3. Auto-stopped notification, gated by pref AND an unseen fire
+        // 4. Auto-stopped notification, gated by pref AND an unseen fire
         //    token. Consumer caches `lastSeenFireToken` locally and
         //    advances it after rendering, so a stable token only triggers
         //    the notification once.
@@ -112,20 +126,20 @@ enum RecordingStatusCardDriver {
             }
         }
 
-        // 4. Existing record-without-transcribe messaging wins if there
+        // 5. Existing record-without-transcribe messaging wins if there
         //    is any.
         if let text = statusText(sessionState: sessionState, progress: progress) {
             return StatusCardContent(text: text, link: nil)
         }
 
-        // 5. Streaming sessions show a finalizing notice while the
+        // 6. Streaming sessions show a finalizing notice while the
         //    authoritative stop-time pipeline runs, unless a higher
         //    priority branch above already claimed the card.
         if isStreamingSession, case .transcribing = sessionState {
             return StatusCardContent(text: "Finalizing…", link: nil)
         }
 
-        // 6. Nothing to show.
+        // 7. Nothing to show.
         return nil
     }
 

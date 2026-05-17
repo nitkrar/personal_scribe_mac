@@ -338,7 +338,7 @@ public struct GeneralTab: View {
                 )
             )
 
-            Text("Saved now for streaming recipes. Live cursor transport is not active in this build.")
+            Text("Appends each end-of-utterance chunk into the focused text field while recording. Requires Accessibility access.")
                 .font(PersonalScribeTheme.Typography.caption.font)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

@@ -56,12 +56,15 @@ Prerequisites:
 4. Confirm the session still completes and the final text falls back to
    the streaming final rather than erroring out.
 
-### MV-STREAM-TX-4 — live cursor flag is runtime-inert in #056
-1. Turn `Live cursor streaming` ON globally or per-mode.
-2. Record into a text field while watching the insertion point.
-3. Confirm no text is injected during capture.
-4. Stop the recording and confirm the existing stop-time clipboard/paste
-   path still runs exactly once.
+### MV-STREAM-TX-4 — live cursor appends EOU chunks without stop-time duplicate
+1. Turn `Live cursor streaming` ON globally or per-mode and ensure
+   Ninimma has Accessibility access.
+2. Focus a text field in another app.
+3. Record a multi-utterance dictation with pauses long enough to trigger
+   end-of-utterance commits while watching the insertion point.
+4. Confirm text is appended during capture as utterances complete.
+5. Stop the recording and confirm no extra duplicate final paste lands
+   at stop.
 
 ## Phase 1 Step 1.1b — Launch signposts
 

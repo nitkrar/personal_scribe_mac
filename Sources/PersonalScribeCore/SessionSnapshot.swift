@@ -8,6 +8,9 @@ public struct SessionSnapshot: Sendable, Equatable {
     public var recordingDuration: Duration?
     public var modelDownloadProgress: ModelDownloadProgress?
     public var reportedError: ReportedError?
+    /// Non-terminal operational notice for a streaming session that
+    /// keeps recording after the live transcript path fails.
+    public var liveStreamingFallbackNotice: String?
     /// Session-owned flag for overlay routing. Set at session start from
     /// the bound recipe, not derived from the mutable active-mode picker.
     public var isStreamingSession: Bool
@@ -32,6 +35,7 @@ public struct SessionSnapshot: Sendable, Equatable {
         recordingDuration: Duration? = nil,
         modelDownloadProgress: ModelDownloadProgress? = nil,
         reportedError: ReportedError? = nil,
+        liveStreamingFallbackNotice: String? = nil,
         isStreamingSession: Bool = false,
         vadAutoStopGracePending: Bool = false,
         vadAutoStopGraceDeadline: Date? = nil,
@@ -44,6 +48,7 @@ public struct SessionSnapshot: Sendable, Equatable {
         self.recordingDuration = recordingDuration
         self.modelDownloadProgress = modelDownloadProgress
         self.reportedError = reportedError
+        self.liveStreamingFallbackNotice = liveStreamingFallbackNotice
         self.isStreamingSession = isStreamingSession
         self.vadAutoStopGracePending = vadAutoStopGracePending
         self.vadAutoStopGraceDeadline = vadAutoStopGraceDeadline

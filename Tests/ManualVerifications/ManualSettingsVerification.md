@@ -87,8 +87,9 @@ System Settings does NOT re-trigger first-run auto-open.
   with toggles for `Live transcript card`, `Live cursor streaming`, and
   `Authoritative second pass`, plus an `Overflow mode` picker.
 - **MV-SETT-STREAM-2 — Live cursor note is explicit:** under the
-  `Live cursor streaming` toggle, confirm the helper copy says the flag
-  is saved now but live cursor transport is not active in this build.
+  `Live cursor streaming` toggle, confirm the helper copy says capture
+  appends end-of-utterance chunks into the focused text field and that
+  Accessibility access is required.
 - **MV-SETT-STREAM-3 — Streaming defaults persist across relaunch:**
   change all three toggles and the overflow picker to non-default
   values, relaunch Ninimma, reopen `Settings → General`, and confirm

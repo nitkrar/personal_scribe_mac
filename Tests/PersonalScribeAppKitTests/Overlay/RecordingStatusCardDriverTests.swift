@@ -136,6 +136,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         let onContent = RecordingStatusCardDriver.statusContent(
             sessionState: .capturing,
             reportedError: nil,
+            liveStreamingFallbackNotice: nil,
             progress: nil,
             isStreamingSession: false,
             vadGracePending: true,
@@ -150,6 +151,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         let offContent = RecordingStatusCardDriver.statusContent(
             sessionState: .capturing,
             reportedError: nil,
+            liveStreamingFallbackNotice: nil,
             progress: nil,
             isStreamingSession: false,
             vadGracePending: true,
@@ -171,6 +173,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         let firstContent = RecordingStatusCardDriver.statusContent(
             sessionState: .transcribing,
             reportedError: nil,
+            liveStreamingFallbackNotice: nil,
             progress: nil,
             isStreamingSession: false,
             vadGracePending: false,
@@ -192,6 +195,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         let secondContent = RecordingStatusCardDriver.statusContent(
             sessionState: .transcribing,
             reportedError: nil,
+            liveStreamingFallbackNotice: nil,
             progress: nil,
             isStreamingSession: false,
             vadGracePending: false,
@@ -206,6 +210,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         let thirdContent = RecordingStatusCardDriver.statusContent(
             sessionState: .transcribing,
             reportedError: nil,
+            liveStreamingFallbackNotice: nil,
             progress: nil,
             isStreamingSession: false,
             vadGracePending: false,
@@ -226,6 +231,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         let content = RecordingStatusCardDriver.statusContent(
             sessionState: .shortExit,
             reportedError: nil,
+            liveStreamingFallbackNotice: nil,
             progress: nil,
             isStreamingSession: false,
             vadGracePending: false,
@@ -245,6 +251,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         let content = RecordingStatusCardDriver.statusContent(
             sessionState: .error(.resampleFailure),
             reportedError: nil,
+            liveStreamingFallbackNotice: nil,
             progress: nil,
             isStreamingSession: false,
             vadGracePending: true,
@@ -285,6 +292,7 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         let content = RecordingStatusCardDriver.statusContent(
             sessionState: .error(.transcriptionFailure),
             reportedError: reportedError,
+            liveStreamingFallbackNotice: nil,
             progress: nil,
             isStreamingSession: false,
             vadGracePending: false,
@@ -299,10 +307,30 @@ final class RecordingStatusCardDriverTests: XCTestCase {
         XCTAssertNil(content?.link)
     }
 
+    func testStreamingCaptureFallbackNoticePreemptsStreamCardAndVadStates() {
+        let content = RecordingStatusCardDriver.statusContent(
+            sessionState: .capturing,
+            reportedError: nil,
+            liveStreamingFallbackNotice: "Live transcript paused. Final result will still appear at stop.",
+            progress: nil,
+            isStreamingSession: true,
+            vadGracePending: true,
+            vadFireToken: UUID(),
+            vadLastSeenFireToken: nil,
+            showStoppingWarning: true,
+            showAutoStoppedNotification: true
+        )
+
+        XCTAssertEqual(content?.text, "Live transcript paused. Final result will still appear at stop.")
+        XCTAssertNil(content?.link)
+        XCTAssertNil(content?.autoDismissAfter)
+    }
+
     func testStreamingSessionTranscribingShowsFinalizingWhenNoHigherPriorityMessageApplies() {
         let content = RecordingStatusCardDriver.statusContent(
             sessionState: .transcribing,
             reportedError: nil,
+            liveStreamingFallbackNotice: nil,
             progress: nil,
             isStreamingSession: true,
             vadGracePending: false,

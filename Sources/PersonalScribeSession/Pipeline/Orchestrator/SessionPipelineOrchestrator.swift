@@ -3,6 +3,8 @@ import PersonalScribeCore
 import PersonalScribeVAD
 
 public actor SessionPipelineOrchestrator: SessionPipelining {
+    private static let liveStreamingFallbackNotice =
+        "Live transcript paused. Final result will still appear at stop."
     private let capture: any AudioCapturer
     private let logger: PersonalScribeLogger
     private let postProcessingPipeline: any PostProcessingPipeline
@@ -239,6 +241,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.activeStage = nil
                 snapshot.transcriptProgress = nil
                 snapshot.recordingDuration = nil
+                snapshot.liveStreamingFallbackNotice = nil
                 snapshot.isStreamingSession = false
             }
             await startRecording()
@@ -255,6 +258,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.activeStage = nil
                 snapshot.transcriptProgress = nil
                 snapshot.recordingDuration = nil
+                snapshot.liveStreamingFallbackNotice = nil
                 snapshot.isStreamingSession = false
             }
             await startHoldRecording()
@@ -446,6 +450,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.activeStage = .capture
                 snapshot.transcriptProgress = nil
                 snapshot.recordingDuration = .zero
+                snapshot.liveStreamingFallbackNotice = nil
                 snapshot.isStreamingSession = sessionRecipe?.streamingBehavior != nil
                 snapshot.vadAutoStopGracePending = false
                 snapshot.vadAutoStopGraceDeadline = nil
@@ -494,6 +499,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             snapshot.activeStage = nil
             snapshot.transcriptProgress = nil
             snapshot.recordingDuration = nil
+            snapshot.liveStreamingFallbackNotice = nil
             snapshot.isStreamingSession = false
             snapshot.vadAutoStopGracePending = false
             snapshot.vadAutoStopGraceDeadline = nil
@@ -523,6 +529,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             snapshot.activeStage = .capture
             snapshot.transcriptProgress = nil
             snapshot.recordingDuration = .zero
+            snapshot.liveStreamingFallbackNotice = nil
             snapshot.isStreamingSession = sessionRecipe?.streamingBehavior != nil
             snapshot.vadAutoStopGracePending = false
             snapshot.vadAutoStopGraceDeadline = nil
@@ -625,6 +632,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.sessionState = .shortExit
                 snapshot.activeStage = nil
                 snapshot.recordingDuration = bufferedDuration
+                snapshot.liveStreamingFallbackNotice = nil
                 snapshot.isStreamingSession = false
                 snapshot.vadAutoStopGracePending = false
                 snapshot.vadAutoStopGraceDeadline = nil
@@ -641,6 +649,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             snapshot.sessionState = .transcribing
             snapshot.activeStage = .transcription
             snapshot.recordingDuration = bufferedDuration
+            snapshot.liveStreamingFallbackNotice = nil
             snapshot.vadAutoStopGracePending = false
             snapshot.vadAutoStopGraceDeadline = nil
         }
@@ -721,6 +730,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.transcriptProgress = cleanedProgress
                 snapshot.lastCompletedResult = finalResult
                 snapshot.recordingDuration = rawResult.audioDuration
+                snapshot.liveStreamingFallbackNotice = nil
                 snapshot.isStreamingSession = false
             }
         } catch let failure as PipelineStageFailure {
@@ -1165,6 +1175,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             snapshot.sessionState = .error(failure.mappedError)
             snapshot.activeStage = failure.stage
             snapshot.reportedError = reportedError
+            snapshot.liveStreamingFallbackNotice = nil
             snapshot.isStreamingSession = false
             snapshot.vadAutoStopGracePending = false
             snapshot.vadAutoStopGraceDeadline = nil
@@ -1381,8 +1392,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             error: error,
             fallback: .transcriptionFailure
         )
-        if liveCardEnabled {
-            publish { snapshot in
+        publish { snapshot in
+            snapshot.liveStreamingFallbackNotice = Self.liveStreamingFallbackNotice
+            if liveCardEnabled {
                 snapshot.transcriptProgress = nil
             }
         }

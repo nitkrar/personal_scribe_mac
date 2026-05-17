@@ -986,6 +986,61 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(sampleCount, 16_000)
     }
 
+    func testStreamingFailureMidCapturePublishesFallbackNoticeAndClearsLiveTranscript() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 8_000, sampleValue: 0.1),
+            try makeBuffer(sampleCount: 8_000, sampleValue: 0.2),
+        ]
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: buffers,
+                delayPerBuffer: .milliseconds(40)
+            ),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: FailingStreamingTranscriber(
+                    perBufferEvents: [
+                        [.partial(text: "streaming live")],
+                        [],
+                    ],
+                    failureAfterBufferCount: 2,
+                    error: StreamTestError.streamFailed
+                ),
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: false
+                )
+            )
+        )
+
+        let stream = await orchestrator.snapshotStream()
+        let observedTask = Task { () -> SessionSnapshot? in
+            for await snapshot in stream {
+                if snapshot.sessionState == .capturing,
+                   snapshot.liveStreamingFallbackNotice == "Live transcript paused. Final result will still appear at stop." {
+                    return snapshot
+                }
+            }
+            return nil
+        }
+
+        await orchestrator.toggleCapture()
+        let snapshot = try await withTimeout(.seconds(2)) {
+            await observedTask.value
+        }
+        await orchestrator.cancelCapture()
+        let finalSnapshot = await orchestrator.snapshot()
+
+        XCTAssertEqual(snapshot?.sessionState, .capturing)
+        XCTAssertEqual(
+            snapshot?.liveStreamingFallbackNotice,
+            "Live transcript paused. Final result will still appear at stop."
+        )
+        XCTAssertNil(snapshot?.transcriptProgress)
+        XCTAssertEqual(finalSnapshot.sessionState, .idle)
+        XCTAssertNil(finalSnapshot.liveStreamingFallbackNotice)
+    }
+
     func testCancelCaptureTerminatesLiveStreamingEventStream() async throws {
         let tracker = StreamTerminationTracker()
         let streamingTranscriber = HangingStreamingTranscriber(

@@ -182,6 +182,7 @@ public final class PillOverlayController: ObservableObject {
         applyRecordingStatusCardState(
             sessionState: snapshot.sessionState,
             reportedError: snapshot.session.reportedError,
+            liveStreamingFallbackNotice: snapshot.session.liveStreamingFallbackNotice,
             progress: snapshot.modelDownloadProgress,
             isStreamingSession: snapshot.session.isStreamingSession,
             vadGracePending: snapshot.session.vadAutoStopGracePending,
@@ -201,6 +202,7 @@ public final class PillOverlayController: ObservableObject {
     private func applyRecordingStatusCardState(
         sessionState: SessionState,
         reportedError: ReportedError?,
+        liveStreamingFallbackNotice: String?,
         progress: ModelDownloadProgress?,
         isStreamingSession: Bool,
         vadGracePending: Bool,
@@ -216,6 +218,7 @@ public final class PillOverlayController: ObservableObject {
         let nextContent = RecordingStatusCardDriver.statusContent(
             sessionState: sessionState,
             reportedError: reportedError,
+            liveStreamingFallbackNotice: liveStreamingFallbackNotice,
             progress: progress,
             isStreamingSession: isStreamingSession,
             vadGracePending: vadGracePending,

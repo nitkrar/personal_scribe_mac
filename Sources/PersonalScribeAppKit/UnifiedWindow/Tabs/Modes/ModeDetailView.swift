@@ -127,7 +127,7 @@ struct ModeDetailView: View {
                         parameter: viewModel.liveCursorStreamingParameter,
                         onChange: { viewModel.setLiveCursorStreaming($0) }
                     )
-                    Text("Saved now for streaming recipes. Live cursor transport is not active in this build.")
+                    Text("Appends each end-of-utterance chunk into the focused text field while recording. Requires Accessibility access.")
                         .font(PersonalScribeTheme.Typography.caption.font)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
