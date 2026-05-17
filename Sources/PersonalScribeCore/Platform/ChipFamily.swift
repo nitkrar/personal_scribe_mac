@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-public enum ChipFamily: Sendable, Equatable, CaseIterable {
+public enum ChipFamily: String, Sendable, Equatable, CaseIterable, Codable {
     case m1
     case m2OrLater
 

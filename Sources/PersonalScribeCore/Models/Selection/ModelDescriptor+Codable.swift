@@ -18,6 +18,8 @@ extension ModelDescriptor: Codable {
         case isEnabled
         case engine
         case performance
+        case tokenizerSource
+        case requiredChipFamily
     }
 
     public init(from decoder: Decoder) throws {
@@ -42,7 +44,9 @@ extension ModelDescriptor: Codable {
             approximateSizeBytes: try container.decode(Int64.self, forKey: .approximateSizeBytes),
             isEnabled: try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true,
             engine: try container.decode(TranscriptionEngine.self, forKey: .engine),
-            performance: try container.decodeIfPresent(ModelPerformance.self, forKey: .performance) ?? ModelPerformance()
+            performance: try container.decodeIfPresent(ModelPerformance.self, forKey: .performance) ?? ModelPerformance(),
+            tokenizerSource: try container.decodeIfPresent(String.self, forKey: .tokenizerSource),
+            requiredChipFamily: try container.decodeIfPresent(ChipFamily.self, forKey: .requiredChipFamily)
         )
     }
 
@@ -60,5 +64,7 @@ extension ModelDescriptor: Codable {
         try container.encode(isEnabled, forKey: .isEnabled)
         try container.encode(engine, forKey: .engine)
         try container.encode(performance, forKey: .performance)
+        try container.encodeIfPresent(tokenizerSource, forKey: .tokenizerSource)
+        try container.encodeIfPresent(requiredChipFamily, forKey: .requiredChipFamily)
     }
 }

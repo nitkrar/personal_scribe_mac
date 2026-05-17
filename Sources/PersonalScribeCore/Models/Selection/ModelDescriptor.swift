@@ -155,6 +155,14 @@ public struct ModelDescriptor: Sendable, Equatable {
     /// E.g. "CC-BY-4.0" or "Apache 2.0".
     public let license: String?
 
+    /// Optional tokenizer repo id for runtimes whose model bundle
+    /// does not ship tokenizer assets inline.
+    public let tokenizerSource: String?
+
+    /// Optional chip requirement for descriptors that should be
+    /// hidden on older Apple Silicon.
+    public let requiredChipFamily: ChipFamily?
+
     /// Companion repos this descriptor's runtime needs in addition to
     /// `repoFolderName`. Folder names match FluidAudio's `Repo.folderName`
     /// for the auxiliary repos.
@@ -194,6 +202,8 @@ public struct ModelDescriptor: Sendable, Equatable {
         worksWith: String? = nil,
         goodFor: String? = nil,
         license: String? = nil,
+        tokenizerSource: String? = nil,
+        requiredChipFamily: ChipFamily? = nil,
         auxiliaryRepoFolderNames: [String] = []
     ) {
         self.id = id
@@ -212,7 +222,52 @@ public struct ModelDescriptor: Sendable, Equatable {
         self.worksWith = worksWith
         self.goodFor = goodFor
         self.license = license
+        self.tokenizerSource = tokenizerSource
+        self.requiredChipFamily = requiredChipFamily
         self.auxiliaryRepoFolderNames = auxiliaryRepoFolderNames
+    }
+
+    @_disfavoredOverload
+    public init(
+        id: String,
+        displayName: String,
+        repoFolderName: String? = nil,
+        shortDescription: String,
+        architecture: String,
+        repository: String,
+        revision: String,
+        requiredRelativePaths: [String],
+        approximateSizeBytes: Int64,
+        isEnabled: Bool = true,
+        engine: TranscriptionEngine,
+        performance: ModelPerformance = ModelPerformance(),
+        madeBy: String? = nil,
+        worksWith: String? = nil,
+        goodFor: String? = nil,
+        license: String? = nil,
+        auxiliaryRepoFolderNames: [String] = []
+    ) {
+        self.init(
+            id: id,
+            displayName: displayName,
+            repoFolderName: repoFolderName,
+            shortDescription: shortDescription,
+            architecture: architecture,
+            repository: repository,
+            revision: revision,
+            requiredRelativePaths: requiredRelativePaths,
+            approximateSizeBytes: approximateSizeBytes,
+            isEnabled: isEnabled,
+            engine: engine,
+            performance: performance,
+            madeBy: madeBy,
+            worksWith: worksWith,
+            goodFor: goodFor,
+            license: license,
+            tokenizerSource: nil,
+            requiredChipFamily: nil,
+            auxiliaryRepoFolderNames: auxiliaryRepoFolderNames
+        )
     }
 
     public func resolveURL(for relativePath: String) -> URL {
