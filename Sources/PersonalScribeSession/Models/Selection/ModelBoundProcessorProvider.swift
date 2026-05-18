@@ -47,9 +47,9 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
             case .whisperCpp:
                 return AdapterRecord(
                     descriptorID: descriptor.id,
-                    transcriber: NoOpDisabledTranscriber(
+                    transcriber: WhisperCppTranscriberAdapter(
                         descriptor: descriptor,
-                        logger: logger
+                        storageLocator: storageLocator
                     )
                 )
             case .parakeetEOU:
@@ -205,59 +205,6 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
     }
 }
 
-/// Stage A safety stub for whisper.cpp descriptors. The catalog rows
-/// stay `isEnabled: false` until Stage B wires the real adapter, but
-/// the provider still needs a concrete branch so the new engine compiles
-/// cleanly and any accidental resolution fails predictably.
-final class NoOpDisabledTranscriber: @unchecked Sendable, Transcriber {
-    let capabilities = TranscriberCapabilities()
-
-    private let descriptor: ModelDescriptor
-    private let logger: PersonalScribeLogger
-
-    init(
-        descriptor: ModelDescriptor,
-        logger: PersonalScribeLogger
-    ) {
-        self.descriptor = descriptor
-        self.logger = logger
-    }
-
-    func downloadIfNeeded() async throws {
-        logUnavailable("downloadIfNeeded")
-        throw PersonalScribeError.modelLoadFailure
-    }
-
-    func prepare() async throws {
-        logUnavailable("prepare")
-        throw PersonalScribeError.modelLoadFailure
-    }
-
-    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
-        AsyncStream { continuation in
-            continuation.yield(.idle)
-            continuation.finish()
-        }
-    }
-
-    func cleanup() async {}
-
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        logUnavailable("transcribe")
-        throw PersonalScribeError.modelLoadFailure
-    }
-
-    private func logUnavailable(_ operation: String) {
-        logger.error(
-            "whisper.cpp adapter not yet wired",
-            metadata: [
-                "descriptor_id": descriptor.id,
-                "engine": "whisperCpp",
-                "operation": operation,
-            ]
-        )
-    }
-}
 
 private extension ModelBoundProcessorProvider {
     func canonicalDescriptor(for descriptor: ModelDescriptor) throws -> ModelDescriptor {

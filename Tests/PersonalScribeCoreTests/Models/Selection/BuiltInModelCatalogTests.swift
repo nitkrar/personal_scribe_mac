@@ -231,7 +231,7 @@ final class BuiltInModelCatalogTests: XCTestCase {
         }
     }
 
-    func testWhisperCppDescriptorsAreRegisteredButDisabledInStageA() {
+    func testWhisperCppDescriptorsAreRegisteredAndEnabled() {
         let whisperCppDescriptors = BuiltInModelCatalog.registeredModels
             .filter { $0.engine == .whisperCpp }
         let expectedIDs: Set<String> = [
@@ -242,14 +242,14 @@ final class BuiltInModelCatalogTests: XCTestCase {
 
         XCTAssertEqual(Set(whisperCppDescriptors.map(\.id)), expectedIDs)
         for descriptor in whisperCppDescriptors {
-            XCTAssertFalse(
+            XCTAssertTrue(
                 descriptor.isEnabled,
-                "\(descriptor.id) should stay hidden until the Stage B atomic enable"
+                "\(descriptor.id) should be live after the Stage B atomic enable"
             )
         }
     }
 
-    func testWhisperCppDescriptorsPinExpectedStageAContract() {
+    func testWhisperCppDescriptorsPinExpectedStageBContract() {
         let expected: [(descriptor: ModelDescriptor, repoFolderName: String, requiredPath: String, approximateSizeBytes: Int64)] = [
             (
                 BuiltInModelCatalog.whisperCppTiny,
