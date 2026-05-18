@@ -66,6 +66,31 @@ Prerequisites:
 5. Stop the recording and confirm no extra duplicate final paste lands
    at stop.
 
+## WhisperKit transcription (#095)
+
+### MV-WHISPERKIT-OFFLINE — pre-staged tokenizer survives offline activation
+1. While network is available, download `Whisper Tiny (WhisperKit)` from
+   `Settings → AI Models`.
+2. Confirm the model leaf includes a `tokenizer/` subdirectory with
+   `tokenizer.json` and `vocab.json`.
+3. Disable Wi-Fi and Ethernet.
+4. Activate `Whisper Tiny (WhisperKit)` and record a short English
+   phrase.
+5. Confirm transcription completes successfully with no extra download
+   or tokenizer fetch attempt.
+6. Re-enable network after the run.
+
+### MV-WHISPERKIT-NON-ENGLISH — multilingual Whisper path works end-to-end
+1. Download and activate `Whisper Large v3 (WhisperKit, 626MB)` or, on
+   lower-disk machines, `Whisper Small (WhisperKit, 216MB)`.
+2. Record 5-10 seconds in a non-English language Whisper is expected to
+   cover well (for example Japanese, Arabic, Hindi, or Vietnamese).
+3. Confirm the final transcript lands in the spoken language rather than
+   English transliteration or an empty result.
+4. Repeat once with `Whisper Small English (WhisperKit, 217MB)` active
+   and confirm the English-only row is not the recommended choice for
+   this case.
+
 ## Phase 1 Step 1.1b — Launch signposts
 
 Signposts emitted under subsystem `com.nitkrar.personal_scribe`, category `prepare`:

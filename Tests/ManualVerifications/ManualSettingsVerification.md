@@ -135,7 +135,9 @@ instead of its contents.
 
 Stage A replaces the inert AIModelsTab with one `SettingsCard` row per registered voice model. Chip + button are driven by `DefaultModelService.downloadStates[descriptor.id]`. A single `SettingsSection` header (`Voice models`) is used for now; Stage B will add an `AI models` section below without restructuring.
 
-**#007 update (2026-04-22):** each row now shows a one-line inline description (from `ModelDescriptor.shortDescription`) in place of the raw byte size, plus an ⓘ info button next to the display name. Clicking ⓘ opens a popover with the full metadata — Speed / Accuracy bars (computed-relative across registered siblings), Size, Architecture, Repository, Revision, Parameters. Row padding tightened to `compactCardPadding` so three models fit under the default window height without scrolling.
+**#007 update (2026-04-22):** each row now shows a one-line inline description (from `ModelDescriptor.shortDescription`) in place of the raw byte size, plus an ⓘ info button next to the display name. Clicking ⓘ opens a popover with the full metadata — Speed / Accuracy bars (computed-relative across registered siblings), Size, Architecture, Repository, Revision, Parameters. Row padding stays at `compactCardPadding` so the first viewport still shows multiple rows cleanly at the default window size.
+
+**#095 update (2026-05-18):** the catalog now includes the five WhisperKit rows in addition to the Parakeet rows. The `Voice models` list is expected to scroll at the default window size once the expanded catalog is registered; the runbook below now treats scrolling as normal rather than a regression.
 
 - **MV-AIM-1 — fresh install, not downloaded:** delete `~/Library/Application Support/com.nitkrar.personal_scribe/models/parakeet-tdt-0.6b-v2/` (and any other model folders), relaunch Ninimma, open `Settings > AI Models`, and confirm each registered voice model row renders with a grey `Not downloaded` badge plus a prominent `Download` button. The default `Parakeet TDT 0.6B` row shows its inline description (`High-accuracy default — balanced RAM and speed.`) under the display name and an ⓘ icon next to the name.
 - **MV-AIM-2 — live download updates:** from MV-AIM-1 state, click `Download` on the `Parakeet TDT 0.6B` row and confirm the badge transitions to an amber `Downloading NN%` chip that updates live over the next several minutes (no Download button while in-flight), then switches to an amber `Loading…` chip briefly, then to a green `Active` chip with a disabled `Active` button (no separate `Set Active` button).
@@ -143,24 +145,32 @@ Stage A replaces the inert AIModelsTab with one `SettingsCard` row per registere
 - **MV-AIM-4 — failure + retry:** enable Airplane Mode (or drop the wi-fi) mid-download, wait for the chip to flip to a red `Failed: …` badge with a `Retry` button, re-enable network, click `Retry`, and confirm the chip resumes the amber `Downloading NN%` → `Loading…` → green `Active` sequence.
 - [ ] **MV-AIM-6 — ⓘ info popover renders computed-relative ratings (#007):**
   open `Settings → AI Models`. Click the ⓘ icon next to each model's
-  display name and confirm the popover renders:
-  - **Parakeet TDT 0.6B (v2)**: Speed bar 2/3 "Fast"; Accuracy bar 3/3 "High"; Size 450 MB; Architecture `FastConformer-TDT`; Parameters `600M`.
-  - **Parakeet TDT-CTC 110M**: Speed bar 3/3 "Fastest"; Accuracy bar 1/3 "Low"; Size 407 MB; Architecture `Hybrid FastConformer-TDT-CTC`; Parameters `110M`.
-  - **Parakeet TDT 0.6B v3**: Speed bar 1/3 "Slow"; Accuracy bar 2/3 "Medium"; Size 700 MB; Architecture `FastConformer-TDT`; Parameters `600M`.
-  Revision row renders a monospaced 8-char short SHA. Clicking outside
-  the popover dismisses it; clicking the ⓘ again re-opens.
-- [ ] **MV-AIM-7 — three rows fit without scrolling (#007):** at the
-  default unified-window size (760×520), confirm all three voice-model
-  rows are visible under `Settings → AI Models` without needing to
-  scroll. Each row shows name + description (one line) + chip +
-  action button. Adding a 4th model would introduce scrolling by
-  design — three is the registered-model ceiling today.
+  display name and confirm the popover renders computed-relative
+  Speed / Accuracy bars, a rounded Size row, Architecture,
+  Repository, Revision, and Parameters. Verify this for at least one
+  Parakeet row and one WhisperKit row. Revision renders as a
+  monospaced short identifier. Clicking outside the popover dismisses
+  it; clicking the ⓘ again re-opens.
+- [ ] **MV-AIM-7 — expanded catalog scrolls cleanly (#095):** at the
+  default unified-window size (760×520), open `Settings → AI Models`
+  and confirm the full `Voice models` list scrolls without clipped
+  rows, overlapping chips, or buttons jumping columns. The first
+  viewport shows compact rows with one-line descriptions; scrolling
+  reveals the remaining Parakeet + WhisperKit rows.
 - **MV-AIM-5 — Disk-space precheck (Stage B).**
   1. Simulate low disk: either fill the volume to near capacity, or inject a small `diskSpaceProvider` via a Debug-only harness (if present). Real-world simulation is fine — move large files onto the volume until < 300 MB free.
-  2. Click **Download** on a model (choose Parakeet TDT 0.6B v2, ~450 MB).
+  2. Click **Download** on a model (choose Parakeet TDT 0.6B v2, roughly 460 MB on disk).
   3. Confirm no HuggingFace network activity starts (Activity Monitor → Network → search for huggingface).
   4. Confirm the row immediately shows a red **Failed** badge with text like `"Not enough disk space to download Parakeet TDT 0.6B. Needs 650 MB, 280 MB available."` and a **Retry** button.
   5. Free up space on the volume; click Retry; confirm download proceeds normally.
+
+## WhisperKit catalog (#095)
+
+- [ ] **MV-WHISPERKIT-1 — tiny row downloads, stages tokenizer, activates, and deletes cleanly:** open `Settings → AI Models`, download `Whisper Tiny (WhisperKit)`, and confirm the row reaches `Ready` or `Active`. Verify `~/Library/Application Support/com.nitkrar.personal_scribe/models/openai_whisper-tiny/` contains `AudioEncoder.mlmodelc/coremldata.bin`, `MelSpectrogram.mlmodelc/coremldata.bin`, `TextDecoder.mlmodelc/coremldata.bin`, `config.json`, `generation_config.json`, plus `tokenizer/tokenizer.json` and `tokenizer/vocab.json`. Activate the row, run a short dictation, then delete it and confirm the bundle leaf and `tokenizer/` subfolder are both removed.
+- [ ] **MV-WHISPERKIT-2 — small multilingual row downloads and activates:** download `Whisper Small (WhisperKit, 216MB)`, wait for `Ready`, click `Set Active`, and confirm the row flips to `Active` while the previous ASR row returns to `Ready`. Trigger a short dictation and confirm the transcript completes normally.
+- [ ] **MV-WHISPERKIT-3 — small English row downloads and activates:** download `Whisper Small English (WhisperKit, 217MB)`, activate it, and confirm an English dictation completes normally. Verify the row copy and popover identify it as English-only.
+- [ ] **MV-WHISPERKIT-4 — large v3 row downloads and activates:** download `Whisper Large v3 (WhisperKit, 626MB)`, confirm the `tokenizer/` folder is present under `openai_whisper-large-v3-v20240930_626MB/`, activate the row, and confirm a short dictation completes without any extra on-demand asset fetch.
+- [ ] **MV-WHISPERKIT-5 — turbo chip gate behaves correctly:** on an M1 Mac, confirm `Whisper Large v3 Turbo (WhisperKit, 632MB)` does NOT appear in `Settings → AI Models` and that the other four WhisperKit rows do. On an M2-or-later Mac, confirm the turbo row does appear, downloads successfully, and can be activated like the other ASR rows.
 
 ## Stale-state on tab return (#039)
 
