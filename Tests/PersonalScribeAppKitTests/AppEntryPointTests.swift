@@ -25,7 +25,9 @@ final class AppEntryPointTests: XCTestCase {
         // does not depend on `@StateObject` lifetime. Re-enable this test if
         // `PersonalScribeAppMain` grows a non-SwiftUI ownership seam for the
         // sceneModel (or if we rewrite to avoid @StateObject for testing).
-        throw XCTSkip("@StateObject lifetime not retained in unit-test context — covered by MenuBarFlowIntegrationTests sibling")
+        if ProcessInfo.processInfo.environment["RUN_QUARANTINED_APP_ENTRY_TEST"] != "1" {
+            throw XCTSkip("@StateObject lifetime not retained in unit-test context — covered by MenuBarFlowIntegrationTests sibling")
+        }
 
         let coordinator = DevelopmentComposition.makeTestingSessionCoordinator()
         let startupCoordinator = AppStartupCoordinator(

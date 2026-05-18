@@ -1,5 +1,4 @@
 import Foundation
-import PersonalScribeCore
 
 /// Persistence seam for `WorkflowModeRegistry` (#078.24).
 ///

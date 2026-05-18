@@ -10,7 +10,7 @@ final class PersonalScribeAppKitTestBootstrap: NSObject, XCTestObservation, @unc
 
     func testBundleWillStart(_ testBundle: Bundle) {
         MainActor.assumeIsolated {
-            NSApplication.shared.setActivationPolicy(.accessory)
+            _ = NSApplication.shared.setActivationPolicy(.accessory)
         }
     }
 }

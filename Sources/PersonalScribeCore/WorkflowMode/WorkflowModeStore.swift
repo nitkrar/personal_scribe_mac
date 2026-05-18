@@ -1,5 +1,4 @@
 import Foundation
-import PersonalScribeCore
 
 /// Disk-backed implementation of `WorkflowModeStoring` (#078.25).
 ///

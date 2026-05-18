@@ -9,6 +9,7 @@ import PersonalScribeCore
 /// `TimelineView(.animation)` is enabled ONLY when the `isActive` binding
 /// is true. When inactive, the view redraws on-demand keyed to the
 /// `audioLevel` binding. This keeps idle-pill CPU cost near zero.
+@MainActor
 final class WaveformViewTests: XCTestCase {
     func testInitializerAcceptsAudioLevelAndIsActiveBindings() {
         let level: Double = 0.3

@@ -192,7 +192,7 @@ private extension WhisperKitTranscriberAdapter {
             throw PersonalScribeError.modelLoadFailure
         }
 
-        let plan = downloadPlan()
+        let plan = try downloadPlan()
         let stagingDirectory = stagingDirectory()
         let tokenizerDirectory = modelDirectory
             .appendingPathComponent("tokenizer", isDirectory: true)

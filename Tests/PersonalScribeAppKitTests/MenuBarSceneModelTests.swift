@@ -159,7 +159,7 @@ final class MenuBarSceneModelTests: XCTestCase {
                 cancellationExpectation.fulfill()
             }
         )
-        weak var weakModel = model
+        weak let weakModel = model
 
         model?.startObserving()
         model = nil

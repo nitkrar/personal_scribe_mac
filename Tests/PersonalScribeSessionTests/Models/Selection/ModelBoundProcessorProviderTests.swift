@@ -77,9 +77,11 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
         )
 
         let transcriber = try provider.transcriber(for: BuiltInModelCatalog.whisperKitTiny)
+        let transcriberTypeName = String(reflecting: type(of: transcriber))
 
         XCTAssertTrue(
-            transcriber is WhisperKitTranscriberAdapter,
+            transcriberTypeName == "WhisperKitTranscriberAdapter"
+                || transcriberTypeName.hasSuffix(".WhisperKitTranscriberAdapter"),
             "WhisperKit descriptors should route to the real adapter after #095 B.5"
         )
     }

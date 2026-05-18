@@ -46,7 +46,8 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
             calls.last?.destination,
             modelLeaf.appendingPathComponent("tokenizer", isDirectory: true).standardizedFileURL
         )
-        XCTAssertEqual(await manager.loadCallCount(), 0)
+        let loadCallCount = await manager.loadCallCount()
+        XCTAssertEqual(loadCallCount, 0)
     }
 
     func testDownloadIfNeededSkipsWhenArtifactsAlreadyExist() async throws {
@@ -62,7 +63,8 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
 
         try await adapter.downloadIfNeeded()
 
-        XCTAssertTrue(await manager.downloadCalls().isEmpty)
+        let downloadCalls = await manager.downloadCalls()
+        XCTAssertTrue(downloadCalls.isEmpty)
     }
 
     func testPrepareIsIdempotent() async throws {
@@ -78,9 +80,12 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         try await adapter.prepare()
         try await adapter.prepare()
 
-        XCTAssertEqual(await manager.downloadCalls().count, 2)
-        XCTAssertEqual(await manager.loadCallCount(), 1)
-        XCTAssertEqual(await manager.loadedModelNames(), [descriptor.repoFolderName])
+        let downloadCalls = await manager.downloadCalls()
+        let loadCallCount = await manager.loadCallCount()
+        let loadedModelNames = await manager.loadedModelNames()
+        XCTAssertEqual(downloadCalls.count, 2)
+        XCTAssertEqual(loadCallCount, 1)
+        XCTAssertEqual(loadedModelNames, [descriptor.repoFolderName])
     }
 
     func testPrepareDeduplicatesConcurrentCalls() async throws {
@@ -101,8 +106,10 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         }
         _ = try await (first.value, second.value)
 
-        XCTAssertEqual(await manager.downloadCalls().count, 2)
-        XCTAssertEqual(await manager.loadCallCount(), 1)
+        let downloadCalls = await manager.downloadCalls()
+        let loadCallCount = await manager.loadCallCount()
+        XCTAssertEqual(downloadCalls.count, 2)
+        XCTAssertEqual(loadCallCount, 1)
     }
 
     func testPrepareFailureClearsStateForRetry() async throws {
@@ -121,7 +128,8 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
 
         try await adapter.prepare()
 
-        XCTAssertEqual(await manager.loadCallCount(), 2)
+        let loadCallCount = await manager.loadCallCount()
+        XCTAssertEqual(loadCallCount, 2)
     }
 
     func testDownloadIfNeededCleansUpPartialBundleWhenTokenizerDownloadFails() async throws {
@@ -178,9 +186,12 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         XCTAssertNil(result.confidence)
         XCTAssertNil(result.tokenTimings)
         XCTAssertNil(result.performanceMetrics)
-        XCTAssertEqual(await manager.loadCallCount(), 1)
-        XCTAssertEqual(await manager.transcribeCallCount(), 1)
-        XCTAssertEqual(await manager.lastSamples(), audio.samples)
+        let loadCallCount = await manager.loadCallCount()
+        let transcribeCallCount = await manager.transcribeCallCount()
+        let lastSamples = await manager.lastSamples()
+        XCTAssertEqual(loadCallCount, 1)
+        XCTAssertEqual(transcribeCallCount, 1)
+        XCTAssertEqual(lastSamples, audio.samples)
     }
 
     func testTranscribeReturnsValueOnlyResult() async throws {
@@ -262,8 +273,10 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         await adapter.cleanup()
         try await adapter.prepare()
 
-        XCTAssertEqual(await manager.cleanupCallCount(), 1)
-        XCTAssertEqual(await manager.loadCallCount(), 2)
+        let cleanupCallCount = await manager.cleanupCallCount()
+        let loadCallCount = await manager.loadCallCount()
+        XCTAssertEqual(cleanupCallCount, 1)
+        XCTAssertEqual(loadCallCount, 2)
     }
 
     func testLiveManagerDownloadAndStageMovesBundleLeafIntoDestinationAndCleansStaging() async throws {
@@ -297,8 +310,9 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
             progressHandler: { _ in }
         )
 
+        let snapshotRequests = await hub.snapshotRequests()
         XCTAssertEqual(
-            await hub.snapshotRequests(),
+            snapshotRequests,
             [StubWhisperKitHubClient.SnapshotRequest(
                 repoID: "argmaxinc/whisperkit-coreml",
                 relativePaths: relativePaths
@@ -352,8 +366,9 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
             progressHandler: { _ in }
         )
 
+        let snapshotRequests = await hub.snapshotRequests()
         XCTAssertEqual(
-            await hub.snapshotRequests(),
+            snapshotRequests,
             [StubWhisperKitHubClient.SnapshotRequest(
                 repoID: "openai/whisper-tiny",
                 relativePaths: relativePaths

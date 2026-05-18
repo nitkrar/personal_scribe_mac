@@ -5,6 +5,7 @@ import XCTest
 
 /// Tests for `TagChip` — a small rounded chip used in the Notes
 /// sidebar/editor for metadata tags.
+@MainActor
 final class TagChipTests: XCTestCase {
     func testDefaultVariantIsNeutral() {
         let chip = TagChip(text: "meeting")
