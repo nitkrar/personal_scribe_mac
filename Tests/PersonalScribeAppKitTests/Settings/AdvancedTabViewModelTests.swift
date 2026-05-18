@@ -152,6 +152,47 @@ final class AdvancedTabViewModelTests: XCTestCase {
         XCTAssertTrue(ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults))
     }
 
+    func testLogRetentionDaysDefaultsToFourteenAndPersistsUpdates() {
+        let defaults = isolatedDefaults()
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            defaults: defaults,
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil }
+        )
+
+        XCTAssertEqual(viewModel.logRetentionDays, 14)
+        XCTAssertEqual(LogRetentionDaysPreference.resolve(from: defaults), 14)
+
+        viewModel.setLogRetentionDays(30)
+
+        XCTAssertEqual(viewModel.logRetentionDays, 30)
+        XCTAssertEqual(LogRetentionDaysPreference.resolve(from: defaults), 30)
+
+        viewModel.setLogRetentionDays(0)
+
+        XCTAssertEqual(viewModel.logRetentionDays, 0)
+        XCTAssertEqual(LogRetentionDaysPreference.resolve(from: defaults), 0)
+    }
+
+    func testLogRetentionDaysClampsOutsideSupportedRange() {
+        let defaults = isolatedDefaults()
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            defaults: defaults,
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil }
+        )
+
+        viewModel.setLogRetentionDays(-5)
+        XCTAssertEqual(viewModel.logRetentionDays, 0)
+        XCTAssertEqual(LogRetentionDaysPreference.resolve(from: defaults), 0)
+
+        viewModel.setLogRetentionDays(120)
+        XCTAssertEqual(viewModel.logRetentionDays, 90)
+        XCTAssertEqual(LogRetentionDaysPreference.resolve(from: defaults), 90)
+    }
+
     private func isolatedDefaults() -> UserDefaults {
         let suiteName = "AdvancedTabViewModelTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

@@ -22,6 +22,7 @@ struct PersonalScribeAppMain: App {
     @StateObject private var diagnosticsOverlayController: LiveDiagnosticsOverlayController
 
     init() {
+        AppComposition.startDiagnosticsMaintenanceIfNeeded()
         self.init(
             coordinator: AppComposition.sessionCoordinator,
             permissionService: AppComposition.makePermissionService(),

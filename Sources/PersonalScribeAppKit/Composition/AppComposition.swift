@@ -10,6 +10,9 @@ import PersonalScribeVAD
 @MainActor
 public enum AppComposition {
     public static let diagnosticsStore = DiagnosticsStore(capacity: 200)
+    private static let diagnosticsMaintenanceController = DiagnosticsLogMaintenanceController(
+        service: DiagnosticsLogMaintenanceService()
+    )
 
     public static let diagnostics: DiagnosticsReporter = {
         return DiagnosticsReporter(
@@ -28,6 +31,10 @@ public enum AppComposition {
             ]
         )
     }()
+
+    public static func startDiagnosticsMaintenanceIfNeeded() {
+        diagnosticsMaintenanceController.start()
+    }
 
     public static func makeLogger(_ category: String) -> PersonalScribeLogger {
         PersonalScribeLogger(category: category, reporter: diagnostics)
