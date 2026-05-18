@@ -426,6 +426,70 @@ final class PillOverlayPresenterTests: XCTestCase {
                        "First sizing after show must be non-animated")
     }
 
+    func testVisibilitySinkLogsOnlyWhenVisibilityStateActuallyChanges() async {
+        let viewModel = PillOverlayViewModel(visibility: .idle, visibilityMode: .alwaysOn)
+        let panelBuilder = RecordingPanelBuilder()
+        let sink = InMemoryTestSink()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            diagnosticLogger: makeLogger(sink: sink)
+        )
+        _ = presenter
+
+        let logFragment = "PillOverlayPresenter visibility-sink"
+        _ = await waitForLogMessages(in: sink, containing: logFragment, expectedCount: 1)
+
+        viewModel.apply(visibility: .idle)
+        try? await Task.sleep(for: .milliseconds(50))
+        let idleLogCount = await logMessages(in: sink, containing: logFragment).count
+        XCTAssertEqual(
+            idleLogCount,
+            1,
+            "Repeated idle emissions should not re-log while the panel state is unchanged"
+        )
+
+        viewModel.apply(visibility: .recording)
+        _ = await waitForLogMessages(in: sink, containing: logFragment, expectedCount: 2)
+
+        viewModel.apply(visibility: .recording)
+        try? await Task.sleep(for: .milliseconds(50))
+        let recordingLogCount = await logMessages(in: sink, containing: logFragment).count
+        XCTAssertEqual(
+            recordingLogCount,
+            2,
+            "Repeated recording emissions should not re-log while the panel state is unchanged"
+        )
+    }
+
+    func testVisibilitySinkDoesNotRelogWhenHiddenStateRepeats() async {
+        let viewModel = PillOverlayViewModel(visibility: .idle, visibilityMode: .alwaysOn)
+        let panelBuilder = RecordingPanelBuilder()
+        let sink = InMemoryTestSink()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            diagnosticLogger: makeLogger(sink: sink)
+        )
+        _ = presenter
+
+        let logFragment = "PillOverlayPresenter visibility-sink"
+        _ = await waitForLogMessages(in: sink, containing: logFragment, expectedCount: 1)
+
+        viewModel.apply(visibility: .hidden)
+        let hiddenLogs = await waitForLogMessages(in: sink, containing: logFragment, expectedCount: 2)
+        XCTAssertEqual(hiddenLogs.last?.message, "PillOverlayPresenter visibility-sink — visibility=hidden isVisible=false")
+
+        viewModel.apply(visibility: .hidden)
+        try? await Task.sleep(for: .milliseconds(50))
+        let hiddenLogCount = await logMessages(in: sink, containing: logFragment).count
+        XCTAssertEqual(
+            hiddenLogCount,
+            2,
+            "Repeated hidden emissions should not re-log once the panel is already hidden"
+        )
+    }
+
     /// Response card stays visually anchored to the pill's bottom-center
     /// during pipeline resizes. The presenter calls
     /// `ResponseCardPresenting.reanchor(abovePillFrame:)` each time it
@@ -565,6 +629,40 @@ final class PillOverlayPresenterTests: XCTestCase {
                 pressure: 1
             )
         )
+    }
+
+    private func makeLogger(sink: InMemoryTestSink) -> PersonalScribeLogger {
+        PersonalScribeLogger(
+            category: PersonalScribeLogCategory.ui,
+            reporter: DiagnosticsReporter(
+                sinks: [sink],
+                now: { Date(timeIntervalSince1970: 0) }
+            )
+        )
+    }
+
+    private func waitForLogMessages(
+        in sink: InMemoryTestSink,
+        containing fragment: String,
+        expectedCount: Int
+    ) async -> [RedactedDiagnosticsEvent] {
+        for _ in 0..<100 {
+            let messages = await logMessages(in: sink, containing: fragment)
+            if messages.count >= expectedCount {
+                return messages
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail("Timed out waiting for \(expectedCount) diagnostics messages containing '\(fragment)'")
+        return await logMessages(in: sink, containing: fragment)
+    }
+
+    private func logMessages(
+        in sink: InMemoryTestSink,
+        containing fragment: String
+    ) async -> [RedactedDiagnosticsEvent] {
+        await sink.snapshot().filter { $0.message.contains(fragment) }
     }
 }
 
