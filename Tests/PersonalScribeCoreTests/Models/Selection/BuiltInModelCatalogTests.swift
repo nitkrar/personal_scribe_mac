@@ -299,7 +299,7 @@ final class BuiltInModelCatalogTests: XCTestCase {
         XCTAssertTrue(Set(WhisperFamilyLanguages.codes).isSuperset(of: ["en", "ja", "zh", "es", "de"]))
     }
 
-    func testSupportedLanguagesMatchRev2WhisperFamilyScope() {
+    func testSupportedLanguagesMatchRev3MultilingualScope() {
         let whisperFamilyDescriptorIDs: Set<String> = [
             BuiltInModelCatalog.whisperKitTiny.id,
             BuiltInModelCatalog.whisperKitSmall216MB.id,
@@ -309,6 +309,10 @@ final class BuiltInModelCatalogTests: XCTestCase {
             BuiltInModelCatalog.whisperCppSmallQ51.id,
             BuiltInModelCatalog.whisperCppLargeV3TurboQ50.id,
         ]
+        let qwen3DescriptorIDs: Set<String> = [
+            BuiltInModelCatalog.qwen3AsrF32.id,
+            BuiltInModelCatalog.qwen3AsrInt8.id,
+        ]
 
         for descriptor in BuiltInModelCatalog.registeredModels {
             if whisperFamilyDescriptorIDs.contains(descriptor.id) {
@@ -316,6 +320,12 @@ final class BuiltInModelCatalogTests: XCTestCase {
                     descriptor.supportedLanguages,
                     WhisperFamilyLanguages.codes,
                     "\(descriptor.id) should expose the shared Whisper-family language list"
+                )
+            } else if qwen3DescriptorIDs.contains(descriptor.id) {
+                XCTAssertEqual(
+                    descriptor.supportedLanguages,
+                    Qwen3Languages.codes,
+                    "\(descriptor.id) should expose the Qwen3 language list"
                 )
             } else {
                 XCTAssertNil(

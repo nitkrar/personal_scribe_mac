@@ -398,12 +398,10 @@ public enum BuiltInModelCatalog {
 
     // MARK: - Qwen3 ASR (Alibaba transformer ASR)
     //
-    // 16-language multilingual transformer-based ASR (EN, ZH, JA, KO,
-    // VI, TH, ID, MS, HI, AR, TR, RU, DE, FR, ES, multilingual). One
+    // 30-language multilingual transformer-based ASR. One
     // HuggingFace repo `qwen3-asr-0.6b-coreml` with two precision
     // variants under `f32/` and `int8/` subPaths. Drives
-    // `Qwen3AsrManager` (separate from `AsrManager`) — adapter not
-    // wired yet, downloads currently fail (interim).
+    // `Qwen3AsrManager` (separate from `AsrManager`).
     private static let qwen3AsrRequiredPaths = [
         "qwen3_asr_audio_encoder_v2.mlmodelc/coremldata.bin",
         "qwen3_asr_decoder_stateful.mlmodelc/coremldata.bin",
@@ -424,9 +422,10 @@ public enum BuiltInModelCatalog {
         isEnabled: false,
         engine: .qwen3ASR,
         madeBy: "Alibaba Qwen team · FluidInference",
-        worksWith: "16 languages (multilingual)",
+        worksWith: "30 languages (multilingual)",
         goodFor: "Multilingual dictation, non-English content",
-        license: "Apache 2.0"
+        license: "Apache 2.0",
+        supportedLanguages: Qwen3Languages.codes
     )
 
     public static let qwen3AsrInt8 = ModelDescriptor(
@@ -442,9 +441,10 @@ public enum BuiltInModelCatalog {
         isEnabled: false,
         engine: .qwen3ASR,
         madeBy: "Alibaba Qwen team · FluidInference",
-        worksWith: "16 languages (multilingual)",
+        worksWith: "30 languages (multilingual)",
         goodFor: "Multilingual dictation on lower-RAM devices",
-        license: "Apache 2.0"
+        license: "Apache 2.0",
+        supportedLanguages: Qwen3Languages.codes
     )
 
     // MARK: - Speaker diarization
