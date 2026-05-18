@@ -125,13 +125,11 @@ if you changed it in `Settings → Advanced`, use that location instead.
    the `.bin` is still present under `<base>/models/whispercpp-*/`.
 6. Re-enable network after the run.
 
-## Model language hint transcription (#091)
+## Mode language hint transcription (#091)
 
-- [ ] **MV-LANGHINT-3 — WhisperKit pinned hint takes effect:** choose a mode that explicitly pins `Whisper Tiny (WhisperKit)` (or another multilingual WhisperKit row), set that row's language picker to `Japanese (ja)`, then record a short Japanese clip. Confirm the final transcript is Japanese rather than English auto-detect output. Switch the picker back to `Auto-detect` after the check if you use the row for other manual cases.
-- [ ] **MV-LANGHINT-4 — whisper.cpp pinned hint takes effect:** choose a mode that explicitly pins a multilingual whisper.cpp row, set its picker to `Japanese (ja)`, record a short Japanese clip, and confirm the final transcript is Japanese.
-- [ ] **MV-LANGHINT-5 — Qwen3 pinned hint takes effect:** choose a mode that explicitly pins `Qwen3 ASR 0.6B`, set its picker to `Japanese (ja)`, record a short Japanese clip, and confirm the final transcript is Japanese rather than falling back to auto-detect.
-- [ ] **MV-LANGHINT-6 — mode-default gate prevents descriptor-hint leak:** set `Whisper Tiny (WhisperKit)` to `Japanese (ja)` in `Settings → AI Models`, then switch to a mode whose ASR selection is `use default model` rather than a pinned descriptor. Record a short English clip while the default still resolves to that WhisperKit row. Confirm the transcript is English, not Japanese — the hint must be suppressed for the default-model path.
-- [ ] **MV-LANGHINT-7 — Auto-detect clears back to normal behavior:** on a multilingual Whisper or Qwen3 row, switch the picker back to `Auto-detect`, record a short clip in a language the model normally auto-detects well, and confirm transcription still completes normally with no forced-language behavior.
+- [ ] **MV-LANGHINT-MODE-4 — a multilingual pinned mode applies its own hint:** choose a mode that explicitly pins a multilingual row such as `Whisper Tiny (WhisperKit)`, `Whisper Large v3 Turbo q5_0 (whisper.cpp)`, or `Qwen3 ASR 0.6B`. Set that mode's `Language` picker to `Japanese (ja)`, record a short Japanese clip, and confirm the final transcript is Japanese rather than an English auto-detect result.
+- [ ] **MV-LANGHINT-MODE-5 — two modes can pin the same descriptor but transcribe with different languages:** create or reuse two modes that both pin the same multilingual descriptor. Set one mode's `Language` picker to `Japanese (ja)` and the other to `English (en)` or another distinct language you can test reliably. Record a short clip in each language while the matching mode is active and confirm both transcripts land in the intended language. Re-open both mode detail panes afterward and confirm each mode still shows its own saved `Language` selection even though the pinned descriptor is identical.
+- [ ] **MV-LANGHINT-MODE-6 — Auto-detect remains normal when the mode has no language hint:** on a mode pinned to a multilingual row, switch the `Language` picker back to `Auto-detect`, record a short clip in a language that model normally auto-detects well, and confirm transcription still completes normally with no forced-language behavior.
 
 ## Phase 1 Step 1.1b — Launch signposts
 

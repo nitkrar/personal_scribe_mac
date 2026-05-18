@@ -184,11 +184,11 @@ if you changed it in `Settings → Advanced`, use that location instead.
 - [ ] **MV-WHISPERCPP-6 — delete removes the leaf and redownload recreates it cleanly:** from a downloaded whisper.cpp row, click `Delete`, confirm the corresponding `whispercpp-*` folder disappears from `<base>/models/`, then click `Download` again and confirm the same leaf plus `.bin` file return and the row reaches `Ready` or `Active`.
 - [ ] **MV-WHISPERCPP-7 — WhisperKit and whisper.cpp remain independently activatable:** keep one WhisperKit row and one whisper.cpp row downloaded at the same time. Switch active model from WhisperKit → whisper.cpp → WhisperKit. Each switch should flip `Active`/`Ready` chips correctly without forcing a redownload, and both on-disk leaves (`openai_*` and `whispercpp-*`) should still be present afterward.
 
-## Model language hint picker (#091)
+## Mode language hint picker (#091)
 
-- [ ] **MV-LANGHINT-1 — picker visibility follows descriptor capability + row state:** open `Settings → AI Models` with the multilingual rows downloaded. Confirm the language picker appears on `Whisper Tiny (WhisperKit)`, `Whisper Large v3 Turbo q5_0 (whisper.cpp)`, and `Qwen3 ASR 0.6B` once each row is `Ready` or `Active`. Confirm the picker is absent for `Whisper Small English (WhisperKit)`, all Parakeet rows, and the EOU rows. Confirm the picker label reads `Language` and the menu entries use `Localized Name (code)` formatting such as `Japanese (ja)`.
-- [ ] **MV-LANGHINT-2 — picker writes the per-model preference:** on a multilingual Whisper row, choose `Japanese (ja)` from the language picker. Run `defaults read com.nitkrar.personal_scribe ModelLanguageHints` and confirm the descriptor ID appears with value `ja`. Switch the same picker back to `Auto-detect` and confirm the descriptor entry is removed from the defaults payload.
-- [ ] **MV-LANGHINT-8 — per-model selections stay independent across rows:** set `Whisper Tiny (WhisperKit)` to `Japanese (ja)`. Then switch to a different downloaded multilingual row such as `Whisper Large v3 Turbo q5_0 (whisper.cpp)` or `Qwen3 ASR 0.6B` and confirm its picker still shows `Auto-detect` unless you explicitly changed that row too. Switching back to the WhisperKit row must still show `Japanese (ja)`.
+- [ ] **MV-LANGHINT-MODE-1 — picker stays hidden when the mode uses the default voice model:** open `Modes`, select a custom mode whose `Voice model` field is `Use default model`, and confirm no `Language` picker row appears anywhere in the mode detail pane.
+- [ ] **MV-LANGHINT-MODE-2 — picker stays hidden for monolingual pinned modes:** in `Modes`, pin a mode to a monolingual ASR row such as `Whisper Small English (WhisperKit)`, any Parakeet row, or an EOU row. Confirm the `Language` picker does not appear for that mode.
+- [ ] **MV-LANGHINT-MODE-3 — picker appears for multilingual pinned modes and persists into `workflow-modes.json`:** in `Modes`, pin a mode to a multilingual row such as `Whisper Tiny (WhisperKit)`, `Whisper Large v3 Turbo q5_0 (whisper.cpp)`, or `Qwen3 ASR 0.6B`. Confirm a `Language` picker appears with `Auto-detect` as the first option and entries formatted as `Localized Name (code)` such as `Japanese (ja)`. Choose `Japanese (ja)`, then inspect `~/Library/Application Support/com.nitkrar.personal_scribe/workflow-modes.json` and confirm that mode now carries `"language": {"source": "override", "value": "ja"}`. Switch the picker back to `Auto-detect` and confirm the `language` field is removed from that mode's JSON payload.
 
 ## Stale-state on tab return (#039)
 
@@ -324,4 +324,3 @@ summary caption at the bottom that adapts to toggle state.
 - **MV-072-8 — Restore default bump:** fresh install (delete
   `UserDefaults` for `PasteRestoreDelaySeconds`). Open Settings, flip
   Restore ON. Slider sits at `3.0`s — not the pre-#072 `0.5`s default.
-
