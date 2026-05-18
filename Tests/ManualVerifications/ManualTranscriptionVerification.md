@@ -69,10 +69,13 @@ Prerequisites:
 ## WhisperKit transcription (#095)
 
 ### MV-WHISPERKIT-OFFLINE — pre-staged tokenizer survives offline activation
-1. While network is available, download `Whisper Tiny (WhisperKit)` from
-   `Settings → AI Models`.
+1. While network is available, delete `Whisper Tiny (WhisperKit)` if it is
+   already present, then download it again from `Settings → AI Models`.
 2. Confirm the model leaf includes a `tokenizer/` subdirectory with
-   `tokenizer.json` and `vocab.json`.
+   `tokenizer.json` and `vocab.json`, and that each of
+   `AudioEncoder.mlmodelc/`, `MelSpectrogram.mlmodelc/`, and
+   `TextDecoder.mlmodelc/` contains `coremldata.bin`, `metadata.json`,
+   `model.mil`, and `weights/weight.bin`.
 3. Disable Wi-Fi and Ethernet.
 4. Activate `Whisper Tiny (WhisperKit)` and record a short English
    phrase.

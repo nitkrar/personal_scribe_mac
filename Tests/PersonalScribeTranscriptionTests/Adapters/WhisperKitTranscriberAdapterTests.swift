@@ -38,16 +38,33 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let calls = await manager.downloadCalls()
         XCTAssertEqual(calls.count, 2)
         XCTAssertEqual(calls.first?.repoID, descriptor.repository)
-        XCTAssertEqual(calls.first?.relativePaths, expectedBundleGlobs(for: descriptor))
+        XCTAssertEqual(calls.first?.matchingPatterns, expectedBundlePatterns(for: descriptor))
         XCTAssertEqual(calls.first?.destination, modelLeaf)
         XCTAssertEqual(calls.last?.repoID, descriptor.tokenizerSource)
-        XCTAssertEqual(calls.last?.relativePaths, expectedTokenizerPaths(for: descriptor))
+        XCTAssertEqual(calls.last?.matchingPatterns, expectedTokenizerPaths(for: descriptor))
         XCTAssertEqual(
             calls.last?.destination,
             modelLeaf.appendingPathComponent("tokenizer", isDirectory: true).standardizedFileURL
         )
         let loadCallCount = await manager.loadCallCount()
         XCTAssertEqual(loadCallCount, 0)
+    }
+
+    func testDownloadIfNeededUsesSingleFolderRootPatternForBundleDownload() async throws {
+        let descriptor = BuiltInModelCatalog.whisperKitTiny
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let manager = StubWhisperKitManager()
+        let adapter = WhisperKitTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.downloadIfNeeded()
+
+        let calls = await manager.downloadCalls()
+        XCTAssertEqual(calls.first?.matchingPatterns, expectedBundlePatterns(for: descriptor))
+        XCTAssertNotEqual(calls.first?.matchingPatterns, expectedBundleLeafPaths(for: descriptor))
     }
 
     func testDownloadIfNeededSkipsWhenArtifactsAlreadyExist() async throws {
@@ -286,15 +303,12 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
             .appendingPathComponent("models", isDirectory: true)
             .appendingPathComponent("openai_whisper-tiny", isDirectory: true)
             .standardizedFileURL
-        let relativePaths = [
-            "openai_whisper-tiny/config.json",
-            "openai_whisper-tiny/TextDecoder.mlmodelc/coremldata.bin",
-        ]
+        let matchingPatterns = ["openai_whisper-tiny/*"]
         let hub = StubWhisperKitHubClient(
             downloadBase: stagingDirectory,
             files: [
-                relativePaths[0]: Data("{}".utf8),
-                relativePaths[1]: Data([0x01]),
+                "openai_whisper-tiny/config.json": Data("{}".utf8),
+                "openai_whisper-tiny/TextDecoder.mlmodelc/coremldata.bin": Data([0x01]),
             ]
         )
         let manager = LiveWhisperKitManager(
@@ -304,7 +318,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
 
         try await manager.downloadAndStage(
             repoID: "argmaxinc/whisperkit-coreml",
-            relativePaths: relativePaths,
+            matchingPatterns: matchingPatterns,
             stagingDirectory: stagingDirectory,
             destination: destination,
             progressHandler: { _ in }
@@ -315,7 +329,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
             snapshotRequests,
             [StubWhisperKitHubClient.SnapshotRequest(
                 repoID: "argmaxinc/whisperkit-coreml",
-                relativePaths: relativePaths
+                matchingPatterns: matchingPatterns
             )]
         )
         XCTAssertTrue(
@@ -342,15 +356,15 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
             .appendingPathComponent("openai_whisper-tiny", isDirectory: true)
             .appendingPathComponent("tokenizer", isDirectory: true)
             .standardizedFileURL
-        let relativePaths = [
+        let matchingPatterns = [
             "tokenizer.json",
             "vocab.json",
         ]
         let hub = StubWhisperKitHubClient(
             downloadBase: stagingDirectory,
             files: [
-                relativePaths[0]: Data("{}".utf8),
-                relativePaths[1]: Data("{}".utf8),
+                matchingPatterns[0]: Data("{}".utf8),
+                matchingPatterns[1]: Data("{}".utf8),
             ]
         )
         let manager = LiveWhisperKitManager(
@@ -360,7 +374,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
 
         try await manager.downloadAndStage(
             repoID: "openai/whisper-tiny",
-            relativePaths: relativePaths,
+            matchingPatterns: matchingPatterns,
             stagingDirectory: stagingDirectory,
             destination: destination,
             progressHandler: { _ in }
@@ -371,7 +385,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
             snapshotRequests,
             [StubWhisperKitHubClient.SnapshotRequest(
                 repoID: "openai/whisper-tiny",
-                relativePaths: relativePaths
+                matchingPatterns: matchingPatterns
             )]
         )
         XCTAssertTrue(
@@ -484,7 +498,7 @@ private actor StubWhisperKitManager: WhisperKitManaging {
 
     struct DownloadCall: Equatable {
         let repoID: String
-        let relativePaths: [String]?
+        let matchingPatterns: [String]?
         let stagingDirectory: URL
         let destination: URL
     }
@@ -517,7 +531,7 @@ private actor StubWhisperKitManager: WhisperKitManaging {
 
     func downloadAndStage(
         repoID: String,
-        relativePaths: [String]?,
+        matchingPatterns: [String]?,
         stagingDirectory: URL,
         destination: URL,
         progressHandler: @escaping @Sendable (Progress) -> Void
@@ -525,7 +539,7 @@ private actor StubWhisperKitManager: WhisperKitManaging {
         downloadCallsStorage.append(
             DownloadCall(
                 repoID: repoID,
-                relativePaths: relativePaths,
+                matchingPatterns: matchingPatterns,
                 stagingDirectory: stagingDirectory,
                 destination: destination
             )
@@ -610,7 +624,7 @@ private actor StubWhisperKitManager: WhisperKitManaging {
 private actor StubWhisperKitHubClient: WhisperKitHubSnapshotting {
     struct SnapshotRequest: Equatable {
         let repoID: String
-        let relativePaths: [String]
+        let matchingPatterns: [String]
     }
 
     private let downloadBase: URL
@@ -627,13 +641,13 @@ private actor StubWhisperKitHubClient: WhisperKitHubSnapshotting {
 
     func snapshot(
         repoID: String,
-        relativePaths: [String],
+        matchingPatterns: [String],
         progressHandler: @escaping @Sendable (Progress) -> Void
     ) async throws -> URL {
         snapshotRequestsStorage.append(
             SnapshotRequest(
                 repoID: repoID,
-                relativePaths: relativePaths
+                matchingPatterns: matchingPatterns
             )
         )
 
@@ -744,7 +758,11 @@ private func stagingRoot(
         .standardizedFileURL
 }
 
-private func expectedBundleGlobs(for descriptor: ModelDescriptor) -> [String] {
+private func expectedBundlePatterns(for descriptor: ModelDescriptor) -> [String] {
+    ["\(descriptor.repoFolderName)/*"]
+}
+
+private func expectedBundleLeafPaths(for descriptor: ModelDescriptor) -> [String] {
     descriptor.requiredRelativePaths
         .filter { !$0.hasPrefix("tokenizer/") }
         .map { "\(descriptor.repoFolderName)/\($0)" }

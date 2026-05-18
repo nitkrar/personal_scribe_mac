@@ -5,7 +5,7 @@ import PersonalScribeCore
 protocol WhisperKitManaging: Sendable {
     func downloadAndStage(
         repoID: String,
-        relativePaths: [String]?,
+        matchingPatterns: [String]?,
         stagingDirectory: URL,
         destination: URL,
         progressHandler: @escaping @Sendable (Progress) -> Void
@@ -23,7 +23,7 @@ protocol WhisperKitManaging: Sendable {
 protocol WhisperKitHubSnapshotting: Sendable {
     func snapshot(
         repoID: String,
-        relativePaths: [String],
+        matchingPatterns: [String],
         progressHandler: @escaping @Sendable (Progress) -> Void
     ) async throws -> URL
 }
@@ -35,12 +35,12 @@ struct WhisperKitManagerResult: Sendable, Equatable {
 extension HubApiWrapper: WhisperKitHubSnapshotting {
     func snapshot(
         repoID: String,
-        relativePaths: [String],
+        matchingPatterns: [String],
         progressHandler: @escaping @Sendable (Progress) -> Void
     ) async throws -> URL {
         try await snapshot(
             from: HubApiWrapper.Repo(id: repoID),
-            matching: relativePaths,
+            matching: matchingPatterns,
             progressHandler: progressHandler
         )
     }
@@ -148,7 +148,7 @@ public actor WhisperKitTranscriberAdapter: Transcriber {
 
 private extension WhisperKitTranscriberAdapter {
     struct DownloadPlan: Sendable {
-        let bundleRelativePaths: [String]
+        let bundlePatterns: [String]
         let tokenizerRelativePaths: [String]
         let bundleFractionRange: ClosedRange<Double>
         let tokenizerFractionRange: ClosedRange<Double>
@@ -208,7 +208,7 @@ private extension WhisperKitTranscriberAdapter {
 
             try await manager.downloadAndStage(
                 repoID: descriptor.repository,
-                relativePaths: plan.bundleRelativePaths,
+                matchingPatterns: plan.bundlePatterns,
                 stagingDirectory: stagingDirectory,
                 destination: modelDirectory,
                 progressHandler: { progress in
@@ -222,7 +222,7 @@ private extension WhisperKitTranscriberAdapter {
 
             try await manager.downloadAndStage(
                 repoID: tokenizerSource,
-                relativePaths: plan.tokenizerRelativePaths,
+                matchingPatterns: plan.tokenizerRelativePaths,
                 stagingDirectory: stagingDirectory,
                 destination: tokenizerDirectory,
                 progressHandler: { progress in
@@ -286,14 +286,15 @@ private extension WhisperKitTranscriberAdapter {
     }
 
     func downloadPlan() throws -> DownloadPlan {
-        let bundleRelativePaths = descriptor.requiredRelativePaths
-            .filter { !$0.hasPrefix("tokenizer/") }
-            .map { "\(descriptor.repoFolderName)/\($0)" }
         let tokenizerRelativePaths = descriptor.requiredRelativePaths
             .filter { $0.hasPrefix("tokenizer/") }
             .map { String($0.dropFirst("tokenizer/".count)) }
+        let bundlePatterns = ["\(descriptor.repoFolderName)/*"]
 
-        guard !bundleRelativePaths.isEmpty, !tokenizerRelativePaths.isEmpty else {
+        guard
+            !descriptor.repoFolderName.isEmpty,
+            !tokenizerRelativePaths.isEmpty
+        else {
             throw PersonalScribeError.modelLoadFailure
         }
 
@@ -301,7 +302,7 @@ private extension WhisperKitTranscriberAdapter {
         // CoreML bundle's hundreds of MB, so reserve the final 5% of
         // the synthetic fraction range for the tokenizer phase.
         return DownloadPlan(
-            bundleRelativePaths: bundleRelativePaths,
+            bundlePatterns: bundlePatterns,
             tokenizerRelativePaths: tokenizerRelativePaths,
             bundleFractionRange: 0...0.95,
             tokenizerFractionRange: 0.95...1
@@ -402,7 +403,7 @@ internal actor LiveWhisperKitManager: WhisperKitManaging {
 
     func downloadAndStage(
         repoID: String,
-        relativePaths: [String]?,
+        matchingPatterns: [String]?,
         stagingDirectory: URL,
         destination: URL,
         progressHandler: @escaping @Sendable (Progress) -> Void
@@ -415,12 +416,12 @@ internal actor LiveWhisperKitManager: WhisperKitManaging {
         let hub = hubFactory(stagingDirectory)
         let snapshotRoot = try await hub.snapshot(
             repoID: repoID,
-            relativePaths: relativePaths ?? [],
+            matchingPatterns: matchingPatterns ?? [],
             progressHandler: progressHandler
         )
         let snapshotLeaf = resolvedSnapshotLeaf(
             snapshotRoot: snapshotRoot,
-            relativePaths: relativePaths
+            matchingPatterns: matchingPatterns
         )
 
         try fileManager.createDirectory(
@@ -478,16 +479,16 @@ internal actor LiveWhisperKitManager: WhisperKitManaging {
 
     private func resolvedSnapshotLeaf(
         snapshotRoot: URL,
-        relativePaths: [String]?
+        matchingPatterns: [String]?
     ) -> URL {
         guard
-            let relativePaths,
-            !relativePaths.isEmpty
+            let matchingPatterns,
+            !matchingPatterns.isEmpty
         else {
             return snapshotRoot
         }
 
-        let topLevelComponents = relativePaths.compactMap { path -> String? in
+        let topLevelComponents = matchingPatterns.compactMap { path -> String? in
             guard path.contains("/") else {
                 return nil
             }
