@@ -55,6 +55,12 @@ public protocol ModelLifecycle: Sendable {
     /// (loaded CoreML models, decoder caches, auxiliary managers)
     /// without relying on `deinit`.
     func cleanup() async
+
+    /// Session-end hook for reclaiming heavyweight runtime state after
+    /// an idle delay. Distinct from `cleanup()`: implementations should
+    /// schedule or perform best-effort idle release without changing
+    /// the adapter's cache ownership semantics.
+    func releaseIdleResources() async
 }
 
 public extension ModelLifecycle {
@@ -73,4 +79,8 @@ public extension ModelLifecycle {
     /// Default backstop for lightweight or pure-value conformers that
     /// have no retained runtime state to release on eviction.
     func cleanup() async {}
+
+    /// Default no-op for conformers that do not retain heavyweight
+    /// runtime state between sessions.
+    func releaseIdleResources() async {}
 }

@@ -2,6 +2,8 @@
 import Foundation
 import PersonalScribeCore
 
+typealias WhisperCppSleep = @Sendable (Duration) async throws -> Void
+
 protocol WhisperCppManaging: Sendable {
     func loadModel(from modelFileURL: URL) async throws
     func transcribe(
@@ -43,8 +45,12 @@ public actor WhisperCppTranscriberAdapter: Transcriber {
     private let downloader: any WhisperCppDownloading
     private nonisolated let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private let fileManager: FileManager
+    private let idleUnloadDelay: Duration
+    private let sleep: WhisperCppSleep
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
+    private var idleReleaseTask: Task<Void, Never>?
+    private var idleReleaseGeneration: UInt64 = 0
 
     public init(
         descriptor: ModelDescriptor,
@@ -54,7 +60,8 @@ public actor WhisperCppTranscriberAdapter: Transcriber {
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: LiveWhisperCppManager(),
-            downloader: LiveWhisperCppDownloader()
+            downloader: LiveWhisperCppDownloader(),
+            idleUnloadDelay: .seconds(30)
         )
     }
 
@@ -63,16 +70,22 @@ public actor WhisperCppTranscriberAdapter: Transcriber {
         storageLocator: any StorageLocator,
         manager: any WhisperCppManaging,
         downloader: any WhisperCppDownloading,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        idleUnloadDelay: Duration = .seconds(30),
+        sleep: @escaping WhisperCppSleep = { try await Task.sleep(for: $0) }
     ) {
         self.descriptor = descriptor
         self.storageLocator = storageLocator
         self.manager = manager
         self.downloader = downloader
         self.fileManager = fileManager
+        self.idleUnloadDelay = idleUnloadDelay
+        self.sleep = sleep
     }
 
     public func prepare() async throws {
+        invalidateIdleRelease()
+
         if hasPreparedModel {
             return
         }
@@ -111,12 +124,32 @@ public actor WhisperCppTranscriberAdapter: Transcriber {
     }
 
     public func cleanup() async {
-        let inFlightPrepare = prepareTask
-        prepareTask = nil
-        hasPreparedModel = false
-        inFlightPrepare?.cancel()
-        await manager.cleanup()
-        progressBroadcaster.emit(.idle)
+        invalidateIdleRelease()
+        await cleanupRuntime()
+    }
+
+    public func releaseIdleResources() async {
+        guard hasPreparedModel || prepareTask != nil else {
+            return
+        }
+
+        invalidateIdleRelease()
+        let generation = idleReleaseGeneration
+        let delay = idleUnloadDelay
+        let sleep = sleep
+        idleReleaseTask = Task {
+            do {
+                try await sleep(delay)
+            } catch {
+                return
+            }
+
+            if Task.isCancelled {
+                return
+            }
+
+            await self.finishIdleRelease(generation: generation)
+        }
     }
 
     public func transcribe(
@@ -147,12 +180,17 @@ public actor WhisperCppTranscriberAdapter: Transcriber {
 private extension WhisperCppTranscriberAdapter {
     func performPrepare() async throws {
         let modelFileURL = try modelFileURL()
-        try await performDownloadIfNeeded(emitFinished: false)
-        progressBroadcaster.emit(.loading)
-
         do {
+            try Task.checkCancellation()
+            try await performDownloadIfNeeded(emitFinished: false)
+            try Task.checkCancellation()
+            progressBroadcaster.emit(.loading)
             try await manager.loadModel(from: modelFileURL)
+            try Task.checkCancellation()
             progressBroadcaster.emit(.finished)
+        } catch is CancellationError {
+            await manager.cleanup()
+            throw CancellationError()
         } catch {
             await manager.cleanup()
             throw PersonalScribeError.modelLoadFailure
@@ -303,6 +341,30 @@ private extension WhisperCppTranscriberAdapter {
             audioDuration: audioDuration,
             processingDuration: processingDuration
         )
+    }
+
+    func invalidateIdleRelease() {
+        idleReleaseGeneration &+= 1
+        idleReleaseTask?.cancel()
+        idleReleaseTask = nil
+    }
+
+    func finishIdleRelease(generation: UInt64) async {
+        guard generation == idleReleaseGeneration else {
+            return
+        }
+
+        idleReleaseTask = nil
+        await cleanupRuntime()
+    }
+
+    func cleanupRuntime() async {
+        let inFlightPrepare = prepareTask
+        prepareTask = nil
+        hasPreparedModel = false
+        inFlightPrepare?.cancel()
+        await manager.cleanup()
+        progressBroadcaster.emit(.idle)
     }
 }
 

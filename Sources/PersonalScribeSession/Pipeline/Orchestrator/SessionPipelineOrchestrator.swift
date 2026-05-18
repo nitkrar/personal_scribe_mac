@@ -490,9 +490,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         bufferedAudio.removeAll(keepingCapacity: true)
         nextRevision = 0
         latestStageFailure = nil
+        let completedRecipe = activeSessionRecipe
         activeSessionRecipe = nil
 
-        await outputSink.endSession()
+        await endSessionAndReleaseIdleResources(for: completedRecipe)
 
         publish { snapshot in
             snapshot.sessionState = .idle
@@ -617,7 +618,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             if isStreamingSession, finishedLiveStreamingState == nil {
                 await cancelLiveStreamingSession()
             }
-            await outputSink.endSession()
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
             publish { snapshot in
                 // `#075`: Short-hold is a pipeline shortcut (nothing to
                 // transcribe), not an error. Publishing `.shortExit`
@@ -722,7 +723,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             }
 
             try await deliverFinal(finalResult)
-            await outputSink.endSession()
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
 
             publish { snapshot in
                 snapshot.sessionState = .completed
@@ -734,10 +735,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.isStreamingSession = false
             }
         } catch let failure as PipelineStageFailure {
-            await outputSink.endSession()
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
             handleStageFailure(failure)
         } catch {
-            await outputSink.endSession()
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
             handleStageFailure(makeStageFailure(stage: .transcription, error: error, fallback: .transcriptionFailure))
         }
     }
@@ -1016,7 +1017,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             }
         } catch {
             await cancelLiveStreamingSession()
-            await outputSink.endSession()
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
             handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
         }
     }
@@ -1578,6 +1579,34 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
         if let secondPassTranscriber = recipe.streamingSecondPassTranscriber {
             try await secondPassTranscriber.prepare()
+        }
+    }
+
+    private func endSessionAndReleaseIdleResources(for recipe: BoundRecipe?) async {
+        await outputSink.endSession()
+        await releaseIdleResources(for: recipe)
+    }
+
+    private func releaseIdleResources(for recipe: BoundRecipe?) async {
+        if let recipe {
+            for processor in recipe.processors {
+                switch processor {
+                case .transcriber(let transcriber):
+                    await transcriber.releaseIdleResources()
+                case .streamingTranscriber(let streamingTranscriber):
+                    await streamingTranscriber.releaseIdleResources()
+                case .diarizedTurns(let diarizer, let transcriber, _):
+                    await diarizer.releaseIdleResources()
+                    await transcriber.releaseIdleResources()
+                }
+            }
+            if let secondPassTranscriber = recipe.streamingSecondPassTranscriber {
+                await secondPassTranscriber.releaseIdleResources()
+            }
+        }
+
+        if let vadProvider {
+            await vadProvider.releaseIdleResources()
         }
     }
 

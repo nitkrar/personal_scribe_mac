@@ -2,6 +2,7 @@ import XCTest
 @testable import PersonalScribeCore
 import PersonalScribeTestSupport
 @testable import PersonalScribeSession
+@testable import PersonalScribeVAD
 
 final class SessionPipelineOrchestratorTests: XCTestCase {
     func testSnapshotStreamDeliversInitialIdleSnapshotImmediately() async {
@@ -775,6 +776,37 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(count, 1, "Expected endSession to fire exactly once after successful completion; got \(count)")
     }
 
+    func testReleaseIdleResourcesFiresOnSuccessfulCompletion() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let transcriber = ReleaseTrackingTranscriber(
+            result: TranscriptionResult(
+                text: "hello",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(10)
+            )
+        )
+        let vadProvider = ReleaseTrackingVadProvider()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: transcriber,
+            vadProvider: vadProvider
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        let transcriberReleaseCount = await transcriber.releaseIdleResourcesCallCount()
+        let vadReleaseCount = await vadProvider.releaseIdleResourcesCallCount()
+
+        XCTAssertEqual(transcriberReleaseCount, 1)
+        XCTAssertEqual(vadReleaseCount, 1)
+    }
+
     func testEndSessionFiresOnShortExit() async throws {
         // Sub-1s buffer in a non-streaming recipe → shortExit path.
         let buffer = try makeBuffer(sampleCount: 1_600)
@@ -795,6 +827,37 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         let count = await sink.endSessionCount()
         XCTAssertEqual(count, 1, "Expected endSession to fire exactly once after shortExit; got \(count)")
+    }
+
+    func testReleaseIdleResourcesFiresOnShortExit() async throws {
+        let buffer = try makeBuffer(sampleCount: 1_600)
+        let transcriber = ReleaseTrackingTranscriber(
+            result: TranscriptionResult(
+                text: "unused",
+                audioDuration: .milliseconds(100),
+                processingDuration: .zero
+            )
+        )
+        let vadProvider = ReleaseTrackingVadProvider()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: transcriber,
+            vadProvider: vadProvider
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().sessionState != .shortExit {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        let transcriberReleaseCount = await transcriber.releaseIdleResourcesCallCount()
+        let vadReleaseCount = await vadProvider.releaseIdleResourcesCallCount()
+
+        XCTAssertEqual(transcriberReleaseCount, 1)
+        XCTAssertEqual(vadReleaseCount, 1)
     }
 
     func testEndSessionFiresOnCancel() async throws {
@@ -822,6 +885,41 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(count, 1, "Expected endSession to fire exactly once after cancel; got \(count)")
     }
 
+    func testReleaseIdleResourcesFiresOnCancel() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let transcriber = ReleaseTrackingTranscriber(
+            result: TranscriptionResult(
+                text: "unused",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(10)
+            )
+        )
+        let vadProvider = ReleaseTrackingVadProvider()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: [buffer],
+                delayPerBuffer: .milliseconds(50)
+            ),
+            transcriber: transcriber,
+            vadProvider: vadProvider
+        )
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(20))
+        await orchestrator.cancelCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().sessionState != .idle {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        let transcriberReleaseCount = await transcriber.releaseIdleResourcesCallCount()
+        let vadReleaseCount = await vadProvider.releaseIdleResourcesCallCount()
+
+        XCTAssertEqual(transcriberReleaseCount, 1)
+        XCTAssertEqual(vadReleaseCount, 1)
+    }
+
     func testEndSessionFiresOnError() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let sink = TestPipelineOutputSink(failurePoint: .final)
@@ -844,6 +942,77 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
 
         let count = await sink.endSessionCount()
         XCTAssertEqual(count, 1, "Expected endSession to fire exactly once after error; got \(count)")
+    }
+
+    func testReleaseIdleResourcesFiresOnOutputError() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let transcriber = ReleaseTrackingTranscriber(
+            result: TranscriptionResult(
+                text: "hello",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(10)
+            )
+        )
+        let vadProvider = ReleaseTrackingVadProvider()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: transcriber,
+            outputSink: TestPipelineOutputSink(failurePoint: .final),
+            vadProvider: vadProvider
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while true {
+                if case .error = await orchestrator.snapshot().sessionState {
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        let transcriberReleaseCount = await transcriber.releaseIdleResourcesCallCount()
+        let vadReleaseCount = await vadProvider.releaseIdleResourcesCallCount()
+
+        XCTAssertEqual(transcriberReleaseCount, 1)
+        XCTAssertEqual(vadReleaseCount, 1)
+    }
+
+    func testReleaseIdleResourcesFiresOnCaptureStreamError() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000)
+        let transcriber = ReleaseTrackingTranscriber(
+            result: TranscriptionResult(
+                text: "unused",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(10)
+            )
+        )
+        let vadProvider = ReleaseTrackingVadProvider()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: [buffer],
+                error: .audioEngineFailure
+            ),
+            transcriber: transcriber,
+            vadProvider: vadProvider
+        )
+
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while true {
+                if case .error = await orchestrator.snapshot().sessionState {
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        let transcriberReleaseCount = await transcriber.releaseIdleResourcesCallCount()
+        let vadReleaseCount = await vadProvider.releaseIdleResourcesCallCount()
+
+        XCTAssertEqual(transcriberReleaseCount, 1)
+        XCTAssertEqual(vadReleaseCount, 1)
     }
 
     func testSuccessfulCompletionWaitsForEndSessionBeforePublishingCompleted() async throws {
@@ -1717,6 +1886,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         outputSink: any PipelineOutputSink = TestPipelineOutputSink(),
         context: PipelineContextSnapshot = PipelineContextSnapshot(streamingOutputEnabled: false),
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)? = nil,
+        vadProvider: (any VadProviding)? = nil,
         boundRecipe: BoundRecipe? = nil,
         liveStreamingEventShutdownTimeout: Duration = .seconds(2)
     ) -> SessionPipelineOrchestrator {
@@ -1741,6 +1911,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                 outputSink: outputSink,
                 contextProvider: contextProvider,
                 persistenceHandler: persistenceHandler,
+                vadProvider: vadProvider,
                 boundRecipe: resolvedRecipe,
                 liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout
             )
@@ -1753,6 +1924,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
             contextProvider: contextProvider,
+            vadProvider: vadProvider,
             boundRecipe: resolvedRecipe,
             liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout
         )
@@ -2146,6 +2318,57 @@ private actor ReturningTranscriber: Transcriber {
     ) async throws -> TranscriptionResult {
         _ = languageHint
         return result
+    }
+}
+
+private actor ReleaseTrackingTranscriber: Transcriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+
+    private let result: TranscriptionResult
+    private var releaseIdleResourcesCalls = 0
+
+    init(result: TranscriptionResult) {
+        self.result = result
+    }
+
+    func prepare() async throws {}
+
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = audio
+        _ = languageHint
+        return result
+    }
+
+    func releaseIdleResources() async {
+        releaseIdleResourcesCalls += 1
+    }
+
+    func releaseIdleResourcesCallCount() -> Int {
+        releaseIdleResourcesCalls
+    }
+}
+
+private actor ReleaseTrackingVadProvider: VadProviding {
+    private var releaseIdleResourcesCalls = 0
+
+    func makeSession(silenceThresholdSeconds: Double) async -> VadSessionHandle? {
+        _ = silenceThresholdSeconds
+        return nil
+    }
+
+    func releaseIdleResources() async {
+        releaseIdleResourcesCalls += 1
+    }
+
+    func releaseIdleResourcesCallCount() -> Int {
+        releaseIdleResourcesCalls
     }
 }
 

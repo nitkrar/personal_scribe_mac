@@ -292,6 +292,54 @@ final class WhisperCppTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(loadCallCount, 2)
     }
 
+    func testReleaseIdleResourcesCleansUpManagerAfterDelayAndNextPrepareReloads() async throws {
+        let descriptor = BuiltInModelCatalog.whisperCppTiny
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let manager = StubWhisperCppManager()
+        let adapter = WhisperCppTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            downloader: StubWhisperCppDownloader(),
+            idleUnloadDelay: .milliseconds(20)
+        )
+
+        try await adapter.prepare()
+        await adapter.releaseIdleResources()
+        try? await Task.sleep(for: .milliseconds(60))
+        try await adapter.prepare()
+        let cleanupCallCount = await manager.cleanupCallCount()
+        let loadCallCount = await manager.loadCallCount()
+
+        XCTAssertEqual(cleanupCallCount, 1)
+        XCTAssertEqual(loadCallCount, 2)
+    }
+
+    func testPrepareCancelsPendingIdleRelease() async throws {
+        let descriptor = BuiltInModelCatalog.whisperCppTiny
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let manager = StubWhisperCppManager()
+        let adapter = WhisperCppTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            downloader: StubWhisperCppDownloader(),
+            idleUnloadDelay: .milliseconds(20)
+        )
+
+        try await adapter.prepare()
+        await adapter.releaseIdleResources()
+        try? await Task.sleep(for: .milliseconds(5))
+        try await adapter.prepare()
+        try? await Task.sleep(for: .milliseconds(60))
+        try await adapter.prepare()
+        let cleanupCallCount = await manager.cleanupCallCount()
+        let loadCallCount = await manager.loadCallCount()
+
+        XCTAssertEqual(cleanupCallCount, 0)
+        XCTAssertEqual(loadCallCount, 1)
+    }
+
     func testLiveManagerLoadModelPassesModelFilePathToLibrary() async throws {
         let library = RecordingWhisperCppLibrary()
         let manager = LiveWhisperCppManager(library: library)

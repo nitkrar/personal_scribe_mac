@@ -2,6 +2,11 @@
 import FluidAudio
 import Foundation
 
+typealias VadSessionFactory = @Sendable (Double) -> VadSessionHandle
+
+typealias VadSessionFactoryLoader = @Sendable (URL) -> VadSessionFactory?
+typealias VadProviderSleep = @Sendable (Duration) async throws -> Void
+
 /// Production `VadProviding` backed by a lazily-loaded Silero CoreML model.
 /// The `.mlmodelc` directory is bundled as `silero-vad.mlmodelc` inside the
 /// module resources — the folder name is version-agnostic so future model
@@ -29,13 +34,18 @@ public actor FluidAudioVadProvider: VadProviding {
 
     private enum LoadState {
         case notLoaded
-        case loading(Task<VadManager?, Never>)
-        case loaded(VadManager)
+        case loading(Task<VadSessionFactory?, Never>)
+        case loaded(VadSessionFactory)
         case failed
     }
 
     private let modelURL: URL
+    private let idleUnloadDelay: Duration
+    private let sleep: VadProviderSleep
+    private let sessionFactoryLoader: VadSessionFactoryLoader
     private var loadState: LoadState = .notLoaded
+    private var idleReleaseTask: Task<Void, Never>?
+    private var idleReleaseGeneration: UInt64 = 0
 
     /// Convenience init that locates the bundled `.mlmodelc` inside the
     /// module resources. Throws if the resource is missing — that's a
@@ -53,53 +63,134 @@ public actor FluidAudioVadProvider: VadProviding {
             )
             throw BundledModelError.resourceNotFound
         }
-        self.modelURL = url
+        self.init(modelURL: url)
     }
 
     /// Explicit-URL init for tests and future callers that want to point at
     /// a non-bundled copy of a compiled Silero `.mlmodelc`.
     public init(modelURL: URL) {
+        self.init(
+            modelURL: modelURL,
+            idleUnloadDelay: .seconds(30),
+            sleep: { try await Task.sleep(for: $0) },
+            sessionFactoryLoader: Self.liveSessionFactoryLoader
+        )
+    }
+
+    init(
+        modelURL: URL,
+        idleUnloadDelay: Duration = .seconds(30),
+        sleep: @escaping VadProviderSleep = { try await Task.sleep(for: $0) },
+        sessionFactoryLoader: @escaping VadSessionFactoryLoader = FluidAudioVadProvider.liveSessionFactoryLoader
+    ) {
         self.modelURL = modelURL
+        self.idleUnloadDelay = idleUnloadDelay
+        self.sleep = sleep
+        self.sessionFactoryLoader = sessionFactoryLoader
     }
 
     public func makeSession(silenceThresholdSeconds: Double) async -> VadSessionHandle? {
-        guard let manager = await ensureManagerLoaded() else { return nil }
-        let config = VadSegmentationConfig(minSilenceDuration: silenceThresholdSeconds)
-        let session = FluidAudioVadSession(
-            inference: { chunk, state, config in
-                try await manager.processStreamingChunk(chunk, state: state, config: config)
-            },
-            config: config
-        )
-        return VadSessionHandle { samples in
-            await session.ingest(samples)
+        invalidateIdleRelease()
+        guard let sessionFactory = await ensureManagerLoaded() else { return nil }
+        return sessionFactory(silenceThresholdSeconds)
+    }
+
+    public func releaseIdleResources() async {
+        guard case .loaded = loadState else {
+            return
+        }
+
+        invalidateIdleRelease()
+        let generation = idleReleaseGeneration
+        let delay = idleUnloadDelay
+        let sleep = sleep
+        idleReleaseTask = Task {
+            do {
+                try await sleep(delay)
+            } catch {
+                return
+            }
+
+            if Task.isCancelled {
+                return
+            }
+
+            await self.finishIdleRelease(generation: generation)
         }
     }
 
-    private func ensureManagerLoaded() async -> VadManager? {
+    private func ensureManagerLoaded() async -> VadSessionFactory? {
         switch loadState {
-        case .loaded(let manager):
-            return manager
+        case .loaded(let sessionFactory):
+            return sessionFactory
         case .failed:
             return nil
         case .loading(let task):
             return await task.value
         case .notLoaded:
             let url = modelURL
-            let task = Task<VadManager?, Never> {
-                let vadConfig = VadConfig.default
-                let mlConfig = MLModelConfiguration()
-                mlConfig.computeUnits = vadConfig.computeUnits
-                mlConfig.allowLowPrecisionAccumulationOnGPU = true
-                guard let model = try? MLModel(contentsOf: url, configuration: mlConfig) else {
-                    return nil
-                }
-                return VadManager(config: vadConfig, vadModel: model)
+            let loader = sessionFactoryLoader
+            let task = Task<VadSessionFactory?, Never> {
+                loader(url)
             }
             loadState = .loading(task)
-            let manager = await task.value
-            loadState = manager.map(LoadState.loaded) ?? .failed
-            return manager
+            let sessionFactory = await task.value
+            loadState = sessionFactory.map(LoadState.loaded) ?? .failed
+            return sessionFactory
+        }
+    }
+
+    private func invalidateIdleRelease() {
+        idleReleaseGeneration &+= 1
+        idleReleaseTask?.cancel()
+        idleReleaseTask = nil
+    }
+
+    private func finishIdleRelease(generation: UInt64) async {
+        guard generation == idleReleaseGeneration else {
+            return
+        }
+
+        idleReleaseTask = nil
+        if case .loaded = loadState {
+            loadState = .notLoaded
+        }
+    }
+}
+
+private extension FluidAudioVadProvider {
+    static func liveSessionFactoryLoader(modelURL: URL) -> VadSessionFactory? {
+        let vadConfig = VadConfig.default
+        let mlConfig = MLModelConfiguration()
+        mlConfig.computeUnits = vadConfig.computeUnits
+        mlConfig.allowLowPrecisionAccumulationOnGPU = true
+        guard let model = try? MLModel(contentsOf: modelURL, configuration: mlConfig) else {
+            return nil
+        }
+        let runtime = LiveVadRuntime(manager: VadManager(config: vadConfig, vadModel: model))
+        return { silenceThresholdSeconds in
+            runtime.makeSession(silenceThresholdSeconds: silenceThresholdSeconds)
+        }
+    }
+}
+
+private final class LiveVadRuntime: @unchecked Sendable {
+    private let manager: VadManager
+
+    init(manager: VadManager) {
+        self.manager = manager
+    }
+
+    func makeSession(silenceThresholdSeconds: Double) -> VadSessionHandle {
+        let config = VadSegmentationConfig(minSilenceDuration: silenceThresholdSeconds)
+        let session = FluidAudioVadSession(
+            inference: { [manager] chunk, state, config in
+                try await manager.processStreamingChunk(chunk, state: state, config: config)
+            },
+            config: config
+        )
+        return VadSessionHandle { samples in
+            await session.ingest(samples)
         }
     }
 }
