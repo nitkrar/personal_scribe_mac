@@ -132,6 +132,66 @@ final class FluidAudioQwenTranscriberAdapterTests: PersonalScribeTranscriptionFi
             "cleanup must clear the prepared latch so a later prepare reloads the model"
         )
     }
+
+    func testTranscribeWithNilHintForwardsNilLanguageToManager() async throws {
+        let descriptor = BuiltInModelCatalog.qwen3AsrF32
+        let storageLocator = QwenAdapterTestStorageLocator(baseDirectory: testRoot)
+        let manager = StubQwenManager(resultText: "hello from qwen")
+        let adapter = FluidAudioQwenTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+        let audio = try PCMBuffer(
+            samples: [0.1, -0.2, 0.3, -0.4],
+            timestamp: ContinuousClock().now
+        )
+
+        _ = try await adapter.transcribe(audio, languageHint: nil)
+
+        let languages = await manager.transcribedLanguages()
+        XCTAssertEqual(languages, [nil])
+    }
+
+    func testTranscribeWithHintMapsToTypedQwenLanguage() async throws {
+        let descriptor = BuiltInModelCatalog.qwen3AsrF32
+        let storageLocator = QwenAdapterTestStorageLocator(baseDirectory: testRoot)
+        let manager = StubQwenManager(resultText: "hello from qwen")
+        let adapter = FluidAudioQwenTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+        let audio = try PCMBuffer(
+            samples: [0.1, -0.2, 0.3, -0.4],
+            timestamp: ContinuousClock().now
+        )
+
+        _ = try await adapter.transcribe(audio, languageHint: "ja")
+
+        let languages = await manager.transcribedLanguages()
+        XCTAssertEqual(languages, [.japanese])
+    }
+
+    func testTranscribeWithUnknownHintFallsBackToAutoDetect() async throws {
+        let descriptor = BuiltInModelCatalog.qwen3AsrF32
+        let storageLocator = QwenAdapterTestStorageLocator(baseDirectory: testRoot)
+        let manager = StubQwenManager(resultText: "hello from qwen")
+        let adapter = FluidAudioQwenTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+        let audio = try PCMBuffer(
+            samples: [0.1, -0.2, 0.3, -0.4],
+            timestamp: ContinuousClock().now
+        )
+
+        _ = try await adapter.transcribe(audio, languageHint: "xx")
+
+        let languages = await manager.transcribedLanguages()
+        XCTAssertEqual(languages, [nil])
+    }
 }
 
 private struct QwenAdapterTestStorageLocator: StorageLocator {
@@ -152,6 +212,7 @@ private actor StubQwenManager: FluidAudioQwenManaging {
     private var downloadVariantsStorage: [Qwen3AsrVariant] = []
     private var loadDirectoriesStorage: [URL] = []
     private var transcribedSamplesStorage: [[Float]] = []
+    private var transcribedLanguagesStorage: [Qwen3AsrConfig.Language?] = []
     private var cleanupCallCountStorage = 0
 
     init(resultText: String) {
@@ -171,8 +232,12 @@ private actor StubQwenManager: FluidAudioQwenManaging {
         loadDirectoriesStorage.append(directory)
     }
 
-    func transcribe(audioSamples: [Float]) async throws -> String {
+    func transcribe(
+        audioSamples: [Float],
+        language: Qwen3AsrConfig.Language?
+    ) async throws -> String {
         transcribedSamplesStorage.append(audioSamples)
+        transcribedLanguagesStorage.append(language)
         return resultText
     }
 
@@ -202,6 +267,10 @@ private actor StubQwenManager: FluidAudioQwenManaging {
 
     func transcribedSamples() -> [[Float]] {
         transcribedSamplesStorage
+    }
+
+    func transcribedLanguages() -> [Qwen3AsrConfig.Language?] {
+        transcribedLanguagesStorage
     }
 
     func cleanupCallCount() -> Int {

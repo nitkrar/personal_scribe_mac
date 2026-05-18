@@ -2040,7 +2040,11 @@ private actor CountingTranscriber: Transcriber {
         }
     }
 
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
         calls += 1
         if let delay {
             try? await Task.sleep(for: delay)
@@ -2093,7 +2097,11 @@ private actor SlowPrepareTranscriber: Transcriber {
         }
     }
 
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
         transcribeCount += 1
         return result
     }
@@ -2132,8 +2140,12 @@ private actor ReturningTranscriber: Transcriber {
         AsyncStream { $0.finish() }
     }
 
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        result
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
+        return result
     }
 }
 
@@ -2152,7 +2164,11 @@ private actor InspectingTranscriber: Transcriber {
         AsyncStream { $0.finish() }
     }
 
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
         lastObservedSampleCount = audio.samples.count
         return TranscriptionResult(
             text: resultText,
@@ -2402,7 +2418,11 @@ private struct TrackedTranscriber: Transcriber {
         }
     }
 
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
         await tracker.recordTranscribe()
         return result
     }

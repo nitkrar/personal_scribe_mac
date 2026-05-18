@@ -1,3 +1,4 @@
+@preconcurrency import WhisperKit
 import Foundation
 import XCTest
 @testable import PersonalScribeCore
@@ -209,6 +210,30 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(loadCallCount, 1)
         XCTAssertEqual(transcribeCallCount, 1)
         XCTAssertEqual(lastSamples, audio.samples)
+    }
+
+    func testTranscribeForwardsLanguageHintToManager() async throws {
+        let descriptor = BuiltInModelCatalog.whisperKitTiny
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let manager = StubWhisperKitManager(
+            result: [WhisperKitManagerResult(text: "hello world")]
+        )
+        let adapter = WhisperKitTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+        let audio = try PCMBuffer(
+            samples: [0.2, -0.1, 0.4, -0.2],
+            sampleRate: 2_000,
+            channelCount: 1,
+            timestamp: ContinuousClock.now
+        )
+
+        _ = try await adapter.transcribe(audio, languageHint: "ja")
+
+        let lastLanguageHint = await manager.lastLanguageHint()
+        XCTAssertEqual(lastLanguageHint, "ja")
     }
 
     func testTranscribeReturnsValueOnlyResult() async throws {
@@ -452,6 +477,74 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(snapshot?.useBackgroundDownloadSession, false)
     }
 
+    func testLiveManagerTranscribeWithNilHintLeavesDecodeOptionsLanguageUnset() async throws {
+        let runtime = RecordingWhisperKitRuntime(
+            result: [WhisperKitManagerResult(text: "hello from runtime")]
+        )
+        let manager = LiveWhisperKitManager(
+            whisperFactory: { _ in
+                WhisperKitRuntimeHandle(
+                    transcribeSamples: { audioArray, decodeOptions in
+                        try await runtime.transcribeSamples(
+                            audioArray: audioArray,
+                            decodeOptions: decodeOptions
+                        )
+                    },
+                    unloadModels: {
+                        await runtime.unloadModels()
+                    }
+                )
+            }
+        )
+        let modelFolder = try temporaryRootDirectory()
+            .appendingPathComponent("openai_whisper-tiny", isDirectory: true)
+        try FileManager.default.createDirectory(at: modelFolder, withIntermediateDirectories: true)
+
+        try await manager.loadModel(
+            modelName: "openai_whisper-tiny",
+            modelFolder: modelFolder
+        )
+        _ = try await manager.transcribe(audioSamples: [0.1, 0.2, 0.3], languageHint: nil)
+
+        let calls = await runtime.transcribeCalls()
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertNil(calls.first?.language)
+    }
+
+    func testLiveManagerTranscribeWithHintSetsDecodeOptionsLanguage() async throws {
+        let runtime = RecordingWhisperKitRuntime(
+            result: [WhisperKitManagerResult(text: "hello from runtime")]
+        )
+        let manager = LiveWhisperKitManager(
+            whisperFactory: { _ in
+                WhisperKitRuntimeHandle(
+                    transcribeSamples: { audioArray, decodeOptions in
+                        try await runtime.transcribeSamples(
+                            audioArray: audioArray,
+                            decodeOptions: decodeOptions
+                        )
+                    },
+                    unloadModels: {
+                        await runtime.unloadModels()
+                    }
+                )
+            }
+        )
+        let modelFolder = try temporaryRootDirectory()
+            .appendingPathComponent("openai_whisper-tiny", isDirectory: true)
+        try FileManager.default.createDirectory(at: modelFolder, withIntermediateDirectories: true)
+
+        try await manager.loadModel(
+            modelName: "openai_whisper-tiny",
+            modelFolder: modelFolder
+        )
+        _ = try await manager.transcribe(audioSamples: [0.1, 0.2, 0.3], languageHint: "ja")
+
+        let calls = await runtime.transcribeCalls()
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(calls.first?.language, "ja")
+    }
+
     private func temporaryRootDirectory() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -513,6 +606,7 @@ private actor StubWhisperKitManager: WhisperKitManaging {
     private var loadedModelNamesStorage: [String] = []
     private var transcribeCallCountStorage = 0
     private var lastSamplesStorage: [Float] = []
+    private var lastLanguageHintStorage: String?
     private var cleanupCallCountStorage = 0
 
     init(
@@ -583,9 +677,13 @@ private actor StubWhisperKitManager: WhisperKitManaging {
         }
     }
 
-    func transcribe(audioSamples: [Float]) async throws -> [WhisperKitManagerResult] {
+    func transcribe(
+        audioSamples: [Float],
+        languageHint: String?
+    ) async throws -> [WhisperKitManagerResult] {
         transcribeCallCountStorage += 1
         lastSamplesStorage = audioSamples
+        lastLanguageHintStorage = languageHint
         if let transcribeError {
             throw transcribeError
         }
@@ -616,8 +714,48 @@ private actor StubWhisperKitManager: WhisperKitManaging {
         lastSamplesStorage
     }
 
+    func lastLanguageHint() -> String? {
+        lastLanguageHintStorage
+    }
+
     func cleanupCallCount() -> Int {
         cleanupCallCountStorage
+    }
+}
+
+private actor RecordingWhisperKitRuntime {
+    struct TranscribeCall: Equatable {
+        let audioSamples: [Float]
+        let language: String?
+    }
+
+    private let result: [WhisperKitManagerResult]
+    private var transcribeCallsStorage: [TranscribeCall] = []
+    private var unloadCallCountStorage = 0
+
+    init(result: [WhisperKitManagerResult]) {
+        self.result = result
+    }
+
+    func transcribeSamples(
+        audioArray: [Float],
+        decodeOptions: DecodingOptions?
+    ) async throws -> [WhisperKitManagerResult] {
+        transcribeCallsStorage.append(
+            TranscribeCall(
+                audioSamples: audioArray,
+                language: decodeOptions?.language
+            )
+        )
+        return result
+    }
+
+    func unloadModels() async {
+        unloadCallCountStorage += 1
+    }
+
+    func transcribeCalls() -> [TranscribeCall] {
+        transcribeCallsStorage
     }
 }
 

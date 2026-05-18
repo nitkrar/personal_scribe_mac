@@ -18,5 +18,14 @@ public protocol Transcriber: ModelLifecycle, Sendable {
     /// expected to have completed `prepare()` before being called.
     /// Errors propagate as `PersonalScribeError` per the legacy
     /// protocol's runtime convention.
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult
+}
+
+public extension Transcriber {
+    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+        try await transcribe(audio, languageHint: nil)
+    }
 }

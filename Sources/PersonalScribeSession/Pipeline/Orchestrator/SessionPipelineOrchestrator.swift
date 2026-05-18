@@ -10,6 +10,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private let postProcessingPipeline: any PostProcessingPipeline
     private let outputSink: any PipelineOutputSink
     private let contextProvider: any PipelineContextProviding
+    private let modelLanguagePreference: ModelLanguagePreference?
     private let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
     /// VAD provider — nil means the feature is compiled in but not wired (tests)
     /// OR the bundled model failed to load and the provider elected to go silent.
@@ -107,6 +108,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         postProcessingPipeline: any PostProcessingPipeline = DefaultPostProcessingPipeline(),
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
+        modelLanguagePreference: ModelLanguagePreference? = nil,
         vadProvider: (any VadProviding)? = nil,
         boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds,
@@ -126,6 +128,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
             contextProvider: contextProvider,
+            modelLanguagePreference: modelLanguagePreference,
             persistenceHandler: persistenceHandler,
             vadProvider: vadProvider,
             boundRecipe: boundRecipe,
@@ -140,6 +143,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         postProcessingPipeline: any PostProcessingPipeline,
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
+        modelLanguagePreference: ModelLanguagePreference? = nil,
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?,
         vadProvider: (any VadProviding)? = nil,
         boundRecipe: BoundRecipe? = nil,
@@ -152,6 +156,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.postProcessingPipeline = postProcessingPipeline
         self.outputSink = outputSink
         self.contextProvider = contextProvider
+        self.modelLanguagePreference = modelLanguagePreference
         self.persistenceHandler = persistenceHandler
         self.vadProvider = vadProvider
         self.boundRecipe = boundRecipe
@@ -765,10 +770,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
 
         do {
+            let languageHint = await resolveLanguageHintForCurrentMode()
             switch processor {
             case .transcriber(let transcriber):
                 let coalesced = try Self.coalesce(replayBuffers)
-                return try await transcriber.transcribe(coalesced)
+                return try await transcriber.transcribe(
+                    coalesced,
+                    languageHint: languageHint
+                )
 
             case .streamingTranscriber:
                 return try await runBoundStreamingTranscription(
@@ -780,7 +789,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 let fusion = DiarizedTurnTranscriptionProcessor(
                     diarizer: diarizer,
                     transcriber: perTurnTranscriber,
-                    sensitivity: sensitivity
+                    sensitivity: sensitivity,
+                    languageHint: languageHint
                 )
                 let coalesced = try Self.coalesce(replayBuffers)
                 let output = try await fusion.process(audio: coalesced, priors: [])
@@ -1539,12 +1549,53 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     ) async throws -> TranscriptionResult? {
         try await transcriber.prepare()
         let coalesced = try Self.coalesce(replayBuffers)
-        let result = try await transcriber.transcribe(coalesced)
+        let languageHint = await resolveLanguageHintForCurrentMode()
+        let result = try await transcriber.transcribe(
+            coalesced,
+            languageHint: languageHint
+        )
         let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return nil
         }
         return result
+    }
+
+    private func resolveLanguageHintForCurrentMode() async -> String? {
+        guard
+            let modelLanguagePreference,
+            let descriptorID = pinnedASRDescriptorIDForLanguageHint(in: activeContext.activeMode)
+        else {
+            return nil
+        }
+
+        return await modelLanguagePreference.hint(for: descriptorID)
+    }
+
+    private func pinnedASRDescriptorIDForLanguageHint(
+        in mode: WorkflowMode?
+    ) -> String? {
+        guard let mode else {
+            return nil
+        }
+
+        for processor in mode.processors {
+            switch processor {
+            case .transcriber(let kind, let descriptorID) where kind == .asr:
+                if let descriptorID {
+                    return descriptorID
+                }
+            case .diarizedTurns(_, let transcriberKind, let descriptorID, _)
+                where transcriberKind == .asr:
+                if let descriptorID {
+                    return descriptorID
+                }
+            default:
+                continue
+            }
+        }
+
+        return nil
     }
 
     /// Sequentially prepare every processor referenced by `recipe`.

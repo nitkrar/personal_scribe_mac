@@ -16,7 +16,10 @@ protocol WhisperKitManaging: Sendable {
         modelFolder: URL
     ) async throws
 
-    func transcribe(audioSamples: [Float]) async throws -> [WhisperKitManagerResult]
+    func transcribe(
+        audioSamples: [Float],
+        languageHint: String?
+    ) async throws -> [WhisperKitManagerResult]
     func cleanup() async
 }
 
@@ -30,6 +33,11 @@ protocol WhisperKitHubSnapshotting: Sendable {
 
 struct WhisperKitManagerResult: Sendable, Equatable {
     let text: String
+}
+
+struct WhisperKitRuntimeHandle {
+    let transcribeSamples: ([Float], DecodingOptions?) async throws -> [WhisperKitManagerResult]
+    let unloadModels: () async -> Void
 }
 
 extension HubApiWrapper: WhisperKitHubSnapshotting {
@@ -127,13 +135,19 @@ public actor WhisperKitTranscriberAdapter: Transcriber {
         progressBroadcaster.emit(.idle)
     }
 
-    public func transcribe(_ audio: PCMBuffer) async throws -> PersonalScribeCore.TranscriptionResult {
+    public func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> PersonalScribeCore.TranscriptionResult {
         try await prepare()
 
         let startedAt = ContinuousClock.now
 
         do {
-            let results = try await manager.transcribe(audioSamples: audio.samples)
+            let results = try await manager.transcribe(
+                audioSamples: audio.samples,
+                languageHint: languageHint
+            )
             let measuredTotalDuration = startedAt.duration(to: ContinuousClock.now)
             return makeTranscriptionResult(
                 from: results,
@@ -384,16 +398,28 @@ private enum WhisperKitArtifactFilesystem {
 internal actor LiveWhisperKitManager: WhisperKitManaging {
     private let fileManager: FileManager
     private let hubFactory: @Sendable (URL) -> any WhisperKitHubSnapshotting
-    private let whisperFactory: (WhisperKitConfig) async throws -> WhisperKit
-    private var whisperKit: WhisperKit?
+    private let whisperFactory: (WhisperKitConfig) async throws -> WhisperKitRuntimeHandle
+    private var whisperKit: WhisperKitRuntimeHandle?
 
     init(
         fileManager: FileManager = .default,
         hubFactory: @escaping @Sendable (URL) -> any WhisperKitHubSnapshotting = {
             HubApiWrapper(downloadBase: $0)
         },
-        whisperFactory: @escaping (WhisperKitConfig) async throws -> WhisperKit = { config in
-            try await WhisperKit(config)
+        whisperFactory: @escaping (WhisperKitConfig) async throws -> WhisperKitRuntimeHandle = { config in
+            let whisperKit = try await WhisperKit(config)
+            return WhisperKitRuntimeHandle(
+                transcribeSamples: { audioArray, decodeOptions in
+                    let results = try await whisperKit.transcribe(
+                        audioArray: audioArray,
+                        decodeOptions: decodeOptions
+                    )
+                    return results.map { WhisperKitManagerResult(text: $0.text) }
+                },
+                unloadModels: {
+                    await whisperKit.unloadModels()
+                }
+            )
         }
     ) {
         self.fileManager = fileManager
@@ -461,13 +487,16 @@ internal actor LiveWhisperKitManager: WhisperKitManaging {
         whisperKit = try await whisperFactory(config)
     }
 
-    func transcribe(audioSamples: [Float]) async throws -> [WhisperKitManagerResult] {
+    func transcribe(
+        audioSamples: [Float],
+        languageHint: String?
+    ) async throws -> [WhisperKitManagerResult] {
         guard let whisperKit else {
             throw PersonalScribeError.modelLoadFailure
         }
 
-        let results = try await whisperKit.transcribe(audioArray: audioSamples)
-        return results.map { WhisperKitManagerResult(text: $0.text) }
+        let decodeOptions = languageHint.map { DecodingOptions(language: $0) }
+        return try await whisperKit.transcribeSamples(audioSamples, decodeOptions)
     }
 
     func cleanup() async {

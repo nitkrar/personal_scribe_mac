@@ -424,8 +424,12 @@ private actor StubTranscriber: Transcriber {
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { $0.finish() }
     }
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        TranscriptionResult(
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
+        return TranscriptionResult(
             text: "",
             audioDuration: .zero,
             processingDuration: .zero

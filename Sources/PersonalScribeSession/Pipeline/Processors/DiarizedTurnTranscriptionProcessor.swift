@@ -5,6 +5,7 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
     private let diarizer: any SpeakerDiarizer
     private let transcriber: any Transcriber
     private let sensitivity: SpeakerSeparationSensitivity
+    private let languageHint: String?
     private let lock = NSLock()
 
     private var hasPreparedModel = false
@@ -13,11 +14,13 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
     public init(
         diarizer: any SpeakerDiarizer,
         transcriber: any Transcriber,
-        sensitivity: SpeakerSeparationSensitivity = .balanced
+        sensitivity: SpeakerSeparationSensitivity = .balanced,
+        languageHint: String? = nil
     ) {
         self.diarizer = diarizer
         self.transcriber = transcriber
         self.sensitivity = sensitivity
+        self.languageHint = languageHint
     }
 
     public func prepare() async throws {
@@ -130,7 +133,10 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
                 }
 
                 let prepared = try Self.preparedTurnAudio(from: slice)
-                let result = try await transcriber.transcribe(prepared.buffer)
+                let result = try await transcriber.transcribe(
+                    prepared.buffer,
+                    languageHint: languageHint
+                )
                 transcribedTurns.append(
                     TurnTranscription(
                         turn: turn,

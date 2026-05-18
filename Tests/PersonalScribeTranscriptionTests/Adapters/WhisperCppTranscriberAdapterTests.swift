@@ -226,6 +226,29 @@ final class WhisperCppTranscriberAdapterTests: XCTestCase {
         assertContainsNoReferenceTypes(result)
     }
 
+    func testTranscribeForwardsLanguageHintToManager() async throws {
+        let descriptor = BuiltInModelCatalog.whisperCppTiny
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let manager = StubWhisperCppManager(result: WhisperCppManagerResult(text: "hello world"))
+        let adapter = WhisperCppTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            downloader: StubWhisperCppDownloader()
+        )
+        let audio = try PCMBuffer(
+            samples: [0.2, -0.1, 0.4, -0.2],
+            sampleRate: 2_000,
+            channelCount: 1,
+            timestamp: ContinuousClock.now
+        )
+
+        _ = try await adapter.transcribe(audio, languageHint: "ja")
+
+        let lastLanguageHint = await manager.lastLanguageHint()
+        XCTAssertEqual(lastLanguageHint, "ja")
+    }
+
     func testTranscribeFailureThrowsTranscriptionFailure() async throws {
         let descriptor = BuiltInModelCatalog.whisperCppTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
@@ -303,11 +326,40 @@ final class WhisperCppTranscriberAdapterTests: XCTestCase {
         try Data([0x01]).write(to: modelURL)
 
         try await manager.loadModel(from: modelURL)
-        let result = try await manager.transcribe(audioSamples: [0.1, 0.2, 0.3])
+        let result = try await manager.transcribe(
+            audioSamples: [0.1, 0.2, 0.3],
+            languageHint: nil
+        )
 
         XCTAssertEqual(result.text, "hello from library")
         XCTAssertEqual(library.transcribeCalls.count, 1)
         XCTAssertEqual(library.transcribeCalls.first?.audioSamples, [0.1, 0.2, 0.3])
+    }
+
+    func testLiveManagerTranscribeWithNilHintFallsBackToAutoLanguage() async throws {
+        let library = RecordingWhisperCppLibrary(transcribedText: "hello from library")
+        let manager = LiveWhisperCppManager(library: library)
+        let modelURL = try temporaryRootDirectory()
+            .appendingPathComponent("ggml-tiny.bin", isDirectory: false)
+        try Data([0x01]).write(to: modelURL)
+
+        try await manager.loadModel(from: modelURL)
+        _ = try await manager.transcribe(audioSamples: [0.1, 0.2, 0.3], languageHint: nil)
+
+        XCTAssertEqual(library.transcribeCalls.first?.language, "auto")
+    }
+
+    func testLiveManagerTranscribeWithHintPassesExplicitLanguage() async throws {
+        let library = RecordingWhisperCppLibrary(transcribedText: "hello from library")
+        let manager = LiveWhisperCppManager(library: library)
+        let modelURL = try temporaryRootDirectory()
+            .appendingPathComponent("ggml-tiny.bin", isDirectory: false)
+        try Data([0x01]).write(to: modelURL)
+
+        try await manager.loadModel(from: modelURL)
+        _ = try await manager.transcribe(audioSamples: [0.1, 0.2, 0.3], languageHint: "ja")
+
+        XCTAssertEqual(library.transcribeCalls.first?.language, "ja")
     }
 
     private func temporaryRootDirectory() throws -> URL {
@@ -421,6 +473,7 @@ private actor StubWhisperCppManager: WhisperCppManaging {
     private var loadedModelPathsStorage: [URL] = []
     private var transcribeCallCountStorage = 0
     private var lastSamplesStorage: [Float] = []
+    private var lastLanguageHintStorage: String?
     private var cleanupCallCountStorage = 0
 
     init(
@@ -449,9 +502,13 @@ private actor StubWhisperCppManager: WhisperCppManaging {
         }
     }
 
-    func transcribe(audioSamples: [Float]) async throws -> WhisperCppManagerResult {
+    func transcribe(
+        audioSamples: [Float],
+        languageHint: String?
+    ) async throws -> WhisperCppManagerResult {
         transcribeCallCountStorage += 1
         lastSamplesStorage = audioSamples
+        lastLanguageHintStorage = languageHint
 
         if let transcribeError {
             throw transcribeError
@@ -480,6 +537,10 @@ private actor StubWhisperCppManager: WhisperCppManaging {
         lastSamplesStorage
     }
 
+    func lastLanguageHint() -> String? {
+        lastLanguageHintStorage
+    }
+
     func cleanupCallCount() -> Int {
         cleanupCallCountStorage
     }
@@ -490,6 +551,7 @@ private final class RecordingWhisperCppLibrary: @unchecked Sendable, WhisperCppL
         let context: OpaquePointer
         let audioSamples: [Float]
         let nThreads: Int32
+        let language: String
     }
 
     let contextToReturn = OpaquePointer(bitPattern: 0xDAD)!
@@ -514,13 +576,15 @@ private final class RecordingWhisperCppLibrary: @unchecked Sendable, WhisperCppL
     func transcribe(
         context: OpaquePointer,
         audioSamples: [Float],
-        nThreads: Int32
+        nThreads: Int32,
+        languageHint: String?
     ) throws -> String {
         transcribeCalls.append(
             TranscribeCall(
                 context: context,
                 audioSamples: audioSamples,
-                nThreads: nThreads
+                nThreads: nThreads,
+                language: languageHint ?? "auto"
             )
         )
         return transcribedText

@@ -200,7 +200,8 @@ public enum AppComposition {
             availableKindsProvider: {
                 Set(ModelKind.allCases.filter(\.isEnabled))
             },
-            outputSink: liveCursorOutput
+            outputSink: liveCursorOutput,
+            modelLanguagePreference: modelLanguagePreference
         )
 
         wirePostSetActivePrewarm(modelService: modelService, coordinator: coordinator)

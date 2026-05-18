@@ -38,7 +38,11 @@ public actor FakeTranscriber: Transcriber {
         }
     }
 
-    public func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+    public func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
         try await maybeDelay()
 
         if let transcribeError {

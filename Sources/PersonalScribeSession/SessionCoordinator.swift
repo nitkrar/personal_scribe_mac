@@ -48,7 +48,8 @@ public actor SessionCoordinator {
         vadProvider: (any VadProviding)? = nil,
         workflowModeRegistry: WorkflowModeRegistry? = nil,
         availableKindsProvider: (@Sendable () -> Set<ModelKind>)? = nil,
-        outputSink: (any PipelineOutputSink)? = nil
+        outputSink: (any PipelineOutputSink)? = nil,
+        modelLanguagePreference: ModelLanguagePreference? = nil
     ) {
         self.capture = capture
         self.fixedRecipe = BoundRecipe(
@@ -70,7 +71,9 @@ public actor SessionCoordinator {
             transcriptRepository: transcriptRepository,
             logger: logger,
             vadProvider: vadProvider,
-            outputSink: outputSink
+            outputSink: outputSink,
+            workflowModeRegistry: workflowModeRegistry,
+            modelLanguagePreference: modelLanguagePreference
         )
         Task { [weak self] in
             await self?.installAutoStopHandler()
@@ -90,7 +93,8 @@ public actor SessionCoordinator {
         vadProvider: (any VadProviding)? = nil,
         workflowModeRegistry: WorkflowModeRegistry,
         availableKindsProvider: @escaping @Sendable () -> Set<ModelKind>,
-        outputSink: (any PipelineOutputSink)? = nil
+        outputSink: (any PipelineOutputSink)? = nil,
+        modelLanguagePreference: ModelLanguagePreference? = nil
     ) {
         self.capture = capture
         self.fixedRecipe = nil
@@ -105,7 +109,9 @@ public actor SessionCoordinator {
             transcriptRepository: transcriptRepository,
             logger: logger,
             vadProvider: vadProvider,
-            outputSink: outputSink
+            outputSink: outputSink,
+            workflowModeRegistry: workflowModeRegistry,
+            modelLanguagePreference: modelLanguagePreference
         )
         Task { [weak self] in
             await self?.installAutoStopHandler()
@@ -445,14 +451,19 @@ public actor SessionCoordinator {
         transcriptRepository: TranscriptRepository?,
         logger: PersonalScribeLogger,
         vadProvider: (any VadProviding)?,
-        outputSink: (any PipelineOutputSink)? = nil
+        outputSink: (any PipelineOutputSink)? = nil,
+        workflowModeRegistry: WorkflowModeRegistry? = nil,
+        modelLanguagePreference: ModelLanguagePreference? = nil
     ) -> SessionPipelineOrchestrator {
         SessionPipelineOrchestrator(
             capture: capture,
             logger: logger,
             postProcessingPipeline: DefaultPostProcessingPipeline(),
             outputSink: outputSink ?? CoordinatorPipelineOutputSink(),
-            contextProvider: CoordinatorPipelineContextProvider(),
+            contextProvider: CoordinatorPipelineContextProvider(
+                workflowModeRegistry: workflowModeRegistry
+            ),
+            modelLanguagePreference: modelLanguagePreference,
             persistenceHandler: makePersistenceHandler(
                 transcriptRepository: transcriptRepository,
                 logger: logger
@@ -510,7 +521,12 @@ private struct CoordinatorPipelineOutputSink: PipelineOutputSink {
 }
 
 private struct CoordinatorPipelineContextProvider: PipelineContextProviding {
+    let workflowModeRegistry: WorkflowModeRegistry?
+
     func currentContext() -> PipelineContextSnapshot {
-        PipelineContextSnapshot(streamingOutputEnabled: false)
+        PipelineContextSnapshot(
+            activeMode: workflowModeRegistry?.currentMode,
+            streamingOutputEnabled: false
+        )
     }
 }

@@ -212,7 +212,11 @@ private actor RecordingTranscriber: Transcriber {
         }
     }
 
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
         transcribeCallCount += 1
         return result
     }

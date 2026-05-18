@@ -672,8 +672,12 @@ private final class ProgressReportingTranscriber: @unchecked Sendable, Transcrib
         relay.stream()
     }
 
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        result
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
+        return result
     }
 
     func emit(_ progress: ModelDownloadProgress) {

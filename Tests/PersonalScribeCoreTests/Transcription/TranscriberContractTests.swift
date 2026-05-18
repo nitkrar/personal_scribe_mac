@@ -20,8 +20,12 @@ final class TranscriberContractTests: XCTestCase {
             }
         }
 
-        func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-            pinnedResult
+        func transcribe(
+            _ audio: PCMBuffer,
+            languageHint: String?
+        ) async throws -> TranscriptionResult {
+            _ = languageHint
+            return pinnedResult
         }
     }
 

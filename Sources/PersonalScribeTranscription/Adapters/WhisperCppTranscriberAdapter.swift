@@ -4,7 +4,10 @@ import PersonalScribeCore
 
 protocol WhisperCppManaging: Sendable {
     func loadModel(from modelFileURL: URL) async throws
-    func transcribe(audioSamples: [Float]) async throws -> WhisperCppManagerResult
+    func transcribe(
+        audioSamples: [Float],
+        languageHint: String?
+    ) async throws -> WhisperCppManagerResult
     func cleanup() async
 }
 
@@ -22,7 +25,8 @@ protocol WhisperCppLibrary: Sendable {
     func transcribe(
         context: OpaquePointer,
         audioSamples: [Float],
-        nThreads: Int32
+        nThreads: Int32,
+        languageHint: String?
     ) throws -> String
 }
 
@@ -115,13 +119,19 @@ public actor WhisperCppTranscriberAdapter: Transcriber {
         progressBroadcaster.emit(.idle)
     }
 
-    public func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+    public func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
         try await prepare()
 
         let startedAt = ContinuousClock.now
 
         do {
-            let result = try await manager.transcribe(audioSamples: audio.samples)
+            let result = try await manager.transcribe(
+                audioSamples: audio.samples,
+                languageHint: languageHint
+            )
             let measuredTotalDuration = startedAt.duration(to: ContinuousClock.now)
             return makeTranscriptionResult(
                 from: result,
@@ -556,7 +566,10 @@ internal final class LiveWhisperCppManager: WhisperCppManaging, @unchecked Senda
         }
     }
 
-    func transcribe(audioSamples: [Float]) async throws -> WhisperCppManagerResult {
+    func transcribe(
+        audioSamples: [Float],
+        languageHint: String?
+    ) async throws -> WhisperCppManagerResult {
         let nThreads = Self.defaultThreadCount()
         return try await enqueue {
             guard let context = self.context else {
@@ -566,7 +579,8 @@ internal final class LiveWhisperCppManager: WhisperCppManaging, @unchecked Senda
             let text = try self.library.transcribe(
                 context: context,
                 audioSamples: audioSamples,
-                nThreads: nThreads
+                nThreads: nThreads,
+                languageHint: languageHint
             )
             return WhisperCppManagerResult(text: text)
         }
@@ -627,7 +641,8 @@ private struct LiveWhisperCppLibrary: WhisperCppLibrary {
     func transcribe(
         context: OpaquePointer,
         audioSamples: [Float],
-        nThreads: Int32
+        nThreads: Int32,
+        languageHint: String?
     ) throws -> String {
         var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
         params.print_special = false
@@ -649,8 +664,9 @@ private struct LiveWhisperCppLibrary: WhisperCppLibrary {
         params.offset_ms = 0
         params.duration_ms = 0
 
-        let resultCode = "auto".withCString { auto -> Int32 in
-            params.language = auto
+        let resolvedLanguage = languageHint ?? "auto"
+        let resultCode = resolvedLanguage.withCString { languageCString -> Int32 in
+            params.language = languageCString
             whisper_reset_timings(context)
             return audioSamples.withUnsafeBufferPointer { samples in
                 whisper_full(context, params, samples.baseAddress, Int32(samples.count))

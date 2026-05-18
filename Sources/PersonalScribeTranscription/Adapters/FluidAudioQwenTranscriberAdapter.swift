@@ -9,7 +9,10 @@ protocol FluidAudioQwenManaging: Sendable {
         progressHandler: DownloadUtils.ProgressHandler?
     ) async throws
     func loadModels(from directory: URL) async throws
-    func transcribe(audioSamples: [Float]) async throws -> String
+    func transcribe(
+        audioSamples: [Float],
+        language: Qwen3AsrConfig.Language?
+    ) async throws -> String
     func cleanup() async
 }
 
@@ -119,14 +122,21 @@ public actor FluidAudioQwenTranscriberAdapter: Transcriber {
         progressBroadcaster.emit(.idle)
     }
 
-    public func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
+    public func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
         try await prepare()
 
         let clock = ContinuousClock()
         let start = clock.now
+        let qwenLanguage = languageHint.flatMap { Qwen3LanguageMap.bcp47ToQwen[$0] }
 
         do {
-            let text = try await manager.transcribe(audioSamples: audio.samples)
+            let text = try await manager.transcribe(
+                audioSamples: audio.samples,
+                language: qwenLanguage
+            )
             let processingDuration = start.duration(to: clock.now)
 
             return TranscriptionResult(
@@ -211,8 +221,14 @@ private actor LiveFluidAudioQwenManager: FluidAudioQwenManaging {
         try await resolvedManager().loadModels(from: directory)
     }
 
-    func transcribe(audioSamples: [Float]) async throws -> String {
-        try await resolvedManager().transcribe(audioSamples: audioSamples)
+    func transcribe(
+        audioSamples: [Float],
+        language: Qwen3AsrConfig.Language?
+    ) async throws -> String {
+        try await resolvedManager().transcribe(
+            audioSamples: audioSamples,
+            language: language
+        )
     }
 
     func cleanup() async {
@@ -251,8 +267,12 @@ private actor UnsupportedFluidAudioQwenManager: FluidAudioQwenManaging {
         throw UnsupportedOSError.requiresMacOS15
     }
 
-    func transcribe(audioSamples: [Float]) async throws -> String {
+    func transcribe(
+        audioSamples: [Float],
+        language: Qwen3AsrConfig.Language?
+    ) async throws -> String {
         _ = audioSamples
+        _ = language
         throw UnsupportedOSError.requiresMacOS15
     }
 

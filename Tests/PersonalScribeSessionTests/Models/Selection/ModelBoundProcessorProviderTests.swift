@@ -300,8 +300,12 @@ private final class MarkerTranscriber: @unchecked Sendable, Transcriber {
         }
     }
 
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        TranscriptionResult(
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
+        return TranscriptionResult(
             text: "marker",
             audioDuration: audio.duration,
             processingDuration: .zero

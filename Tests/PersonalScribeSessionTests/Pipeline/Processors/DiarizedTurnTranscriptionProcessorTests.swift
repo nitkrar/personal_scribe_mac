@@ -449,8 +449,12 @@ private final class RecordingTranscriber: @unchecked Sendable, Transcriber {
         }
     }
 
-    func transcribe(_ audio: PCMBuffer) async throws -> TranscriptionResult {
-        try lock.withLock {
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
+        return try lock.withLock {
             if let minimumSampleCountForSuccess, audio.samples.count < minimumSampleCountForSuccess {
                 struct ShortInputError: Error {}
                 sampleBatches.append(audio.samples)
