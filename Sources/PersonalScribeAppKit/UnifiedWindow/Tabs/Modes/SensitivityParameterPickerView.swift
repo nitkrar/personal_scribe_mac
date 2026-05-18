@@ -47,7 +47,7 @@ struct SensitivityParameterPickerView: View {
 
     private var defaultLabel: String {
         let live = SpeakerSeparationSensitivityPreference.resolve(from: defaults)
-        return "Default (Live: \(Self.overrideLabel(for: live)))"
+        return Self.defaultLabel(for: live)
     }
 
     private var selectionBinding: Binding<Selection> {
@@ -69,6 +69,10 @@ struct SensitivityParameterPickerView: View {
                 }
             }
         )
+    }
+
+    static func defaultLabel(for sensitivity: SpeakerSeparationSensitivity) -> String {
+        "Default (\(overrideLabel(for: sensitivity)))"
     }
 
     static func overrideLabel(for sensitivity: SpeakerSeparationSensitivity) -> String {

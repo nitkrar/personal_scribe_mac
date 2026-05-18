@@ -47,7 +47,11 @@ struct ParameterPickerView: View {
 
     private var defaultLabel: String {
         let live = settingKey.resolve(from: defaults)
-        return "Default (Live: \(Self.overrideLabel(for: live)))"
+        return Self.defaultLabel(for: live)
+    }
+
+    static func defaultLabel(for value: Bool) -> String {
+        "Default (\(overrideLabel(for: value)))"
     }
 
     static func overrideLabel(for value: Bool) -> String {
