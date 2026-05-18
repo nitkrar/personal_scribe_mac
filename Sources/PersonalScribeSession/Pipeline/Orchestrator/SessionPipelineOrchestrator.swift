@@ -765,7 +765,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
 
         do {
-            let languageHint: String? = nil
+            let languageHint = activeContext.activeMode?.language?.resolved
             switch processor {
             case .transcriber(let transcriber):
                 let coalesced = try Self.coalesce(replayBuffers)
@@ -1544,7 +1544,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     ) async throws -> TranscriptionResult? {
         try await transcriber.prepare()
         let coalesced = try Self.coalesce(replayBuffers)
-        let languageHint: String? = nil
+        let languageHint = activeContext.activeMode?.language?.resolved
         let result = try await transcriber.transcribe(
             coalesced,
             languageHint: languageHint

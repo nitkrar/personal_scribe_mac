@@ -322,6 +322,165 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         XCTAssertEqual(snapshot.lastCompletedResult?.text, "Ok.")
     }
 
+    func testOrchestratorPassesModeLanguageHintWhenModePinsDescriptor() async throws {
+        let buffer = try Self.makeBuffer(sampleCount: 16_000)
+        let stubTranscriber = StubBoundTranscriber(
+            result: TranscriptionResult(
+                text: "konnichiwa",
+                audioDuration: .seconds(1),
+                processingDuration: .zero
+            )
+        )
+        let mode = WorkflowMode(
+            id: "pinned-whisper",
+            name: "Pinned Whisper",
+            language: Parameter<String?>.override("ja"),
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.whisperKitTiny.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
+        )
+        let recipe = BoundRecipe(
+            recipeID: mode.id,
+            recipeName: mode.name,
+            pipelineShape: .batch,
+            processors: [.transcriber(stubTranscriber)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: true)]
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            context: PipelineContextSnapshot(activeMode: mode, streamingOutputEnabled: false),
+            boundRecipe: recipe
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await waitUntil(.seconds(2)) {
+            let snapshot = await orchestrator.snapshot()
+            return snapshot.lastCompletedResult != nil
+        }
+
+        let lastLanguageHint = await stubTranscriber.lastLanguageHint()
+        XCTAssertEqual(lastLanguageHint, "ja")
+    }
+
+    func testOrchestratorPassesNilLanguageHintWhenModeLanguageUnset() async throws {
+        let buffer = try Self.makeBuffer(sampleCount: 16_000)
+        let stubTranscriber = StubBoundTranscriber(
+            result: TranscriptionResult(
+                text: "hello",
+                audioDuration: .seconds(1),
+                processingDuration: .zero
+            )
+        )
+        let mode = WorkflowMode(
+            id: "pinned-whisper",
+            name: "Pinned Whisper",
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.whisperKitTiny.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
+        )
+        let recipe = BoundRecipe(
+            recipeID: mode.id,
+            recipeName: mode.name,
+            pipelineShape: .batch,
+            processors: [.transcriber(stubTranscriber)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: true)]
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            context: PipelineContextSnapshot(activeMode: mode, streamingOutputEnabled: false),
+            boundRecipe: recipe
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await waitUntil(.seconds(2)) {
+            let snapshot = await orchestrator.snapshot()
+            return snapshot.lastCompletedResult != nil
+        }
+
+        let lastLanguageHint = await stubTranscriber.lastLanguageHint()
+        XCTAssertNil(lastLanguageHint)
+    }
+
+    func testOrchestratorPassesModeLanguageHintThroughDiarizedRecipe() async throws {
+        let buffer = try Self.makeBuffer(sampleCount: 16_000)
+        let diarizer = StubBoundDiarizer(
+            terminalTurns: [
+                SpeakerTurn(
+                    speakerID: "spk1",
+                    start: .zero,
+                    end: .seconds(1)
+                ),
+            ]
+        )
+        let perTurnTranscriber = StubBoundTranscriber(
+            result: TranscriptionResult(
+                text: "konnichiwa",
+                audioDuration: .seconds(1),
+                processingDuration: .zero
+            )
+        )
+        let mode = WorkflowMode(
+            id: "pinned-diarized-whisper",
+            name: "Pinned Diarized Whisper",
+            language: Parameter<String?>.override("ja"),
+            pipelineShape: .batch,
+            processors: [
+                .diarizedTurns(
+                    diarizerKind: .diarization,
+                    transcriberKind: .asr,
+                    transcriberDescriptorID: BuiltInModelCatalog.whisperKitTiny.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
+        )
+        let recipe = BoundRecipe(
+            recipeID: mode.id,
+            recipeName: mode.name,
+            pipelineShape: .batch,
+            processors: [
+                .diarizedTurns(
+                    diarizer: diarizer,
+                    transcriber: perTurnTranscriber,
+                    sensitivity: .balanced
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: true)]
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            context: PipelineContextSnapshot(activeMode: mode, streamingOutputEnabled: false),
+            boundRecipe: recipe
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await waitUntil(.seconds(2)) {
+            let snapshot = await orchestrator.snapshot()
+            return snapshot.lastCompletedResult != nil
+        }
+
+        let lastLanguageHint = await perTurnTranscriber.lastLanguageHint()
+        XCTAssertEqual(lastLanguageHint, "ja")
+    }
+
     // MARK: - Helpers
 
     private func makeOrchestrator(

@@ -18,7 +18,11 @@ struct ModeDetailView: View {
         modelService: ActiveModelService
     ) {
         _viewModel = StateObject(
-            wrappedValue: ModeDetailViewModel(mode: mode, registry: registry)
+            wrappedValue: ModeDetailViewModel(
+                mode: mode,
+                registry: registry,
+                registeredDescriptors: modelService.registeredModels
+            )
         )
         self.modelService = modelService
         _nameDraft = State(initialValue: mode.name)
@@ -161,6 +165,15 @@ struct ModeDetailView: View {
                 }
                 Spacer(minLength: PersonalScribeTheme.Spacing.sm)
                 voiceModelMenu
+            }
+
+            if !viewModel.languageOptions.isEmpty {
+                Divider()
+                ModeLanguagePickerView(
+                    selectedLanguage: viewModel.selectedLanguage,
+                    options: viewModel.languageOptions,
+                    onChange: { viewModel.setLanguage($0) }
+                )
             }
         }
     }

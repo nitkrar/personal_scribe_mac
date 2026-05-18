@@ -31,6 +31,12 @@ extension WorkflowMode {
         return copy
     }
 
+    func withLanguage(_ language: String?) -> WorkflowMode {
+        var copy = self
+        copy.language = language.map { Parameter<String?>.override($0) }
+        return copy
+    }
+
     func withLiveTranscriptCard(parameter: Parameter<Bool>) -> WorkflowMode {
         rewritingStreamingBehavior { behavior in
             behavior.liveCardEnabled = parameter
@@ -215,6 +221,28 @@ extension WorkflowMode {
         return copy
     }
 
+    func sanitizingLanguage(
+        registeredDescriptors: [ModelDescriptor]
+    ) -> WorkflowMode {
+        var copy = self
+        guard let language = copy.language?.resolved, !language.isEmpty else {
+            copy.language = nil
+            return copy
+        }
+
+        guard
+            let descriptorID = copy.pinnedDescriptorIDForLanguage(),
+            let descriptor = registeredDescriptors.first(where: { $0.id == descriptorID }),
+            let supportedLanguages = descriptor.supportedLanguages,
+            supportedLanguages.contains(language)
+        else {
+            copy.language = nil
+            return copy
+        }
+
+        return copy
+    }
+
     private func rewritingStreamingBehavior(
         _ mutate: (inout StreamingBehaviorSpec) -> Void
     ) -> WorkflowMode {
@@ -223,5 +251,26 @@ extension WorkflowMode {
         mutate(&behavior)
         copy.streamingBehavior = behavior
         return copy
+    }
+
+    private func pinnedDescriptorIDForLanguage() -> String? {
+        for spec in processors {
+            switch spec {
+            case .transcriber(_, let descriptorID):
+                if let descriptorID {
+                    return descriptorID
+                }
+            case .streamingTranscriber(_, let descriptorID):
+                if let descriptorID {
+                    return descriptorID
+                }
+            case .diarizedTurns(_, _, let descriptorID, _):
+                if let descriptorID {
+                    return descriptorID
+                }
+            }
+        }
+
+        return nil
     }
 }

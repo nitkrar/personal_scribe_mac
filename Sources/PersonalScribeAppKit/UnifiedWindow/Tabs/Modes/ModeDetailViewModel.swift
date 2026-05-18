@@ -11,10 +11,16 @@ final class ModeDetailViewModel: ObservableObject {
     @Published var lastError: String? = nil
 
     private let registry: WorkflowModeRegistry
+    private let registeredDescriptors: [ModelDescriptor]
 
-    init(mode: WorkflowMode, registry: WorkflowModeRegistry) {
+    init(
+        mode: WorkflowMode,
+        registry: WorkflowModeRegistry,
+        registeredDescriptors: [ModelDescriptor] = BuiltInModelCatalog.registeredModels
+    ) {
         self.mode = mode
         self.registry = registry
+        self.registeredDescriptors = registeredDescriptors
     }
 
     var realtimeOn: Bool {
@@ -100,8 +106,51 @@ final class ModeDetailViewModel: ObservableObject {
         return nil
     }
 
-    func setRealtime(_ on: Bool) { apply(mode.withRealtime(on)) }
-    func setDiarization(_ on: Bool) { apply(mode.withDiarization(on)) }
+    var selectedLanguage: String? {
+        guard let descriptor = languageDescriptor else {
+            return nil
+        }
+        guard let selected = mode.language?.resolved else {
+            return nil
+        }
+        guard descriptor.supportedLanguages?.contains(selected) == true else {
+            return nil
+        }
+        return selected
+    }
+
+    var languageOptions: [ModeLanguagePickerView.Option] {
+        guard let descriptor = languageDescriptor else {
+            return []
+        }
+        return ModeLanguagePickerView.options(for: descriptor)
+    }
+
+    private var languageDescriptor: ModelDescriptor? {
+        guard let pinID = voiceModelPinID else {
+            return nil
+        }
+        guard let descriptor = registeredDescriptors.first(where: { $0.id == pinID }) else {
+            return nil
+        }
+        guard descriptor.supportedLanguages?.isEmpty == false else {
+            return nil
+        }
+        return descriptor
+    }
+
+    func setRealtime(_ on: Bool) {
+        apply(
+            mode.withRealtime(on)
+                .sanitizingLanguage(registeredDescriptors: registeredDescriptors)
+        )
+    }
+    func setDiarization(_ on: Bool) {
+        apply(
+            mode.withDiarization(on)
+                .sanitizingLanguage(registeredDescriptors: registeredDescriptors)
+        )
+    }
     func setAutoStop(_ parameter: Parameter<Bool>) { apply(mode.withAutoStop(parameter: parameter)) }
     func setAutoPaste(_ parameter: Parameter<Bool>) { apply(mode.withAutoPaste(parameter: parameter)) }
     func setRestoreClipboard(_ parameter: Parameter<Bool>) { apply(mode.withRestoreClipboard(parameter: parameter)) }
@@ -115,7 +164,18 @@ final class ModeDetailViewModel: ObservableObject {
         apply(mode.withAuthoritativeSecondPass(parameter: parameter))
     }
     func setHotkey(_ hotkey: HotkeyPreference?) { apply(mode.withHotkey(hotkey)) }
-    func setVoiceModelPin(_ id: String?) { apply(mode.withVoiceModelPin(id)) }
+    func setVoiceModelPin(_ id: String?) {
+        apply(
+            mode.withVoiceModelPin(id)
+                .sanitizingLanguage(registeredDescriptors: registeredDescriptors)
+        )
+    }
+    func setLanguage(_ language: String?) {
+        apply(
+            mode.withLanguage(language)
+                .sanitizingLanguage(registeredDescriptors: registeredDescriptors)
+        )
+    }
     func setSpeakerSeparationSensitivity(_ parameter: Parameter<SpeakerSeparationSensitivity>) {
         apply(mode.withSpeakerSeparationSensitivity(parameter: parameter))
     }

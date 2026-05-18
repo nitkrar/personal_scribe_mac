@@ -101,4 +101,246 @@ final class ModeDetailViewModelTests: XCTestCase {
         XCTAssertEqual(saved?.streamingBehavior?.liveCursorEnabled, .override(true))
         XCTAssertEqual(saved?.streamingBehavior?.secondPassEnabled, .override(false))
     }
+
+    func testLanguageRoundTripsThroughRegistry() throws {
+        let custom = WorkflowMode(
+            id: "lang-rt",
+            name: "Language Round Trip",
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.whisperKitTiny.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let store = InMemoryWorkflowModeStore(
+            initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+        )
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+        let viewModel = ModeDetailViewModel(
+            mode: custom,
+            registry: registry,
+            registeredDescriptors: [BuiltInModelCatalog.whisperKitTiny]
+        )
+
+        viewModel.setLanguage("ja")
+
+        XCTAssertEqual(viewModel.selectedLanguage, "ja")
+        XCTAssertEqual(
+            registry.customModes.first { $0.id == "lang-rt" }?.language,
+            Parameter<String?>.override("ja")
+        )
+    }
+
+    func testLanguagePickerHiddenWhenModeUsesDefaultVoiceModel() throws {
+        let custom = WorkflowMode(
+            id: "lang-default",
+            name: "Language Default",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(
+                initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+            ),
+            availableKindsProvider: { [.asr] }
+        )
+        let viewModel = ModeDetailViewModel(
+            mode: custom,
+            registry: registry,
+            registeredDescriptors: [BuiltInModelCatalog.whisperKitTiny]
+        )
+
+        XCTAssertTrue(viewModel.languageOptions.isEmpty)
+        XCTAssertNil(viewModel.selectedLanguage)
+    }
+
+    func testLanguagePickerHiddenWhenPinnedDescriptorIsMonolingual() throws {
+        let custom = WorkflowMode(
+            id: "lang-mono",
+            name: "Language Mono",
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.whisperKitSmallEn217MB.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(
+                initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+            ),
+            availableKindsProvider: { [.asr] }
+        )
+        let viewModel = ModeDetailViewModel(
+            mode: custom,
+            registry: registry,
+            registeredDescriptors: [BuiltInModelCatalog.whisperKitSmallEn217MB]
+        )
+
+        XCTAssertTrue(viewModel.languageOptions.isEmpty)
+    }
+
+    func testSetVoiceModelPinToDefaultClearsLanguage() throws {
+        let custom = WorkflowMode(
+            id: "lang-default-clear",
+            name: "Language Default Clear",
+            language: Parameter<String?>.override("ja"),
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.whisperKitTiny.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(
+                initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+            ),
+            availableKindsProvider: { [.asr] }
+        )
+        let viewModel = ModeDetailViewModel(
+            mode: custom,
+            registry: registry,
+            registeredDescriptors: [BuiltInModelCatalog.whisperKitTiny]
+        )
+
+        viewModel.setVoiceModelPin(nil)
+
+        XCTAssertNil(viewModel.voiceModelPinID)
+        XCTAssertNil(viewModel.selectedLanguage)
+        XCTAssertNil(
+            registry.customModes.first { $0.id == "lang-default-clear" }?.language
+        )
+    }
+
+    func testSetVoiceModelPinClearsUnsupportedLanguageOnDescriptorSwitch() throws {
+        let custom = WorkflowMode(
+            id: "lang-switch-clear",
+            name: "Language Switch Clear",
+            language: Parameter<String?>.override("ga"),
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.whisperKitTiny.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(
+                initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+            ),
+            availableKindsProvider: { [.asr] }
+        )
+        let viewModel = ModeDetailViewModel(
+            mode: custom,
+            registry: registry,
+            registeredDescriptors: [
+                BuiltInModelCatalog.whisperKitTiny,
+                BuiltInModelCatalog.qwen3AsrF32,
+            ]
+        )
+
+        viewModel.setVoiceModelPin(BuiltInModelCatalog.qwen3AsrF32.id)
+
+        XCTAssertEqual(viewModel.voiceModelPinID, BuiltInModelCatalog.qwen3AsrF32.id)
+        XCTAssertNil(viewModel.selectedLanguage)
+        XCTAssertNil(
+            registry.customModes.first { $0.id == "lang-switch-clear" }?.language
+        )
+    }
+
+    func testSetVoiceModelPinPreservesSupportedLanguageOnDescriptorSwitch() throws {
+        let custom = WorkflowMode(
+            id: "lang-switch-keep",
+            name: "Language Switch Keep",
+            language: Parameter<String?>.override("ja"),
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.whisperKitTiny.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(
+                initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+            ),
+            availableKindsProvider: { [.asr] }
+        )
+        let viewModel = ModeDetailViewModel(
+            mode: custom,
+            registry: registry,
+            registeredDescriptors: [
+                BuiltInModelCatalog.whisperKitTiny,
+                BuiltInModelCatalog.qwen3AsrF32,
+            ]
+        )
+
+        viewModel.setVoiceModelPin(BuiltInModelCatalog.qwen3AsrF32.id)
+
+        XCTAssertEqual(viewModel.voiceModelPinID, BuiltInModelCatalog.qwen3AsrF32.id)
+        XCTAssertEqual(viewModel.selectedLanguage, "ja")
+        XCTAssertEqual(
+            registry.customModes.first { $0.id == "lang-switch-keep" }?.language,
+            Parameter<String?>.override("ja")
+        )
+    }
+
+    func testSetRealtimeClearsLanguageWhenPinIsDropped() throws {
+        let custom = WorkflowMode(
+            id: "lang-realtime-clear",
+            name: "Language Realtime Clear",
+            language: Parameter<String?>.override("ja"),
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.whisperKitTiny.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(
+                initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+            ),
+            availableKindsProvider: { [.asr, .streamingASR] }
+        )
+        let viewModel = ModeDetailViewModel(
+            mode: custom,
+            registry: registry,
+            registeredDescriptors: [BuiltInModelCatalog.whisperKitTiny]
+        )
+
+        viewModel.setRealtime(true)
+
+        XCTAssertTrue(viewModel.realtimeOn)
+        XCTAssertNil(viewModel.voiceModelPinID)
+        XCTAssertNil(viewModel.selectedLanguage)
+        XCTAssertNil(
+            registry.customModes.first { $0.id == "lang-realtime-clear" }?.language
+        )
+    }
 }
