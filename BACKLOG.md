@@ -81,7 +81,7 @@ Done bugs archived 2026-04-30 → see [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.m
 
 ## Features
 
-Done features archived 2026-05-01 → see [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.md) "Archived 2026-05-01: 12 done features + refactors closed" for #011, #013, #015, #016, #017, #024, #046, #078, #089, #092 (and refactors #028, #090).
+Done features archived 2026-05-01 → see [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.md) "Archived 2026-05-01: 12 done features + refactors closed" for #011, #013, #015, #016, #017, #024, #046, #078, #089, #092 (and refactors #028, #090). Multilingual ASR sweep 2026-05-18 → see "Archived 2026-05-18" for #095 (WhisperKit) and #098 (whisper.cpp), plus refactor #091 (per-model language hint).
 
 ### #012 — OSSignposter instrumentation for launch-freeze RCA
 
