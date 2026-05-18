@@ -86,6 +86,35 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
         )
     }
 
+    func testWhisperCppDescriptorResolvesToNoOpDisabledTranscriberInStageA() throws {
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: TestStorageLocator.make(),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        let transcriber = try provider.transcriber(for: BuiltInModelCatalog.whisperCppTiny)
+
+        XCTAssertTrue(
+            transcriber is NoOpDisabledTranscriber,
+            "Stage A whisper.cpp descriptors should stay bound to the safety stub until Stage B wires the real adapter"
+        )
+    }
+
+    func testWhisperCppNoOpDisabledTranscriberThrowsModelLoadFailure() async throws {
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: TestStorageLocator.make(),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+        let transcriber = try provider.transcriber(for: BuiltInModelCatalog.whisperCppTiny)
+
+        do {
+            try await transcriber.prepare()
+            XCTFail("Expected Stage A whisper.cpp stub to throw modelLoadFailure")
+        } catch {
+            XCTAssertEqual(error as? PersonalScribeError, .modelLoadFailure)
+        }
+    }
+
     func testSameDescriptorReturnsSharedCacheRecord() throws {
         let factoryCallCount = AtomicIntBox()
         let provider = ModelBoundProcessorProvider(

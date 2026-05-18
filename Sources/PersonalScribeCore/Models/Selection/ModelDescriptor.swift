@@ -14,6 +14,10 @@ public enum TranscriptionEngine: Sendable, Equatable {
     /// into Ninimma's models directory and loaded by
     /// `WhisperKitTranscriberAdapter`.
     case whisperKit
+    /// Whisper via whisper.cpp. Single-file ggml model artifacts are
+    /// staged into Ninimma's models directory and loaded by
+    /// `WhisperCppTranscriberAdapter`.
+    case whisperCpp
     /// Speaker diarization (pyannote segmentation + WeSpeaker
     /// embedding). Different manager class
     /// (`OfflineDiarizerManager`).

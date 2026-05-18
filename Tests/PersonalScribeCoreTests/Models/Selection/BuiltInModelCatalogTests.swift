@@ -230,4 +230,66 @@ final class BuiltInModelCatalogTests: XCTestCase {
             )
         }
     }
+
+    func testWhisperCppDescriptorsAreRegisteredButDisabledInStageA() {
+        let whisperCppDescriptors = BuiltInModelCatalog.registeredModels
+            .filter { $0.engine == .whisperCpp }
+        let expectedIDs: Set<String> = [
+            BuiltInModelCatalog.whisperCppTiny.id,
+            BuiltInModelCatalog.whisperCppSmallQ51.id,
+            BuiltInModelCatalog.whisperCppLargeV3TurboQ50.id,
+        ]
+
+        XCTAssertEqual(Set(whisperCppDescriptors.map(\.id)), expectedIDs)
+        for descriptor in whisperCppDescriptors {
+            XCTAssertFalse(
+                descriptor.isEnabled,
+                "\(descriptor.id) should stay hidden until the Stage B atomic enable"
+            )
+        }
+    }
+
+    func testWhisperCppDescriptorsPinExpectedStageAContract() {
+        let expected: [(descriptor: ModelDescriptor, repoFolderName: String, requiredPath: String, approximateSizeBytes: Int64)] = [
+            (
+                BuiltInModelCatalog.whisperCppTiny,
+                "whispercpp-tiny",
+                "ggml-tiny.bin",
+                77_691_713
+            ),
+            (
+                BuiltInModelCatalog.whisperCppSmallQ51,
+                "whispercpp-small-q5_1",
+                "ggml-small-q5_1.bin",
+                190_085_487
+            ),
+            (
+                BuiltInModelCatalog.whisperCppLargeV3TurboQ50,
+                "whispercpp-large-v3-turbo-q5_0",
+                "ggml-large-v3-turbo-q5_0.bin",
+                574_041_195
+            ),
+        ]
+
+        for item in expected {
+            XCTAssertEqual(item.descriptor.engine, .whisperCpp)
+            XCTAssertEqual(item.descriptor.kind, .asr)
+            XCTAssertEqual(item.descriptor.repository, "ggerganov/whisper.cpp")
+            XCTAssertEqual(
+                item.descriptor.revision,
+                "5359861c739e955e79d9a303bcbc70fb988958b1"
+            )
+            XCTAssertFalse(item.descriptor.shortDescription.isEmpty)
+            XCTAssertTrue(item.descriptor.displayName.contains("(whisper.cpp)"))
+            XCTAssertEqual(item.descriptor.repoFolderName, item.repoFolderName)
+            XCTAssertEqual(item.descriptor.requiredRelativePaths, [item.requiredPath])
+            XCTAssertEqual(item.descriptor.approximateSizeBytes, item.approximateSizeBytes)
+            XCTAssertNil(item.descriptor.tokenizerSource)
+            XCTAssertNil(item.descriptor.requiredChipFamily)
+            XCTAssertEqual(item.descriptor.madeBy, "OpenAI · ggml-org")
+            XCTAssertEqual(item.descriptor.worksWith, "Multilingual (~99 languages)")
+            XCTAssertFalse(item.descriptor.goodFor?.isEmpty ?? true)
+            XCTAssertEqual(item.descriptor.license, "MIT")
+        }
+    }
 }

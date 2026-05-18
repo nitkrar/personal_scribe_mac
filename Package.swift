@@ -52,6 +52,11 @@ let package = Package(
         ),
     ],
     targets: [
+        .binaryTarget(
+            name: "WhisperFramework",
+            url: "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.4/whisper-v1.8.4-xcframework.zip",
+            checksum: "1c7a93bd20fe4e57e0af12051ddb34b7a434dfc9acc02c8313393150b6d1821f"
+        ),
         .target(
             name: "PersonalScribeCore",
             dependencies: [
@@ -70,6 +75,7 @@ let package = Package(
             name: "PersonalScribeTranscription",
             dependencies: [
                 "PersonalScribeCore",
+                "WhisperFramework",
                 .product(name: "FluidAudio", package: "FluidAudio"),
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
             ],

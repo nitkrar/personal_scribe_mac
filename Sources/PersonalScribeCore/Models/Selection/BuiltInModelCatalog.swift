@@ -260,6 +260,68 @@ public enum BuiltInModelCatalog {
         requiredChipFamily: .m2OrLater
     )
 
+    // MARK: - whisper.cpp ASR
+    //
+    // Direct ggml model files from Hugging Face. No tokenizer sidecar
+    // and no CoreML encoder sidecar in v1. `repoFolderName` is
+    // intentionally namespaced with the runtime prefix so the on-disk
+    // model leaf stays unambiguous beside WhisperKit bundles.
+    private static let whisperCppModelRevision = "5359861c739e955e79d9a303bcbc70fb988958b1"
+
+    public static let whisperCppTiny = ModelDescriptor(
+        id: "whispercpp-tiny",
+        displayName: "Whisper Tiny (whisper.cpp)",
+        repoFolderName: "whispercpp-tiny",
+        shortDescription: "Fastest whisper.cpp option - tiny multilingual model, lowest accuracy.",
+        architecture: "Whisper (whisper.cpp runtime)",
+        repository: "ggerganov/whisper.cpp",
+        revision: whisperCppModelRevision,
+        requiredRelativePaths: ["ggml-tiny.bin"],
+        approximateSizeBytes: 77_691_713,
+        isEnabled: false,
+        engine: .whisperCpp,
+        madeBy: "OpenAI · ggml-org",
+        worksWith: "Multilingual (~99 languages)",
+        goodFor: "Quick multilingual dictation, smoke tests, lowest disk footprint",
+        license: "MIT"
+    )
+
+    public static let whisperCppSmallQ51 = ModelDescriptor(
+        id: "whispercpp-small-q5_1",
+        displayName: "Whisper Small q5_1 (whisper.cpp)",
+        repoFolderName: "whispercpp-small-q5_1",
+        shortDescription: "Balanced whisper.cpp model - multilingual with moderate disk and RAM.",
+        architecture: "Whisper (whisper.cpp runtime)",
+        repository: "ggerganov/whisper.cpp",
+        revision: whisperCppModelRevision,
+        requiredRelativePaths: ["ggml-small-q5_1.bin"],
+        approximateSizeBytes: 190_085_487,
+        isEnabled: false,
+        engine: .whisperCpp,
+        madeBy: "OpenAI · ggml-org",
+        worksWith: "Multilingual (~99 languages)",
+        goodFor: "Everyday multilingual dictation with lower disk than full small",
+        license: "MIT"
+    )
+
+    public static let whisperCppLargeV3TurboQ50 = ModelDescriptor(
+        id: "whispercpp-large-v3-turbo-q5_0",
+        displayName: "Whisper Large v3 Turbo q5_0 (whisper.cpp)",
+        repoFolderName: "whispercpp-large-v3-turbo-q5_0",
+        shortDescription: "Higher-accuracy whisper.cpp model with quantized large-v3-turbo weights.",
+        architecture: "Whisper (whisper.cpp runtime)",
+        repository: "ggerganov/whisper.cpp",
+        revision: whisperCppModelRevision,
+        requiredRelativePaths: ["ggml-large-v3-turbo-q5_0.bin"],
+        approximateSizeBytes: 574_041_195,
+        isEnabled: false,
+        engine: .whisperCpp,
+        madeBy: "OpenAI · ggml-org",
+        worksWith: "Multilingual (~99 languages)",
+        goodFor: "Higher-accuracy multilingual dictation with reduced large-v3 disk cost",
+        license: "MIT"
+    )
+
     // MARK: - Streaming ASR (parakeet realtime EOU)
     //
     // Parakeet 120M with end-of-utterance detection. Three chunk-size
@@ -422,6 +484,9 @@ public enum BuiltInModelCatalog {
         whisperKitSmallEn217MB,
         whisperKitLargeV3626MB,
         whisperKitLargeV3Turbo632MB,
+        whisperCppTiny,
+        whisperCppSmallQ51,
+        whisperCppLargeV3TurboQ50,
         parakeetEou160ms,
         parakeetEou320ms,
         parakeetEou1280ms,
