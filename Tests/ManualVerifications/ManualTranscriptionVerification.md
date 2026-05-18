@@ -94,6 +94,37 @@ Prerequisites:
    and confirm the English-only row is not the recommended choice for
    this case.
 
+## whisper.cpp transcription (#098)
+
+For the checks below, `<base>` means Ninimma's current base directory.
+By default that is `~/Library/Application Support/personal_scribe/`;
+if you changed it in `Settings → Advanced`, use that location instead.
+
+### MV-WHISPERCPP-4 — activation + transcription stay local after predownload
+1. While network is available, download `Whisper Tiny (whisper.cpp)` from
+   `Settings → AI Models`, and leave Activity Monitor's Network tab (or
+   an equivalent network monitor) open for Ninimma.
+2. Confirm `<base>/models/whispercpp-tiny/ggml-tiny.bin` exists before
+   activation.
+3. Click `Set Active` on `Whisper Tiny (whisper.cpp)` and immediately
+   record a short known phrase such as `hello world from whisper cpp`.
+4. Confirm the final transcript appears with reasonable accuracy.
+5. Confirm activation does not trigger a fresh model download: the row
+   may briefly show `Loading…`, but it must not go back to `Downloading`,
+   and the app must reuse the already-downloaded `.bin` in place.
+
+### MV-WHISPERCPP-5 — offline relaunch or switchback still works after predownload
+1. While network is still available, leave `Whisper Tiny (whisper.cpp)`
+   or another whisper.cpp row fully downloaded.
+2. Disable Wi-Fi and Ethernet.
+3. Relaunch Ninimma, or switch away to another downloaded ASR row and
+   then back to the whisper.cpp row.
+4. Activate the whisper.cpp row if needed and record a short phrase.
+5. Confirm transcription completes successfully offline, the app does
+   not re-enter `Downloading`, and no failure state appears as long as
+   the `.bin` is still present under `<base>/models/whispercpp-*/`.
+6. Re-enable network after the run.
+
 ## Phase 1 Step 1.1b — Launch signposts
 
 Signposts emitted under subsystem `com.nitkrar.personal_scribe`, category `prepare`:

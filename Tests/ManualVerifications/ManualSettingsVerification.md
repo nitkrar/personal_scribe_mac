@@ -172,6 +172,18 @@ Stage A replaces the inert AIModelsTab with one `SettingsCard` row per registere
 - [ ] **MV-WHISPERKIT-4 — large v3 row downloads and activates:** download `Whisper Large v3 (WhisperKit, 626MB)`, confirm the `tokenizer/` folder is present under `openai_whisper-large-v3-v20240930_626MB/`, activate the row, and confirm a short dictation completes without any extra on-demand asset fetch.
 - [ ] **MV-WHISPERKIT-5 — turbo chip gate behaves correctly:** on an M1 Mac, confirm `Whisper Large v3 Turbo (WhisperKit, 632MB)` does NOT appear in `Settings → AI Models` and that the other four WhisperKit rows do. On an M2-or-later Mac, confirm the turbo row does appear, downloads successfully, and can be activated like the other ASR rows.
 
+## whisper.cpp catalog (#098)
+
+For the checks below, `<base>` means Ninimma's current base directory.
+By default that is `~/Library/Application Support/personal_scribe/`;
+if you changed it in `Settings → Advanced`, use that location instead.
+
+- [ ] **MV-WHISPERCPP-1 — tiny row downloads one ggml file into the namespaced leaf:** in `Settings → AI Models`, delete `Whisper Tiny (whisper.cpp)` first if it is already present, then download it again and confirm the row reaches `Ready` or `Active`. Verify `<base>/models/whispercpp-tiny/ggml-tiny.bin` exists at about `77.7 MB` (`77,691,713` bytes) and that the leaf contains no `tokenizer/`, `.mlmodelc/`, or encoder-sidecar files. Activate the row if needed and confirm no second download starts.
+- [ ] **MV-WHISPERCPP-2 — small q5_1 row uses the expected leaf and size:** download `Whisper Small q5_1 (whisper.cpp)`, wait for `Ready`, and verify `<base>/models/whispercpp-small-q5_1/ggml-small-q5_1.bin` exists at about `190.1 MB` (`190,085,487` bytes). Click `Set Active` and confirm the row flips to `Active` without any extra files appearing beside the `.bin`.
+- [ ] **MV-WHISPERCPP-3 — large v3 turbo q5_0 row uses the expected leaf and size:** download `Whisper Large v3 Turbo q5_0 (whisper.cpp)`, wait for `Ready`, and verify `<base>/models/whispercpp-large-v3-turbo-q5_0/ggml-large-v3-turbo-q5_0.bin` exists at about `574.0 MB` (`574,041,195` bytes). Confirm there is still only the single `.bin` artifact under that leaf after activation.
+- [ ] **MV-WHISPERCPP-6 — delete removes the leaf and redownload recreates it cleanly:** from a downloaded whisper.cpp row, click `Delete`, confirm the corresponding `whispercpp-*` folder disappears from `<base>/models/`, then click `Download` again and confirm the same leaf plus `.bin` file return and the row reaches `Ready` or `Active`.
+- [ ] **MV-WHISPERCPP-7 — WhisperKit and whisper.cpp remain independently activatable:** keep one WhisperKit row and one whisper.cpp row downloaded at the same time. Switch active model from WhisperKit → whisper.cpp → WhisperKit. Each switch should flip `Active`/`Ready` chips correctly without forcing a redownload, and both on-disk leaves (`openai_*` and `whispercpp-*`) should still be present afterward.
+
 ## Stale-state on tab return (#039)
 
 Regression guards for ticket #039. AIModelsTab now calls
