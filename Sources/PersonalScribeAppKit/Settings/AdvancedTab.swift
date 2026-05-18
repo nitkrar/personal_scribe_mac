@@ -21,7 +21,8 @@ public struct AdvancedTab: View {
             // of `personal_scribe/`. `NSWorkspace.shared.open(_:)` on a
             // directory URL opens that directory's contents.
             NSWorkspace.shared.open(url)
-        }
+        },
+        openDiagnosticsWindow: @escaping @MainActor () -> Void = {}
     ) {
         _viewModel = StateObject(
             wrappedValue: AdvancedTabViewModel(
@@ -29,7 +30,8 @@ public struct AdvancedTab: View {
                 defaults: defaults,
                 migrator: migrator,
                 selectDirectory: selectDirectory,
-                openInFinder: openInFinder
+                openInFinder: openInFinder,
+                openDiagnosticsWindow: openDiagnosticsWindow
             )
         )
     }
@@ -118,19 +120,15 @@ public struct AdvancedTab: View {
 
             Divider()
 
-            Toggle(
-                "Show live diagnostics overlay",
-                isOn: Binding(
-                    get: { viewModel.showLiveDiagnosticsOverlay },
-                    set: { viewModel.setShowLiveDiagnosticsOverlay($0) }
-                )
-            )
-            .disabled(viewModel.isLiveDiagnosticsOverlayToggleDisabled)
+            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                Button("Open Diagnostics Window") {
+                    viewModel.openDiagnosticsWindow()
+                }
 
-            if viewModel.isLiveDiagnosticsOverlayToggleDisabled {
-                Text("Set Diagnostic logging to Verbose to enable the overlay.")
+                Text("Opens the floating diagnostics window. Closing it does not change the logging mode.")
                     .font(PersonalScribeTheme.Typography.caption.font)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -239,12 +237,12 @@ final class AdvancedTabViewModel: ObservableObject {
     @Published private(set) var feedback: Feedback?
     @Published private(set) var diagnosticLoggingMode: DiagnosticLoggingMode
     @Published private(set) var logRetentionDays: Int
-    @Published private(set) var showLiveDiagnosticsOverlay: Bool
 
     private let defaults: UserDefaults
     private let migrator: any BaseDirectoryMigrating
     private let selectDirectory: @MainActor (URL?) -> URL?
     private let openInFinder: @MainActor (URL) -> Void
+    private let openDiagnosticsWindowAction: @MainActor () -> Void
 
     init(
         baseDirectoryResult: Result<URL, Error> = Result { try AppConfig.baseDirectory() },
@@ -255,18 +253,18 @@ final class AdvancedTabViewModel: ObservableObject {
         selectDirectory: @escaping @MainActor (URL?) -> URL?,
         openInFinder: @escaping @MainActor (URL) -> Void = { url in
             NSWorkspace.shared.open(url)
-        }
+        },
+        openDiagnosticsWindow: @escaping @MainActor () -> Void = {}
     ) {
         self.baseDirectoryResult = baseDirectoryResult
         self.defaults = defaults
         self.migrator = migrator
         self.selectDirectory = selectDirectory
         self.openInFinder = openInFinder
+        openDiagnosticsWindowAction = openDiagnosticsWindow
         let diagnosticLoggingMode = DiagnosticLoggingMode.resolve(from: defaults)
         self.diagnosticLoggingMode = diagnosticLoggingMode
         logRetentionDays = LogRetentionDaysPreference.resolve(from: defaults)
-        let storedOverlay = ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults)
-        showLiveDiagnosticsOverlay = diagnosticLoggingMode == .verbose && storedOverlay
     }
 
     var diagnosticLoggingModeDescription: String {
@@ -298,10 +296,6 @@ final class AdvancedTabViewModel: ObservableObject {
         default:
             return "Current logs rotate daily at local midnight. Keep the most recent \(logRetentionDays) days of archived logs."
         }
-    }
-
-    var isLiveDiagnosticsOverlayToggleDisabled: Bool {
-        diagnosticLoggingMode != .verbose
     }
 
     func setLogRetentionDays(_ days: Int) {
@@ -339,22 +333,10 @@ final class AdvancedTabViewModel: ObservableObject {
     func setDiagnosticLoggingMode(_ mode: DiagnosticLoggingMode) {
         diagnosticLoggingMode = mode
         mode.persist(to: defaults)
-
-        if mode != .verbose {
-            showLiveDiagnosticsOverlay = false
-            ShowLiveDiagnosticsOverlayPreference.persist(false, to: defaults)
-        }
     }
 
-    func setShowLiveDiagnosticsOverlay(_ isEnabled: Bool) {
-        guard diagnosticLoggingMode == .verbose else {
-            showLiveDiagnosticsOverlay = false
-            ShowLiveDiagnosticsOverlayPreference.persist(false, to: defaults)
-            return
-        }
-
-        showLiveDiagnosticsOverlay = isEnabled
-        ShowLiveDiagnosticsOverlayPreference.persist(isEnabled, to: defaults)
+    func openDiagnosticsWindow() {
+        openDiagnosticsWindowAction()
     }
 
     private var currentBaseDirectory: URL? {

@@ -10,6 +10,7 @@ public struct SettingsTab: View {
     private let permissionService: any PermissionService
     private let menuBarVisibilityProvider: @MainActor () -> Bool
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
+    private let openDiagnosticsWindow: @MainActor () -> Void
 
     public init(
         defaults: UserDefaults = .standard,
@@ -20,12 +21,14 @@ public struct SettingsTab: View {
         // Default kept so existing test surfaces don't have to know
         // about the menu-bar plumbing.
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
-        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
+        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
+        openDiagnosticsWindow: @escaping @MainActor () -> Void = {}
     ) {
         self.defaults = defaults
         self.permissionService = permissionService
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
+        self.openDiagnosticsWindow = openDiagnosticsWindow
     }
 
     public var body: some View {
@@ -49,7 +52,10 @@ public struct SettingsTab: View {
                 case .aiModels:
                     AIModelsTab()
                 case .advanced:
-                    AdvancedTab()
+                    AdvancedTab(
+                        defaults: defaults,
+                        openDiagnosticsWindow: openDiagnosticsWindow
+                    )
                 case .permissions:
                     PermissionsSubTab(
                         viewModel: PermissionsSubTabViewModel(

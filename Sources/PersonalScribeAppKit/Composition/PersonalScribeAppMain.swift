@@ -132,8 +132,7 @@ struct PersonalScribeAppMain: App {
             service: sharedSnapshotService
         )
         let diagnosticsOverlayController = LiveDiagnosticsOverlayController(
-            store: AppComposition.diagnosticsStore,
-            defaults: defaults
+            store: AppComposition.diagnosticsStore
         )
 
         // #002: global Esc truly discards an active recording — no
@@ -222,6 +221,9 @@ struct PersonalScribeAppMain: App {
                     },
                     menuBarVisibilitySetter: { isVisible in
                         statusItemHostRef?.setMenuBarVisible(isVisible)
+                    },
+                    openDiagnosticsWindow: {
+                        diagnosticsOverlayController.openWindow()
                     }
                 )
             }

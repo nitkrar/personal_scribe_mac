@@ -61,6 +61,7 @@ final class UnifiedWindowController: NSWindowController {
     private let permissionService: any PermissionService
     private let menuBarVisibilityProvider: @MainActor () -> Bool
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
+    private let openDiagnosticsWindow: @MainActor () -> Void
     private var windowTintObserver: NSObjectProtocol?
     private var appDidBecomeActiveObserver: NSObjectProtocol?
     private var appDidResignActiveObserver: NSObjectProtocol?
@@ -80,7 +81,8 @@ final class UnifiedWindowController: NSWindowController {
         modelService: ActiveModelService,
         setActiveMode: (@MainActor (WorkflowMode) async -> Void)? = nil,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
-        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
+        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
+        openDiagnosticsWindow: @escaping @MainActor () -> Void = {}
     ) {
         self.defaults = defaults
         self.notificationCenter = notificationCenter
@@ -89,6 +91,7 @@ final class UnifiedWindowController: NSWindowController {
         self.permissionService = permissionService
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
+        self.openDiagnosticsWindow = openDiagnosticsWindow
         self.homeViewModel = HomeTabViewModel(reader: metricsReader)
         self.transcriptionsViewModel = TranscriptionsTabViewModel(reader: transcriptReader)
         self.modesViewModel = ModesListViewModel(
@@ -111,7 +114,8 @@ final class UnifiedWindowController: NSWindowController {
             permissionService: permissionService,
             defaults: defaults,
             menuBarVisibilityProvider: menuBarVisibilityProvider,
-            menuBarVisibilitySetter: menuBarVisibilitySetter
+            menuBarVisibilitySetter: menuBarVisibilitySetter,
+            openDiagnosticsWindow: openDiagnosticsWindow
         )
         let hostingController = NSHostingController(rootView: rootView)
         self.hostingController = hostingController
@@ -339,7 +343,8 @@ final class UnifiedWindowController: NSWindowController {
             permissionService: permissionService,
             defaults: defaults,
             menuBarVisibilityProvider: menuBarVisibilityProvider,
-            menuBarVisibilitySetter: menuBarVisibilitySetter
+            menuBarVisibilitySetter: menuBarVisibilitySetter,
+            openDiagnosticsWindow: openDiagnosticsWindow
         )
     }
 

@@ -71,7 +71,7 @@ struct LiveDiagnosticsOverlayView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Live Diagnostics")
                         .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
-                    Text("Verbose diagnostics stream here while the app is running.")
+                    Text("Errors always appear here. Verbose mode adds debug, info, and notice events.")
                         .font(PersonalScribeTheme.Typography.caption.font)
                         .foregroundStyle(.secondary)
                 }
