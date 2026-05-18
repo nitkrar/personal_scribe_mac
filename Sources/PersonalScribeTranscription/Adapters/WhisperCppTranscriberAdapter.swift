@@ -637,7 +637,12 @@ private struct LiveWhisperCppLibrary: WhisperCppLibrary {
         params.translate = false
         params.no_context = true
         params.single_segment = false
-        params.detect_language = true
+        // Do NOT set params.detect_language = true. Upstream semantics
+        // are "exit after automatically detecting language" (per
+        // whisper.cpp's CLI --detect-language help). With language="auto"
+        // below, that short-circuits the decoder and returns zero
+        // segments — symptom: empty transcripts with ~80ms processing
+        // time on multi-second audio.
         params.suppress_blank = true
         params.suppress_nst = true
         params.n_threads = nThreads
