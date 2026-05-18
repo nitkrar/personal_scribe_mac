@@ -20,8 +20,30 @@ protocol WhisperKitManaging: Sendable {
     func cleanup() async
 }
 
+protocol WhisperKitHubSnapshotting: Sendable {
+    func snapshot(
+        repoID: String,
+        relativePaths: [String],
+        progressHandler: @escaping @Sendable (Progress) -> Void
+    ) async throws -> URL
+}
+
 struct WhisperKitManagerResult: Sendable, Equatable {
     let text: String
+}
+
+extension HubApiWrapper: WhisperKitHubSnapshotting {
+    func snapshot(
+        repoID: String,
+        relativePaths: [String],
+        progressHandler: @escaping @Sendable (Progress) -> Void
+    ) async throws -> URL {
+        try await snapshot(
+            from: HubApiWrapper.Repo(id: repoID),
+            matching: relativePaths,
+            progressHandler: progressHandler
+        )
+    }
 }
 
 public actor WhisperKitTranscriberAdapter: Transcriber {
@@ -360,13 +382,15 @@ private enum WhisperKitArtifactFilesystem {
 
 internal actor LiveWhisperKitManager: WhisperKitManaging {
     private let fileManager: FileManager
-    private let hubFactory: (URL) -> HubApiWrapper
+    private let hubFactory: @Sendable (URL) -> any WhisperKitHubSnapshotting
     private let whisperFactory: (WhisperKitConfig) async throws -> WhisperKit
     private var whisperKit: WhisperKit?
 
     init(
         fileManager: FileManager = .default,
-        hubFactory: @escaping (URL) -> HubApiWrapper = { HubApiWrapper(downloadBase: $0) },
+        hubFactory: @escaping @Sendable (URL) -> any WhisperKitHubSnapshotting = {
+            HubApiWrapper(downloadBase: $0)
+        },
         whisperFactory: @escaping (WhisperKitConfig) async throws -> WhisperKit = { config in
             try await WhisperKit(config)
         }
@@ -390,8 +414,8 @@ internal actor LiveWhisperKitManager: WhisperKitManaging {
 
         let hub = hubFactory(stagingDirectory)
         let snapshotRoot = try await hub.snapshot(
-            from: HubApiWrapper.Repo(id: repoID),
-            matching: relativePaths ?? [],
+            repoID: repoID,
+            relativePaths: relativePaths ?? [],
             progressHandler: progressHandler
         )
         let snapshotLeaf = resolvedSnapshotLeaf(

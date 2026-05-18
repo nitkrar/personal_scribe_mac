@@ -266,6 +266,163 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(await manager.loadCallCount(), 2)
     }
 
+    func testLiveManagerDownloadAndStageMovesBundleLeafIntoDestinationAndCleansStaging() async throws {
+        let root = try temporaryRootDirectory()
+        let stagingDirectory = root.appendingPathComponent("staging", isDirectory: true)
+        let destination = root
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent("openai_whisper-tiny", isDirectory: true)
+            .standardizedFileURL
+        let relativePaths = [
+            "openai_whisper-tiny/config.json",
+            "openai_whisper-tiny/TextDecoder.mlmodelc/coremldata.bin",
+        ]
+        let hub = StubWhisperKitHubClient(
+            downloadBase: stagingDirectory,
+            files: [
+                relativePaths[0]: Data("{}".utf8),
+                relativePaths[1]: Data([0x01]),
+            ]
+        )
+        let manager = LiveWhisperKitManager(
+            hubFactory: { _ in hub },
+            whisperFactory: { _ in throw LoadModelFactoryError.unexpectedFactoryUse }
+        )
+
+        try await manager.downloadAndStage(
+            repoID: "argmaxinc/whisperkit-coreml",
+            relativePaths: relativePaths,
+            stagingDirectory: stagingDirectory,
+            destination: destination,
+            progressHandler: { _ in }
+        )
+
+        XCTAssertEqual(
+            await hub.snapshotRequests(),
+            [StubWhisperKitHubClient.SnapshotRequest(
+                repoID: "argmaxinc/whisperkit-coreml",
+                relativePaths: relativePaths
+            )]
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: destination.appendingPathComponent("config.json").path
+            )
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: destination
+                    .appendingPathComponent("TextDecoder.mlmodelc", isDirectory: true)
+                    .appendingPathComponent("coremldata.bin")
+                    .path
+            )
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stagingDirectory.path))
+    }
+
+    func testLiveManagerDownloadAndStageMovesTokenizerRepoRootIntoDestinationAndCleansStaging() async throws {
+        let root = try temporaryRootDirectory()
+        let stagingDirectory = root.appendingPathComponent("staging", isDirectory: true)
+        let destination = root
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent("openai_whisper-tiny", isDirectory: true)
+            .appendingPathComponent("tokenizer", isDirectory: true)
+            .standardizedFileURL
+        let relativePaths = [
+            "tokenizer.json",
+            "vocab.json",
+        ]
+        let hub = StubWhisperKitHubClient(
+            downloadBase: stagingDirectory,
+            files: [
+                relativePaths[0]: Data("{}".utf8),
+                relativePaths[1]: Data("{}".utf8),
+            ]
+        )
+        let manager = LiveWhisperKitManager(
+            hubFactory: { _ in hub },
+            whisperFactory: { _ in throw LoadModelFactoryError.unexpectedFactoryUse }
+        )
+
+        try await manager.downloadAndStage(
+            repoID: "openai/whisper-tiny",
+            relativePaths: relativePaths,
+            stagingDirectory: stagingDirectory,
+            destination: destination,
+            progressHandler: { _ in }
+        )
+
+        XCTAssertEqual(
+            await hub.snapshotRequests(),
+            [StubWhisperKitHubClient.SnapshotRequest(
+                repoID: "openai/whisper-tiny",
+                relativePaths: relativePaths
+            )]
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: destination.appendingPathComponent("tokenizer.json").path
+            )
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: destination.appendingPathComponent("vocab.json").path
+            )
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stagingDirectory.path))
+    }
+
+    func testLiveManagerLoadModelPassesExplicitTokenizerFolderToWhisperFactory() async throws {
+        let root = try temporaryRootDirectory()
+        let modelFolder = root
+            .appendingPathComponent("openai_whisper-tiny", isDirectory: true)
+            .standardizedFileURL
+        try FileManager.default.createDirectory(
+            at: modelFolder,
+            withIntermediateDirectories: true
+        )
+        let recorder = WhisperKitFactoryConfigRecorder()
+        let manager = LiveWhisperKitManager(
+            whisperFactory: { config in
+                await recorder.record(
+                    model: config.model,
+                    modelFolder: config.modelFolder,
+                    tokenizerFolder: config.tokenizerFolder,
+                    load: config.load,
+                    download: config.download,
+                    verbose: config.verbose,
+                    prewarm: config.prewarm,
+                    useBackgroundDownloadSession: config.useBackgroundDownloadSession
+                )
+                throw LoadModelFactoryError.expected
+            }
+        )
+
+        await XCTAssertThrowsErrorAsync(
+            try await manager.loadModel(
+                modelName: "openai_whisper-tiny",
+                modelFolder: modelFolder
+            )
+        ) { error in
+            XCTAssertEqual(error as? LoadModelFactoryError, .expected)
+        }
+
+        let snapshot = await recorder.snapshot()
+        XCTAssertEqual(snapshot?.model, "openai_whisper-tiny")
+        XCTAssertEqual(snapshot?.modelFolder, modelFolder.path)
+        XCTAssertEqual(
+            snapshot?.tokenizerFolder?.standardizedFileURL,
+            modelFolder
+                .appendingPathComponent("tokenizer", isDirectory: true)
+                .standardizedFileURL
+        )
+        XCTAssertEqual(snapshot?.load, true)
+        XCTAssertEqual(snapshot?.download, false)
+        XCTAssertEqual(snapshot?.verbose, false)
+        XCTAssertEqual(snapshot?.prewarm, false)
+        XCTAssertEqual(snapshot?.useBackgroundDownloadSession, false)
+    }
+
     private func temporaryRootDirectory() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -435,6 +592,122 @@ private actor StubWhisperKitManager: WhisperKitManaging {
     }
 }
 
+private actor StubWhisperKitHubClient: WhisperKitHubSnapshotting {
+    struct SnapshotRequest: Equatable {
+        let repoID: String
+        let relativePaths: [String]
+    }
+
+    private let downloadBase: URL
+    private let files: [String: Data]
+    private var snapshotRequestsStorage: [SnapshotRequest] = []
+
+    init(
+        downloadBase: URL,
+        files: [String: Data]
+    ) {
+        self.downloadBase = downloadBase
+        self.files = files
+    }
+
+    func snapshot(
+        repoID: String,
+        relativePaths: [String],
+        progressHandler: @escaping @Sendable (Progress) -> Void
+    ) async throws -> URL {
+        snapshotRequestsStorage.append(
+            SnapshotRequest(
+                repoID: repoID,
+                relativePaths: relativePaths
+            )
+        )
+
+        let snapshotRoot = repoRoot(for: repoID)
+        try FileManager.default.createDirectory(
+            at: snapshotRoot,
+            withIntermediateDirectories: true
+        )
+
+        for (relativePath, data) in files {
+            let fileURL = appendingRelativePath(relativePath, to: snapshotRoot)
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: fileURL)
+        }
+
+        let progress = Progress(totalUnitCount: 100)
+        progress.completedUnitCount = 100
+        progressHandler(progress)
+
+        return snapshotRoot
+    }
+
+    func snapshotRequests() -> [SnapshotRequest] {
+        snapshotRequestsStorage
+    }
+
+    private func repoRoot(for repoID: String) -> URL {
+        repoID
+            .split(separator: "/")
+            .reduce(
+                downloadBase
+                    .appendingPathComponent("models", isDirectory: true)
+                    .standardizedFileURL
+            ) { partial, component in
+                partial.appendingPathComponent(String(component), isDirectory: true)
+            }
+            .standardizedFileURL
+    }
+}
+
+private actor WhisperKitFactoryConfigRecorder {
+    struct Snapshot: Equatable {
+        let model: String?
+        let modelFolder: String?
+        let tokenizerFolder: URL?
+        let load: Bool?
+        let download: Bool
+        let verbose: Bool
+        let prewarm: Bool?
+        let useBackgroundDownloadSession: Bool
+    }
+
+    private var snapshotStorage: Snapshot?
+
+    func record(
+        model: String?,
+        modelFolder: String?,
+        tokenizerFolder: URL?,
+        load: Bool?,
+        download: Bool,
+        verbose: Bool,
+        prewarm: Bool?,
+        useBackgroundDownloadSession: Bool
+    ) {
+        snapshotStorage = Snapshot(
+            model: model,
+            modelFolder: modelFolder,
+            tokenizerFolder: tokenizerFolder,
+            load: load,
+            download: download,
+            verbose: verbose,
+            prewarm: prewarm,
+            useBackgroundDownloadSession: useBackgroundDownloadSession
+        )
+    }
+
+    func snapshot() -> Snapshot? {
+        snapshotStorage
+    }
+}
+
+private enum LoadModelFactoryError: Error, Equatable {
+    case expected
+    case unexpectedFactoryUse
+}
+
 private func modelDirectory(
     for descriptor: ModelDescriptor,
     storageLocator: any StorageLocator
@@ -466,6 +739,15 @@ private func expectedTokenizerPaths(for descriptor: ModelDescriptor) -> [String]
     descriptor.requiredRelativePaths
         .filter { $0.hasPrefix("tokenizer/") }
         .map { String($0.dropFirst("tokenizer/".count)) }
+}
+
+private func appendingRelativePath(_ relativePath: String, to base: URL) -> URL {
+    relativePath
+        .split(separator: "/")
+        .reduce(base.standardizedFileURL) { partial, component in
+            partial.appendingPathComponent(String(component), isDirectory: false)
+        }
+        .standardizedFileURL
 }
 
 private func seedArtifacts(
