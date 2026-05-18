@@ -184,6 +184,12 @@ if you changed it in `Settings → Advanced`, use that location instead.
 - [ ] **MV-WHISPERCPP-6 — delete removes the leaf and redownload recreates it cleanly:** from a downloaded whisper.cpp row, click `Delete`, confirm the corresponding `whispercpp-*` folder disappears from `<base>/models/`, then click `Download` again and confirm the same leaf plus `.bin` file return and the row reaches `Ready` or `Active`.
 - [ ] **MV-WHISPERCPP-7 — WhisperKit and whisper.cpp remain independently activatable:** keep one WhisperKit row and one whisper.cpp row downloaded at the same time. Switch active model from WhisperKit → whisper.cpp → WhisperKit. Each switch should flip `Active`/`Ready` chips correctly without forcing a redownload, and both on-disk leaves (`openai_*` and `whispercpp-*`) should still be present afterward.
 
+## Model language hint picker (#091)
+
+- [ ] **MV-LANGHINT-1 — picker visibility follows descriptor capability + row state:** open `Settings → AI Models` with the multilingual rows downloaded. Confirm the language picker appears on `Whisper Tiny (WhisperKit)`, `Whisper Large v3 Turbo q5_0 (whisper.cpp)`, and `Qwen3 ASR 0.6B` once each row is `Ready` or `Active`. Confirm the picker is absent for `Whisper Small English (WhisperKit)`, all Parakeet rows, and the EOU rows. Confirm the picker label reads `Language` and the menu entries use `Localized Name (code)` formatting such as `Japanese (ja)`.
+- [ ] **MV-LANGHINT-2 — picker writes the per-model preference:** on a multilingual Whisper row, choose `Japanese (ja)` from the language picker. Run `defaults read com.nitkrar.personal_scribe ModelLanguageHints` and confirm the descriptor ID appears with value `ja`. Switch the same picker back to `Auto-detect` and confirm the descriptor entry is removed from the defaults payload.
+- [ ] **MV-LANGHINT-8 — per-model selections stay independent across rows:** set `Whisper Tiny (WhisperKit)` to `Japanese (ja)`. Then switch to a different downloaded multilingual row such as `Whisper Large v3 Turbo q5_0 (whisper.cpp)` or `Qwen3 ASR 0.6B` and confirm its picker still shows `Auto-detect` unless you explicitly changed that row too. Switching back to the WhisperKit row must still show `Japanese (ja)`.
+
 ## Stale-state on tab return (#039)
 
 Regression guards for ticket #039. AIModelsTab now calls

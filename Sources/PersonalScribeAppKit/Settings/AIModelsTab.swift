@@ -12,9 +12,14 @@ import PersonalScribeSession
 @MainActor
 public struct AIModelsTab: View {
     @ObservedObject private var service: ActiveModelService
+    private let modelLanguagePreference: ModelLanguagePreference
 
-    public init(service: ActiveModelService = AppComposition.modelService) {
+    public init(
+        service: ActiveModelService = AppComposition.modelService,
+        modelLanguagePreference: ModelLanguagePreference = AppComposition.modelLanguagePreference
+    ) {
         self.service = service
+        self.modelLanguagePreference = modelLanguagePreference
     }
 
     public var body: some View {
@@ -34,6 +39,7 @@ public struct AIModelsTab: View {
                                 descriptor: descriptor,
                                 state: service.downloadStates[descriptor.id],
                                 isActive: service.activeDescriptor(for: descriptor.kind)?.id == descriptor.id,
+                                modelLanguagePreference: modelLanguagePreference,
                                 onActivate: { activate(descriptor) },
                                 onDownload: { download(descriptor) },
                                 onDelete: { delete(descriptor) }
@@ -103,6 +109,7 @@ struct ModelRow: View {
     let descriptor: ModelDescriptor
     let state: ModelDownloadState?
     let isActive: Bool
+    let modelLanguagePreference: ModelLanguagePreference
     /// Siblings used for the info popover's relative-rank computation.
     /// Defaults to the catalog-registered list.
     let siblings: [ModelDescriptor]
@@ -116,6 +123,7 @@ struct ModelRow: View {
         descriptor: ModelDescriptor,
         state: ModelDownloadState?,
         isActive: Bool,
+        modelLanguagePreference: ModelLanguagePreference = AppComposition.modelLanguagePreference,
         siblings: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
         onActivate: @escaping () -> Void,
         onDownload: @escaping () -> Void = {},
@@ -124,6 +132,7 @@ struct ModelRow: View {
         self.descriptor = descriptor
         self.state = state
         self.isActive = isActive
+        self.modelLanguagePreference = modelLanguagePreference
         self.siblings = siblings
         self.onActivate = onActivate
         self.onDownload = onDownload
@@ -157,6 +166,14 @@ struct ModelRow: View {
                 Spacer(minLength: 0)
 
                 trailingControls
+            }
+
+            if showsLanguagePicker {
+                ModelLanguagePicker(
+                    descriptor: descriptor,
+                    phase: phase,
+                    preference: modelLanguagePreference
+                )
             }
         }
         // Tapping anywhere on the card (outside the trailing buttons)
@@ -285,6 +302,13 @@ struct ModelRow: View {
             let concise = trimmed.count > 40 ? String(trimmed.prefix(37)) + "…" : trimmed
             return (.failed, "Failed: \(concise)")
         }
+    }
+
+    var showsLanguagePicker: Bool {
+        ModelLanguagePicker.isVisible(
+            descriptor: descriptor,
+            phase: phase
+        )
     }
 
     // MARK: - Action button (transient phases only)

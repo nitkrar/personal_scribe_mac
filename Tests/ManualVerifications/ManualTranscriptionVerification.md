@@ -125,6 +125,14 @@ if you changed it in `Settings → Advanced`, use that location instead.
    the `.bin` is still present under `<base>/models/whispercpp-*/`.
 6. Re-enable network after the run.
 
+## Model language hint transcription (#091)
+
+- [ ] **MV-LANGHINT-3 — WhisperKit pinned hint takes effect:** choose a mode that explicitly pins `Whisper Tiny (WhisperKit)` (or another multilingual WhisperKit row), set that row's language picker to `Japanese (ja)`, then record a short Japanese clip. Confirm the final transcript is Japanese rather than English auto-detect output. Switch the picker back to `Auto-detect` after the check if you use the row for other manual cases.
+- [ ] **MV-LANGHINT-4 — whisper.cpp pinned hint takes effect:** choose a mode that explicitly pins a multilingual whisper.cpp row, set its picker to `Japanese (ja)`, record a short Japanese clip, and confirm the final transcript is Japanese.
+- [ ] **MV-LANGHINT-5 — Qwen3 pinned hint takes effect:** choose a mode that explicitly pins `Qwen3 ASR 0.6B`, set its picker to `Japanese (ja)`, record a short Japanese clip, and confirm the final transcript is Japanese rather than falling back to auto-detect.
+- [ ] **MV-LANGHINT-6 — mode-default gate prevents descriptor-hint leak:** set `Whisper Tiny (WhisperKit)` to `Japanese (ja)` in `Settings → AI Models`, then switch to a mode whose ASR selection is `use default model` rather than a pinned descriptor. Record a short English clip while the default still resolves to that WhisperKit row. Confirm the transcript is English, not Japanese — the hint must be suppressed for the default-model path.
+- [ ] **MV-LANGHINT-7 — Auto-detect clears back to normal behavior:** on a multilingual Whisper or Qwen3 row, switch the picker back to `Auto-detect`, record a short clip in a language the model normally auto-detects well, and confirm transcription still completes normally with no forced-language behavior.
+
 ## Phase 1 Step 1.1b — Launch signposts
 
 Signposts emitted under subsystem `com.nitkrar.personal_scribe`, category `prepare`:
