@@ -24,6 +24,8 @@ import Foundation
 /// 6. Every pinned `descriptorID` must reference a descriptor in the
 ///    supplied `registeredDescriptors` list, AND that descriptor's
 ///    `kind` must match the spec's kind.
+/// 7. `mode.language` may only be set when the mode pins a descriptor
+///    whose `supportedLanguages` is non-nil.
 ///
 /// Caseless enum: namespace only. The validator is stateless — every
 /// call evaluates the same rules against its inputs.
@@ -138,6 +140,11 @@ public enum WorkflowModeValidator {
                     count: streamingProcessorCount
                 )
         }
+
+        try validateLanguage(
+            in: mode,
+            registeredDescriptors: registeredDescriptors
+        )
     }
 
     /// Combined Rule-5 + Rule-6 check. When `descriptorID` is non-nil
@@ -167,5 +174,49 @@ public enum WorkflowModeValidator {
         guard availableKinds.contains(kind) else {
             throw WorkflowModeValidationError.kindUnavailable(kind)
         }
+    }
+
+    private static func validateLanguage(
+        in mode: WorkflowMode,
+        registeredDescriptors: [ModelDescriptor]
+    ) throws {
+        guard mode.language != nil else {
+            return
+        }
+
+        guard let descriptorID = pinnedDescriptorIDForLanguage(in: mode) else {
+            throw WorkflowModeValidationError.languageRequiresPinnedDescriptor
+        }
+
+        guard let descriptor = registeredDescriptors.first(where: { $0.id == descriptorID }) else {
+            throw WorkflowModeValidationError.pinnedDescriptorNotRegistered(id: descriptorID)
+        }
+
+        guard descriptor.supportedLanguages != nil else {
+            throw WorkflowModeValidationError.languageRequiresMultilingualPinnedDescriptor(
+                id: descriptorID
+            )
+        }
+    }
+
+    private static func pinnedDescriptorIDForLanguage(in mode: WorkflowMode) -> String? {
+        for processor in mode.processors {
+            switch processor {
+            case .transcriber(_, let descriptorID):
+                if let descriptorID {
+                    return descriptorID
+                }
+            case .streamingTranscriber(_, let descriptorID):
+                if let descriptorID {
+                    return descriptorID
+                }
+            case .diarizedTurns(_, _, let descriptorID, _):
+                if let descriptorID {
+                    return descriptorID
+                }
+            }
+        }
+
+        return nil
     }
 }
