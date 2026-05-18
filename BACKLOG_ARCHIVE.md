@@ -6,6 +6,104 @@ Closed items. Source of truth for "what was the fix for that thing I filed month
 
 ---
 
+## Archived 2026-05-18: #091 + #095 + #098 closed (multilingual ASR sweep)
+
+Three related tickets closing together. #095 introduced WhisperKit (Tier 2 multilingual). #098 was a follow-up for whisper.cpp as a parallel runtime so we could A/B vs WhisperKit (filed only as broker request scope during execution; never lived in BACKLOG.md). #091 added the per-model language hint picker that those new multilingual runtimes consume.
+
+User runtime verification deferred to convenience; closing on code-complete trust given hermes' build-tests + targeted-suite passes on each chunk.
+
+### #091 — Per-model language hint  *(reframed from "per-mode" during execution)*
+
+`refactor` · `P2` · `done` · `area: transcription, models, modes, recipes`
+*Filed 2026-04-29, closed 2026-05-18*
+
+When the active ASR model is multilingual, the user pins a target language for that model so the runtime stops guessing on short clips. Reframed during execution from per-WorkflowMode to **per-ASR-model**: language lives on the descriptor row in AI Models tab, switching active model swaps which picker shows. Picker hidden for monolingual / no-vendor-API descriptors. Orchestrator passes hint through only when the active mode pins a specific ASR descriptor (mode = "use default model" forces nil hint to prevent silent leak).
+
+**Scope shipped (v1)**:
+- `ModelDescriptor.supportedLanguages: [String]?` — BCP-47 codes; nil = picker hidden.
+- `WhisperFamilyLanguages.codes` (100 BCP-47 codes shared between WhisperKit + whisper.cpp) and `Qwen3Languages.codes` (30 BCP-47 codes derived from `Qwen3AsrConfig.Language`).
+- `Qwen3LanguageMap` adapter-internal dictionary translating BCP-47 string → vendor enum case (bijection-tested).
+- `ModelLanguagePreference` actor wrapping UserDefaults `ModelLanguageHints`; descriptor.id → BCP-47. Validator drops stale entries at app start.
+- `Transcriber.transcribe(_:languageHint:)` protocol widening with default-nil extension; 3 multilingual adapters (WhisperKit / WhisperCpp / Qwen3) forward, 3 monolingual adapters (Parakeet / EOU / diarizer) accept-unused.
+- `SessionPipelineOrchestrator` D5 mode-default gate at transcribe time.
+- `ModelLanguagePicker` inline in AIModelsTab per row, format "Localized Name (code)", "Auto-detect" first.
+- `MV-LANGHINT-1..8` runbook coverage incl. the mode-default leak prevention.
+
+**Scope deferred to follow-up tickets**:
+- Parakeet TDT v3 language hint — blocked on FluidAudio upstream API (`AsrManager.transcribe` has no language param).
+- Per-mode language override (different from per-model). Explicitly rejected for v1 in DESIGN §D2.
+
+**Plans on disk**: `plans/091_language_selector/{DESIGN.md (rev 3), IMPLEMENTATION.md (rev 3)}`.
+
+**Changelog**
+- 2026-05-18 `c6f37a1` Stage A — descriptor `supportedLanguages` field + `WhisperFamilyLanguages.codes` (100 codes audited between WhisperKit tokenizer + whisper.cpp lang.h) + `ModelLanguagePreference` actor with startup validation + AppComposition bootstrap. Catalog: WhisperKit multilingual rows + whispercpp rows get the shared list; English-only Whisper variant + all Parakeet + Qwen3 + diarizer stay nil. +10 tests.
+- 2026-05-18 `240f405` Stage A.1 — Qwen3 widening: `Qwen3Languages.codes` (30 BCP-47, sorted) + `Qwen3LanguageMap` (Transcription target, imports vendor enum) + flip two Qwen3 catalog rows from nil to the list + bijection tests. +4 tests.
+- 2026-05-18 `2b7cccd` Stage B — `Transcriber.transcribe(_:languageHint:)` protocol widening (with default-nil extension) + 3-adapter forwarding (WhisperKit `DecodingOptions.language`, WhisperCpp `params.language ?? "auto"`, Qwen3 via `Qwen3LanguageMap`) + signature-only for Parakeet + EOU + orchestrator D5 mode-default gate covering single-transcriber + diarizedTurns paths. +12 tests.
+- 2026-05-18 `d2c92a1` Stage C — `ModelLanguagePicker` view + AIModelsTab integration (show when descriptor.supportedLanguages non-nil AND state ∈ {ready, active}) + MV-LANGHINT-1..8 across both manual runbooks. +6 tests.
+
+**Adversarial review**: req-0012 BLOCKER from codex-hermes after rev 1 forced narrowing of original "wire all 5 engines" plan — caught unverified "25 EU BCP-47" Parakeet v3 claim + Qwen3 enum-format mismatch. Rev 2 narrowed to Whisper-only; rev 3 widened back to include Qwen3 with adapter-internal map after user-locked registry-as-source-of-truth principle + mode-default-gate addition.
+
+**Legacy:** carved out of original #090 entry on 2026-04-29 when the descriptor-pinning slice shipped without language plumbing.
+
+---
+
+### #095 — Extend ASR catalog beyond Parakeet+Qwen (Tier 2: Whisper via WhisperKit)
+
+`feature` · `P2` · `done` · `area: transcription, models, catalog, multilingual`
+*Filed 2026-04-30, closed 2026-05-18*
+
+Added Whisper as a second ASR runtime via `argmaxinc/argmax-oss-swift` (WhisperKit) SPM dependency. Five descriptors covering tiny / small / small-en / large-v3 / large-v3-turbo with chip-family gating on turbo (M2+). Vendor-bound naming throughout (`whisperkit-*` descriptor IDs, `WhisperKit*` types) so #098 whisper.cpp adapter slotted in cleanly as a parallel runtime.
+
+Real implementation history was longer than the typical "one ticket = one Stage A→E" cycle because two post-Stage-D bugs surfaced during dogfood (silent partial downloads, app crash on dyld load). Both fixed before closure; both gated on review research (codex-apollo did the download-bug research recommending option 5 = folder-root glob).
+
+**Plans on disk**: `plans/095_whisperkit/{DESIGN.md (rev 3), IMPLEMENTATION.md (rev 3), whisperkit-api-notes.md, REVIEW-consolidated.md, DOWNLOAD-BUG-RESEARCH.md, FOLLOWUP_whispercpp.md (drafted, became #098)}`.
+
+**Tier 3** (Canary / Parakeet 1.1B / Granite / Phi-4 / Seamless) — still out of scope; left as reference notes in plans/.
+
+**Changelog**
+- 2026-05-18 `ad6fda5` Stage A.0 — paper-spike confirming SPM pin to argmax-oss-swift v1.0.0 + tokenizer-folder source-trace findings.
+- 2026-05-18 `26099fa..cbab105` Stage A.1-A.3 — `TranscriptionEngine.whisperKit` engine case, `ChipFamily.{m1,m2OrLater}` (sysctlbyname-based), `ModelDescriptor.tokenizerSource: String?` + `requiredChipFamily: ChipFamily?` optional fields. SIGSEGV fix at A.3.1 (stale module cache, not real bug).
+- 2026-05-18 `edeb567` Stage A.4 — centralized `ActiveModelService.canActivate(_:)` predicate applied at 4 call sites including chip-mismatch fallback to default activatable in `resolveInitialActiveIDs`.
+- 2026-05-18 `75ca6cf` Stage A.5 — 5 disabled catalog descriptors (whisperkit-tiny / small-216mb / small-en-217mb / large-v3-626mb / large-v3-turbo-632mb) with verified HF sizes + turbo M2+ chip gate.
+- 2026-05-18 `dadaac8` Stage B.1 — `WhisperKitTranscriberAdapter` skeleton with two-step HubApi.snapshot → FileManager.moveItem download path, both modelFolder AND tokenizerFolder passed to WhisperKitConfig.
+- 2026-05-18 `d0ed7f8..0702d8d` Stage B.5-C — adapter wire + atomic enable flip of all 5 descriptors in one commit + Stage C live-manager staging seam tests + Stage D manual runbooks for WhisperKit rows / offline tokenizer pass / non-English smoke / chip-gate.
+- 2026-05-18 `c83c151` Stage B.5-C.1 — warning cleanups across TestBootstrap + `WhisperKitTranscriberAdapter` `try downloadPlan()` fix + transitive `swift-argument-parser` pin in Package.resolved.
+- 2026-05-18 `b0522ea` Stage C.2 — fix silent partial-download bug (req-0005). `bundlePatterns = ["<repoFolderName>/*"]` folder-root glob per apollo's research (req-0004 → `plans/095_whisperkit/DOWNLOAD-BUG-RESEARCH.md`); `requiredRelativePaths` preserved as literal validation checklist. API rename `relativePaths → matchingPatterns` end-to-end. Root cause: HubApi.snapshot uses fnmatch and only downloads files matching literal globs, so per-file `.mlmodelc/coremldata.bin` patterns downloaded only the leaf binaries, not the surrounding directory contents.
+- 2026-05-18 `b15f8dd` Stage C.3 (packaging) — fix dyld load failure on installed app (req-0011). `scripts/package.py` now copies built `whisper.framework` into `Contents/Frameworks/`, sets `@loader_path/../Frameworks` rpath, signs bundled frameworks before app signing, adds `com.apple.security.cs.disable-library-validation` entitlement so the Nitkrar Dev self-signed identity can load third-party dynamic framework under hardened runtime.
+- 2026-05-18 `5504f51` Stage C.4 — fix WhisperCpp adapter empty-transcript bug (not WhisperKit; surfaced during shared multilingual dogfood). `params.detect_language = true` was causing whisper_full to exit after language auto-detect without running the decoder. Removed the line; `params.language = "auto"` still triggers auto-detect-then-transcribe. (Also closed against #098 since the WhisperCpp adapter is its primary consumer.)
+
+**Final release artifact**: Ninimma.app 12MB / DMG 6.1MB (was ~9.5MB pre-#095, +2.5MB for WhisperKit + ArgmaxCore code; CoreML model bundles stay out of app — downloaded at runtime).
+
+**Legacy:** none — net-new.
+
+---
+
+### #098 — Whisper.cpp ASR adapter (parallel runtime to #095's WhisperKit)
+
+`feature` · `P3` · `done` · `area: transcription, models, adapters`
+*Filed 2026-05-18 (as broker request scope, not in BACKLOG.md), closed 2026-05-18*
+
+Added whisper.cpp as a SECOND Whisper runtime, parallel to #095's WhisperKit adapter, so we could A/B the two on real metrics and hedge against vendor positioning risk (Pro upsell tightening, OSS deprecation, etc.). Vendor-bound naming `whispercpp-*` mirrors #095's `whisperkit-*` so both runtimes coexist cleanly in the catalog. Three descriptors v1: tiny, small-q5_1, large-v3-turbo-q5_0.
+
+Two parallel paper spikes (codex-hermes + pool-claude-1, independent, no cross-coordination) converged on identical findings: ANE no-go for v1 (`--optimize-ane True` is broken in whisper.cpp's official generate-coreml-model.sh per PR #3632; community benchmarks show no consistent speedup vs Metal; large-v3-turbo cut decoder not encoder so even theoretical 3× encoder speedup → 5-15% wall-clock); use upstream `ggml-org/whisper.cpp` v1.8.4 binary XCFramework via SwiftPM .binaryTarget with pinned URL+sha256 (avoids whisper.spm sunset + SwiftWhisper staleness).
+
+**Plans on disk**: `plans/098_whispercpp/{DESIGN.md (rev 1), IMPLEMENTATION.md (rev 1), SPIKE.md (hermes), SPIKE-pool-claude.md (parallel pass)}`.
+
+**Changelog**
+- 2026-05-18 `da1a8b7` Phase 1 — paper-spike doc landed in plans/098_whispercpp/SPIKE.md (no code; recommendation: XCFramework + thin C bridge; ANE no-go).
+- 2026-05-18 `49b539e` Phase 2 — DESIGN.md + IMPLEMENTATION.md (no code; 14 D-decisions, 4-stage compressed rollout, 3 §6 open items locked by user: XCFramework v1.8.4 pin / direct GitHub URL + sha / Option A folder naming `whispercpp-*`).
+- 2026-05-18 `f67aab9` Stage A — XCFramework v1.8.4 .binaryTarget pin with real sha256, `TranscriptionEngine.whisperCpp` engine case + kind/codable wiring, 3 disabled `whispercpp-*` catalog descriptors with namespaced repoFolderName leaves, `NoOpDisabledTranscriber` provider stub. +6 tests.
+- 2026-05-18 `434bdeb` Stage B — `WhisperCppTranscriberAdapter` (669 LOC + 593 LOC tests) with direct sibling-temp download path + atomic rename, queue-serialized live manager (one whisper_context per descriptor, blocking C calls off the cooperative executor), provider swap, atomic isEnabled flip of all 3 descriptors in same commit. +14 tests.
+- 2026-05-18 `6720446` Stage C — MV-WHISPERCPP-1..7 across both manual runbooks (download + on-disk checks + offline activation + delete/redownload + WhisperKit↔whispercpp switchback).
+- 2026-05-18 `b15f8dd` packaging fix — same fix that landed #095's dyld load failure (Frameworks bundling + entitlement + signing). Shared across both Whisper runtimes since both depend on a dynamic framework.
+- 2026-05-18 `5504f51` adapter empty-transcript fix — `params.detect_language = true` short-circuit removed (see #095 closure for root-cause detail).
+
+**Adversarial collaboration**: req-0007 (hermes paper spike) + req-0008 (pool-claude-1 parallel paper spike) → req-0009 (design + impl plan) → req-0010 (code phase) → req-0011 (packaging fix). All broker requests resolved.
+
+**Legacy:** filed at user direction during #095 design phase as a vendor-diversification insurance policy. Original draft at `plans/095_whisperkit/FOLLOWUP_whispercpp.md` (now obsolete — superseded by `plans/098_whispercpp/`).
+
+---
+
 ## From `ui-mockup-gaps.md` (22 closed)
 
 | Group | Items | Commits |

@@ -530,71 +530,6 @@ Two entry points for offline transcription of audio files.
 
 ---
 
-### #095 — Extend ASR catalog beyond Parakeet+Qwen
-
-`feature` · `P2` · `open` · `area: transcription, models, catalog, multilingual`
-*Filed 2026-04-30*
-
-Today the catalog ships English-only ASR (Parakeet TDT 0.6B v2/v3 + TDT-CTC 110M, plus Parakeet EOU streaming) and a single multilingual option (Qwen3 ASR, currently `isEnabled: false` per #091). Multilingual users have no working option. The English options are all NVIDIA Parakeet variants — same model family, no diversity in architecture or training data.
-
-This ticket tracks adding an additional ASR family beyond what FluidAudio supports, starting with Whisper.
-
-**No Tier 1 candidates exist today.** The only English-only Parakeet variant FluidAudio's `Repo` enum knows about that we haven't registered — `parakeet-ctc-0.6b-coreml` — is wired only into `CtcKeywordSpotter` (custom-vocabulary keyword detection), not the general `AsrManager`. Registering it as a transcriber descriptor would download the bytes but fail at session start because `AsrModelVersion` has no `ctc06b` case. Parakeet 1.1B has no CoreML conversion. Japanese/Chinese language-pinned variants are intentionally excluded from this scope (covered under per-language UX in #091).
-
-**Tier 2 — Whisper via WhisperKit** *(the actual scope of this ticket)*
-
-WhisperKit ([github.com/argmaxinc/WhisperKit](https://github.com/argmaxinc/WhisperKit)) is a pure-Swift Whisper runtime built on CoreML. Same author publishes pre-converted CoreML model bundles on HuggingFace (`argmaxinc/whisperkit-coreml`). Multilingual (~99 languages), gold-standard ASR accuracy, ANE-accelerated.
-
-Why WhisperKit specifically over whisper.cpp:
-- Pure Swift — no C++ bridging, no `module.modulemap` header juggling, less cross-platform glue.
-- Idiomatic async/await + Combine API matches our existing adapter shape (`Transcriber` protocol from #078).
-- Designed for Apple platforms; ANE acceleration on by default.
-- whisper.cpp is more mature and cross-platform but Ninimma is macOS-only — the cross-platform value doesn't apply.
-
-**Distil-Whisper note**: distilled smaller/faster Whisper variants from HuggingFace (`distil-large-v3`, `distil-medium`, `distil-small`). Loaded by the same WhisperKit runtime — not a separate runtime decision. If we want a "fast Whisper" tier alongside the accurate one, we ship a distil-* model bundle in addition to the standard one. Sub-decision under this ticket, not a separate ticket.
-
-**Scope**:
-
-1. **New Swift package dependency** — `argmaxinc/WhisperKit` in `Package.swift`. Pin a release (latest stable at filing time).
-2. **New `TranscriptionEngine` case** — `.whisper` (or `.whisperKit` if we want to keep engine cases vendor-bound). Single case covers all model sizes; size differentiation lives in the descriptor `id` + display metadata.
-3. **New `WhisperKitTranscriberAdapter`** — conforms to `Transcriber`. Mirrors `FluidAudioParakeetTranscriberAdapter`'s shape: `prepare()` loads the CoreML bundle via WhisperKit, `transcribe(_:)` runs inference, `modelDownloadProgress()` bridges WhisperKit's progress to our existing `ModelDownloadProgress` stream.
-4. **Model descriptors** (start with one or two; expand on demand):
-   - `whisper-large-v3-turbo` — accuracy/speed sweet spot. Most users.
-   - `whisper-large-v3` — slowest, highest accuracy. Optional second slot for power users.
-   - Optional `distil-large-v3` — fast English-focused tier. Defer until v2 if dogfooding shows demand.
-5. **AI Models tab integration** — the tab iterates over `BuiltInModelCatalog.registeredModels`, so new entries surface automatically. Validate per-row metadata (size, WER, license) renders correctly.
-6. **`worksWith` / `supportedLanguages`** — Whisper-large-v3 supports ~99 languages. Match against the schema decided in #091.
-7. **`requiredRelativePaths`** — WhisperKit's CoreML bundle has its own folder layout (encoder + decoder + tokenizer); confirm against `argmaxinc/whisperkit-coreml` HF tree at conversion time.
-8. **Tests** — `WhisperKitTranscriberAdapterTests` covering prepare/transcribe/progress flow against a stub WhisperKit; integration smoke test against a fixture audio if WhisperKit's API permits in-memory model injection.
-
-**Effort estimate**:
-- Package dependency + engine case + descriptor: 0.25d
-- Adapter (load + transcribe + progress bridge): 0.5–1d (depends on WhisperKit's internals; first integration always overruns)
-- Tests + fixtures: 0.25d
-- AI Models tab metadata sourcing (HF tree fetch, license, WER, RTFx): 0.25d
-- **Total**: M (~1.25–2d) for one model size; +0.25d per additional descriptor.
-
-**Depends on**: nothing blocking. Plays well with #091 (per-mode language hint) — Whisper's multilingual nature is the ideal consumer of the language picker once #091 lands.
-
-**Unblocks**: multilingual transcription for non-English users. Optional fallback when Parakeet underperforms on a recording's domain (medical, legal, accented speech).
-
----
-
-## Tier 3 — reference notes (future / out-of-scope for this ticket)
-
-Models considered but not in immediate scope. Left here so future readers don't re-research the same ground.
-
-- **NVIDIA Canary** (`canary-1b`, `canary-180m-flash`) — multilingual ASR (en/de/es/fr) plus speech translation. Strong benchmarks. NeMo checkpoint format only; no CoreML conversion published. Adding requires NeMo→CoreML conversion pipeline (significant) or waiting for someone (FluidInference?) to publish.
-- **NVIDIA Parakeet 1.1B variants** (`parakeet-tdt-1.1b`, `parakeet-rnnt-1.1b`, `parakeet-ctc-1.1b`) — bigger sibling of the 0.6B. Same conversion blocker as Canary: NeMo only, no CoreML.
-- **Pure CTC 0.6B** (`FluidInference/parakeet-ctc-0.6b-coreml`) — CoreML exists but FluidAudio's `AsrModelVersion` enum has no `ctc06b` case, so `AsrManager` won't load it as a transcriber. Currently used internally by `CtcKeywordSpotter` only. Unblocks if FluidAudio adds the case OR if we write our own inference pipeline on top of the loaded models.
-- **IBM Granite Speech 3.3** — open weights, multilingual. CoreML ecosystem immature. Wait-and-see.
-- **Microsoft Phi-4 multimodal** — speech-aware multimodal model. New (early 2025); CoreML conversions immature.
-- **Meta SeamlessM4T** — speech-to-text + translation in one model. Heavy. Better fit if Ninimma ever adds a translation feature; not pure ASR.
-- **whisper.cpp** — alternative Whisper runtime. More mature than WhisperKit, but C++ bridging + cross-platform features that don't apply to a macOS-only app. Defer unless WhisperKit hits a wall.
-
-**Legacy:** none — net-new.
-
----
 
 ### #096 — Diagnostics system consolidation
 
@@ -661,44 +596,6 @@ That split is workable for the immediate error-display fix but is the wrong long
 
 ## Refactors
 
-### #091 — Per-mode language hint
-
-`refactor` · `P2` · `open` · `area: transcription, models, modes, recipes`
-*Filed 2026-04-29 (carved out of #090)*
-
-When a pinned descriptor is multilingual, the user picks a target language for that mode. E.g. a "Japanese meeting" mode pinned to Qwen3 with `language: "ja"`.
-
-**Why deferred from #090**: two prerequisites that #090 couldn't satisfy.
-
-1. **Qwen3 re-enablement**. Qwen3 is `isEnabled: false` in `BuiltInModelCatalog` today (was a memory hog pre-#078). Post-#078 eviction fix (`10a81f0`) may have addressed it — needs re-validation on the Air with the released DMG. Until Qwen3 is re-enabled, the language picker has no consumer (Parakeet doesn't accept hints).
-2. **Parakeet upstream blocker**. Parakeet's "25 EU languages" is a model-internal capability with no FluidAudio API to control target language at runtime. File a FluidAudio issue requesting per-call language hint for Parakeet TDT batch + streaming. Until that lands, Parakeet rows hide the language picker even though the model card claims multilingual.
-
-**Scope**:
-- Add `language: String?` to `.transcriber` / `.streamingTranscriber` / `.diarizedTurns` (or wrap in a `TranscriptionOptions` struct alongside `descriptorID`).
-- Add `supportedLanguages: [String]?` to `ModelDescriptor`. nil = monolingual; otherwise structured language list (replaces freeform `worksWith` for picker logic, keeps `worksWith` for human copy).
-- `WorkflowModeValidator`: validate language-present-on-supported-processor + language-supported-by-pinned-descriptor.
-- `RecipeBuilder` → `BoundRecipe` → `Transcriber.transcribe(_:options:)` → adapters: thread the language through.
-- `FluidAudioQwenTranscriberAdapter`: plumb language to `Qwen3AsrManager.transcribe(audioSamples:language:)`.
-- Re-enable Qwen3 in `BuiltInModelCatalog` after memory re-validation.
-- Modes editor: add a "Language" row that appears only when the selected descriptor has `supportedLanguages != nil`. Carries through to the `WorkflowMode` recipe.
-- Reconcile language-list inconsistencies: codex flagged 16-vs-30 for Qwen, 24-vs-25 for Parakeet. File upstream issue or pin a canonical list with citations.
-
-**Future-relevant**: when Whisper.cpp (or any other multilingual engine) lands, this seam already exists.
-
-**Effort estimate** (carry-over from #090's codex breakdown):
-- Descriptor metadata + mapping tables + validator wiring: 0.25-0.5d
-- Recipe schema + Codable fallout + orchestrator/diarized-turn-processor plumbing: 0.5-0.75d
-- Qwen adapter + live-manager + validation: 0.25-0.5d
-- Modes editor integration: 0.25d
-- Total: M (~1-1.5d) for "Qwen-only" scope; L (>1.5d) if waiting on upstream Parakeet.
-
-**Depends on**: #090 (descriptor pinning, shipped). Qwen3 memory re-validation independent — schedule a 30-minute dogfood pass to confirm or deny the eviction fix's effect on Qwen.
-
-**Evidence**: `plans/investigations/2026-04-28-multilang-feasibility-codex.md`.
-
-**Legacy:** carved out of original #090 entry on 2026-04-29 when the descriptor-pinning slice shipped without language plumbing.
-
----
 
 ### #088 — Narrow FluidAudio model download to runtime-needed files
 
