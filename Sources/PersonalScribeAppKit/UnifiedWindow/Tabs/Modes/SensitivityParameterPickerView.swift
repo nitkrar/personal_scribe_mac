@@ -35,9 +35,9 @@ struct SensitivityParameterPickerView: View {
 
             Picker("", selection: selectionBinding) {
                 Text(defaultLabel).tag(Selection.useDefault)
-                Text("Force Relaxed").tag(Selection.force(.relaxed))
-                Text("Force Balanced").tag(Selection.force(.balanced))
-                Text("Force Strict").tag(Selection.force(.strict))
+                Text(Self.overrideLabel(for: .relaxed)).tag(Selection.force(.relaxed))
+                Text(Self.overrideLabel(for: .balanced)).tag(Selection.force(.balanced))
+                Text(Self.overrideLabel(for: .strict)).tag(Selection.force(.strict))
             }
             .labelsHidden()
             .pickerStyle(.menu)
@@ -47,7 +47,7 @@ struct SensitivityParameterPickerView: View {
 
     private var defaultLabel: String {
         let live = SpeakerSeparationSensitivityPreference.resolve(from: defaults)
-        return "Default (Live: \(Self.label(for: live)))"
+        return "Default (Live: \(Self.overrideLabel(for: live)))"
     }
 
     private var selectionBinding: Binding<Selection> {
@@ -71,7 +71,7 @@ struct SensitivityParameterPickerView: View {
         )
     }
 
-    private static func label(for sensitivity: SpeakerSeparationSensitivity) -> String {
+    static func overrideLabel(for sensitivity: SpeakerSeparationSensitivity) -> String {
         switch sensitivity {
         case .relaxed: "Relaxed"
         case .balanced: "Balanced"
