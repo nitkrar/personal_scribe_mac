@@ -292,4 +292,37 @@ final class BuiltInModelCatalogTests: XCTestCase {
             XCTAssertEqual(item.descriptor.license, "MIT")
         }
     }
+
+    func testWhisperFamilyLanguageCodesStayStable() {
+        XCTAssertEqual(WhisperFamilyLanguages.codes.count, 100)
+        XCTAssertEqual(Set(WhisperFamilyLanguages.codes).count, WhisperFamilyLanguages.codes.count)
+        XCTAssertTrue(Set(WhisperFamilyLanguages.codes).isSuperset(of: ["en", "ja", "zh", "es", "de"]))
+    }
+
+    func testSupportedLanguagesMatchRev2WhisperFamilyScope() {
+        let whisperFamilyDescriptorIDs: Set<String> = [
+            BuiltInModelCatalog.whisperKitTiny.id,
+            BuiltInModelCatalog.whisperKitSmall216MB.id,
+            BuiltInModelCatalog.whisperKitLargeV3626MB.id,
+            BuiltInModelCatalog.whisperKitLargeV3Turbo632MB.id,
+            BuiltInModelCatalog.whisperCppTiny.id,
+            BuiltInModelCatalog.whisperCppSmallQ51.id,
+            BuiltInModelCatalog.whisperCppLargeV3TurboQ50.id,
+        ]
+
+        for descriptor in BuiltInModelCatalog.registeredModels {
+            if whisperFamilyDescriptorIDs.contains(descriptor.id) {
+                XCTAssertEqual(
+                    descriptor.supportedLanguages,
+                    WhisperFamilyLanguages.codes,
+                    "\(descriptor.id) should expose the shared Whisper-family language list"
+                )
+            } else {
+                XCTAssertNil(
+                    descriptor.supportedLanguages,
+                    "\(descriptor.id) should not expose a v1 language picker"
+                )
+            }
+        }
+    }
 }

@@ -165,6 +165,10 @@ public struct ModelDescriptor: Sendable, Equatable {
     /// hidden on older Apple Silicon.
     public let requiredChipFamily: ChipFamily?
 
+    /// Optional list of user-selectable language hints for this model.
+    /// `nil` means the UI should hide the picker for this descriptor.
+    public let supportedLanguages: [String]?
+
     /// Companion repos this descriptor's runtime needs in addition to
     /// `repoFolderName`. Folder names match FluidAudio's `Repo.folderName`
     /// for the auxiliary repos.
@@ -206,6 +210,7 @@ public struct ModelDescriptor: Sendable, Equatable {
         license: String? = nil,
         tokenizerSource: String? = nil,
         requiredChipFamily: ChipFamily? = nil,
+        supportedLanguages: [String]?,
         auxiliaryRepoFolderNames: [String] = []
     ) {
         self.id = id
@@ -226,7 +231,53 @@ public struct ModelDescriptor: Sendable, Equatable {
         self.license = license
         self.tokenizerSource = tokenizerSource
         self.requiredChipFamily = requiredChipFamily
+        self.supportedLanguages = supportedLanguages
         self.auxiliaryRepoFolderNames = auxiliaryRepoFolderNames
+    }
+
+    public init(
+        id: String,
+        displayName: String,
+        repoFolderName: String? = nil,
+        shortDescription: String,
+        architecture: String,
+        repository: String,
+        revision: String,
+        requiredRelativePaths: [String],
+        approximateSizeBytes: Int64,
+        isEnabled: Bool = true,
+        engine: TranscriptionEngine,
+        performance: ModelPerformance = ModelPerformance(),
+        madeBy: String? = nil,
+        worksWith: String? = nil,
+        goodFor: String? = nil,
+        license: String? = nil,
+        tokenizerSource: String? = nil,
+        requiredChipFamily: ChipFamily? = nil,
+        auxiliaryRepoFolderNames: [String] = []
+    ) {
+        self.init(
+            id: id,
+            displayName: displayName,
+            repoFolderName: repoFolderName,
+            shortDescription: shortDescription,
+            architecture: architecture,
+            repository: repository,
+            revision: revision,
+            requiredRelativePaths: requiredRelativePaths,
+            approximateSizeBytes: approximateSizeBytes,
+            isEnabled: isEnabled,
+            engine: engine,
+            performance: performance,
+            madeBy: madeBy,
+            worksWith: worksWith,
+            goodFor: goodFor,
+            license: license,
+            tokenizerSource: tokenizerSource,
+            requiredChipFamily: requiredChipFamily,
+            supportedLanguages: nil,
+            auxiliaryRepoFolderNames: auxiliaryRepoFolderNames
+        )
     }
 
     public func resolveURL(for relativePath: String) -> URL {

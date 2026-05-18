@@ -180,7 +180,8 @@ public enum BuiltInModelCatalog {
         worksWith: "Multilingual (~99 languages)",
         goodFor: "Quick multilingual dictation, smoke tests, low-RAM Macs",
         license: "MIT (WhisperKit) + Apache 2.0 (Whisper weights)",
-        tokenizerSource: "openai/whisper-tiny"
+        tokenizerSource: "openai/whisper-tiny",
+        supportedLanguages: WhisperFamilyLanguages.codes
     )
 
     public static let whisperKitSmall216MB = ModelDescriptor(
@@ -199,7 +200,8 @@ public enum BuiltInModelCatalog {
         worksWith: "Multilingual (~99 languages)",
         goodFor: "Multilingual dictation on everyday Apple Silicon Macs",
         license: "MIT (WhisperKit) + Apache 2.0 (Whisper weights)",
-        tokenizerSource: "openai/whisper-small"
+        tokenizerSource: "openai/whisper-small",
+        supportedLanguages: WhisperFamilyLanguages.codes
     )
 
     public static let whisperKitSmallEn217MB = ModelDescriptor(
@@ -237,7 +239,8 @@ public enum BuiltInModelCatalog {
         worksWith: "Multilingual (~99 languages)",
         goodFor: "Higher-accuracy multilingual dictation",
         license: "MIT (WhisperKit) + Apache 2.0 (Whisper weights)",
-        tokenizerSource: "openai/whisper-large-v3"
+        tokenizerSource: "openai/whisper-large-v3",
+        supportedLanguages: WhisperFamilyLanguages.codes
     )
 
     public static let whisperKitLargeV3Turbo632MB = ModelDescriptor(
@@ -257,7 +260,8 @@ public enum BuiltInModelCatalog {
         goodFor: "Higher-accuracy multilingual dictation on M2+ with faster decode",
         license: "MIT (WhisperKit) + Apache 2.0 (Whisper weights)",
         tokenizerSource: "openai/whisper-large-v3",
-        requiredChipFamily: .m2OrLater
+        requiredChipFamily: .m2OrLater,
+        supportedLanguages: WhisperFamilyLanguages.codes
     )
 
     // MARK: - whisper.cpp ASR
@@ -283,7 +287,8 @@ public enum BuiltInModelCatalog {
         madeBy: "OpenAI · ggml-org",
         worksWith: "Multilingual (~99 languages)",
         goodFor: "Quick multilingual dictation, smoke tests, lowest disk footprint",
-        license: "MIT"
+        license: "MIT",
+        supportedLanguages: WhisperFamilyLanguages.codes
     )
 
     public static let whisperCppSmallQ51 = ModelDescriptor(
@@ -301,7 +306,8 @@ public enum BuiltInModelCatalog {
         madeBy: "OpenAI · ggml-org",
         worksWith: "Multilingual (~99 languages)",
         goodFor: "Everyday multilingual dictation with lower disk than full small",
-        license: "MIT"
+        license: "MIT",
+        supportedLanguages: WhisperFamilyLanguages.codes
     )
 
     public static let whisperCppLargeV3TurboQ50 = ModelDescriptor(
@@ -319,7 +325,8 @@ public enum BuiltInModelCatalog {
         madeBy: "OpenAI · ggml-org",
         worksWith: "Multilingual (~99 languages)",
         goodFor: "Higher-accuracy multilingual dictation with reduced large-v3 disk cost",
-        license: "MIT"
+        license: "MIT",
+        supportedLanguages: WhisperFamilyLanguages.codes
     )
 
     // MARK: - Streaming ASR (parakeet realtime EOU)

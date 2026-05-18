@@ -71,6 +71,20 @@ public enum AppComposition {
         )
     }()
 
+    public static let modelLanguagePreference: ModelLanguagePreference = makeModelLanguagePreference()
+
+    static func makeModelLanguagePreference(
+        suiteName: String? = nil,
+        registeredModels: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
+        logger: PersonalScribeLogger? = nil
+    ) -> ModelLanguagePreference {
+        ModelLanguagePreference(
+            suiteName: suiteName,
+            registeredModels: registeredModels,
+            logger: logger ?? makeLogger(PersonalScribeLogCategory.app)
+        )
+    }
+
     /// VAD provider — nil if the bundled Silero `.mlmodelc` resource failed
     /// to resolve (dev / shipping error). Failure is silent: the orchestrator
     /// treats nil identically to the "feature disabled" path, so recording
@@ -158,6 +172,7 @@ public enum AppComposition {
 
     public static let sessionCoordinator: SessionCoordinator = {
         let logger = makeLogger(PersonalScribeLogCategory.session)
+        _ = modelLanguagePreference
         let capture = AVAudioCaptureService(
             logger: makeLogger(PersonalScribeLogCategory.audio),
             inputDeviceProvider: AVFoundationInputDeviceProvider(defaults: .standard),

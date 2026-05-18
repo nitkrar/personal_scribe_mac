@@ -20,6 +20,7 @@ extension ModelDescriptor: Codable {
         case performance
         case tokenizerSource
         case requiredChipFamily
+        case supportedLanguages
     }
 
     public init(from decoder: Decoder) throws {
@@ -46,7 +47,8 @@ extension ModelDescriptor: Codable {
             engine: try container.decode(TranscriptionEngine.self, forKey: .engine),
             performance: try container.decodeIfPresent(ModelPerformance.self, forKey: .performance) ?? ModelPerformance(),
             tokenizerSource: try container.decodeIfPresent(String.self, forKey: .tokenizerSource),
-            requiredChipFamily: try container.decodeIfPresent(ChipFamily.self, forKey: .requiredChipFamily)
+            requiredChipFamily: try container.decodeIfPresent(ChipFamily.self, forKey: .requiredChipFamily),
+            supportedLanguages: try container.decodeIfPresent([String].self, forKey: .supportedLanguages)
         )
     }
 
@@ -66,5 +68,6 @@ extension ModelDescriptor: Codable {
         try container.encode(performance, forKey: .performance)
         try container.encodeIfPresent(tokenizerSource, forKey: .tokenizerSource)
         try container.encodeIfPresent(requiredChipFamily, forKey: .requiredChipFamily)
+        try container.encodeIfPresent(supportedLanguages, forKey: .supportedLanguages)
     }
 }
