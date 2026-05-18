@@ -147,6 +147,10 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
             }
             operationObserver.record(.readSucceeded)
             return entries
+        } catch is CancellationError {
+            // Caller (e.g. SwiftUI view) tore down before the query
+            // finished. Not a failure; don't pollute errors.log.
+            return []
         } catch {
             logger.error("TranscriptRepository.recent failed", error: error)
             operationObserver.record(.readFailed)
@@ -162,6 +166,8 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
             }
             operationObserver.record(.readSucceeded)
             return result
+        } catch is CancellationError {
+            return 0
         } catch {
             logger.error("TranscriptRepository.count failed", error: error)
             operationObserver.record(.readFailed)
@@ -276,6 +282,8 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
             }
             operationObserver.record(.readSucceeded)
             return entries
+        } catch is CancellationError {
+            return []
         } catch {
             logger.error("TranscriptRepository.entries(in:orderedBy:) failed", error: error)
             operationObserver.record(.readFailed)
