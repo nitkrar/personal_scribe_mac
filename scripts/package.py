@@ -43,6 +43,8 @@ ICNS_SOURCE = (
     REPO_ROOT / "Sources" / "PersonalScribeAppKit" / "Resources" / "AppIcon.icns"
 )
 SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "personal_scribe"
+RUNTIME_FRAMEWORK_NAME = "whisper.framework"
+RUNTIME_FRAMEWORK_RPATH = "@loader_path/../Frameworks"
 
 # Keep Stable self-signed identity for TCC persistence across rebuilds
 # (see sign() for why).
@@ -88,6 +90,11 @@ def git_sha() -> str:
     )
     sha = result.stdout.strip()
     return sha if sha else "unknown"
+
+
+def binary_has_rpath(binary: Path, rpath: str) -> bool:
+    result = run(["otool", "-l", str(binary)], capture=True)
+    return f"path {rpath} (offset " in (result.stdout or "")
 
 
 # --- CLI ---------------------------------------------------------------------
@@ -329,6 +336,7 @@ def assemble_app(binary: Path, config: str) -> None:
     if APP_PATH.exists():
         shutil.rmtree(APP_PATH)
     (APP_PATH / "Contents" / "MacOS").mkdir(parents=True)
+    (APP_PATH / "Contents" / "Frameworks").mkdir(parents=True)
     (APP_PATH / "Contents" / "Resources").mkdir(parents=True)
 
     dest_binary = APP_PATH / "Contents" / "MacOS" / BINARY_NAME
@@ -342,6 +350,28 @@ def assemble_app(binary: Path, config: str) -> None:
     if config == "release":
         print("==> Stripping release binary symbols...")
         run(["strip", "-x", str(dest_binary)])
+
+    framework_source = binary.resolve().parent / RUNTIME_FRAMEWORK_NAME
+    framework_dest = APP_PATH / "Contents" / "Frameworks" / RUNTIME_FRAMEWORK_NAME
+    print(f"==> Bundling {RUNTIME_FRAMEWORK_NAME} from {framework_source}...")
+    if not framework_source.is_dir():
+        print(
+            f"error: runtime framework not found at {framework_source}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    shutil.copytree(framework_source, framework_dest, symlinks=True)
+
+    if not binary_has_rpath(dest_binary, RUNTIME_FRAMEWORK_RPATH):
+        print(f"==> Adding runtime search path {RUNTIME_FRAMEWORK_RPATH}...")
+        run(
+            [
+                "install_name_tool",
+                "-add_rpath",
+                RUNTIME_FRAMEWORK_RPATH,
+                str(dest_binary),
+            ]
+        )
 
     (APP_PATH / "Contents" / "Info.plist").write_text(info_plist_contents())
     (APP_PATH / "Contents" / "PkgInfo").write_text("APPL????")
@@ -400,6 +430,8 @@ ENTITLEMENTS_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
     <key>com.apple.security.device.audio-input</key>
     <true/>
 </dict>
@@ -409,6 +441,21 @@ ENTITLEMENTS_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
 
 def sign() -> None:
     identity = resolve_signing_identity()
+    frameworks_dir = APP_PATH / "Contents" / "Frameworks"
+    for framework in sorted(frameworks_dir.glob("*.framework")):
+        print(f"==> Signing bundled framework {framework.name} with identity: {identity}")
+        run(
+            [
+                "codesign",
+                "--force",
+                "--sign",
+                identity,
+                "--timestamp=none",
+                str(framework),
+            ]
+        )
+        run(["codesign", "--verify", "--verbose", str(framework)])
+
     print(
         f"==> Signing with identity: {identity} "
         "(hardened runtime + mic entitlement)..."
