@@ -19,10 +19,15 @@ struct OfflineTranscriptionTab: View {
 
         ZStack(alignment: .trailing) {
             SettingsTabContainer {
-                VStack(alignment: .leading, spacing: SettingsLayout.sectionSpacing) {
-                    header
+                SettingsSection(
+                    title: "Offline Transcription",
+                    description: "Re-transcribe past recordings or import audio files for batch processing."
+                ) {
+                    settingsCard
                     dropZoneCard(palette: palette)
-                    queueCard(palette: palette)
+                    if !viewModel.jobs.isEmpty {
+                        queueCard(palette: palette)
+                    }
                 }
             }
             .background(resolvedBackground(palette: palette))
@@ -50,97 +55,88 @@ struct OfflineTranscriptionTab: View {
 }
 
 private extension OfflineTranscriptionTab {
-    var header: some View {
-        SettingsSection(
-            title: "Offline Files",
-            description: "Queue saved recordings for batch transcription with the selected voice model."
-        ) {
-            SettingsCard {
-                HStack(alignment: .top, spacing: SettingsLayout.itemSpacing) {
-                    VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
-                        Text("Model")
-                            .font(PersonalScribeTheme.Typography.caption.font.weight(.semibold))
-                            .foregroundStyle(.secondary)
+    var settingsCard: some View {
+        SettingsCard {
+            HStack(alignment: .center, spacing: SettingsLayout.itemSpacing) {
+                HStack(spacing: SettingsLayout.inlineSpacing) {
+                    Text("Model")
+                        .font(PersonalScribeTheme.Typography.caption.font.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
 
-                        Picker("Model", selection: $viewModel.selectedModelID) {
-                            ForEach(viewModel.availableModels, id: \.id) { descriptor in
-                                Text(descriptor.displayName).tag(descriptor.id)
-                            }
+                    Picker("Model", selection: $viewModel.selectedModelID) {
+                        ForEach(viewModel.availableModels, id: \.id) { descriptor in
+                            Text(descriptor.displayName).tag(descriptor.id)
                         }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
                     }
-
-                    Spacer(minLength: SettingsLayout.itemSpacing)
-
-                    Toggle("Enable diarization", isOn: $viewModel.diarizationEnabled)
-                        .toggleStyle(.switch)
-                        .controlSize(.regular)
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 320)
                 }
+
+                Spacer(minLength: SettingsLayout.itemSpacing)
+
+                Toggle("Detect speakers", isOn: $viewModel.diarizationEnabled)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .fixedSize()
             }
         }
     }
 
     func dropZoneCard(palette: PersonalScribeTheme.Palette) -> some View {
-        SettingsSection(
-            title: "Add Files",
-            description: "Drop audio files here or browse for `.wav`, `.m4a`, `.mp3`, and `.aac` sources."
-        ) {
-            SettingsCard {
-                VStack(alignment: .leading, spacing: SettingsLayout.itemSpacing) {
-                    VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
-                        Text("Drop audio files")
-                            .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
-                        Text("Files start when live capture is idle; multiple files process serially.")
-                            .font(PersonalScribeTheme.Typography.caption.font)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack(spacing: SettingsLayout.itemSpacing) {
-                        Label("Supports wav, m4a, mp3, aac", systemImage: "arrow.down.doc")
-                            .font(PersonalScribeTheme.Typography.caption.font)
-                            .foregroundStyle(.secondary)
-
-                        Spacer(minLength: 0)
-
-                        Button("Browse…") {
-                            Task {
-                                await viewModel.handlePickedFiles(Self.presentAudioPicker())
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-                .padding(.vertical, SettingsLayout.itemSpacing)
-                .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
-                .background(
-                    RoundedRectangle(
-                        cornerRadius: SettingsLayout.cardCornerRadius,
-                        style: .continuous
-                    )
-                    .fill(
-                        isDropTargeted
-                            ? palette.brandChampagne.opacity(0.14)
-                            : Color.clear
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(
-                        cornerRadius: SettingsLayout.cardCornerRadius,
-                        style: .continuous
-                    )
-                    .strokeBorder(
-                        isDropTargeted
-                            ? palette.brandChampagne.opacity(0.9)
-                            : palette.brandChampagne.opacity(0.25),
-                        style: StrokeStyle(lineWidth: 1, dash: [6, 4])
-                    )
-                )
-                .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
-                    Self.handleDroppedProviders(providers) { urls in
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: SettingsLayout.inlineSpacing) {
+                    Image(systemName: "arrow.down.doc")
+                        .foregroundStyle(.secondary)
+                    Text("Drop audio files here or")
+                        .font(PersonalScribeTheme.Typography.body.font)
+                        .foregroundStyle(.secondary)
+                    Button("Browse…") {
                         Task {
-                            await viewModel.handleFileDrop(urls)
+                            await viewModel.handlePickedFiles(Self.presentAudioPicker())
                         }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    Spacer(minLength: 0)
+                }
+
+                Text("Supports .wav .m4a .mp3 .aac · runs when live capture is idle")
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(
+                    cornerRadius: SettingsLayout.cardCornerRadius,
+                    style: .continuous
+                )
+                .fill(
+                    isDropTargeted
+                        ? palette.brandChampagne.opacity(0.14)
+                        : Color.clear
+                )
+            )
+            .overlay(
+                RoundedRectangle(
+                    cornerRadius: SettingsLayout.cardCornerRadius,
+                    style: .continuous
+                )
+                .strokeBorder(
+                    isDropTargeted
+                        ? palette.brandChampagne.opacity(0.9)
+                        : palette.brandChampagne.opacity(0.25),
+                    style: StrokeStyle(lineWidth: 1, dash: [6, 4])
+                )
+            )
+            .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
+                Self.handleDroppedProviders(providers) { urls in
+                    Task {
+                        await viewModel.handleFileDrop(urls)
                     }
                 }
             }
@@ -148,47 +144,66 @@ private extension OfflineTranscriptionTab {
     }
 
     func queueCard(palette: PersonalScribeTheme.Palette) -> some View {
-        SettingsSection(
-            title: "Queue",
-            description: "Queued files keep recent history visible while limiting the table to a compact height."
-        ) {
-            SettingsCard {
-                if viewModel.jobs.isEmpty {
-                    Text("No offline transcription jobs yet.")
-                        .font(PersonalScribeTheme.Typography.body.font)
-                        .foregroundStyle(.secondary)
-                } else {
-                    List(viewModel.jobs, id: \.id) { job in
-                        HStack(spacing: SettingsLayout.itemSpacing) {
-                            Label(
-                                job.url.lastPathComponent,
-                                systemImage: statusIcon(for: job.status)
-                            )
-                            .font(PersonalScribeTheme.Typography.body.font)
-                            .lineLimit(1)
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Recent")
+                    .font(PersonalScribeTheme.Typography.caption.font.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 2)
 
-                            Spacer(minLength: 0)
-
-                            Text(statusLabel(for: job.status))
-                                .font(PersonalScribeTheme.Typography.caption.font)
-                                .foregroundStyle(.secondary)
-
-                            if let action = rowAction(for: job) {
-                                Button(action.title) {
-                                    Task {
-                                        await action.handler()
-                                    }
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                            }
-                        }
-                        .padding(.vertical, 2)
+                ForEach(Array(viewModel.jobs.enumerated()), id: \.element.id) { index, job in
+                    if index > 0 {
+                        Divider().opacity(0.4)
                     }
-                    .listStyle(.plain)
-                    .frame(minHeight: 150, maxHeight: 220)
+                    queueRow(job: job, palette: palette)
                 }
             }
+        }
+    }
+
+    func queueRow(
+        job: OfflineTranscriptionCoordinator.Job,
+        palette: PersonalScribeTheme.Palette
+    ) -> some View {
+        HStack(spacing: SettingsLayout.inlineSpacing) {
+            Image(systemName: statusIcon(for: job.status))
+                .foregroundStyle(statusIconColor(for: job.status, palette: palette))
+                .frame(width: 16)
+
+            Text(job.url.lastPathComponent)
+                .font(PersonalScribeTheme.Typography.body.font)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: SettingsLayout.inlineSpacing)
+
+            Text(statusLabel(for: job.status))
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(.secondary)
+
+            if let action = rowAction(for: job) {
+                Button(action.title) {
+                    Task {
+                        await action.handler()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    func statusIconColor(
+        for status: OfflineTranscriptionCoordinator.JobStatus,
+        palette: PersonalScribeTheme.Palette
+    ) -> Color {
+        switch status {
+        case .queued: return .secondary
+        case .inFlight: return palette.statusLink
+        case .completed: return palette.statusLink
+        case .failed: return .orange
+        case .cancelled: return .secondary
         }
     }
 
