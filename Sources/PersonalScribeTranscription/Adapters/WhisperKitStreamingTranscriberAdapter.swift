@@ -287,7 +287,18 @@ private extension WhisperKitStreamingTranscriberAdapter {
     }
 }
 
-private struct WhisperKitStreamingLedger {
+struct WhisperKitStreamingLedger {
+    private struct TimedText {
+        let start: Float
+        let end: Float
+        let text: String
+    }
+
+    private static let specialTokenRegex = try! NSRegularExpression(
+        pattern: "<\\|[^|]*\\|>",
+        options: []
+    )
+
     private var lastCommittedSegmentEndSeconds: Float = 0
     private var committedUtterances: [String] = []
     private var currentPartialText = ""
@@ -302,7 +313,7 @@ private struct WhisperKitStreamingLedger {
             lastCommittedSegmentEndSeconds = max(lastCommittedSegmentEndSeconds, lastConfirmedEnd)
         }
 
-        let stableText = Self.joinedText(newlyConfirmed.map(\.text))
+        let stableText = Self.joinedText(newlyConfirmed)
         let emittedStable = !stableText.isEmpty
         if emittedStable {
             committedUtterances.append(stableText)
@@ -310,7 +321,7 @@ private struct WhisperKitStreamingLedger {
             events.append(.endOfUtterance(text: stableText))
         }
 
-        let partialText = Self.joinedText(state.unconfirmedSegments.map(\.text))
+        let partialText = Self.joinedText(state.unconfirmedSegments)
         currentPartialText = partialText
         if partialText.isEmpty {
             lastEmittedPartialText = ""
@@ -325,7 +336,7 @@ private struct WhisperKitStreamingLedger {
     func finalText(fallbackState: WhisperKitStreamingState?) -> String {
         if let fallbackState {
             let stateText = Self.joinedText(
-                (fallbackState.confirmedSegments + fallbackState.unconfirmedSegments).map(\.text)
+                fallbackState.confirmedSegments + fallbackState.unconfirmedSegments
             )
             if !stateText.isEmpty {
                 return stateText
@@ -338,14 +349,91 @@ private struct WhisperKitStreamingLedger {
         return Self.joinedText(pieces)
     }
 
+    static func joinedText(_ segments: [TranscriptionSegment]) -> String {
+        let cleanedSegments = segments.compactMap { segment -> TimedText? in
+            let text = sanitizePiece(segment.text)
+            guard !text.isEmpty else {
+                return nil
+            }
+
+            return TimedText(
+                start: segment.start,
+                end: segment.end,
+                text: text
+            )
+        }
+
+        guard !cleanedSegments.isEmpty else {
+            return ""
+        }
+
+        var mergedSegments: [TimedText] = []
+        for segment in cleanedSegments {
+            while let last = mergedSegments.last, segment.start <= last.start {
+                mergedSegments.removeLast()
+            }
+
+            if let last = mergedSegments.last, segment.start < last.end {
+                mergedSegments[mergedSegments.count - 1] = TimedText(
+                    start: last.start,
+                    end: max(last.end, segment.end),
+                    text: mergeOverlappingText(base: last.text, next: segment.text)
+                )
+            } else {
+                mergedSegments.append(segment)
+            }
+        }
+
+        return joinedText(mergedSegments.map(\.text))
+    }
+
     private static func joinedText(_ pieces: [String]) -> String {
         pieces
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map(sanitizePiece)
             .filter { !$0.isEmpty }
-            .map { piece in
-                piece.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-            }
             .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func sanitizePiece(_ text: String) -> String {
+        let range = NSRange(text.startIndex..., in: text)
+        let stripped = specialTokenRegex.stringByReplacingMatches(
+            in: text,
+            options: [],
+            range: range,
+            withTemplate: ""
+        )
+
+        return stripped
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+    }
+
+    private static func mergeOverlappingText(base: String, next: String) -> String {
+        guard !base.isEmpty else {
+            return next
+        }
+        guard !next.isEmpty else {
+            return base
+        }
+        if next == base || next.hasPrefix(base) {
+            return next
+        }
+        if base.hasPrefix(next) {
+            return base
+        }
+
+        let baseWords = base.split(whereSeparator: \.isWhitespace).map(String.init)
+        let nextWords = next.split(whereSeparator: \.isWhitespace).map(String.init)
+        let maxOverlap = min(baseWords.count, nextWords.count)
+
+        for overlap in stride(from: maxOverlap, through: 1, by: -1) {
+            if Array(baseWords.suffix(overlap)) == Array(nextWords.prefix(overlap)) {
+                return (baseWords + nextWords.dropFirst(overlap)).joined(separator: " ")
+            }
+        }
+
+        return "\(base) \(next)"
     }
 }
 

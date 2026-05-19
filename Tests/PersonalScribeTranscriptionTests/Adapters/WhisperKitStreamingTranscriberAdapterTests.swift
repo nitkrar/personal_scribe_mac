@@ -73,6 +73,157 @@ final class WhisperKitStreamingTranscriberAdapterTests: XCTestCase {
         )
     }
 
+    func testJoinedTextStripsSpecialTokensFromSegments() {
+        let text = WhisperKitStreamingLedger.joinedText(
+            [
+                .init(
+                    start: 0,
+                    end: 2,
+                    text: "<|startoftranscript|><|en|><|transcribe|><|0.00|> hello<|2.00|>"
+                ),
+            ]
+        )
+
+        XCTAssertEqual(text, "hello")
+    }
+
+    func testPartialEventEmittedAfterStrippingHasNoSpecialTokens() async throws {
+        let descriptor = BuiltInModelCatalog.whisperKitStreamingSmall216MB
+        let storageLocator = WhisperKitStreamingTestStorageLocator(
+            baseDirectory: try temporaryRootDirectory()
+        )
+        let downloader = StubWhisperKitStreamingArtifactDownloader()
+        let manager = StubWhisperKitStreamingManager(
+            appendedStates: [
+                [
+                    .init(
+                        confirmedSegments: [],
+                        unconfirmedSegments: [
+                            .init(
+                                start: 0,
+                                end: 3.48,
+                                text: "<|startoftranscript|><|en|><|transcribe|><|0.00|> Wait, end of the<|3.48|>"
+                            ),
+                            .init(
+                                start: 0,
+                                end: 24.56,
+                                text: "<|startoftranscript|><|en|><|transcribe|><|0.00|> Wait, end of utterance is not working, what's wrong?<|24.56|>"
+                            ),
+                        ]
+                    ),
+                ],
+            ],
+            finalStates: [
+                .init(
+                    confirmedSegments: [],
+                    unconfirmedSegments: [
+                        .init(
+                            start: 0,
+                            end: 24.56,
+                            text: "<|startoftranscript|><|en|><|transcribe|><|0.00|> Wait, end of utterance is not working, what's wrong?<|24.56|>"
+                        ),
+                    ]
+                ),
+            ]
+        )
+        let adapter = WhisperKitStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            artifactDownloader: downloader,
+            manager: manager
+        )
+        let inputBuffer = try makePCMBuffer(sampleCount: 160)
+
+        let events = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer]))
+        )
+
+        XCTAssertEqual(
+            events,
+            [
+                .partial(text: "Wait, end of utterance is not working, what's wrong?"),
+                .finalized(
+                    TranscriptionResult(
+                        text: "Wait, end of utterance is not working, what's wrong?",
+                        audioDuration: inputBuffer.duration,
+                        processingDuration: .zero
+                    )
+                ),
+            ]
+        )
+
+        guard case let .partial(text) = try XCTUnwrap(events.first) else {
+            return XCTFail("Expected a partial event")
+        }
+        XCTAssertFalse(text.contains("<|"))
+    }
+
+    func testEndOfUtteranceTextHasNoSpecialTokens() async throws {
+        let descriptor = BuiltInModelCatalog.whisperKitStreamingSmall216MB
+        let storageLocator = WhisperKitStreamingTestStorageLocator(
+            baseDirectory: try temporaryRootDirectory()
+        )
+        let downloader = StubWhisperKitStreamingArtifactDownloader()
+        let manager = StubWhisperKitStreamingManager(
+            appendedStates: [
+                [
+                    .init(
+                        confirmedSegments: [
+                            .init(
+                                start: 0,
+                                end: 7,
+                                text: "<|startoftranscript|><|en|><|transcribe|><|0.00|> I forgot to check end of utterance on this.<|7.00|>"
+                            ),
+                        ],
+                        unconfirmedSegments: []
+                    ),
+                ],
+            ],
+            finalStates: [
+                .init(
+                    confirmedSegments: [
+                        .init(
+                            start: 0,
+                            end: 7,
+                            text: "<|startoftranscript|><|en|><|transcribe|><|0.00|> I forgot to check end of utterance on this.<|7.00|>"
+                        ),
+                    ],
+                    unconfirmedSegments: []
+                ),
+            ]
+        )
+        let adapter = WhisperKitStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            artifactDownloader: downloader,
+            manager: manager
+        )
+        let inputBuffer = try makePCMBuffer(sampleCount: 160)
+
+        let events = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer]))
+        )
+
+        XCTAssertEqual(
+            events,
+            [
+                .endOfUtterance(text: "I forgot to check end of utterance on this."),
+                .finalized(
+                    TranscriptionResult(
+                        text: "I forgot to check end of utterance on this.",
+                        audioDuration: inputBuffer.duration,
+                        processingDuration: .zero
+                    )
+                ),
+            ]
+        )
+
+        guard case let .endOfUtterance(text) = try XCTUnwrap(events.first) else {
+            return XCTFail("Expected an end-of-utterance event")
+        }
+        XCTAssertFalse(text.contains("<|"))
+    }
+
     func testTranscribeEmitsStableChunkThenTrailingPartialWithoutReplay() async throws {
         let descriptor = BuiltInModelCatalog.whisperKitStreamingSmall216MB
         let storageLocator = WhisperKitStreamingTestStorageLocator(
