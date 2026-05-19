@@ -14,6 +14,7 @@ import Foundation
 public enum AppTab: String, CaseIterable, Identifiable, Sendable {
     case home           = "Home"
     case transcriptions = "Transcriptions"
+    case offlineTranscription = "Offline Files"
     case modes          = "Modes"
     case settings       = "Settings"
     case about          = "About"
@@ -25,6 +26,7 @@ public enum AppTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .home:           return "house.fill"
         case .transcriptions: return "waveform"
+        case .offlineTranscription: return "waveform.and.magnifyingglass"
         case .modes:          return "square.grid.2x2"
         case .settings:       return "gearshape"
         case .about:          return "info.circle"
@@ -35,6 +37,6 @@ public enum AppTab: String, CaseIterable, Identifiable, Sendable {
     /// is intentionally excluded — it lives as a clickable footer row
     /// next to the Microphone footer (bug #1c, 2026-04-21 dogfood).
     public static let sidebarListCases: [AppTab] = [
-        .home, .transcriptions, .modes, .settings,
+        .home, .transcriptions, .offlineTranscription, .modes, .settings,
     ]
 }
