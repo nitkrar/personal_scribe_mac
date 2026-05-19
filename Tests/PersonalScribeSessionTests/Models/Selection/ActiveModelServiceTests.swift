@@ -300,6 +300,20 @@ final class ActiveModelServiceTests: XCTestCase {
         )
     }
 
+    func testFreshInstallKeepsFluidAudioAsDefaultStreamingModel() {
+        let defaults = isolatedDefaults()
+        let service = ActiveModelService(
+            defaults: defaults,
+            physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        XCTAssertEqual(
+            service.activeDescriptor(for: ModelKind.streamingASR)?.id,
+            BuiltInModelCatalog.parakeetEou160ms.id
+        )
+    }
+
     /// User chose v2 explicitly on a prior launch — the persisted
     /// selection wins over the RAM probe even on an 8 GB machine.
     /// Guards "user choice always wins after first launch."

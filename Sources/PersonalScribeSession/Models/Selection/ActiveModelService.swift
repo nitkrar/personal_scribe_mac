@@ -89,7 +89,10 @@ public final class ActiveModelService: ObservableObject {
             lightweight: BuiltInModelCatalog.parakeetTDTCTC110M,
             baseline: BuiltInModelCatalog.parakeetTDT06Bv2
         )
-        let recommendedDefault: [ModelKind: String] = [.asr: recommendedVoiceModel.id]
+        let recommendedDefault: [ModelKind: String] = [
+            .asr: recommendedVoiceModel.id,
+            .streamingASR: BuiltInModelCatalog.parakeetEou160ms.id,
+        ]
         let activeIDsPreference = Preference<[ModelKind: String]>(
             key: Self.preferenceKey,
             default: recommendedDefault,

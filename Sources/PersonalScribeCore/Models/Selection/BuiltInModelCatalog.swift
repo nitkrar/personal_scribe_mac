@@ -204,6 +204,27 @@ public enum BuiltInModelCatalog {
         supportedLanguages: WhisperFamilyLanguages.codes
     )
 
+    public static let whisperKitStreamingSmall216MB = ModelDescriptor(
+        id: "whisperkit-streaming-small-216mb",
+        displayName: "Whisper Small (WhisperKit, Streaming)",
+        repoFolderName: whisperKitSmall216MB.repoFolderName,
+        shortDescription: "Streaming Whisper model - multilingual with shared batch artifacts.",
+        architecture: "Whisper (WhisperKit streaming runtime)",
+        repository: whisperKitSmall216MB.repository,
+        revision: whisperKitSmall216MB.revision,
+        requiredRelativePaths: whisperKitSmall216MB.requiredRelativePaths,
+        approximateSizeBytes: whisperKitSmall216MB.approximateSizeBytes,
+        isEnabled: true,
+        engine: .whisperKitStreaming,
+        madeBy: whisperKitSmall216MB.madeBy,
+        worksWith: whisperKitSmall216MB.worksWith,
+        goodFor: "Realtime multilingual dictation with shared WhisperKit download",
+        license: whisperKitSmall216MB.license,
+        tokenizerSource: whisperKitSmall216MB.tokenizerSource,
+        requiredChipFamily: whisperKitSmall216MB.requiredChipFamily,
+        supportedLanguages: whisperKitSmall216MB.supportedLanguages
+    )
+
     public static let whisperKitSmallEn217MB = ModelDescriptor(
         id: "whisperkit-small-en-217mb",
         displayName: "Whisper Small English (WhisperKit, 217MB)",
@@ -327,6 +348,47 @@ public enum BuiltInModelCatalog {
         goodFor: "Higher-accuracy multilingual dictation with reduced large-v3 disk cost",
         license: "MIT",
         supportedLanguages: WhisperFamilyLanguages.codes
+    )
+
+    public static let whisperCppStreamingTiny = ModelDescriptor(
+        id: "whispercpp-streaming-tiny",
+        displayName: "Whisper Tiny (whisper.cpp, streaming)",
+        // Intentionally reuse the batch artifact leaf so download /
+        // ready / delete state stays shared across the batch and
+        // streaming descriptors.
+        repoFolderName: whisperCppTiny.repoFolderName,
+        shortDescription: "Streaming whisper.cpp option - lowest latency dogfood candidate.",
+        architecture: "Whisper (whisper.cpp streaming runtime)",
+        repository: whisperCppTiny.repository,
+        revision: whisperCppTiny.revision,
+        requiredRelativePaths: whisperCppTiny.requiredRelativePaths,
+        approximateSizeBytes: whisperCppTiny.approximateSizeBytes,
+        isEnabled: true,
+        engine: .whisperCppStreaming,
+        madeBy: whisperCppTiny.madeBy,
+        worksWith: whisperCppTiny.worksWith,
+        goodFor: "Realtime multilingual dictation, lowest disk footprint",
+        license: whisperCppTiny.license,
+        supportedLanguages: whisperCppTiny.supportedLanguages
+    )
+
+    public static let whisperCppStreamingSmallQ51 = ModelDescriptor(
+        id: "whispercpp-streaming-small-q5_1",
+        displayName: "Whisper Small q5_1 (whisper.cpp, streaming)",
+        repoFolderName: whisperCppSmallQ51.repoFolderName,
+        shortDescription: "Streaming whisper.cpp option - balanced latency and accuracy.",
+        architecture: "Whisper (whisper.cpp streaming runtime)",
+        repository: whisperCppSmallQ51.repository,
+        revision: whisperCppSmallQ51.revision,
+        requiredRelativePaths: whisperCppSmallQ51.requiredRelativePaths,
+        approximateSizeBytes: whisperCppSmallQ51.approximateSizeBytes,
+        isEnabled: true,
+        engine: .whisperCppStreaming,
+        madeBy: whisperCppSmallQ51.madeBy,
+        worksWith: whisperCppSmallQ51.worksWith,
+        goodFor: "Realtime multilingual dictation with better balance than tiny",
+        license: whisperCppSmallQ51.license,
+        supportedLanguages: whisperCppSmallQ51.supportedLanguages
     )
 
     // MARK: - Streaming ASR (parakeet realtime EOU)
@@ -488,12 +550,15 @@ public enum BuiltInModelCatalog {
         parakeetTDT06Bv3,
         whisperKitTiny,
         whisperKitSmall216MB,
+        whisperKitStreamingSmall216MB,
         whisperKitSmallEn217MB,
         whisperKitLargeV3626MB,
         whisperKitLargeV3Turbo632MB,
         whisperCppTiny,
         whisperCppSmallQ51,
         whisperCppLargeV3TurboQ50,
+        whisperCppStreamingTiny,
+        whisperCppStreamingSmallQ51,
         parakeetEou160ms,
         parakeetEou320ms,
         parakeetEou1280ms,

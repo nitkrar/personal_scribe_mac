@@ -21,8 +21,12 @@ extension TranscriptionEngine {
             return .asr
         case .whisperKit:
             return .asr
+        case .whisperKitStreaming:
+            return .streamingASR
         case .whisperCpp:
             return .asr
+        case .whisperCppStreaming:
+            return .streamingASR
         case .parakeetEOU:
             return .streamingASR
         case .diarization:

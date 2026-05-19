@@ -6,7 +6,9 @@ extension TranscriptionEngine: Codable {
         case parakeetEOU
         case qwen3ASR
         case whisperKit
+        case whisperKitStreaming
         case whisperCpp
+        case whisperCppStreaming
         case diarization
     }
 
@@ -23,8 +25,12 @@ extension TranscriptionEngine: Codable {
             self = .qwen3ASR
         case .whisperKit:
             self = .whisperKit
+        case .whisperKitStreaming:
+            self = .whisperKitStreaming
         case .whisperCpp:
             self = .whisperCpp
+        case .whisperCppStreaming:
+            self = .whisperCppStreaming
         case .diarization:
             self = .diarization
         }
@@ -42,8 +48,12 @@ extension TranscriptionEngine: Codable {
             try container.encode(CodableValue.qwen3ASR)
         case .whisperKit:
             try container.encode(CodableValue.whisperKit)
+        case .whisperKitStreaming:
+            try container.encode(CodableValue.whisperKitStreaming)
         case .whisperCpp:
             try container.encode(CodableValue.whisperCpp)
+        case .whisperCppStreaming:
+            try container.encode(CodableValue.whisperCppStreaming)
         case .diarization:
             try container.encode(CodableValue.diarization)
         }

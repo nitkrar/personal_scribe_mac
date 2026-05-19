@@ -3,7 +3,9 @@ import XCTest
 
 final class ModelDescriptorTests: XCTestCase {
     func testLegacyBuiltInDescriptorsDefaultTokenizerSourceAndRequiredChipFamilyToNil() {
-        let legacyDescriptors = BuiltInModelCatalog.registeredModels.filter { $0.engine != .whisperKit }
+        let legacyDescriptors = BuiltInModelCatalog.registeredModels.filter {
+            $0.engine != .whisperKit && $0.engine != .whisperKitStreaming
+        }
 
         XCTAssertFalse(legacyDescriptors.isEmpty)
         for descriptor in legacyDescriptors {

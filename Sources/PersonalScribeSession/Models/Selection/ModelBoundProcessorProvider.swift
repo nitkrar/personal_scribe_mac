@@ -45,12 +45,31 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                         storageLocator: storageLocator
                     )
                 )
+            case .whisperKitStreaming:
+                return AdapterRecord(
+                    descriptorID: descriptor.id,
+                    streamingTranscriber: WhisperKitStreamingTranscriberAdapter(
+                        descriptor: descriptor,
+                        storageLocator: storageLocator,
+                        logger: logger
+                    )
+                )
             case .whisperCpp:
                 return AdapterRecord(
                     descriptorID: descriptor.id,
                     transcriber: WhisperCppTranscriberAdapter(
                         descriptor: descriptor,
                         storageLocator: storageLocator
+                    )
+                )
+            case .whisperCppStreaming:
+                return AdapterRecord(
+                    descriptorID: descriptor.id,
+                    streamingTranscriber: WhisperCppStreamingTranscriberAdapter(
+                        descriptor: descriptor,
+                        storageLocator: storageLocator,
+                        vadBoundarySessionFactory: vadBoundarySessionFactory,
+                        logger: logger
                     )
                 )
             case .parakeetEOU:

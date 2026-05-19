@@ -102,6 +102,42 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
         )
     }
 
+    func testWhisperCppStreamingDescriptorResolvesToWhisperCppStreamingTranscriberAdapter() throws {
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: TestStorageLocator.make(),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        let transcriber = try provider.streamingTranscriber(
+            for: BuiltInModelCatalog.whisperCppStreamingTiny
+        )
+        let transcriberTypeName = String(reflecting: type(of: transcriber))
+
+        XCTAssertTrue(
+            transcriberTypeName == "WhisperCppStreamingTranscriberAdapter"
+                || transcriberTypeName.hasSuffix(".WhisperCppStreamingTranscriberAdapter"),
+            "Phase 2 whisper.cpp streaming descriptors should route to the real streaming adapter"
+        )
+    }
+
+    func testWhisperKitStreamingDescriptorResolvesToWhisperKitStreamingTranscriberAdapter() throws {
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: TestStorageLocator.make(),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        let transcriber = try provider.streamingTranscriber(
+            for: BuiltInModelCatalog.whisperKitStreamingSmall216MB
+        )
+        let transcriberTypeName = String(reflecting: type(of: transcriber))
+
+        XCTAssertTrue(
+            transcriberTypeName == "WhisperKitStreamingTranscriberAdapter"
+                || transcriberTypeName.hasSuffix(".WhisperKitStreamingTranscriberAdapter"),
+            "Phase 1 WhisperKit streaming descriptor should route to the real streaming adapter"
+        )
+    }
+
     func testSameDescriptorReturnsSharedCacheRecord() throws {
         let factoryCallCount = AtomicIntBox()
         let provider = ModelBoundProcessorProvider(
