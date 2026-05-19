@@ -18,6 +18,7 @@ final class TranscriptionsTabViewModel: ObservableObject {
     private let reader: any TranscriptReading
     private let deleter: (any TranscriptDeleting)?
     private let updater: (any TranscriptUpdating)?
+    private let retranscriptionHandler: (any RetranscriptionPerforming)?
     private let clock: @MainActor () -> Date
     private let calendar: Calendar
     private let explicitDateFormatter: DateFormatter
@@ -27,6 +28,7 @@ final class TranscriptionsTabViewModel: ObservableObject {
         reader: any TranscriptReading,
         deleter: (any TranscriptDeleting)? = nil,
         updater: (any TranscriptUpdating)? = nil,
+        retranscriptionHandler: (any RetranscriptionPerforming)? = nil,
         clock: @escaping @MainActor () -> Date = { Date() },
         calendar: Calendar = .autoupdatingCurrent,
         locale: Locale = Locale(identifier: "en_US_POSIX")
@@ -34,6 +36,7 @@ final class TranscriptionsTabViewModel: ObservableObject {
         self.reader = reader
         self.deleter = deleter ?? (reader as? any TranscriptDeleting)
         self.updater = updater ?? (reader as? any TranscriptUpdating)
+        self.retranscriptionHandler = retranscriptionHandler
         self.clock = clock
         self.calendar = calendar
 
@@ -83,6 +86,18 @@ final class TranscriptionsTabViewModel: ObservableObject {
 
     var canEdit: Bool {
         updater != nil
+    }
+
+    func canReTranscribe(_ entry: TranscriptEntry) -> Bool {
+        entry.audioFilename != nil && retranscriptionHandler != nil
+    }
+
+    func reTranscribe(entry: TranscriptEntry) async {
+        guard let sourceFilename = entry.audioFilename else {
+            return
+        }
+
+        await retranscriptionHandler?.perform(sourceFilename: sourceFilename)
     }
 
     /// Case-insensitive contains-match against `entry.text`. An empty or

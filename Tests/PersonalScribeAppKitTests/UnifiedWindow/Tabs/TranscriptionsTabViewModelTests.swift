@@ -44,12 +44,14 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
 
     private func makeViewModel(
         entries: [TranscriptEntry] = [],
-        now: Date? = nil
+        now: Date? = nil,
+        retranscriptionHandler: (any RetranscriptionPerforming)? = nil
     ) -> TranscriptionsTabViewModel {
         let fixedNow = now ?? makeNow()
         let store = InlineFakeTranscriptStore(entries: entries)
         return TranscriptionsTabViewModel(
             reader: store,
+            retranscriptionHandler: retranscriptionHandler,
             clock: { fixedNow },
             calendar: testCalendar,
             locale: Locale(identifier: "en_US_POSIX")
@@ -58,12 +60,17 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
 
     private func makeHarness(
         entries: [TranscriptEntry] = [],
-        now: Date? = nil
-    ) -> (viewModel: TranscriptionsTabViewModel, store: InlineFakeTranscriptStore) {
+        now: Date? = nil,
+        retranscriptionHandler: (any RetranscriptionPerforming)? = nil
+    ) -> (
+        viewModel: TranscriptionsTabViewModel,
+        store: InlineFakeTranscriptStore
+    ) {
         let fixedNow = now ?? makeNow()
         let store = InlineFakeTranscriptStore(entries: entries)
         let viewModel = TranscriptionsTabViewModel(
             reader: store,
+            retranscriptionHandler: retranscriptionHandler,
             clock: { fixedNow },
             calendar: testCalendar,
             locale: Locale(identifier: "en_US_POSIX")
@@ -144,6 +151,50 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
         )
         let updateCalls = await harness.store.updateCalls()
         XCTAssertEqual(updateCalls, [UpdateCall(id: edited.id, text: "after")])
+    }
+
+    func testReTranscribeIconAppearsOnlyForRowsWithAudioFilename() {
+        let handler = RetranscriptionHandlerSpy()
+        let withAudio = TranscriptEntry(
+            id: UUID(),
+            timestamp: makeNow(),
+            text: "has audio",
+            audioDuration: 3,
+            processingDuration: 0.5,
+            audioFilename: "clip.wav"
+        )
+        let withoutAudio = makeEntry(
+            text: "no audio",
+            timestamp: makeNow().addingTimeInterval(-60)
+        )
+        let viewModel = makeViewModel(
+            entries: [withAudio, withoutAudio],
+            retranscriptionHandler: handler
+        )
+
+        XCTAssertTrue(viewModel.canReTranscribe(withAudio))
+        XCTAssertFalse(viewModel.canReTranscribe(withoutAudio))
+    }
+
+    func testReTranscribeIconClickInvokesCoordinatorWithRowAudioFilename() async {
+        let handler = RetranscriptionHandlerSpy()
+        let entry = TranscriptEntry(
+            id: UUID(),
+            timestamp: makeNow(),
+            text: "has audio",
+            audioDuration: 3,
+            processingDuration: 0.5,
+            audioFilename: "recording.wav"
+        )
+        let viewModel = makeViewModel(
+            entries: [entry],
+            retranscriptionHandler: handler
+        )
+
+        await viewModel.reTranscribe(entry: entry)
+
+        let calls = await handler.sourceFilenames()
+        XCTAssertEqual(calls, ["recording.wav"])
     }
 
     // MARK: - filteredEntries
@@ -330,4 +381,16 @@ private actor InlineFakeTranscriptStore: TranscriptReading, TranscriptDeleting, 
 private struct UpdateCall: Equatable {
     let id: UUID
     let text: String
+}
+
+private actor RetranscriptionHandlerSpy: RetranscriptionPerforming {
+    private var sourceFilenamesStorage: [String] = []
+
+    func perform(sourceFilename: String) async {
+        sourceFilenamesStorage.append(sourceFilename)
+    }
+
+    func sourceFilenames() -> [String] {
+        sourceFilenamesStorage
+    }
 }

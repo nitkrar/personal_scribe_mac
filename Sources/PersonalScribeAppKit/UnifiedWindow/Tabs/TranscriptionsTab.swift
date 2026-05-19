@@ -110,6 +110,7 @@ struct TranscriptionsTab: View {
             timestamp: entry.timestamp,
             preview: entry.text,
             isSelected: editingItem?.entry.id == entry.id,
+            onRetranscribe: retranscribeAction(for: entry),
             onDelete: deleteAction(for: entry.id),
             referenceDate: referenceDate
         )
@@ -128,6 +129,18 @@ struct TranscriptionsTab: View {
         return {
             Task {
                 try? await viewModel.delete(id: id)
+            }
+        }
+    }
+
+    private func retranscribeAction(for entry: TranscriptEntry) -> (() -> Void)? {
+        guard viewModel.canReTranscribe(entry) else {
+            return nil
+        }
+
+        return {
+            Task {
+                await viewModel.reTranscribe(entry: entry)
             }
         }
     }

@@ -33,6 +33,7 @@ public struct TranscriptRow: View {
     public let preview: String
     public let isSelected: Bool
     public let displayStyle: DisplayStyle
+    public let onRetranscribe: (() -> Void)?
     public let onDelete: (() -> Void)?
 
     /// Reference `now` used for relative-timestamp formatting. Injected
@@ -48,6 +49,7 @@ public struct TranscriptRow: View {
         timestamp: Date,
         preview: String,
         isSelected: Bool = false,
+        onRetranscribe: (() -> Void)? = nil,
         onDelete: (() -> Void)? = nil,
         referenceDate: Date = Date()
     ) {
@@ -55,6 +57,7 @@ public struct TranscriptRow: View {
         self.timestamp = timestamp
         self.preview = preview
         self.isSelected = isSelected
+        self.onRetranscribe = onRetranscribe
         self.onDelete = onDelete
         self.referenceDate = referenceDate
         self.displayStyle = .summary
@@ -66,6 +69,7 @@ public struct TranscriptRow: View {
         timestamp: Date,
         preview: String,
         isSelected: Bool = false,
+        onRetranscribe: (() -> Void)? = nil,
         onDelete: (() -> Void)? = nil,
         referenceDate: Date = Date()
     ) {
@@ -73,6 +77,7 @@ public struct TranscriptRow: View {
         self.timestamp = timestamp
         self.preview = preview
         self.isSelected = isSelected
+        self.onRetranscribe = onRetranscribe
         self.onDelete = onDelete
         self.referenceDate = referenceDate
         self.displayStyle = .detail
@@ -121,6 +126,11 @@ public struct TranscriptRow: View {
             isHovered: isHovered,
             hasDeleteAction: onDelete != nil
         )
+        let showsRetranscribeControl = Self.showsRetranscribeControl(
+            displayStyle: displayStyle,
+            isHovered: isHovered,
+            hasRetranscribeAction: onRetranscribe != nil
+        )
 
         VStack(alignment: .leading, spacing: Layout.innerSpacing) {
             HStack(alignment: .firstTextBaseline, spacing: Layout.titleTimestampSpacing) {
@@ -149,6 +159,18 @@ public struct TranscriptRow: View {
                         .lineLimit(1)
 
                     Spacer(minLength: 0)
+
+                    if showsRetranscribeControl {
+                        Button(action: { onRetranscribe?() }) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: Layout.deleteIconSize, weight: .medium))
+                                .frame(width: Layout.deleteButtonSize, height: Layout.deleteButtonSize)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(palette.secondaryText)
+                        .help("Re-transcribe recording")
+                        .accessibilityLabel("Re-transcribe recording")
+                    }
 
                     if showsDeleteControl {
                         Button(action: { onDelete?() }) {
@@ -223,6 +245,14 @@ public struct TranscriptRow: View {
         hasDeleteAction: Bool
     ) -> Bool {
         displayStyle == .detail && isHovered && hasDeleteAction
+    }
+
+    internal static func showsRetranscribeControl(
+        displayStyle: DisplayStyle,
+        isHovered: Bool,
+        hasRetranscribeAction: Bool
+    ) -> Bool {
+        displayStyle == .detail && isHovered && hasRetranscribeAction
     }
 
     // MARK: - Pure formatting helpers (tested)
