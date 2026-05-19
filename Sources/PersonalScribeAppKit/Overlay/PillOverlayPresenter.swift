@@ -593,6 +593,12 @@ public final class PillOverlayPresenter {
     }
 
     func showStreamCard(text: String) {
+        // TEMP-DIAG #056-vad-bug: log show/update/hide cycle for the
+        // stream card so we can distinguish "card never asked to render"
+        // from "card render path bug." Remove with the rest of TEMP-DIAG.
+        diagnosticLogger.info(
+            "stream_card_show_called textLen=\(text.count) hasAnchorWindow=\(panel?.anchorWindow != nil) existingCard=\(streamCard != nil)"
+        )
         guard let anchorWindow = panel?.anchorWindow else {
             diagnosticLogger.info("PillOverlayPresenter.showStreamCard — skipped because no anchor window is available")
             return
@@ -604,6 +610,10 @@ public final class PillOverlayPresenter {
     }
 
     func updateStreamCard(text: String) {
+        // TEMP-DIAG #056-vad-bug
+        diagnosticLogger.info(
+            "stream_card_update_called textLen=\(text.count) existingCard=\(streamCard != nil)"
+        )
         guard let streamCard else {
             showStreamCard(text: text)
             return
@@ -613,6 +623,8 @@ public final class PillOverlayPresenter {
     }
 
     func hideStreamCard() {
+        // TEMP-DIAG #056-vad-bug
+        diagnosticLogger.info("stream_card_hide_called existingCard=\(streamCard != nil)")
         streamCard?.hide()
     }
 

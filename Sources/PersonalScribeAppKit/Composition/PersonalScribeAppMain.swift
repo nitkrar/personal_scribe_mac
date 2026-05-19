@@ -27,6 +27,15 @@ struct PersonalScribeAppMain: App {
         // shared singletons (notably `modelService`) resolve upgraded
         // defaults on first launch after a migration lands.
         PreferenceMigrator.migrate(defaults: defaults)
+        // TEMP-DIAG #056-vad-bug: log app launch identity so a dogfood
+        // session's log slice can be tied back to a specific build.
+        // Remove once the bug closes.
+        let info = Bundle.main.infoDictionary
+        let shortVersion = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let buildVersion = info?["CFBundleVersion"] as? String ?? "?"
+        AppComposition.makeLogger(PersonalScribeLogCategory.app).info(
+            "app_launch shortVersion=\(shortVersion) buildVersion=\(buildVersion)"
+        )
         AppComposition.startDiagnosticsMaintenanceIfNeeded()
         AppComposition.startRecordingRetentionSweeperIfNeeded()
         self.init(

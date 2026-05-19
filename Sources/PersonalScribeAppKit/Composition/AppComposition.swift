@@ -112,7 +112,12 @@ public enum AppComposition {
     public static let vadProvider: (any VadProviding)? = {
         let logger = makeLogger(PersonalScribeLogCategory.session)
         do {
-            return try FluidAudioVadProvider()
+            // TEMP-DIAG #056-vad-bug: pass a diagnostics logger so the
+            // VAD session can log model-load failures + per-chunk Silero
+            // events. Remove the arg when the bug closes.
+            return try FluidAudioVadProvider(
+                diagnosticsLogger: makeLogger(PersonalScribeLogCategory.transcription)
+            )
         } catch {
             logger.error(
                 "Bundled VAD model not found; auto-stop silently disabled",

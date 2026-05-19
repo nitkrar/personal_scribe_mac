@@ -1,5 +1,6 @@
 import FluidAudio
 import Foundation
+import PersonalScribeCore
 
 /// Inference function injected at session construction. Production wires
 /// directly to `VadManager.processStreamingChunk`; tests supply a scripted
@@ -27,10 +28,20 @@ actor FluidAudioVadSession {
     /// event — it's the first detection. Only subsequent transitions
     /// after a prior `.speechEnd` count as resumed speech.
     private var hasEmittedSpeechEnded: Bool = false
+    // TEMP-DIAG #056-vad-bug: per-chunk counters for instrumentation.
+    // Remove with the rest of the TEMP-DIAG block once the Parakeet
+    // streaming silent-VAD bug is closed.
+    private let logger: PersonalScribeLogger?
+    private var chunkIndex: Int = 0
 
-    init(inference: @escaping StreamingVadInference, config: VadSegmentationConfig) {
+    init(
+        inference: @escaping StreamingVadInference,
+        config: VadSegmentationConfig,
+        logger: PersonalScribeLogger? = nil
+    ) {
         self.inference = inference
         self.config = config
+        self.logger = logger
     }
 
     /// Feed samples. Accumulates into `VadManager.chunkSize` (4096) windows,
@@ -43,10 +54,33 @@ actor FluidAudioVadSession {
         while pendingSamples.count >= VadManager.chunkSize {
             let chunk = Array(pendingSamples.prefix(VadManager.chunkSize))
             pendingSamples.removeFirst(VadManager.chunkSize)
-            guard let result = try? await inference(chunk, streamState, config) else {
+            // TEMP-DIAG #056-vad-bug: log inference failures (previously
+            // swallowed silently) and per-chunk Silero event kind so we
+            // can tell "VAD model didn't load" from "VAD ran but never
+            // emitted .speechEnd" from "VAD ran and emitted events the
+            // gate dropped." Remove this entire block when bug closes.
+            chunkIndex += 1
+            let result: VadStreamResult
+            do {
+                result = try await inference(chunk, streamState, config)
+            } catch {
+                logger?.error(
+                    "vad_inference_failed chunkIndex=\(chunkIndex) hasEmittedSpeechEnded=\(hasEmittedSpeechEnded)",
+                    error: error
+                )
                 continue
             }
             streamState = result.state
+            let kindLabel: String
+            switch result.event?.kind {
+            case .some(.speechStart): kindLabel = "speechStart"
+            case .some(.speechEnd): kindLabel = "speechEnd"
+            case .none: kindLabel = "none"
+            }
+            logger?.info(
+                "vad_chunk_processed chunkIndex=\(chunkIndex) event=\(kindLabel) hasEmittedSpeechEnded=\(hasEmittedSpeechEnded) triggered=\(result.state.triggered) probability=\(String(format: "%.3f", result.probability))"
+            )
+            // END TEMP-DIAG block
             switch result.event?.kind {
             case .speechEnd:
                 hasEmittedSpeechEnded = true

@@ -34,17 +34,22 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(events.count, 5)
+        XCTAssertEqual(events.count, 6)
         XCTAssertEqual(events[0], .partial(text: "hello"))
         XCTAssertEqual(events[1], .partial(text: "hello world"))
         XCTAssertEqual(events[2], .endOfUtterance(text: "hello world"))
         XCTAssertEqual(events[3], .partial(text: "how"))
-        switch events[4] {
+        // BUG FIX #056-vad-bug: trailing partial "how" is no longer
+        // dropped at stream end. Adapter now flushes a final boundary
+        // unconditionally (mirrors WhisperCpp). Leading space comes
+        // from the subsequent-utterance prepend (c167155).
+        XCTAssertEqual(events[4], .endOfUtterance(text: " how"))
+        switch events[5] {
         case .finalized(let result):
             XCTAssertEqual(result.text, "hello world how")
             XCTAssertEqual(result.audioDuration, inputBuffer.duration * 3)
         default:
-            XCTFail("Expected finalized event, got \(events[4])")
+            XCTFail("Expected finalized event, got \(events[5])")
         }
     }
 
@@ -169,7 +174,13 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
         )
     }
 
-    func testStreamEndBeforeAnyBoundaryEmitsOnlyFinalized() async throws {
+    func testStreamEndBeforeAnyBoundaryEmitsFinalBoundary() async throws {
+        // BUG FIX #056-vad-bug regression test. Previously the adapter
+        // emitted ZERO `.endOfUtterance` events when a VAD session was
+        // provided but never returned `.speechEnded` — the user lost the
+        // entire transcript's live cursor delivery for the session.
+        // Mirrors the WhisperCpp adapter contract: always flush at
+        // stream end.
         let descriptor = BuiltInModelCatalog.parakeetEou160ms
         let rootDirectory = try temporaryRootDirectory()
         let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
@@ -189,9 +200,10 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
             from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer]))
         )
 
-        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events.count, 3)
         XCTAssertEqual(events[0], .partial(text: "hello world"))
-        guard case .finalized(let result) = events[1] else {
+        XCTAssertEqual(events[1], .endOfUtterance(text: "hello world"))
+        guard case .finalized(let result) = events[2] else {
             XCTFail("Expected finalized event, got \(events)")
             return
         }

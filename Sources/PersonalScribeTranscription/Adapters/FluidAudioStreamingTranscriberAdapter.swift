@@ -266,16 +266,30 @@ extension FluidAudioStreamingTranscriberAdapter {
                 throw PersonalScribeError.transcriptionFailure
             }
 
-            if vadSession == nil {
-                let canonicalFinal = finalText.isEmpty ? latestCumulative : finalText
-                emitBoundaryIfNeeded(
-                    latestCumulative: canonicalFinal,
-                    lastCommittedBoundary: &lastCommittedBoundary,
-                    continuation: continuation,
-                    diagnosticsContext: diagnosticsContext,
-                    emittedUtteranceCount: &emittedUtteranceCount
-                )
-            }
+            // BUG FIX #056-vad-bug: flush a final boundary at stream end
+            // unconditionally, mirroring the WhisperCpp adapter's pattern
+            // (see WhisperCppStreamingTranscriberAdapter.swift:298-313).
+            // Pre-fix: this only ran when `vadSession == nil` (feature-
+            // disabled path). When VAD existed but never returned
+            // `.speechEnded` during the session, ZERO EOU events emitted
+            // for the whole recording — live card + live cursor both
+            // silent. `lastCommittedBoundary` already prevents duplicate
+            // emission when VAD did fire at least once.
+            let canonicalFinal = finalText.isEmpty ? latestCumulative : finalText
+            emitBoundaryIfNeeded(
+                latestCumulative: canonicalFinal,
+                lastCommittedBoundary: &lastCommittedBoundary,
+                continuation: continuation,
+                diagnosticsContext: diagnosticsContext,
+                emittedUtteranceCount: &emittedUtteranceCount
+            )
+
+            // TEMP-DIAG #056-vad-bug: log per-session VAD summary so we
+            // can see if a session ended with zero VAD-driven boundaries.
+            // Remove once the silent-VAD root cause is identified.
+            logger.info(
+                "streaming_session_summary session=\(diagnosticsContext.sessionID) vadSessionPresent=\(vadSession != nil) emittedUtteranceCount=\(emittedUtteranceCount) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds())"
+            )
 
             continuation.yield(
                 .finalized(
@@ -335,7 +349,16 @@ extension FluidAudioStreamingTranscriberAdapter {
         diagnosticsContext: StreamingDiagnosticsSession.Context,
         nextUtterance: Int
     ) {
-        for cumulativeText in partialInbox.drain() {
+        let inboxItems = partialInbox.drain()
+        // TEMP-DIAG #056-vad-bug: log drain shape so we can see if
+        // partial callbacks are arriving from the manager and how many
+        // queue up between calls. Remove when bug closes.
+        if !inboxItems.isEmpty {
+            logger.info(
+                "adapter_partial_drain session=\(diagnosticsContext.sessionID) inbox=\(inboxItems.count) nextUtterance=\(nextUtterance) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds())"
+            )
+        }
+        for cumulativeText in inboxItems {
             latestCumulative = cumulativeText
             let derivation = Self.deriveDelta(
                 latest: cumulativeText,

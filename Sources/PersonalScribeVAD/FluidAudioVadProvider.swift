@@ -1,6 +1,7 @@
 @preconcurrency import CoreML
 import FluidAudio
 import Foundation
+import PersonalScribeCore
 
 typealias VadSessionFactory = @Sendable (Double) -> VadSessionHandle
 
@@ -53,7 +54,7 @@ public actor FluidAudioVadProvider: VadProviding {
     /// NOT a user-facing failure mode. Debug builds also assert so a dev
     /// build with a mis-configured bundle crashes early rather than silently
     /// proceeding to the production fallback path.
-    public init() throws {
+    public init(diagnosticsLogger: PersonalScribeLogger? = nil) throws {
         guard let url = Bundle.module.url(
             forResource: "silero-vad",
             withExtension: "mlmodelc"
@@ -63,17 +64,19 @@ public actor FluidAudioVadProvider: VadProviding {
             )
             throw BundledModelError.resourceNotFound
         }
-        self.init(modelURL: url)
+        self.init(modelURL: url, diagnosticsLogger: diagnosticsLogger)
     }
 
     /// Explicit-URL init for tests and future callers that want to point at
     /// a non-bundled copy of a compiled Silero `.mlmodelc`.
-    public init(modelURL: URL) {
+    public init(modelURL: URL, diagnosticsLogger: PersonalScribeLogger? = nil) {
         self.init(
             modelURL: modelURL,
             idleUnloadDelay: .seconds(30),
             sleep: { try await Task.sleep(for: $0) },
-            sessionFactoryLoader: Self.liveSessionFactoryLoader
+            sessionFactoryLoader: Self.makeLiveSessionFactoryLoader(
+                diagnosticsLogger: diagnosticsLogger
+            )
         )
     }
 
@@ -160,34 +163,55 @@ public actor FluidAudioVadProvider: VadProviding {
 
 private extension FluidAudioVadProvider {
     static func liveSessionFactoryLoader(modelURL: URL) -> VadSessionFactory? {
-        let vadConfig = VadConfig.default
-        let mlConfig = MLModelConfiguration()
-        mlConfig.computeUnits = vadConfig.computeUnits
-        mlConfig.allowLowPrecisionAccumulationOnGPU = true
-        guard let model = try? MLModel(contentsOf: modelURL, configuration: mlConfig) else {
-            return nil
-        }
-        let runtime = LiveVadRuntime(manager: VadManager(config: vadConfig, vadModel: model))
-        return { silenceThresholdSeconds in
-            runtime.makeSession(silenceThresholdSeconds: silenceThresholdSeconds)
+        makeLiveSessionFactoryLoader(diagnosticsLogger: nil)(modelURL)
+    }
+
+    static func makeLiveSessionFactoryLoader(
+        diagnosticsLogger: PersonalScribeLogger?
+    ) -> VadSessionFactoryLoader {
+        { modelURL in
+            let vadConfig = VadConfig.default
+            let mlConfig = MLModelConfiguration()
+            mlConfig.computeUnits = vadConfig.computeUnits
+            mlConfig.allowLowPrecisionAccumulationOnGPU = true
+            guard let model = try? MLModel(contentsOf: modelURL, configuration: mlConfig) else {
+                diagnosticsLogger?.error(
+                    "vad_model_load_failed modelURL=\(modelURL.path)",
+                    error: NSError(domain: "FluidAudioVadProvider", code: -1)
+                )
+                return nil
+            }
+            let runtime = LiveVadRuntime(
+                manager: VadManager(config: vadConfig, vadModel: model),
+                diagnosticsLogger: diagnosticsLogger
+            )
+            return { silenceThresholdSeconds in
+                runtime.makeSession(silenceThresholdSeconds: silenceThresholdSeconds)
+            }
         }
     }
 }
 
 private final class LiveVadRuntime: @unchecked Sendable {
     private let manager: VadManager
+    private let diagnosticsLogger: PersonalScribeLogger?
 
-    init(manager: VadManager) {
+    init(manager: VadManager, diagnosticsLogger: PersonalScribeLogger? = nil) {
         self.manager = manager
+        self.diagnosticsLogger = diagnosticsLogger
     }
 
     func makeSession(silenceThresholdSeconds: Double) -> VadSessionHandle {
         let config = VadSegmentationConfig(minSilenceDuration: silenceThresholdSeconds)
+        // TEMP-DIAG #056-vad-bug: hand the per-runtime diagnostics logger
+        // to the session so per-chunk Silero events are observable in
+        // the diagnostics log. Remove when the bug closes.
         let session = FluidAudioVadSession(
             inference: { [manager] chunk, state, config in
                 try await manager.processStreamingChunk(chunk, state: state, config: config)
             },
-            config: config
+            config: config,
+            logger: diagnosticsLogger
         )
         return VadSessionHandle { samples in
             await session.ingest(samples)
