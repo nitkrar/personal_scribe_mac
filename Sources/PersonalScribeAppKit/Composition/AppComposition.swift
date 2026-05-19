@@ -48,6 +48,9 @@ public enum AppComposition {
     public static let appDatabase: AppDatabase? = {
         let logger = makeLogger(PersonalScribeLogCategory.session)
         do {
+            let migrator = BaseDirectoryMigrator(logger: logger)
+            try migrator.migrateFromLegacyBrandDirectoryIfNeeded()
+            try migrator.relocateLegacyDatabaseIfNeeded()
             return try AppDatabase(locator: AppConfig.liveStorageLocator())
         } catch {
             logger.error("AppDatabase init failed; continuing without persistence", error: error)

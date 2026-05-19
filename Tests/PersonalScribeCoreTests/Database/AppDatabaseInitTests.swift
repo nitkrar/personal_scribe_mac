@@ -9,15 +9,12 @@ final class AppDatabaseInitTests: XCTestCase {
     private let fileManager = FileManager.default
 
     func test_init_onEmptyDirectory_createsSQLiteFile() throws {
-        let (recordings, baseDir) = try makeTempRecordingsDir()
+        let baseDir = try makeTempBaseDir()
         defer { cleanup(baseDir) }
 
-        let locator = FixedBaseDirectoryStorageLocator(
-            baseDirectory: baseDir,
-            managedDirectoryOverrides: [.recordings: recordings]
-        )
+        let locator = FixedBaseDirectoryStorageLocator(baseDirectory: baseDir)
 
-        let databaseURL = recordings.appendingPathComponent("transcripts.sqlite", isDirectory: false)
+        let databaseURL = baseDir.appendingPathComponent("db/transcripts.sqlite", isDirectory: false)
         XCTAssertFalse(
             fileManager.fileExists(atPath: databaseURL.path),
             "precondition: SQLite file must not exist before init"
@@ -32,13 +29,10 @@ final class AppDatabaseInitTests: XCTestCase {
     }
 
     func test_init_reopeningExistingFile_isIdempotent() throws {
-        let (recordings, baseDir) = try makeTempRecordingsDir()
+        let baseDir = try makeTempBaseDir()
         defer { cleanup(baseDir) }
 
-        let locator = FixedBaseDirectoryStorageLocator(
-            baseDirectory: baseDir,
-            managedDirectoryOverrides: [.recordings: recordings]
-        )
+        let locator = FixedBaseDirectoryStorageLocator(baseDirectory: baseDir)
 
         _ = try AppDatabase(locator: locator)
 
@@ -50,12 +44,11 @@ final class AppDatabaseInitTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeTempRecordingsDir() throws -> (recordings: URL, base: URL) {
+    private func makeTempBaseDir() throws -> URL {
         let base = fileManager.temporaryDirectory
             .appendingPathComponent("AppDatabaseInitTests-\(UUID().uuidString)", isDirectory: true)
-        let recordings = base.appendingPathComponent("recordings", isDirectory: true)
-        try fileManager.createDirectory(at: recordings, withIntermediateDirectories: true)
-        return (recordings, base)
+        try fileManager.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
     }
 
     private func cleanup(_ base: URL) {

@@ -18,8 +18,8 @@ func makeMetricsTestDatabaseContext() throws -> MetricsTestDatabaseContext {
 
     return MetricsTestDatabaseContext(
         baseDirectory: baseDirectory,
-        recordingsDirectory: baseDirectory,
-        databaseURL: baseDirectory.appendingPathComponent("transcripts.sqlite", isDirectory: false)
+        recordingsDirectory: baseDirectory.appendingPathComponent("recordings", isDirectory: true),
+        databaseURL: baseDirectory.appendingPathComponent("db/transcripts.sqlite", isDirectory: false)
     )
 }
 
@@ -36,17 +36,8 @@ struct MetricsAppDatabaseContext {
 func makeMetricsAppDatabaseContext() throws -> MetricsAppDatabaseContext {
     let baseDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("MetricsAppDatabase-\(UUID().uuidString)", isDirectory: true)
-    let recordingsDirectory = baseDirectory
-        .appendingPathComponent("recordings", isDirectory: true)
-    try FileManager.default.createDirectory(
-        at: recordingsDirectory,
-        withIntermediateDirectories: true
-    )
-
-    let locator = FixedBaseDirectoryStorageLocator(
-        baseDirectory: baseDirectory,
-        managedDirectoryOverrides: [.recordings: recordingsDirectory]
-    )
+    try FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+    let locator = FixedBaseDirectoryStorageLocator(baseDirectory: baseDirectory)
     let database = try AppDatabase(locator: locator)
     let repository = TranscriptRepository(
         database: database,

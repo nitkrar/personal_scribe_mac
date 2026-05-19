@@ -15,15 +15,10 @@ final class AppDatabaseMigrationTests: XCTestCase {
         let baseDirectory = try makeTempBaseDir()
         defer { cleanup(baseDirectory) }
 
-        let recordings = baseDirectory.appendingPathComponent("recordings", isDirectory: true)
-        try fileManager.createDirectory(at: recordings, withIntermediateDirectories: true)
-        let locator = FixedBaseDirectoryStorageLocator(
-            baseDirectory: baseDirectory,
-            managedDirectoryOverrides: [.recordings: recordings]
-        )
+        let locator = FixedBaseDirectoryStorageLocator(baseDirectory: baseDirectory)
         _ = try AppDatabase(locator: locator)
 
-        let databaseURL = recordings.appendingPathComponent("transcripts.sqlite", isDirectory: false)
+        let databaseURL = baseDirectory.appendingPathComponent("db/transcripts.sqlite", isDirectory: false)
         let dumped = try dumpSchema(at: databaseURL)
 
         XCTAssertEqual(dumped, Self.expectedSchemaDump, diffMessage(actual: dumped, expected: Self.expectedSchemaDump))

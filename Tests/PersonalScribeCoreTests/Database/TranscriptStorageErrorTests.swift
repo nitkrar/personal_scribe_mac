@@ -11,10 +11,12 @@ final class TranscriptStorageErrorTests: XCTestCase {
     private let fileManager = FileManager.default
 
     func test_init_onMalformedNonSQLiteFile_throwsTranscriptStorageError() throws {
-        let (recordings, baseDir) = try makeTempRecordingsDir()
+        let baseDir = try makeTempBaseDir()
         defer { cleanup(baseDir) }
 
-        let databaseURL = recordings.appendingPathComponent("transcripts.sqlite", isDirectory: false)
+        let databaseDirectory = baseDir.appendingPathComponent("db", isDirectory: true)
+        try fileManager.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
+        let databaseURL = databaseDirectory.appendingPathComponent("transcripts.sqlite", isDirectory: false)
 
         // Plant 64 bytes of random non-SQLite content at the target path BEFORE
         // init. The SQLite header magic is "SQLite format 3\0" — overwriting
@@ -22,10 +24,7 @@ final class TranscriptStorageErrorTests: XCTestCase {
         let garbage = Data(repeating: 0xAB, count: 64)
         try garbage.write(to: databaseURL)
 
-        let locator = FixedBaseDirectoryStorageLocator(
-            baseDirectory: baseDir,
-            managedDirectoryOverrides: [.recordings: recordings]
-        )
+        let locator = FixedBaseDirectoryStorageLocator(baseDirectory: baseDir)
 
         do {
             _ = try AppDatabase(locator: locator)
@@ -42,12 +41,11 @@ final class TranscriptStorageErrorTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeTempRecordingsDir() throws -> (recordings: URL, base: URL) {
+    private func makeTempBaseDir() throws -> URL {
         let base = fileManager.temporaryDirectory
             .appendingPathComponent("TranscriptStorageErrorTests-\(UUID().uuidString)", isDirectory: true)
-        let recordings = base.appendingPathComponent("recordings", isDirectory: true)
-        try fileManager.createDirectory(at: recordings, withIntermediateDirectories: true)
-        return (recordings, base)
+        try fileManager.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
     }
 
     private func cleanup(_ base: URL) {
