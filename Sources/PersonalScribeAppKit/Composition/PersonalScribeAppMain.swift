@@ -28,6 +28,7 @@ struct PersonalScribeAppMain: App {
         // defaults on first launch after a migration lands.
         PreferenceMigrator.migrate(defaults: defaults)
         AppComposition.startDiagnosticsMaintenanceIfNeeded()
+        AppComposition.startRecordingRetentionSweeperIfNeeded()
         self.init(
             coordinator: AppComposition.sessionCoordinator,
             permissionService: AppComposition.makePermissionService(),

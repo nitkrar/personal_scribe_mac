@@ -16,7 +16,7 @@ import GRDB
 ///
 /// SQL shape parity with `SQLiteTranscriptStore` (lines 78-175) is maintained
 /// so Pass 2 can delete the legacy store without query-plan drift.
-public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDeleting, TranscriptUpdating {
+public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDeleting, TranscriptUpdating, TranscriptAudioFilenameNullifying {
     private static let transcriptsFTSTableName = "transcripts_fts"
 
     private let database: AppDatabase
@@ -154,6 +154,34 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
         }
     }
 
+    public func nullifyAudioFilenames(_ filenames: [String]) async throws {
+        guard !filenames.isEmpty else {
+            return
+        }
+
+        let placeholders = Array(repeating: "?", count: filenames.count).joined(separator: ", ")
+        do {
+            try await database.write { db in
+                try db.execute(
+                    sql: """
+                    UPDATE transcripts
+                    SET audio_filename = NULL
+                    WHERE audio_filename IN (\(placeholders))
+                    """,
+                    arguments: StatementArguments(filenames)
+                )
+            }
+            notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
+            operationObserver.record(.writeSucceeded)
+        } catch let error as TranscriptStorageError {
+            operationObserver.record(.writeFailed)
+            throw error
+        } catch {
+            operationObserver.record(.writeFailed)
+            throw TranscriptStorageError.queryFailed(underlying: error)
+        }
+    }
+
     // MARK: - Reads (non-throwing; swallow + log)
 
     /// Most recent `limit` entries in reverse-chronological order. A non-
@@ -174,7 +202,9 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         timestamp,
                         text,
                         audio_duration,
-                        processing_duration
+                        processing_duration,
+                        mode_id,
+                        audio_filename
                     FROM transcripts
                     ORDER BY timestamp DESC
                     LIMIT ?
@@ -237,7 +267,9 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         transcripts.timestamp,
                         transcripts.text,
                         transcripts.audio_duration,
-                        transcripts.processing_duration
+                        transcripts.processing_duration,
+                        transcripts.mode_id,
+                        transcripts.audio_filename
                     FROM transcripts
                     JOIN transcripts_fts
                       ON transcripts_fts.rowid = transcripts.rowid
@@ -268,7 +300,9 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         timestamp,
                         text,
                         audio_duration,
-                        processing_duration
+                        processing_duration,
+                        mode_id,
+                        audio_filename
                     FROM transcripts
                     ORDER BY timestamp DESC
                     """
@@ -309,7 +343,9 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         timestamp,
                         text,
                         audio_duration,
-                        processing_duration
+                        processing_duration,
+                        mode_id,
+                        audio_filename
                     FROM transcripts
                     WHERE timestamp BETWEEN ? AND ?
                     ORDER BY timestamp \(orderClause)

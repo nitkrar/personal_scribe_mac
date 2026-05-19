@@ -13,6 +13,18 @@ public enum AppComposition {
     private static let diagnosticsMaintenanceController = DiagnosticsLogMaintenanceController(
         service: DiagnosticsLogMaintenanceService()
     )
+    private static let recordingRetentionSweeper: RecordingRetentionSweeper? = {
+        guard let transcriptRepository else {
+            return nil
+        }
+
+        return RecordingRetentionSweeper(
+            recordingsDirectory: { try AppConfig.recordingsDirectory() },
+            repository: transcriptRepository,
+            retentionDays: { AudioRecordingRetentionDaysPreference.resolve() },
+            diagnostics: makeLogger(PersonalScribeLogCategory.app)
+        )
+    }()
 
     public static let diagnostics: DiagnosticsReporter = {
         return DiagnosticsReporter(
@@ -34,6 +46,16 @@ public enum AppComposition {
 
     public static func startDiagnosticsMaintenanceIfNeeded() {
         diagnosticsMaintenanceController.start()
+    }
+
+    public static func startRecordingRetentionSweeperIfNeeded() {
+        guard let recordingRetentionSweeper else {
+            return
+        }
+
+        Task {
+            await recordingRetentionSweeper.start()
+        }
     }
 
     public static func makeLogger(_ category: String) -> PersonalScribeLogger {
