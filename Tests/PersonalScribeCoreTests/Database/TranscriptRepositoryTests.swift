@@ -125,6 +125,73 @@ final class TranscriptRepositoryTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 1.0)
     }
 
+    func testDeleteRemovesAudioSidecarWhenPresent() async throws {
+        let remover = AudioFileRemoverSpy()
+        let harness = try makeHarness(audioFileRemover: remover.remove)
+        defer { cleanup(harness.base) }
+
+        let entry = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 100),
+            text: "delete me",
+            audioFilename: "20260519_113345.wav"
+        )
+        try await harness.repository.append(entry)
+
+        try await harness.repository.delete(id: entry.id)
+
+        XCTAssertEqual(remover.calls(), ["20260519_113345.wav"])
+    }
+
+    func testDeleteSkipsRemoverWhenAudioFilenameNil() async throws {
+        let remover = AudioFileRemoverSpy()
+        let harness = try makeHarness(audioFileRemover: remover.remove)
+        defer { cleanup(harness.base) }
+
+        let entry = makeEntry(timestamp: Date(timeIntervalSince1970: 100), text: "delete me")
+        try await harness.repository.append(entry)
+
+        try await harness.repository.delete(id: entry.id)
+
+        XCTAssertTrue(remover.calls().isEmpty)
+    }
+
+    func testDeleteSucceedsWhenAudioRemovalFails() async throws {
+        let sink = InMemoryTestSink()
+        let logger = PersonalScribeLogger(
+            category: PersonalScribeLogCategory.app,
+            reporter: DiagnosticsReporter(sinks: [sink])
+        )
+        let remover = AudioFileRemoverSpy(error: AudioRemovalFailure.removeFailed)
+        let harness = try makeHarness(
+            logger: logger,
+            audioFileRemover: remover.remove
+        )
+        defer { cleanup(harness.base) }
+
+        let entry = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 100),
+            text: "delete me",
+            audioFilename: "20260519_113345.wav"
+        )
+        try await harness.repository.append(entry)
+
+        try await harness.repository.delete(id: entry.id)
+        try await waitForDiagnostics(in: sink)
+
+        let remaining = await harness.repository.all()
+        let events = await sink.snapshot()
+
+        XCTAssertTrue(remaining.isEmpty)
+        XCTAssertEqual(remover.calls(), ["20260519_113345.wav"])
+        XCTAssertTrue(
+            events.contains { event in
+                event.level == .error &&
+                event.message == "TranscriptRepository.delete file removal failed" &&
+                event.underlyingError?.contains("removeFailed") == true
+            }
+        )
+    }
+
     // MARK: - update
 
     func test_update_persistsNewTextReadableFromRepository() async throws {
@@ -319,7 +386,10 @@ final class TranscriptRepositoryTests: XCTestCase {
         let base: URL
     }
 
-    private func makeHarness() throws -> Harness {
+    private func makeHarness(
+        logger: PersonalScribeLogger = PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app),
+        audioFileRemover: @escaping @Sendable (String) throws -> Void = { _ in }
+    ) throws -> Harness {
         let (recordings, base) = try makeTempRecordingsDir()
         let locator = FixedBaseDirectoryStorageLocator(
             baseDirectory: base,
@@ -328,7 +398,8 @@ final class TranscriptRepositoryTests: XCTestCase {
         let database = try AppDatabase(locator: locator)
         let repository = TranscriptRepository(
             database: database,
-            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+            audioFileRemover: audioFileRemover,
+            logger: logger
         )
         return Harness(database: database, repository: repository, base: base)
     }
@@ -350,15 +421,28 @@ final class TranscriptRepositoryTests: XCTestCase {
         timestamp: Date,
         text: String,
         audioDuration: TimeInterval = 1.0,
-        processingDuration: TimeInterval = 0.1
+        processingDuration: TimeInterval = 0.1,
+        audioFilename: String? = nil
     ) -> TranscriptEntry {
         TranscriptEntry(
             id: id,
             timestamp: timestamp,
             text: text,
             audioDuration: audioDuration,
-            processingDuration: processingDuration
+            processingDuration: processingDuration,
+            audioFilename: audioFilename
         )
+    }
+
+    private func waitForDiagnostics(in sink: InMemoryTestSink) async throws {
+        for _ in 0..<100 {
+            if await sink.snapshot().isEmpty == false {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail("Diagnostics sink never received the delete failure event")
     }
 
     /// Seeds 5 entries at t=10, 20, 30, 40, 50 (seconds since epoch) and
@@ -373,4 +457,34 @@ final class TranscriptRepositoryTests: XCTestCase {
         }
         return entries
     }
+}
+
+private final class AudioFileRemoverSpy: @unchecked Sendable {
+    private let lock = NSLock()
+    private var removed: [String] = []
+    private let error: (any Error)?
+
+    init(error: (any Error)? = nil) {
+        self.error = error
+    }
+
+    func remove(_ filename: String) throws {
+        lock.lock()
+        removed.append(filename)
+        lock.unlock()
+
+        if let error {
+            throw error
+        }
+    }
+
+    func calls() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return removed
+    }
+}
+
+private enum AudioRemovalFailure: Error {
+    case removeFailed
 }
