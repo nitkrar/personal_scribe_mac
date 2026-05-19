@@ -27,6 +27,7 @@ public actor WhisperCppStreamingTranscriberAdapter: VadBoundaryStreamingTranscri
 
     private static let decodeCadence: Duration = .milliseconds(500)
     private static let maxDecodeWindowSeconds: Double = 8.25
+    private static let minimumDecodeWindowRms: Float = 0.001
 
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
@@ -345,6 +346,9 @@ private extension WhisperCppStreamingTranscriberAdapter {
             sampleRate: sampleRate,
             channelCount: channelCount
         )
+        guard windowHasSpeechLikeEnergy(window.samples) else {
+            return
+        }
 
         do {
             let decoded = try await manager.decodeSegments(
@@ -409,6 +413,17 @@ private extension WhisperCppStreamingTranscriberAdapter {
         let droppedFrames = (sessionSamples.count - windowSamples.count) / channelCount
         let windowStartMs = Int64((Double(droppedFrames) / sampleRate) * 1_000)
         return (windowSamples, windowStartMs)
+    }
+
+    func windowHasSpeechLikeEnergy(_ samples: [Float]) -> Bool {
+        guard !samples.isEmpty else {
+            return false
+        }
+
+        let meanSquare = samples.reduce(into: Float.zero) { partialResult, sample in
+            partialResult += sample * sample
+        } / Float(samples.count)
+        return sqrt(meanSquare) >= Self.minimumDecodeWindowRms
     }
 
     func validateStreamShape(_ buffer: PCMBuffer, against firstBuffer: PCMBuffer?) throws {

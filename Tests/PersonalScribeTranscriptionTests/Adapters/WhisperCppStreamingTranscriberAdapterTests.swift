@@ -71,6 +71,39 @@ final class WhisperCppStreamingTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(recordedThreshold!, 1.4, accuracy: 0.000_1)
     }
 
+    func testSilentDecodeWindowProducesNoEvents() async throws {
+        let descriptor = BuiltInModelCatalog.whisperCppStreamingTiny
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let manager = StubWhisperCppStreamingManager(
+            scriptedSegments: [
+                [makeSegment("Thank you", 0, 300)],
+                [makeSegment("Thank you", 0, 300)],
+            ]
+        )
+        let adapter = WhisperCppStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            downloader: StubWhisperCppDownloader()
+        )
+        let silentBuffer = try makePCMBuffer(sampleCount: 8_000, sampleValue: 0)
+
+        let events = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [silentBuffer]))
+        )
+
+        XCTAssertEqual(events.count, 1)
+        guard case .finalized(let result) = events[0] else {
+            XCTFail("Expected finalized event, got \(events)")
+            return
+        }
+        XCTAssertEqual(result.text, "")
+        XCTAssertEqual(result.audioDuration, silentBuffer.duration)
+        let decodeCallCount = await manager.decodeCallCount()
+        XCTAssertEqual(decodeCallCount, 0)
+    }
+
     func testSpeechEndedForcesDecodeAndFlushBeforeCadenceThreshold() async throws {
         let descriptor = BuiltInModelCatalog.whisperCppStreamingTiny
         let rootDirectory = try temporaryRootDirectory()
@@ -152,6 +185,55 @@ final class WhisperCppStreamingTranscriberAdapterTests: XCTestCase {
             return
         }
         XCTAssertEqual(result.text, "hello world again")
+        XCTAssertEqual(result.audioDuration, buffer.duration * 2)
+    }
+
+    func testRegroupedCommittedReplayDoesNotReappearInPartialOrBoundary() async throws {
+        let descriptor = BuiltInModelCatalog.whisperCppStreamingTiny
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let adapter = WhisperCppStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: StubWhisperCppStreamingManager(
+                scriptedSegments: [
+                    [
+                        makeSegment("Let's see.", 0, 300),
+                        makeSegment("This is odd.", 300, 600),
+                    ],
+                    [
+                        makeSegment("Let's see.", 0, 300),
+                        makeSegment("This is odd.", 300, 600),
+                    ],
+                    [
+                        makeSegment("let's see this is odd", 0, 600),
+                        makeSegment("again", 600, 900),
+                    ],
+                    [
+                        makeSegment("let's see this is odd", 0, 600),
+                        makeSegment("again", 600, 900),
+                    ],
+                ]
+            ),
+            downloader: StubWhisperCppDownloader(),
+            vadBoundarySessionFactory: makeVadFactory(events: [.speechEnded, nil])
+        )
+        let buffer = try makePCMBuffer(sampleCount: 8_000)
+
+        let events = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [buffer, buffer]))
+        )
+
+        XCTAssertEqual(events.count, 5)
+        XCTAssertEqual(events[0], .partial(text: "Let's see. This is odd."))
+        XCTAssertEqual(events[1], .endOfUtterance(text: "Let's see. This is odd."))
+        XCTAssertEqual(events[2], .partial(text: "again"))
+        XCTAssertEqual(events[3], .endOfUtterance(text: "again"))
+        guard case .finalized(let result) = events[4] else {
+            XCTFail("Expected finalized event, got \(events)")
+            return
+        }
+        XCTAssertEqual(result.text, "Let's see. This is odd. again")
         XCTAssertEqual(result.audioDuration, buffer.duration * 2)
     }
 
@@ -240,10 +322,11 @@ private extension WhisperCppStreamingTranscriberAdapterTests {
     func makePCMBuffer(
         sampleCount: Int,
         sampleRate: Double = AppConfig.sampleRate,
-        channelCount: Int = AppConfig.channelCount
+        channelCount: Int = AppConfig.channelCount,
+        sampleValue: Float = 0.25
     ) throws -> PCMBuffer {
         try PCMBuffer(
-            samples: Array(repeating: 0.25, count: sampleCount),
+            samples: Array(repeating: sampleValue, count: sampleCount),
             sampleRate: sampleRate,
             channelCount: channelCount,
             timestamp: ContinuousClock().now

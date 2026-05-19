@@ -89,6 +89,41 @@ final class WhisperCppStableSegmentTrackerTests: XCTestCase {
         XCTAssertEqual(tracker.partialText, "")
         XCTAssertEqual(tracker.finalText, "hello world again")
     }
+
+    func testCommittedReplayRegroupedIntoSingleSegmentDoesNotBecomeNewBoundaryText() {
+        var tracker = WhisperCppStableSegmentTracker()
+
+        _ = tracker.ingest([
+            makeSegment("Let's see.", 0, 300),
+            makeSegment("This is odd.", 300, 600),
+        ])
+        _ = tracker.ingest([
+            makeSegment("Let's see.", 0, 300),
+            makeSegment("This is odd.", 300, 600),
+        ])
+
+        XCTAssertEqual(tracker.flushStablePrefix(), "Let's see. This is odd.")
+        XCTAssertEqual(tracker.currentUtteranceText, "")
+        XCTAssertEqual(tracker.finalText, "Let's see. This is odd.")
+
+        _ = tracker.ingest([
+            makeSegment("let's see this is odd", 0, 600),
+            makeSegment("again", 600, 900),
+        ])
+
+        XCTAssertEqual(tracker.currentUtteranceText, "again")
+        XCTAssertEqual(tracker.pendingStableText, "")
+        XCTAssertEqual(tracker.partialText, "again")
+
+        _ = tracker.ingest([
+            makeSegment("let's see this is odd", 0, 600),
+            makeSegment("again", 600, 900),
+        ])
+
+        XCTAssertEqual(tracker.flushStablePrefix(), "again")
+        XCTAssertEqual(tracker.currentUtteranceText, "")
+        XCTAssertEqual(tracker.finalText, "Let's see. This is odd. again")
+    }
 }
 
 private extension WhisperCppStableSegmentTrackerTests {

@@ -86,10 +86,25 @@ private extension WhisperCppStableSegmentTracker {
     }
 
     private static func normalizeText(_ text: String) -> String {
-        text
-            .split(whereSeparator: \.isWhitespace)
-            .joined(separator: " ")
-            .lowercased()
+        var normalized = ""
+        var needsSeparator = false
+
+        for scalar in text.lowercased().unicodeScalars {
+            switch scalar {
+            case "'", "’":
+                continue
+            case _ where CharacterSet.alphanumerics.contains(scalar):
+                if needsSeparator, !normalized.isEmpty {
+                    normalized.append(" ")
+                }
+                normalized.unicodeScalars.append(scalar)
+                needsSeparator = false
+            default:
+                needsSeparator = true
+            }
+        }
+
+        return normalized
     }
 
     private static func normalizeSegment(_ segment: WhisperCppDecodedSegment) -> TrackedSegment {
@@ -113,16 +128,49 @@ private extension WhisperCppStableSegmentTracker {
         }
 
         let committed = committedSegments.map(Self.normalizeSegment)
-        let maxOverlap = min(committed.count, incoming.count)
-        for overlapCount in stride(from: maxOverlap, through: 1, by: -1) {
-            let committedSuffix = committed.suffix(overlapCount)
-            let incomingPrefix = incoming.prefix(overlapCount)
-            if zip(committedSuffix, incomingPrefix).allSatisfy(segmentsMatch) {
-                return Array(incoming.dropFirst(overlapCount))
+        var bestIncomingOverlapCount = 0
+        var bestOverlapLength = 0
+
+        for committedStartIndex in committed.indices {
+            let committedSuffix = Array(committed[committedStartIndex...])
+            guard
+                let committedStartMs = committedSuffix.first?.segment.startMs,
+                let committedEndMs = committedSuffix.last?.segment.endMs
+            else {
+                continue
+            }
+
+            let committedText = Self.joinNormalizedText(committedSuffix.map(\.normalizedText))
+            var incomingPieces: [String] = []
+
+            for incomingIndex in incoming.indices {
+                incomingPieces.append(incoming[incomingIndex].normalizedText)
+                let incomingText = Self.joinNormalizedText(incomingPieces)
+
+                guard committedText.hasPrefix(incomingText) else {
+                    break
+                }
+
+                if incomingText == committedText,
+                   rangesMatch(
+                       startMs: committedStartMs,
+                       endMs: committedEndMs,
+                       otherStartMs: incoming[0].segment.startMs,
+                       otherEndMs: incoming[incomingIndex].segment.endMs
+                   ),
+                   committedText.count > bestOverlapLength
+                {
+                    bestIncomingOverlapCount = incomingIndex + 1
+                    bestOverlapLength = committedText.count
+                }
             }
         }
 
-        return incoming
+        guard bestIncomingOverlapCount > 0 else {
+            return incoming
+        }
+
+        return Array(incoming.dropFirst(bestIncomingOverlapCount))
     }
 
     private func merge(
@@ -188,11 +236,32 @@ private extension WhisperCppStableSegmentTracker {
             return false
         }
 
-        let startDrift = abs(lhs.segment.startMs - rhs.segment.startMs)
-        let endDrift = abs(lhs.segment.endMs - rhs.segment.endMs)
+        return rangesMatch(
+            startMs: lhs.segment.startMs,
+            endMs: lhs.segment.endMs,
+            otherStartMs: rhs.segment.startMs,
+            otherEndMs: rhs.segment.endMs
+        )
+    }
+
+    private static func joinNormalizedText<S: Sequence>(_ pieces: S) -> String
+    where S.Element == String {
+        pieces
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    private func rangesMatch(
+        startMs: Int64,
+        endMs: Int64,
+        otherStartMs: Int64,
+        otherEndMs: Int64
+    ) -> Bool {
+        let startDrift = abs(startMs - otherStartMs)
+        let endDrift = abs(endMs - otherEndMs)
         let overlapsWithDrift =
-            lhs.segment.startMs <= rhs.segment.endMs + maxTimeDriftMs
-            && rhs.segment.startMs <= lhs.segment.endMs + maxTimeDriftMs
+            startMs <= otherEndMs + maxTimeDriftMs
+            && otherStartMs <= endMs + maxTimeDriftMs
         return overlapsWithDrift || (startDrift <= maxTimeDriftMs && endDrift <= maxTimeDriftMs)
     }
 }
