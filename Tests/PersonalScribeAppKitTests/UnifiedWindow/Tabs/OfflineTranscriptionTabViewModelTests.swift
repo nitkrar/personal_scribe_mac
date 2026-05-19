@@ -230,6 +230,10 @@ private actor OfflineTranscriptionCoordinatorSpy: OfflineTranscriptionCoordinati
         return UUID()
     }
 
+    func reTranscribe(sourceFilename: String) async -> UUID {
+        UUID()
+    }
+
     func cancelJob(id: UUID) async {}
 
     func dequeueJob(id: UUID) async {}

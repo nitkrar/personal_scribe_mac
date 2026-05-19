@@ -463,6 +463,7 @@ final class StatusItemControllerHost: ObservableObject {
         openTranscriptions: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
+        retranscribeLastRecordingAction: RetranscribeLastRecordingAction? = nil,
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
         },
@@ -479,6 +480,7 @@ final class StatusItemControllerHost: ObservableObject {
             openTranscriptions: openTranscriptions,
             openSettings: openSettings,
             openCopyLastTranscript: openCopyLastTranscript,
+            retranscribeLastRecordingAction: retranscribeLastRecordingAction,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider,
             modesProvider: modesProvider,

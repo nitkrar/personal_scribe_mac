@@ -12,6 +12,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let openTranscriptions: @MainActor () -> Void
     private let openSettings: @MainActor () -> Void
     private let openCopyLastTranscript: @MainActor () -> Void
+    private let retranscribeLastRecordingAction: RetranscribeLastRecordingAction?
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
     private let openURL: @MainActor (URL) -> Void
     private let inputDeviceProvider: any AudioInputDeviceProviding
@@ -33,6 +34,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openTranscriptions: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
+        retranscribeLastRecordingAction: RetranscribeLastRecordingAction? = nil,
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
@@ -51,6 +53,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             openTranscriptions: openTranscriptions,
             openSettings: openSettings,
             openCopyLastTranscript: openCopyLastTranscript,
+            retranscribeLastRecordingAction: retranscribeLastRecordingAction,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             openURL: openURL,
             openMicrophoneSystemSettings: openMicrophoneSystemSettings,
@@ -71,6 +74,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openTranscriptions: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
+        retranscribeLastRecordingAction: RetranscribeLastRecordingAction? = nil,
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
@@ -88,6 +92,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.openTranscriptions = openTranscriptions
         self.openSettings = openSettings
         self.openCopyLastTranscript = openCopyLastTranscript
+        self.retranscribeLastRecordingAction = retranscribeLastRecordingAction
         self.isOnboardingCompleteProvider = isOnboardingCompleteProvider ?? {
             onboardingCompletionPreference.resolve()
         }
@@ -127,6 +132,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
         }
 
+        self.retranscribeLastRecordingAction?.onAvailabilityChange = { [weak self] in
+            guard let self else {
+                return
+            }
+            if self.statusItem.menu?.numberOfItems ?? 0 > 0 {
+                self.rebuildMenu()
+            }
+        }
+
         updateStatusItemAppearance(for: appStore.snapshot.sessionState)
     }
 
@@ -160,6 +174,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             openSettings()
         case .copyLastTranscript:
             openCopyLastTranscript()
+        case .reTranscribeLastRecording:
+            Task { @MainActor in
+                await retranscribeLastRecordingAction?.perform()
+            }
         case .openMicrophoneSystemSettings:
             openURL(PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .microphone))
         case .openInputMonitoringSystemSettings:
@@ -277,7 +295,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             inputDevices: inputDevices,
             currentInputDeviceID: currentInputDeviceID,
             modes: modesProvider(),
-            currentModeID: snapshot.activeMode?.id
+            currentModeID: snapshot.activeMode?.id,
+            canRetranscribeLastRecording: retranscribeLastRecordingAction?.isEnabled ?? false
         )
 
         menu.removeAllItems()

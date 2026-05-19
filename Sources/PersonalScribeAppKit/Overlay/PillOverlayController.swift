@@ -105,7 +105,8 @@ public final class PillOverlayController: ObservableObject {
         legacyVisibilityModeBridge: LegacyVisibilityModeBridge?,
         onTap: @escaping @MainActor () -> Void = {},
         panelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
-        openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil
+        openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil,
+        toastBroadcaster: ToastBroadcaster = AppComposition.toastBroadcaster
     ) {
         let initialMode = legacyVisibilityModeBridge?.currentPillVisibility()
             ?? PillVisibility.resolve(from: defaults ?? .standard)
@@ -149,6 +150,20 @@ public final class PillOverlayController: ObservableObject {
                 }
                 .store(in: &cancellables)
         }
+
+        toastBroadcaster.publisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] message in
+                MainActor.assumeIsolated {
+                    self?.presenter.showRecordingStatusCard(
+                        text: message.text,
+                        link: nil,
+                        autoDismissAfter: message.autoDismissAfter,
+                        onLinkTap: nil
+                    )
+                }
+            }
+            .store(in: &cancellables)
     }
 
     public func setVisibilityMode(

@@ -5,6 +5,7 @@ import PersonalScribeSession
 
 protocol OfflineTranscriptionCoordinating: Sendable {
     func enqueueFile(url: URL, descriptorID: String, diarize: Bool) async -> UUID
+    func reTranscribe(sourceFilename: String) async -> UUID
     func cancelJob(id: UUID) async
     func dequeueJob(id: UUID) async
     func snapshot() async -> [OfflineTranscriptionCoordinator.Job]
@@ -15,6 +16,10 @@ extension OfflineTranscriptionCoordinator: OfflineTranscriptionCoordinating {}
 
 actor DisabledOfflineTranscriptionCoordinator: OfflineTranscriptionCoordinating {
     func enqueueFile(url: URL, descriptorID: String, diarize: Bool) async -> UUID {
+        UUID()
+    }
+
+    func reTranscribe(sourceFilename: String) async -> UUID {
         UUID()
     }
 

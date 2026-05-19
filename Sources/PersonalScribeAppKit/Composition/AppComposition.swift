@@ -10,6 +10,7 @@ import PersonalScribeVAD
 @MainActor
 public enum AppComposition {
     public static let diagnosticsStore = DiagnosticsStore(capacity: 200)
+    public static let toastBroadcaster = ToastBroadcaster()
     private static let diagnosticsMaintenanceController = DiagnosticsLogMaintenanceController(
         service: DiagnosticsLogMaintenanceService()
     )
