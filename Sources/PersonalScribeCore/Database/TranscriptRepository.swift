@@ -317,6 +317,38 @@ public struct TranscriptRepository: Sendable, TranscriptAppending, TranscriptRea
         }
     }
 
+    public func mostRecentEntryWithAudio() async -> TranscriptEntry? {
+        do {
+            let entry = try await database.read { db in
+                try TranscriptEntry.fetchOne(
+                    db,
+                    sql: """
+                    SELECT
+                        id,
+                        timestamp,
+                        text,
+                        audio_duration,
+                        processing_duration,
+                        mode_id,
+                        audio_filename
+                    FROM transcripts
+                    WHERE audio_filename IS NOT NULL
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                    """
+                )
+            }
+            operationObserver.record(.readSucceeded)
+            return entry
+        } catch is CancellationError {
+            return nil
+        } catch {
+            logger.error("TranscriptRepository.mostRecentEntryWithAudio failed", error: error)
+            operationObserver.record(.readFailed)
+            return nil
+        }
+    }
+
     /// Entries whose `timestamp` falls within the closed range `window`, in
     /// the caller-specified order. Window endpoints are inclusive via
     /// `BETWEEN`. Non-throwing.

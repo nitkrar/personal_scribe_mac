@@ -584,6 +584,10 @@ private struct EmptyTranscriptReader: TranscriptReading {
     func all() async -> [TranscriptEntry] {
         []
     }
+
+    func mostRecentEntryWithAudio() async -> TranscriptEntry? {
+        nil
+    }
 }
 
 /// Fallback MetricsReading used when the SQLite metrics store can't be

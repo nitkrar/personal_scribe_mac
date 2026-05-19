@@ -291,6 +291,13 @@ private actor InlineFakeTranscriptStore: TranscriptReading, TranscriptDeleting, 
         entries
     }
 
+    func mostRecentEntryWithAudio() async -> TranscriptEntry? {
+        entries
+            .filter { $0.audioFilename != nil }
+            .sorted { $0.timestamp > $1.timestamp }
+            .first
+    }
+
     func delete(id: UUID) async throws {
         deletedIDsStorage.append(id)
         entries.removeAll { $0.id == id }

@@ -125,6 +125,10 @@ private actor FakeTranscriptReader: TranscriptReading {
     func search(query: String) async -> [TranscriptEntry] { searchResult }
 
     func all() async -> [TranscriptEntry] { allResult }
+
+    func mostRecentEntryWithAudio() async -> TranscriptEntry? {
+        allResult.first(where: { $0.audioFilename != nil })
+    }
 }
 
 @MainActor

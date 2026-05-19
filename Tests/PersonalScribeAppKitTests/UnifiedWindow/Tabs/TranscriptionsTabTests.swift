@@ -129,4 +129,5 @@ private actor FakeEmptyReader: TranscriptReading {
     func recent(limit: Int) async -> [TranscriptEntry] { [] }
     func search(query: String) async -> [TranscriptEntry] { [] }
     func all() async -> [TranscriptEntry] { [] }
+    func mostRecentEntryWithAudio() async -> TranscriptEntry? { nil }
 }

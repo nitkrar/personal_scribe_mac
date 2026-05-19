@@ -328,6 +328,75 @@ final class TranscriptRepositoryTests: XCTestCase {
         XCTAssertEqual(result.map(\.text), ["c", "b", "a"])
     }
 
+    // MARK: - mostRecentEntryWithAudio
+
+    func testMostRecentEntryWithAudioReturnsNilWhenNoRowsHaveAudio() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        try await harness.repository.append(
+            makeEntry(timestamp: Date(timeIntervalSince1970: 100), text: "first")
+        )
+        try await harness.repository.append(
+            makeEntry(timestamp: Date(timeIntervalSince1970: 200), text: "second")
+        )
+
+        let result = await harness.repository.mostRecentEntryWithAudio()
+
+        XCTAssertNil(result)
+    }
+
+    func testMostRecentEntryWithAudioReturnsLatestRowWithAudio() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        let withAudio = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 200),
+            text: "with audio",
+            audioFilename: "with-audio.wav"
+        )
+        let withoutAudio = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 300),
+            text: "without audio"
+        )
+        let olderAudio = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 100),
+            text: "older audio",
+            audioFilename: "older-audio.wav"
+        )
+        try await harness.repository.append(olderAudio)
+        try await harness.repository.append(withAudio)
+        try await harness.repository.append(withoutAudio)
+
+        let result = await harness.repository.mostRecentEntryWithAudio()
+
+        XCTAssertEqual(result?.id, withAudio.id)
+        XCTAssertEqual(result?.audioFilename, "with-audio.wav")
+    }
+
+    func testMostRecentEntryWithAudioOrdersByTimestampDesc() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        let olderAudio = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 100),
+            text: "older audio",
+            audioFilename: "older-audio.wav"
+        )
+        let newerAudio = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 300),
+            text: "newer audio",
+            audioFilename: "newer-audio.wav"
+        )
+        try await harness.repository.append(olderAudio)
+        try await harness.repository.append(newerAudio)
+
+        let result = await harness.repository.mostRecentEntryWithAudio()
+
+        XCTAssertEqual(result?.id, newerAudio.id)
+        XCTAssertEqual(result?.audioFilename, "newer-audio.wav")
+    }
+
     // MARK: - entries(in:orderedBy:)
 
     func test_entries_inWindow_ascending_returnsRangeSortedAscending() async throws {
