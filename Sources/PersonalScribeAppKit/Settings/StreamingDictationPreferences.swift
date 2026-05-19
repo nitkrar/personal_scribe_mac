@@ -49,6 +49,29 @@ public enum StreamingSecondPassEnabledPreference {
     }
 }
 
+public enum StreamingEouSilenceThresholdPreference {
+    public static let userDefaultsKey = PreferenceKeys.streamingEouSilenceThresholdMs.key
+    public static let `default` = PreferenceKeys.streamingEouSilenceThresholdMs.default
+    public static let minimum = 200
+    public static let maximum = 3_000
+    public static let step = 100
+
+    public static func resolve(from defaults: UserDefaults = .standard) -> Int {
+        guard defaults.object(forKey: userDefaultsKey) != nil else {
+            return `default`
+        }
+        return clamp(defaults.integer(forKey: userDefaultsKey))
+    }
+
+    public static func persist(_ value: Int, to defaults: UserDefaults = .standard) {
+        defaults.set(clamp(value), forKey: userDefaultsKey)
+    }
+
+    private static func clamp(_ value: Int) -> Int {
+        min(max(value, minimum), maximum)
+    }
+}
+
 public enum StreamingCardOverflowMode: String, CaseIterable, Codable, Sendable {
     case tailPinnedHeadEllipsis
     case marquee

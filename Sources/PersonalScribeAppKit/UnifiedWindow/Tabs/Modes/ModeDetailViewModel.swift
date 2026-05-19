@@ -79,6 +79,11 @@ final class ModeDetailViewModel: ObservableObject {
             ?? .setting(PreferenceKeys.streamingSecondPassEnabled)
     }
 
+    var eouSilenceThresholdParameter: Parameter<Int> {
+        mode.streamingBehavior?.eouSilenceThresholdMs
+            ?? .setting(PreferenceKeys.streamingEouSilenceThresholdMs)
+    }
+
     /// #090 — Per-mode voice-model pin. Reads through to the first
     /// transcriber-bearing processor's `descriptorID`. `nil` means
     /// "use globally active", which is the default.
@@ -162,6 +167,9 @@ final class ModeDetailViewModel: ObservableObject {
     }
     func setAuthoritativeSecondPass(_ parameter: Parameter<Bool>) {
         apply(mode.withAuthoritativeSecondPass(parameter: parameter))
+    }
+    func setEouSilenceThreshold(_ parameter: Parameter<Int>) {
+        apply(mode.withStreamingEouSilenceThresholdMs(parameter: parameter))
     }
     func setHotkey(_ hotkey: HotkeyPreference?) { apply(mode.withHotkey(hotkey)) }
     func setVoiceModelPin(_ id: String?) {

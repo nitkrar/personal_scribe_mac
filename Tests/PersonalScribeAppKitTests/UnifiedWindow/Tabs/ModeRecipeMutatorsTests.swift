@@ -102,6 +102,16 @@ final class ModeRecipeMutatorsTests: XCTestCase {
         XCTAssertEqual(streamingBehavior?.secondPassEnabled, .override(false))
     }
 
+    func testStreamingEouSilenceThresholdMutatorRewritesParameter() {
+        let mode = Self.makeStreamingMode()
+            .withStreamingEouSilenceThresholdMs(parameter: .override(1400))
+
+        XCTAssertEqual(
+            mode.streamingBehavior?.eouSilenceThresholdMs,
+            .override(1400)
+        )
+    }
+
     // MARK: - withDiarization: kind preserved → CARRY pin
 
     func testWithDiarizationOnCarriesTranscriberPinIntoDiarizedTurns() {

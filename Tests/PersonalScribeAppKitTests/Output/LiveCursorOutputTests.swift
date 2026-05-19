@@ -227,6 +227,90 @@ final class LiveCursorOutputTests: XCTestCase {
         )
     }
 
+    func testDeliverPartialLogsStreamingClipboardWriteAndPasteOutcomeWhenDiagnosticsSessionPresent() async throws {
+        let pasteboard = makePasteboard()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        let output = makeOutput(
+            pasteboard: pasteboard,
+            logger: logger,
+            pasteShortcutPoster: { true }
+        )
+
+        await output.resetForNewSession()
+        try await StreamingDiagnosticsSession.$current.withValue(
+            .init(sessionID: "stream-session")
+        ) {
+            try await output.deliverPartial(makeProgress("hello"))
+        }
+
+        _ = await waitForLogMessages(
+            in: sink,
+            containing: "streaming_sink_paste_outcome session=stream-session utterance=1",
+            expectedCount: 1
+        )
+        let messages = await sink.snapshot().map(\.message)
+        XCTAssertTrue(
+            messages.contains {
+                $0.contains("streaming_sink_clipboard_written session=stream-session utterance=1")
+            }
+        )
+        XCTAssertTrue(
+            messages.contains {
+                $0.contains("streaming_sink_paste_outcome session=stream-session utterance=1")
+                    && $0.contains("outcome=posted")
+            }
+        )
+    }
+
+    func testDeliverPartialLogsStreamingAccessibilitySkipWhenDiagnosticsSessionPresent() async throws {
+        let pasteboard = makePasteboard()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        let output = makeOutput(
+            pasteboard: pasteboard,
+            logger: logger,
+            isAccessibilityTrusted: { false }
+        )
+
+        await output.resetForNewSession()
+        try await StreamingDiagnosticsSession.$current.withValue(
+            .init(sessionID: "stream-session")
+        ) {
+            try await output.deliverPartial(makeProgress("hello"))
+        }
+
+        _ = await waitForLogMessages(
+            in: sink,
+            containing: "streaming_sink_ax_skip session=stream-session utterance=1",
+            expectedCount: 1
+        )
+    }
+
+    func testDeliverPartialLogsStreamingSelfFocusSkipWhenDiagnosticsSessionPresent() async throws {
+        let pasteboard = makePasteboard()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        let output = makeOutput(
+            pasteboard: pasteboard,
+            logger: logger,
+            focusedElementIsInAnotherApp: { false }
+        )
+
+        await output.resetForNewSession()
+        try await StreamingDiagnosticsSession.$current.withValue(
+            .init(sessionID: "stream-session")
+        ) {
+            try await output.deliverPartial(makeProgress("hello"))
+        }
+
+        _ = await waitForLogMessages(
+            in: sink,
+            containing: "streaming_sink_self_focus_skip session=stream-session utterance=1",
+            expectedCount: 1
+        )
+    }
+
     func testDeliverPartialIgnoresBlankText() async throws {
         let pasteboard = makePasteboard()
         pasteboard.clearContents()

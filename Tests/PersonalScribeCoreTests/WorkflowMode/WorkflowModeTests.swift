@@ -122,6 +122,10 @@ final class WorkflowModeTests: XCTestCase {
             streamingBehavior.secondPassEnabled,
             .setting(PreferenceKeys.streamingSecondPassEnabled)
         )
+        XCTAssertEqual(
+            streamingBehavior.eouSilenceThresholdMs,
+            .setting(PreferenceKeys.streamingEouSilenceThresholdMs)
+        )
     }
 
     func testStreamingDictationPresetSeedsStreamingBehaviorAndDisablesVad() throws {

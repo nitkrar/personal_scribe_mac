@@ -747,6 +747,43 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
     }
 
+    func testStreamingRecipePassesBoundEouSilenceThresholdToConfigurableStreamingTranscriber() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.1),
+        ]
+        let streamingTranscriber = ThresholdRecordingStreamingTranscriber()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: buffers,
+                delayPerBuffer: .milliseconds(20)
+            ),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: false,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: false,
+                    eouSilenceThresholdSeconds: 1.4
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(50))
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let observedThresholds = await streamingTranscriber.observedThresholds()
+        XCTAssertEqual(observedThresholds, [1.4])
+        let plainTranscribeCalls = await streamingTranscriber.plainTranscribeCalls()
+        XCTAssertEqual(plainTranscribeCalls, 0)
+    }
+
     func testEndSessionFiresOnSuccessfulCompletion() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let transcriber = ReturningTranscriber(
@@ -2452,6 +2489,74 @@ private actor ScriptedStreamingTranscriber: StreamingTranscriber {
                 }
             }
         }
+    }
+}
+
+private actor ThresholdRecordingStreamingTranscriber: VadBoundaryStreamingTranscriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+
+    private var thresholds: [Double] = []
+    private var plainCalls = 0
+
+    func prepare() async throws {}
+
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+
+    nonisolated func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>,
+        eouSilenceThresholdSeconds: Double
+    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                await self.recordThreshold(eouSilenceThresholdSeconds)
+                do {
+                    for try await _ in stream {
+                        continue
+                    }
+                    continuation.yield(
+                        .finalized(
+                            TranscriptionResult(
+                                text: "threshold aware",
+                                audioDuration: .milliseconds(100),
+                                processingDuration: .milliseconds(10)
+                            )
+                        )
+                    )
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+
+    nonisolated func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>
+    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
+        return AsyncThrowingStream { continuation in
+            Task {
+                await self.recordPlainCall()
+                continuation.finish()
+            }
+        }
+    }
+
+    func observedThresholds() -> [Double] {
+        thresholds
+    }
+
+    func plainTranscribeCalls() -> Int {
+        plainCalls
+    }
+
+    private func recordThreshold(_ threshold: Double) {
+        thresholds.append(threshold)
+    }
+
+    private func recordPlainCall() {
+        plainCalls += 1
     }
 }
 

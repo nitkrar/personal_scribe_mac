@@ -141,7 +141,10 @@ public final class RecipeBuilder {
         return BoundStreamingBehavior(
             liveCardEnabled: ParameterResolver.resolve(spec.liveCardEnabled, from: defaults),
             liveCursorEnabled: ParameterResolver.resolve(spec.liveCursorEnabled, from: defaults),
-            secondPassEnabled: ParameterResolver.resolve(spec.secondPassEnabled, from: defaults)
+            secondPassEnabled: ParameterResolver.resolve(spec.secondPassEnabled, from: defaults),
+            eouSilenceThresholdSeconds: Double(
+                ParameterResolver.resolve(spec.eouSilenceThresholdMs, from: defaults)
+            ) / 1000
         )
     }
 

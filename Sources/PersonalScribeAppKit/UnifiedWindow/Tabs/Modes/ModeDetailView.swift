@@ -142,6 +142,15 @@ struct ModeDetailView: View {
                         parameter: viewModel.authoritativeSecondPassParameter,
                         onChange: { viewModel.setAuthoritativeSecondPass($0) }
                     )
+                    Divider()
+                    IntegerParameterStepperView(
+                        title: "End-of-utterance silence",
+                        settingKey: PreferenceKeys.streamingEouSilenceThresholdMs,
+                        parameter: viewModel.eouSilenceThresholdParameter,
+                        range: StreamingEouSilenceThresholdPreference.minimum...StreamingEouSilenceThresholdPreference.maximum,
+                        step: StreamingEouSilenceThresholdPreference.step,
+                        onChange: { viewModel.setEouSilenceThreshold($0) }
+                    )
                 }
             }
         }

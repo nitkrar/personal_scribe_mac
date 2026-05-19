@@ -55,6 +55,12 @@ extension WorkflowMode {
         }
     }
 
+    func withStreamingEouSilenceThresholdMs(parameter: Parameter<Int>) -> WorkflowMode {
+        rewritingStreamingBehavior { behavior in
+            behavior.eouSilenceThresholdMs = parameter
+        }
+    }
+
     func withDiarization(_ on: Bool) -> WorkflowMode {
         var copy = self
         copy.processors = copy.processors.map { spec -> ProcessorSpec in

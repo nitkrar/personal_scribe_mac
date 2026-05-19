@@ -93,12 +93,14 @@ final class GeneralTabViewModelTests: XCTestCase {
         StreamingLiveCardEnabledPreference.persist(false, to: defaults)
         StreamingLiveCursorEnabledPreference.persist(true, to: defaults)
         StreamingSecondPassEnabledPreference.persist(false, to: defaults)
+        StreamingEouSilenceThresholdPreference.persist(1400, to: defaults)
 
         let viewModel = GeneralTabViewModel(defaults: defaults)
 
         XCTAssertFalse(viewModel.streamingLiveCardEnabled)
         XCTAssertTrue(viewModel.streamingLiveCursorEnabled)
         XCTAssertFalse(viewModel.streamingSecondPassEnabled)
+        XCTAssertEqual(viewModel.streamingEouSilenceThresholdMs, 1400)
     }
 
     func testSetStreamingDefaultsPersistAndPublish() {
@@ -108,12 +110,28 @@ final class GeneralTabViewModelTests: XCTestCase {
         viewModel.setStreamingLiveCardEnabled(false)
         viewModel.setStreamingLiveCursorEnabled(true)
         viewModel.setStreamingSecondPassEnabled(false)
+        viewModel.setStreamingEouSilenceThresholdMs(1200)
 
         XCTAssertFalse(viewModel.streamingLiveCardEnabled)
         XCTAssertTrue(viewModel.streamingLiveCursorEnabled)
         XCTAssertFalse(viewModel.streamingSecondPassEnabled)
+        XCTAssertEqual(viewModel.streamingEouSilenceThresholdMs, 1200)
         XCTAssertFalse(StreamingLiveCardEnabledPreference.resolve(from: defaults))
         XCTAssertTrue(StreamingLiveCursorEnabledPreference.resolve(from: defaults))
         XCTAssertFalse(StreamingSecondPassEnabledPreference.resolve(from: defaults))
+        XCTAssertEqual(StreamingEouSilenceThresholdPreference.resolve(from: defaults), 1200)
+    }
+
+    func testSetStreamingEouSilenceThresholdClampsToGuardrails() {
+        let defaults = isolatedDefaults()
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+
+        viewModel.setStreamingEouSilenceThresholdMs(100)
+        XCTAssertEqual(viewModel.streamingEouSilenceThresholdMs, 200)
+        XCTAssertEqual(StreamingEouSilenceThresholdPreference.resolve(from: defaults), 200)
+
+        viewModel.setStreamingEouSilenceThresholdMs(4000)
+        XCTAssertEqual(viewModel.streamingEouSilenceThresholdMs, 3000)
+        XCTAssertEqual(StreamingEouSilenceThresholdPreference.resolve(from: defaults), 3000)
     }
 }

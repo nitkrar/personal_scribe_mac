@@ -355,6 +355,34 @@ public struct GeneralTab: View {
 
             Divider()
 
+            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                Text("End-of-utterance silence")
+                    .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+
+                Text(viewModel.streamingEouSilenceThresholdDescription)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+
+                Stepper(
+                    value: Binding(
+                        get: { viewModel.streamingEouSilenceThresholdMs },
+                        set: { viewModel.setStreamingEouSilenceThresholdMs($0) }
+                    ),
+                    in: StreamingEouSilenceThresholdPreference.minimum...StreamingEouSilenceThresholdPreference.maximum,
+                    step: StreamingEouSilenceThresholdPreference.step
+                ) {
+                    Text("\(viewModel.streamingEouSilenceThresholdMs) ms")
+                        .font(PersonalScribeTheme.Typography.body.font)
+                }
+
+                Text("Applies to streaming modes that use the default threshold. Per-mode overrides can narrow or widen it.")
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Divider()
+
             Picker(
                 "Overflow mode",
                 selection: Binding(
@@ -687,6 +715,7 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var streamingLiveCardEnabled: Bool
     @Published private(set) var streamingLiveCursorEnabled: Bool
     @Published private(set) var streamingSecondPassEnabled: Bool
+    @Published private(set) var streamingEouSilenceThresholdMs: Int
     @Published private(set) var streamingCardOverflowMode: StreamingCardOverflowMode
     /// Master theme (Light / Dark / System). Drives
     /// `showsTintPicker` — tint is hidden when the effective scheme
@@ -766,6 +795,9 @@ final class GeneralTabViewModel: ObservableObject {
         self.streamingLiveCardEnabled = StreamingLiveCardEnabledPreference.resolve(from: defaults)
         self.streamingLiveCursorEnabled = StreamingLiveCursorEnabledPreference.resolve(from: defaults)
         self.streamingSecondPassEnabled = StreamingSecondPassEnabledPreference.resolve(from: defaults)
+        self.streamingEouSilenceThresholdMs = StreamingEouSilenceThresholdPreference.resolve(
+            from: defaults
+        )
         self.streamingCardOverflowMode = StreamingCardOverflowModePreference.resolve(from: defaults)
         self.appTheme = AppTheme.resolve(from: defaults)
         self.speakerSeparationSensitivity = SpeakerSeparationSensitivityPreference.resolve(from: defaults)
@@ -892,6 +924,13 @@ final class GeneralTabViewModel: ObservableObject {
         StreamingSecondPassEnabledPreference.persist(enabled, to: defaults)
     }
 
+    func setStreamingEouSilenceThresholdMs(_ milliseconds: Int) {
+        StreamingEouSilenceThresholdPreference.persist(milliseconds, to: defaults)
+        streamingEouSilenceThresholdMs = StreamingEouSilenceThresholdPreference.resolve(
+            from: defaults
+        )
+    }
+
     func setStreamingCardOverflowMode(_ mode: StreamingCardOverflowMode) {
         streamingCardOverflowMode = mode
         StreamingCardOverflowModePreference.persist(mode, to: defaults)
@@ -988,6 +1027,10 @@ final class GeneralTabViewModel: ObservableObject {
         "After paste, wait \(Self.formatSeconds(clipboardRestoreDelay.seconds))s before restoring your clipboard"
     }
 
+    var streamingEouSilenceThresholdDescription: String {
+        "\(Self.formatMilliseconds(streamingEouSilenceThresholdMs))s of silence before streaming end-of-utterance"
+    }
+
     /// Plain-English summary that adapts to the current toggle/slider
     /// state. Rendered beneath the two toggles in `transcribeOutputCard`
     /// so the user can see the concrete behavior instead of mentally
@@ -1010,6 +1053,10 @@ final class GeneralTabViewModel: ObservableObject {
 
     private static func formatSeconds(_ seconds: TimeInterval) -> String {
         String(format: "%.1f", seconds)
+    }
+
+    private static func formatMilliseconds(_ milliseconds: Int) -> String {
+        formatSeconds(Double(milliseconds) / 1000)
     }
 }
 

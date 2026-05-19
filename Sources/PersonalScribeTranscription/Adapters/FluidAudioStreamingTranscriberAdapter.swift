@@ -3,22 +3,29 @@ import FluidAudio
 import Foundation
 import PersonalScribeCore
 
-public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
+public actor FluidAudioStreamingTranscriberAdapter: VadBoundaryStreamingTranscriber {
     public nonisolated let capabilities = TranscriberCapabilities()
 
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
     private let managerResult: Result<any FluidAudioStreamingEouManaging, Error>
+    private let vadBoundarySessionFactory: VadBoundarySessionFactory?
+    private let logger: PersonalScribeLogger
     private nonisolated let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
+    private nonisolated let partialInbox = PartialInbox()
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
 
     public init(
         descriptor: ModelDescriptor,
-        storageLocator: any StorageLocator = AppConfig.liveStorageLocator()
+        storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
+        vadBoundarySessionFactory: VadBoundarySessionFactory? = nil,
+        logger: PersonalScribeLogger = .testing(category: PersonalScribeLogCategory.transcription)
     ) {
         self.descriptor = descriptor
         self.storageLocator = storageLocator
+        self.vadBoundarySessionFactory = vadBoundarySessionFactory
+        self.logger = logger
         self.managerResult = Result {
             StreamingEouAsrManager(
                 chunkSize: try StreamingChunkSize(descriptor: descriptor)
@@ -29,10 +36,14 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
     init(
         descriptor: ModelDescriptor,
         storageLocator: any StorageLocator,
-        manager: any FluidAudioStreamingEouManaging
+        manager: any FluidAudioStreamingEouManaging,
+        vadBoundarySessionFactory: VadBoundarySessionFactory? = nil,
+        logger: PersonalScribeLogger = .testing(category: PersonalScribeLogCategory.transcription)
     ) {
         self.descriptor = descriptor
         self.storageLocator = storageLocator
+        self.vadBoundarySessionFactory = vadBoundarySessionFactory
+        self.logger = logger
         self.managerResult = .success(manager)
     }
 
@@ -97,10 +108,10 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
         prepareTask = nil
         hasPreparedModel = false
         inFlightPrepare?.cancel()
+        partialInbox.clear()
 
         if let manager = try? resolvedManager() {
             await manager.setPartialCallback { _ in }
-            await manager.setEouCallback { _ in }
             await manager.cleanup()
         }
 
@@ -110,11 +121,24 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
     public nonisolated func transcribe(
         stream: AsyncThrowingStream<PCMBuffer, Error>
     ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
+        transcribe(
+            stream: stream,
+            eouSilenceThresholdSeconds: Double(
+                PreferenceKeys.streamingEouSilenceThresholdMs.default
+            ) / 1000
+        )
+    }
+
+    public nonisolated func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>,
+        eouSilenceThresholdSeconds: Double
+    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 await self.executeTranscription(
                     from: stream,
-                    continuation: continuation
+                    continuation: continuation,
+                    eouSilenceThresholdSeconds: eouSilenceThresholdSeconds
                 )
             }
 
@@ -154,25 +178,34 @@ protocol FluidAudioStreamingEouManaging: Actor, Sendable {
     func cleanup() async
 }
 
-private extension FluidAudioStreamingTranscriberAdapter {
+extension FluidAudioStreamingTranscriberAdapter {
     func executeTranscription(
         from stream: AsyncThrowingStream<PCMBuffer, Error>,
-        continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation
+        continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation,
+        eouSilenceThresholdSeconds: Double
     ) async {
         do {
             try await prepare()
             let manager = try resolvedManager()
+            let diagnosticsContext = StreamingDiagnosticsSession.current
+                ?? StreamingDiagnosticsSession.Context()
 
             await manager.reset()
             await manager.setPartialCallback { text in
-                continuation.yield(.partial(text: text))
-            }
-            await manager.setEouCallback { text in
-                continuation.yield(.endOfUtterance(text: text))
+                self.partialInbox.append(text)
             }
 
             var audioDuration: Duration = .zero
             var firstBuffer: PCMBuffer?
+            var latestCumulative = ""
+            var lastCommittedBoundary = ""
+            var emittedUtteranceCount = 0
+            let vadSession = await vadBoundarySessionFactory?(eouSilenceThresholdSeconds)
+            if vadSession == nil {
+                logger.info(
+                    "VAD boundary unavailable; falling back to stream-end boundary session=\(diagnosticsContext.sessionID) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds())"
+                )
+            }
 
             do {
                 for try await buffer in stream {
@@ -185,6 +218,23 @@ private extension FluidAudioStreamingTranscriberAdapter {
                     _ = try await manager.process(
                         audioBuffer: try Self.makeAVAudioPCMBuffer(from: buffer)
                     )
+                    drainPartialsAndEmitRevisions(
+                        continuation: continuation,
+                        latestCumulative: &latestCumulative,
+                        lastCommittedBoundary: lastCommittedBoundary,
+                        diagnosticsContext: diagnosticsContext,
+                        nextUtterance: emittedUtteranceCount + 1
+                    )
+                    if let vadEvent = await vadSession?.ingest(buffer.samples),
+                       vadEvent == .speechEnded {
+                        emitBoundaryIfNeeded(
+                            latestCumulative: latestCumulative,
+                            lastCommittedBoundary: &lastCommittedBoundary,
+                            continuation: continuation,
+                            diagnosticsContext: diagnosticsContext,
+                            emittedUtteranceCount: &emittedUtteranceCount
+                        )
+                    }
                 }
             } catch is CancellationError {
                 await reset(manager: manager)
@@ -197,6 +247,14 @@ private extension FluidAudioStreamingTranscriberAdapter {
                 throw PersonalScribeError.transcriptionFailure
             }
 
+            drainPartialsAndEmitRevisions(
+                continuation: continuation,
+                latestCumulative: &latestCumulative,
+                lastCommittedBoundary: lastCommittedBoundary,
+                diagnosticsContext: diagnosticsContext,
+                nextUtterance: emittedUtteranceCount + 1
+            )
+
             let finalText: String
             do {
                 finalText = try await manager.finish()
@@ -206,6 +264,17 @@ private extension FluidAudioStreamingTranscriberAdapter {
             } catch {
                 await reset(manager: manager)
                 throw PersonalScribeError.transcriptionFailure
+            }
+
+            if vadSession == nil {
+                let canonicalFinal = finalText.isEmpty ? latestCumulative : finalText
+                emitBoundaryIfNeeded(
+                    latestCumulative: canonicalFinal,
+                    lastCommittedBoundary: &lastCommittedBoundary,
+                    continuation: continuation,
+                    diagnosticsContext: diagnosticsContext,
+                    emittedUtteranceCount: &emittedUtteranceCount
+                )
             }
 
             continuation.yield(
@@ -255,8 +324,80 @@ private extension FluidAudioStreamingTranscriberAdapter {
 
     func reset(manager: any FluidAudioStreamingEouManaging) async {
         await manager.setPartialCallback { _ in }
-        await manager.setEouCallback { _ in }
+        partialInbox.clear()
         await manager.reset()
+    }
+
+    func drainPartialsAndEmitRevisions(
+        continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation,
+        latestCumulative: inout String,
+        lastCommittedBoundary: String,
+        diagnosticsContext: StreamingDiagnosticsSession.Context,
+        nextUtterance: Int
+    ) {
+        for cumulativeText in partialInbox.drain() {
+            latestCumulative = cumulativeText
+            let derivation = Self.deriveDelta(
+                latest: cumulativeText,
+                committed: lastCommittedBoundary
+            )
+            if derivation.usedLongestCommonPrefixFallback {
+                logLcpFallback(
+                    latest: cumulativeText,
+                    committed: lastCommittedBoundary,
+                    diagnosticsContext: diagnosticsContext,
+                    utterance: nextUtterance
+                )
+            }
+            let trimmed = derivation.delta.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                continuation.yield(.partial(text: trimmed))
+            }
+        }
+    }
+
+    func emitBoundaryIfNeeded(
+        latestCumulative: String,
+        lastCommittedBoundary: inout String,
+        continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation,
+        diagnosticsContext: StreamingDiagnosticsSession.Context,
+        emittedUtteranceCount: inout Int
+    ) {
+        let derivation = Self.deriveDelta(
+            latest: latestCumulative,
+            committed: lastCommittedBoundary
+        )
+        if derivation.usedLongestCommonPrefixFallback {
+            logLcpFallback(
+                latest: latestCumulative,
+                committed: lastCommittedBoundary,
+                diagnosticsContext: diagnosticsContext,
+                utterance: emittedUtteranceCount + 1
+            )
+        }
+        let trimmed = derivation.delta.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+
+        emittedUtteranceCount += 1
+        continuation.yield(.endOfUtterance(text: trimmed))
+        lastCommittedBoundary = latestCumulative
+        logger.info(
+            "streaming_eou_emitted session=\(diagnosticsContext.sessionID) utterance=\(emittedUtteranceCount) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds()) chars=\(trimmed.count)"
+        )
+    }
+
+    func logLcpFallback(
+        latest: String,
+        committed: String,
+        diagnosticsContext: StreamingDiagnosticsSession.Context,
+        utterance: Int
+    ) {
+        let lcp = Self.longestCommonPrefix(latest, committed)
+        logger.info(
+            "streaming_lcp_fallback session=\(diagnosticsContext.sessionID) utterance=\(utterance) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds()) latest_chars=\(latest.count) committed_chars=\(committed.count) lcp_chars=\(lcp.count)"
+        )
     }
 
     static func makeAVAudioPCMBuffer(from buffer: PCMBuffer) throws -> AVAudioPCMBuffer {
@@ -290,6 +431,43 @@ private extension FluidAudioStreamingTranscriberAdapter {
 
         return audioBuffer
     }
+
+    struct DeltaDerivation: Sendable, Equatable {
+        let delta: String
+        let usedLongestCommonPrefixFallback: Bool
+    }
+
+    static func deriveDelta(
+        latest: String,
+        committed: String
+    ) -> DeltaDerivation {
+        if latest.hasPrefix(committed) {
+            return DeltaDerivation(
+                delta: String(latest.dropFirst(committed.count)),
+                usedLongestCommonPrefixFallback: false
+            )
+        }
+
+        let lcp = longestCommonPrefix(latest, committed)
+        return DeltaDerivation(
+            delta: String(latest.dropFirst(lcp.count)),
+            usedLongestCommonPrefixFallback: true
+        )
+    }
+
+    static func longestCommonPrefix(_ lhs: String, _ rhs: String) -> String {
+        var lhsIndex = lhs.startIndex
+        var rhsIndex = rhs.startIndex
+
+        while lhsIndex < lhs.endIndex,
+              rhsIndex < rhs.endIndex,
+              lhs[lhsIndex] == rhs[rhsIndex] {
+            lhsIndex = lhs.index(after: lhsIndex)
+            rhsIndex = rhs.index(after: rhsIndex)
+        }
+
+        return String(lhs[..<lhsIndex])
+    }
 }
 
 private extension StreamingChunkSize {
@@ -304,5 +482,30 @@ private extension StreamingChunkSize {
         default:
             throw ModelSelectionError.unknownVoiceModelID(descriptor.id)
         }
+    }
+}
+
+private final class PartialInbox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var queue: [String] = []
+
+    func append(_ text: String) {
+        lock.lock()
+        queue.append(text)
+        lock.unlock()
+    }
+
+    func drain() -> [String] {
+        lock.lock()
+        let drained = queue
+        queue.removeAll(keepingCapacity: true)
+        lock.unlock()
+        return drained
+    }
+
+    func clear() {
+        lock.lock()
+        queue.removeAll(keepingCapacity: true)
+        lock.unlock()
     }
 }

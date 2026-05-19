@@ -102,6 +102,34 @@ final class ModeDetailViewModelTests: XCTestCase {
         XCTAssertEqual(saved?.streamingBehavior?.secondPassEnabled, .override(false))
     }
 
+    func testStreamingEouSilenceThresholdRoundTripsThroughRegistry() throws {
+        let custom = WorkflowMode(
+            id: "streaming-threshold",
+            name: "Streaming Threshold",
+            pipelineShape: .streaming,
+            processors: [.streamingTranscriber(kind: .streamingASR)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite],
+            streamingBehavior: .defaultSettings
+        )
+        let store = InMemoryWorkflowModeStore(
+            initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+        )
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.streamingASR] }
+        )
+        let viewModel = ModeDetailViewModel(mode: custom, registry: registry)
+
+        viewModel.setEouSilenceThreshold(.override(1400))
+
+        XCTAssertEqual(viewModel.eouSilenceThresholdParameter, .override(1400))
+        XCTAssertEqual(
+            registry.customModes.first { $0.id == "streaming-threshold" }?.streamingBehavior?.eouSilenceThresholdMs,
+            .override(1400)
+        )
+    }
+
     func testLanguageRoundTripsThroughRegistry() throws {
         let custom = WorkflowMode(
             id: "lang-rt",

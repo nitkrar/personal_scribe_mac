@@ -95,6 +95,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private var liveStreamingEventTask: Task<Void, Never>?
     private var liveStreamingAccumulator: StreamingTranscriptAccumulator?
     private var liveStreamingFailure: PipelineStageFailure?
+    private var liveStreamingEouReceiveCount = 0
     private var audioLevelContinuations: [UUID: AsyncStream<Float>.Continuation] = [:]
     private var currentAudioLevel: Float = 0.0
     private var audioLevelTask: Task<Void, Never>?
@@ -1302,6 +1303,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         liveStreamingEventTask = nil
         liveStreamingAccumulator = nil
         liveStreamingFailure = nil
+        liveStreamingEouReceiveCount = 0
 
         guard let recipe,
               let processor = recipe.processors.first,
@@ -1311,23 +1313,37 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
 
         let (inputStream, continuation) = Self.makeLiveStreamingInputStream()
-        let events = streamingTranscriber.transcribe(stream: inputStream)
         let liveCardEnabled = recipe.streamingBehavior?.liveCardEnabled ?? false
         let liveCursorEnabled = recipe.streamingBehavior?.liveCursorEnabled ?? false
+        let thresholdSeconds =
+            recipe.streamingBehavior?.eouSilenceThresholdSeconds
+            ?? Double(PreferenceKeys.streamingEouSilenceThresholdMs.default) / 1000
+        let diagnosticsContext = StreamingDiagnosticsSession.Context()
+        let events = StreamingDiagnosticsSession.$current.withValue(diagnosticsContext) {
+            if let thresholdAware = streamingTranscriber as? any VadBoundaryStreamingTranscriber {
+                return thresholdAware.transcribe(
+                    stream: inputStream,
+                    eouSilenceThresholdSeconds: thresholdSeconds
+                )
+            }
+            return streamingTranscriber.transcribe(stream: inputStream)
+        }
 
         liveStreamingInputContinuation = continuation
         liveStreamingAccumulator = StreamingTranscriptAccumulator()
-        liveStreamingEventTask = Task { [weak self] in
-            do {
-                for try await event in events {
-                    await self?.consumeLiveStreamingEvent(
-                        event,
-                        liveCardEnabled: liveCardEnabled,
-                        liveCursorEnabled: liveCursorEnabled
-                    )
+        liveStreamingEventTask = StreamingDiagnosticsSession.$current.withValue(diagnosticsContext) {
+            Task { [weak self] in
+                do {
+                    for try await event in events {
+                        await self?.consumeLiveStreamingEvent(
+                            event,
+                            liveCardEnabled: liveCardEnabled,
+                            liveCursorEnabled: liveCursorEnabled
+                        )
+                    }
+                } catch {
+                    await self?.recordLiveStreamingFailure(error, liveCardEnabled: liveCardEnabled)
                 }
-            } catch {
-                await self?.recordLiveStreamingFailure(error, liveCardEnabled: liveCardEnabled)
             }
         }
     }
@@ -1368,6 +1384,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         // not deliver (per #056 DESIGN locked: "EOU chunks only").
         // Failure is logged-and-continued — a transient cursor delivery
         // glitch should not tear down the session.
+        if case .endOfUtterance = event {
+            liveStreamingEouReceiveCount += 1
+            logStreamingEouReceived(utterance: liveStreamingEouReceiveCount)
+        }
+
         if liveCursorEnabled, case .endOfUtterance(let chunkText) = event {
             let trimmed = chunkText.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
@@ -1383,6 +1404,15 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 }
             }
         }
+    }
+
+    private func logStreamingEouReceived(utterance: Int) {
+        guard let context = StreamingDiagnosticsSession.current else {
+            return
+        }
+        logger.info(
+            "streaming_eou_received session=\(context.sessionID) utterance=\(utterance) ms_since_session_start=\(context.elapsedMilliseconds())"
+        )
     }
 
     private func recordLiveStreamingFailure(

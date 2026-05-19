@@ -114,13 +114,36 @@ final class SpecCodableTests: XCTestCase {
         let original = StreamingBehaviorSpec(
             liveCardEnabled: .setting(PreferenceKeys.streamingLiveCardEnabled),
             liveCursorEnabled: .override(true),
-            secondPassEnabled: .override(false)
+            secondPassEnabled: .override(false),
+            eouSilenceThresholdMs: .override(650)
         )
 
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(StreamingBehaviorSpec.self, from: data)
 
         XCTAssertEqual(decoded, original)
+    }
+
+    func testStreamingBehaviorSpecLegacyDecodeWithoutEouSilenceThresholdDefaultsToSetting() throws {
+        let original = StreamingBehaviorSpec(
+            liveCardEnabled: .setting(PreferenceKeys.streamingLiveCardEnabled),
+            liveCursorEnabled: .override(true),
+            secondPassEnabled: .override(false),
+            eouSilenceThresholdMs: .override(650)
+        )
+        let data = try JSONEncoder().encode(original)
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        json.removeValue(forKey: "eouSilenceThresholdMs")
+        let legacyData = try JSONSerialization.data(withJSONObject: json)
+
+        let decoded = try JSONDecoder().decode(StreamingBehaviorSpec.self, from: legacyData)
+
+        XCTAssertEqual(
+            decoded.eouSilenceThresholdMs,
+            .setting(PreferenceKeys.streamingEouSilenceThresholdMs)
+        )
     }
 
     func testOutputSinkSpecClipboardCarriesRestoreParameter() throws {

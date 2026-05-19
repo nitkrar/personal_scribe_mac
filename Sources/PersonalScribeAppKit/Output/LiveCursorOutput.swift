@@ -49,6 +49,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
 
     private var sessionSnapshotHandle: PasteboardSnapshotService.Handle?
     private var didWriteChunkThisSession = false
+    private var streamingDeliveryCountThisSession = 0
     private var didLogAccessibilityTrustSkipThisCycle = false
     private var didLogSelfFocusSkipThisCycle = false
 
@@ -84,14 +85,29 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
             return
         }
         didWriteChunkThisSession = true
+        streamingDeliveryCountThisSession += 1
+        logStreamingEvent(
+            name: "streaming_sink_clipboard_written",
+            utterance: streamingDeliveryCountThisSession
+        )
 
         guard isAccessibilityTrusted() else {
+            logStreamingEvent(
+                name: "streaming_sink_ax_skip",
+                utterance: streamingDeliveryCountThisSession,
+                outcome: "ax_skip"
+            )
             logAccessibilityTrustSkipIfNeeded()
             return
         }
         didLogAccessibilityTrustSkipThisCycle = false
 
         guard focusedElementIsInAnotherApp() else {
+            logStreamingEvent(
+                name: "streaming_sink_self_focus_skip",
+                utterance: streamingDeliveryCountThisSession,
+                outcome: "self_focus_skip"
+            )
             logSelfFocusSkipIfNeeded()
             return
         }
@@ -102,7 +118,18 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         // path: the chunk landed on the clipboard but no ⌘V actually
         // posted, and the user sees nothing in the target app.
         if !pasteShortcutPoster() {
+            logStreamingEvent(
+                name: "streaming_sink_paste_outcome",
+                utterance: streamingDeliveryCountThisSession,
+                outcome: "failed"
+            )
             logger.error("LiveCursorOutput: paste shortcut poster reported failure; chunk on clipboard but ⌘V was not posted")
+        } else {
+            logStreamingEvent(
+                name: "streaming_sink_paste_outcome",
+                utterance: streamingDeliveryCountThisSession,
+                outcome: "posted"
+            )
         }
     }
 
@@ -122,6 +149,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
             snapshotService.discardSnapshot(handle)
         }
         didWriteChunkThisSession = false
+        streamingDeliveryCountThisSession = 0
         didLogAccessibilityTrustSkipThisCycle = false
         didLogSelfFocusSkipThisCycle = false
         sessionSnapshotHandle = snapshotService.captureTransientSnapshot()
@@ -132,6 +160,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         sessionSnapshotHandle = nil
         let shouldRestore = didWriteChunkThisSession
         didWriteChunkThisSession = false
+        streamingDeliveryCountThisSession = 0
         didLogAccessibilityTrustSkipThisCycle = false
         didLogSelfFocusSkipThisCycle = false
         if shouldRestore {
@@ -157,6 +186,23 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
 
         didLogSelfFocusSkipThisCycle = true
         logger.info("LiveCursorOutput: focused element is in self; chunk left on clipboard, skipping ⌘V")
+    }
+
+    private func logStreamingEvent(
+        name: String,
+        utterance: Int,
+        outcome: String? = nil
+    ) {
+        guard let context = StreamingDiagnosticsSession.current else {
+            return
+        }
+
+        var message =
+            "\(name) session=\(context.sessionID) utterance=\(utterance) ms_since_session_start=\(context.elapsedMilliseconds())"
+        if let outcome {
+            message += " outcome=\(outcome)"
+        }
+        logger.info(message)
     }
 
     // MARK: - Live AX probe + paste poster

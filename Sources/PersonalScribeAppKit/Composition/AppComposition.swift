@@ -147,9 +147,21 @@ public enum AppComposition {
     /// #078.31a — typed-accessor processor provider feeds both
     /// `ActiveModelService.download` and the orchestrator's
     /// recipe-driven dispatch (via `RecipeBuilder`, per L24).
-    public static let processorProvider: any ModelBoundProcessorProviding = ModelBoundProcessorProvider(
-        logger: makeLogger(PersonalScribeLogCategory.transcription)
-    )
+    public static let processorProvider: any ModelBoundProcessorProviding = {
+        let logger = makeLogger(PersonalScribeLogCategory.transcription)
+        let vadProvider = AppComposition.vadProvider
+        return ModelBoundProcessorProvider(
+            vadBoundarySessionFactory: { silenceThresholdSeconds in
+                guard let vadProvider else {
+                    return nil
+                }
+                return await vadProvider.makeSession(
+                    silenceThresholdSeconds: silenceThresholdSeconds
+                )
+            },
+            logger: logger
+        )
+    }()
 
     /// #028 / 5a-v2 — central key-event router. Owns the single
     /// `HotkeyEventTap` (CGEvent), local NSEvent monitor, and global

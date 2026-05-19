@@ -47,15 +47,19 @@ public struct BoundStreamingBehavior: Sendable, Equatable {
     public let liveCardEnabled: Bool
     public let liveCursorEnabled: Bool
     public let secondPassEnabled: Bool
+    public let eouSilenceThresholdSeconds: Double
 
     public init(
         liveCardEnabled: Bool,
         liveCursorEnabled: Bool,
-        secondPassEnabled: Bool
+        secondPassEnabled: Bool,
+        eouSilenceThresholdSeconds: Double
+            = Double(PreferenceKeys.streamingEouSilenceThresholdMs.default) / 1000
     ) {
         self.liveCardEnabled = liveCardEnabled
         self.liveCursorEnabled = liveCursorEnabled
         self.secondPassEnabled = secondPassEnabled
+        self.eouSilenceThresholdSeconds = eouSilenceThresholdSeconds
     }
 }
 

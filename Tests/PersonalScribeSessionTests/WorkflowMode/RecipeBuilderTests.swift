@@ -200,6 +200,7 @@ final class RecipeBuilderTests: XCTestCase {
         defaults.set(false, forKey: PreferenceKeys.streamingLiveCardEnabled.key)
         defaults.set(true, forKey: PreferenceKeys.streamingLiveCursorEnabled.key)
         defaults.set(true, forKey: PreferenceKeys.streamingSecondPassEnabled.key)
+        defaults.set(650, forKey: PreferenceKeys.streamingEouSilenceThresholdMs.key)
 
         let service = makeServiceWithActive(
             asr: BuiltInModelCatalog.parakeetTDT06Bv2.id,
@@ -221,7 +222,8 @@ final class RecipeBuilderTests: XCTestCase {
             BoundStreamingBehavior(
                 liveCardEnabled: false,
                 liveCursorEnabled: true,
-                secondPassEnabled: true
+                secondPassEnabled: true,
+                eouSilenceThresholdSeconds: 0.65
             )
         )
         XCTAssertNotNil(bound.streamingSecondPassTranscriber)
@@ -379,9 +381,14 @@ final class RecipeBuilderTests: XCTestCase {
 /// descriptors passed to each accessor.
 private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchecked Sendable {
     private let lock = NSLock()
+    private let providedStreamingTranscriber: (any StreamingTranscriber)?
     private var transcribers: [String: any Transcriber] = [:]
     private(set) var transcriberRequests: [ModelDescriptor] = []
     private(set) var streamingTranscriberRequests: [ModelDescriptor] = []
+
+    init(streamingTranscriber: (any StreamingTranscriber)? = nil) {
+        self.providedStreamingTranscriber = streamingTranscriber
+    }
 
     func transcriber(for descriptor: ModelDescriptor) throws -> any Transcriber {
         lock.withLock {
@@ -399,7 +406,7 @@ private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchec
         lock.withLock {
             streamingTranscriberRequests.append(descriptor)
         }
-        return StubStreamingTranscriber()
+        return providedStreamingTranscriber ?? StubStreamingTranscriber()
     }
 
     func diarizer(for descriptor: ModelDescriptor) throws -> any SpeakerDiarizer {

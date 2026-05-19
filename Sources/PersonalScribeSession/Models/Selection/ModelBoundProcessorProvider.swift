@@ -11,6 +11,7 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
 
     public init(
         storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
+        vadBoundarySessionFactory: VadBoundarySessionFactory? = nil,
         logger: PersonalScribeLogger
     ) {
         let registeredDescriptors = BuiltInModelCatalog.registeredModels
@@ -57,7 +58,9 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                     descriptorID: descriptor.id,
                     streamingTranscriber: FluidAudioStreamingTranscriberAdapter(
                         descriptor: descriptor,
-                        storageLocator: storageLocator
+                        storageLocator: storageLocator,
+                        vadBoundarySessionFactory: vadBoundarySessionFactory,
+                        logger: logger
                     )
                 )
             case .diarization:
