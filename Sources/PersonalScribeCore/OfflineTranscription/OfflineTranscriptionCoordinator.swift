@@ -52,6 +52,7 @@ public actor OfflineTranscriptionCoordinator {
         public let descriptorID: String
         public let diarize: Bool
         public let recipeOverride: RecipeOverride?
+        public let enqueuedAt: Date
         public var status: JobStatus
 
         public init(
@@ -60,13 +61,15 @@ public actor OfflineTranscriptionCoordinator {
             descriptorID: String,
             diarize: Bool,
             recipeOverride: RecipeOverride?,
-            status: JobStatus
+            status: JobStatus,
+            enqueuedAt: Date = Date()
         ) {
             self.id = id
             self.url = url
             self.descriptorID = descriptorID
             self.diarize = diarize
             self.recipeOverride = recipeOverride
+            self.enqueuedAt = enqueuedAt
             self.status = status
         }
     }
@@ -130,7 +133,8 @@ public actor OfflineTranscriptionCoordinator {
                     descriptorID: descriptorID,
                     diarize: diarize,
                     recipeOverride: nil,
-                    status: .failed(reason: .modelNotAvailable)
+                    status: .failed(reason: .modelNotAvailable),
+                    enqueuedAt: now()
                 )
             )
             return jobID
@@ -145,7 +149,8 @@ public actor OfflineTranscriptionCoordinator {
                     descriptorID: descriptorID,
                     diarize: diarize,
                     recipeOverride: nil,
-                    status: .failed(reason: .other(Self.describe(error)))
+                    status: .failed(reason: .other(Self.describe(error))),
+                    enqueuedAt: now()
                 )
             )
             return jobID
@@ -160,7 +165,8 @@ public actor OfflineTranscriptionCoordinator {
                     descriptorID: descriptorID,
                     diarize: diarize,
                     recipeOverride: nil,
-                    status: status
+                    status: status,
+                    enqueuedAt: now()
                 )
             )
             publishJobs()
@@ -186,7 +192,8 @@ public actor OfflineTranscriptionCoordinator {
                     descriptorID: descriptorID,
                     diarize: false,
                     recipeOverride: .fixedDictation,
-                    status: .failed(reason: .modelNotAvailable)
+                    status: .failed(reason: .modelNotAvailable),
+                    enqueuedAt: now()
                 )
             )
             return jobID
@@ -203,7 +210,8 @@ public actor OfflineTranscriptionCoordinator {
                     descriptorID: descriptorID,
                     diarize: false,
                     recipeOverride: .fixedDictation,
-                    status: .failed(reason: .other(Self.describe(error)))
+                    status: .failed(reason: .other(Self.describe(error))),
+                    enqueuedAt: now()
                 )
             )
             return jobID
@@ -219,7 +227,8 @@ public actor OfflineTranscriptionCoordinator {
                 descriptorID: descriptorID,
                 diarize: false,
                 recipeOverride: .fixedDictation,
-                status: status
+                status: status,
+                enqueuedAt: now()
             )
         )
         publishJobs()

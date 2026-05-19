@@ -123,6 +123,35 @@ final class OfflineTranscriptionTabViewModelTests: XCTestCase {
             true
         )
     }
+
+    func testJobsPublishedNewestFirst() async {
+        let harness = makeHarness()
+        let oldest = makeCompletedJob(
+            transcriptID: UUID(),
+            filename: "oldest.wav",
+            enqueuedAt: Date(timeIntervalSince1970: 1)
+        )
+        let middle = makeCompletedJob(
+            transcriptID: UUID(),
+            filename: "middle.wav",
+            enqueuedAt: Date(timeIntervalSince1970: 2)
+        )
+        let newest = makeCompletedJob(
+            transcriptID: UUID(),
+            filename: "newest.wav",
+            enqueuedAt: Date(timeIntervalSince1970: 3)
+        )
+
+        await harness.coordinator.publish([oldest, middle, newest])
+
+        await waitUntil {
+            harness.viewModel.jobs.map(\.url.lastPathComponent) == [
+                "newest.wav",
+                "middle.wav",
+                "oldest.wav",
+            ]
+        }
+    }
 }
 
 // MARK: - Helpers
@@ -165,7 +194,8 @@ private extension OfflineTranscriptionTabViewModelTests {
     func makeCompletedJob(
         id: UUID = UUID(),
         transcriptID: UUID,
-        filename: String
+        filename: String,
+        enqueuedAt: Date = Date()
     ) -> OfflineTranscriptionCoordinator.Job {
         OfflineTranscriptionCoordinator.Job(
             id: id,
@@ -173,7 +203,8 @@ private extension OfflineTranscriptionTabViewModelTests {
             descriptorID: "batch-model",
             diarize: false,
             recipeOverride: nil,
-            status: .completed(transcriptID: transcriptID)
+            status: .completed(transcriptID: transcriptID),
+            enqueuedAt: enqueuedAt
         )
     }
 

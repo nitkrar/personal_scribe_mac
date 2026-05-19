@@ -113,7 +113,7 @@ final class OfflineTranscriptionTabViewModel: ObservableObject {
             let stream = await coordinator.snapshotStream()
             for await jobs in stream {
                 await MainActor.run {
-                    self.jobs = jobs
+                    self.jobs = Self.sortedJobs(jobs)
                     self.refreshSelectedTranscriptIfNeeded()
                 }
             }
@@ -151,6 +151,12 @@ private extension OfflineTranscriptionTabViewModel {
 
     static func resolveAvailableModels(from modelService: ActiveModelService) -> [ModelDescriptor] {
         modelService.enabledModels(kind: .asr)
+    }
+
+    static func sortedJobs(_ jobs: [Job]) -> [Job] {
+        jobs.sorted { lhs, rhs in
+            lhs.enqueuedAt > rhs.enqueuedAt
+        }
     }
 
     func enqueueSupportedFiles(from urls: [URL]) async {

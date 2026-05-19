@@ -33,3 +33,6 @@ UI and end-to-end flow checks.
   to the trash action. Click it and verify the same toast appears, the
   clipboard updates, and a new transcript row is added without mutating
   the original row.
+- [ ] **MV-OFFLINE-8** Click `Browse…` in `Offline Files` and confirm the
+  picker opens in Ninimma's `<base>/recordings/` directory when it
+  exists, rather than defaulting to `~/Documents`.

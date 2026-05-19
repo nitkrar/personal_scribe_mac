@@ -346,6 +346,7 @@ private extension OfflineTranscriptionTab {
         }
         panel.prompt = "Add"
         panel.message = "Choose audio files to transcribe offline."
+        panel.directoryURL = try? AppConfig.recordingsDirectory()
         guard panel.runModal() == .OK else {
             return []
         }
