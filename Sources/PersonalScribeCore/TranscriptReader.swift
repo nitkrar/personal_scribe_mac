@@ -1,5 +1,9 @@
 import Foundation
 
+public protocol TranscriptAppending: Sendable {
+    func append(_ entry: TranscriptEntry) async throws
+}
+
 public protocol TranscriptReading: Sendable {
     func recent(limit: Int) async -> [TranscriptEntry]
     func search(query: String) async -> [TranscriptEntry]

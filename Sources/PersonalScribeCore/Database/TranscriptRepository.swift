@@ -16,7 +16,7 @@ import GRDB
 ///
 /// SQL shape parity with `SQLiteTranscriptStore` (lines 78-175) is maintained
 /// so Pass 2 can delete the legacy store without query-plan drift.
-public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDeleting, TranscriptUpdating, TranscriptAudioFilenameNullifying {
+public struct TranscriptRepository: Sendable, TranscriptAppending, TranscriptReading, TranscriptDeleting, TranscriptUpdating, TranscriptAudioFilenameNullifying {
     private static let transcriptsFTSTableName = "transcripts_fts"
 
     private let database: AppDatabase
