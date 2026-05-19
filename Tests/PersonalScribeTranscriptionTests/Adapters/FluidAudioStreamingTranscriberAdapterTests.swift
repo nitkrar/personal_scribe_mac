@@ -6,310 +6,39 @@ import XCTest
 @testable import PersonalScribeTranscription
 
 final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
-    func testPartialCallbackDerivesDeltaFromLastCommittedBoundary() async throws {
+    func testTranscribeBridgesPartialAndEouCallbacksIntoStreamingEvents() async throws {
         let descriptor = BuiltInModelCatalog.parakeetEou160ms
         let rootDirectory = try temporaryRootDirectory()
         let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
         let manager = StubFluidAudioStreamingManager(
             scriptedProcessActions: [
-                [.partial("hello")],
-                [.partial("hello world")],
-                [.partial("hello world how")],
+                [.partial("hello"), .endOfUtterance("hello there")],
             ],
-            finalText: "hello world how"
+            finalText: "hello there"
         )
         let adapter = FluidAudioStreamingTranscriberAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
-            manager: manager,
-            vadBoundarySessionFactory: makeVadFactory(
-                events: [nil, .speechEnded, nil]
-            )
+            manager: manager
         )
         let inputBuffer = try makePCMBuffer(sampleCount: 160)
 
         let events = try await collectEvents(
             from: adapter.transcribe(
-                stream: makeStream(buffers: [inputBuffer, inputBuffer, inputBuffer])
+                stream: makeStream(buffers: [inputBuffer])
             )
         )
 
-        XCTAssertEqual(events.count, 6)
-        XCTAssertEqual(events[0], .partial(text: "hello"))
-        XCTAssertEqual(events[1], .partial(text: "hello world"))
-        XCTAssertEqual(events[2], .endOfUtterance(text: "hello world"))
-        XCTAssertEqual(events[3], .partial(text: "how"))
-        // BUG FIX #056-vad-bug: trailing partial "how" is no longer
-        // dropped at stream end. Adapter now flushes a final boundary
-        // unconditionally (mirrors WhisperCpp). Leading space comes
-        // from the subsequent-utterance prepend (c167155).
-        XCTAssertEqual(events[4], .endOfUtterance(text: " how"))
-        switch events[5] {
-        case .finalized(let result):
-            XCTAssertEqual(result.text, "hello world how")
-            XCTAssertEqual(result.audioDuration, inputBuffer.duration * 3)
-        default:
-            XCTFail("Expected finalized event, got \(events[5])")
-        }
-    }
-
-    func testSameBufferPartialThenSpeechEndedUsesNewestCumulative() async throws {
-        let descriptor = BuiltInModelCatalog.parakeetEou160ms
-        let rootDirectory = try temporaryRootDirectory()
-        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
-        let manager = StubFluidAudioStreamingManager(
-            scriptedProcessActions: [[.partial("hello world")]],
-            finalText: "hello world"
-        )
-        let adapter = FluidAudioStreamingTranscriberAdapter(
-            descriptor: descriptor,
-            storageLocator: storageLocator,
-            manager: manager,
-            vadBoundarySessionFactory: makeVadFactory(events: [.speechEnded])
-        )
-        let inputBuffer = try makePCMBuffer(sampleCount: 160)
-
-        let events = try await collectEvents(
-            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer]))
-        )
-
-        XCTAssertEqual(events[0], .partial(text: "hello world"))
-        XCTAssertEqual(events[1], .endOfUtterance(text: "hello world"))
-    }
-
-    func testFirstEndOfUtteranceHasNoLeadingSpace() async throws {
-        let descriptor = BuiltInModelCatalog.parakeetEou160ms
-        let rootDirectory = try temporaryRootDirectory()
-        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
-        let manager = StubFluidAudioStreamingManager(
-            scriptedProcessActions: [[.partial("hello")]],
-            finalText: "hello"
-        )
-        let adapter = FluidAudioStreamingTranscriberAdapter(
-            descriptor: descriptor,
-            storageLocator: storageLocator,
-            manager: manager,
-            vadBoundarySessionFactory: makeVadFactory(events: [.speechEnded])
-        )
-        let inputBuffer = try makePCMBuffer(sampleCount: 160)
-
-        let events = try await collectEvents(
-            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer]))
-        )
-
-        XCTAssertEqual(events[0], .partial(text: "hello"))
-        XCTAssertEqual(events[1], .endOfUtterance(text: "hello"))
-    }
-
-    func testSubsequentEndOfUtterancePrependsLeadingSpace() async throws {
-        let descriptor = BuiltInModelCatalog.parakeetEou160ms
-        let rootDirectory = try temporaryRootDirectory()
-        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
-        let manager = StubFluidAudioStreamingManager(
-            scriptedProcessActions: [
-                [.partial("hello")],
-                [.partial("helloworld")],
-            ],
-            finalText: "helloworld"
-        )
-        let adapter = FluidAudioStreamingTranscriberAdapter(
-            descriptor: descriptor,
-            storageLocator: storageLocator,
-            manager: manager,
-            vadBoundarySessionFactory: makeVadFactory(events: [.speechEnded, .speechEnded])
-        )
-        let inputBuffer = try makePCMBuffer(sampleCount: 160)
-
-        let events = try await collectEvents(
-            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer, inputBuffer]))
-        )
-
-        XCTAssertEqual(
-            events.prefix(4).map { $0 },
-            [
-                .partial(text: "hello"),
-                .endOfUtterance(text: "hello"),
-                .partial(text: "world"),
-                .endOfUtterance(text: " world"),
-            ]
-        )
-    }
-
-    func testWhitespaceOnlyDeltaStillDropped() async throws {
-        let descriptor = BuiltInModelCatalog.parakeetEou160ms
-        let rootDirectory = try temporaryRootDirectory()
-        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
-        let manager = StubFluidAudioStreamingManager(
-            scriptedProcessActions: [
-                [.partial("hello")],
-                [.partial("hello ")],
-            ],
-            finalText: "hello "
-        )
-        let adapter = FluidAudioStreamingTranscriberAdapter(
-            descriptor: descriptor,
-            storageLocator: storageLocator,
-            manager: manager,
-            vadBoundarySessionFactory: makeVadFactory(events: [.speechEnded, .speechEnded])
-        )
-        let inputBuffer = try makePCMBuffer(sampleCount: 160)
-
-        let events = try await collectEvents(
-            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer, inputBuffer]))
-        )
-
-        XCTAssertEqual(
-            events.map { $0 },
-            [
-                .partial(text: "hello"),
-                .endOfUtterance(text: "hello"),
-                .finalized(
-                    TranscriptionResult(
-                        text: "hello ",
-                        audioDuration: inputBuffer.duration * 2,
-                        processingDuration: .zero
-                    )
-                ),
-            ]
-        )
-    }
-
-    func testStreamEndBeforeAnyBoundaryEmitsFinalBoundary() async throws {
-        // BUG FIX #056-vad-bug regression test. Previously the adapter
-        // emitted ZERO `.endOfUtterance` events when a VAD session was
-        // provided but never returned `.speechEnded` — the user lost the
-        // entire transcript's live cursor delivery for the session.
-        // Mirrors the WhisperCpp adapter contract: always flush at
-        // stream end.
-        let descriptor = BuiltInModelCatalog.parakeetEou160ms
-        let rootDirectory = try temporaryRootDirectory()
-        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
-        let manager = StubFluidAudioStreamingManager(
-            scriptedProcessActions: [[.partial("hello world")]],
-            finalText: "hello world"
-        )
-        let adapter = FluidAudioStreamingTranscriberAdapter(
-            descriptor: descriptor,
-            storageLocator: storageLocator,
-            manager: manager,
-            vadBoundarySessionFactory: makeVadFactory(events: [nil])
-        )
-        let inputBuffer = try makePCMBuffer(sampleCount: 160)
-
-        let events = try await collectEvents(
-            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer]))
-        )
-
         XCTAssertEqual(events.count, 3)
-        XCTAssertEqual(events[0], .partial(text: "hello world"))
-        XCTAssertEqual(events[1], .endOfUtterance(text: "hello world"))
-        guard case .finalized(let result) = events[2] else {
-            XCTFail("Expected finalized event, got \(events)")
-            return
+        XCTAssertEqual(events[0], .partial(text: "hello"))
+        XCTAssertEqual(events[1], .endOfUtterance(text: "hello there"))
+        switch events[2] {
+        case .finalized(let result):
+            XCTAssertEqual(result.text, "hello there")
+            XCTAssertEqual(result.audioDuration, inputBuffer.duration)
+        default:
+            XCTFail("Expected finalized event, got \(events[2])")
         }
-        XCTAssertEqual(result.text, "hello world")
-    }
-
-    func testVadFactoryReturnsNilFallsBackToStreamEndBoundaryAndLogsOnce() async throws {
-        let descriptor = BuiltInModelCatalog.parakeetEou160ms
-        let rootDirectory = try temporaryRootDirectory()
-        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
-        let manager = StubFluidAudioStreamingManager(
-            scriptedProcessActions: [[.partial("hello world")]],
-            finalText: "hello world"
-        )
-        let sink = InMemoryTestSink()
-        let adapter = FluidAudioStreamingTranscriberAdapter(
-            descriptor: descriptor,
-            storageLocator: storageLocator,
-            manager: manager,
-            vadBoundarySessionFactory: { _ in nil },
-            logger: makeLogger(sink: sink)
-        )
-        let inputBuffer = try makePCMBuffer(sampleCount: 160)
-
-        let events = try await collectEvents(
-            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer]))
-        )
-
-        XCTAssertEqual(
-            events.prefix(2).map { $0 },
-            [
-                .partial(text: "hello world"),
-                .endOfUtterance(text: "hello world"),
-            ]
-        )
-        _ = await waitForLogMessages(
-            in: sink,
-            containing: "VAD boundary unavailable",
-            expectedCount: 1
-        )
-        let unavailableLogCount = await logMessages(
-            in: sink,
-            containing: "VAD boundary unavailable"
-        ).count
-        XCTAssertEqual(unavailableLogCount, 1)
-    }
-
-    func testManagerEouCallbackIsNeverRegistered() async throws {
-        let descriptor = BuiltInModelCatalog.parakeetEou160ms
-        let rootDirectory = try temporaryRootDirectory()
-        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
-        let manager = StubFluidAudioStreamingManager(
-            scriptedProcessActions: [[.partial("hello world")]],
-            finalText: "hello world"
-        )
-        let adapter = FluidAudioStreamingTranscriberAdapter(
-            descriptor: descriptor,
-            storageLocator: storageLocator,
-            manager: manager,
-            vadBoundarySessionFactory: makeVadFactory(events: [.speechEnded])
-        )
-        let inputBuffer = try makePCMBuffer(sampleCount: 160)
-
-        _ = try await collectEvents(
-            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer]))
-        )
-
-        let eouCallbackSetCount = await manager.eouCallbackSetCount()
-        XCTAssertEqual(eouCallbackSetCount, 0)
-    }
-
-    func testResetRunsOnlyAtSessionStartAndEnd() async throws {
-        let descriptor = BuiltInModelCatalog.parakeetEou160ms
-        let rootDirectory = try temporaryRootDirectory()
-        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
-        let manager = StubFluidAudioStreamingManager(
-            scriptedProcessActions: [
-                [.partial("hello")],
-                [.partial("hello world")],
-            ],
-            finalText: "hello world"
-        )
-        let adapter = FluidAudioStreamingTranscriberAdapter(
-            descriptor: descriptor,
-            storageLocator: storageLocator,
-            manager: manager,
-            vadBoundarySessionFactory: makeVadFactory(events: [nil, .speechEnded])
-        )
-        let inputBuffer = try makePCMBuffer(sampleCount: 160)
-
-        _ = try await collectEvents(
-            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer, inputBuffer]))
-        )
-
-        let resetCallCount = await manager.resetCallCount()
-        XCTAssertEqual(resetCallCount, 2)
-    }
-
-    func testDerivedDeltaFallsBackToLongestCommonPrefixWhenLatestDoesNotExtendCommitted() {
-        let derivation = FluidAudioStreamingTranscriberAdapter.deriveDelta(
-            latest: "hello word",
-            committed: "hello world"
-        )
-
-        XCTAssertEqual(derivation.delta, "d")
-        XCTAssertTrue(derivation.usedLongestCommonPrefixFallback)
     }
 
     func testAdapterLoadsModelAndExtractsBasicResultUsingStubManager() async throws {
@@ -343,14 +72,13 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
             ]
         )
 
-        XCTAssertEqual(events.count, 2)
-        XCTAssertEqual(events[0], .endOfUtterance(text: "final transcript"))
-        switch events[1] {
+        XCTAssertEqual(events.count, 1)
+        switch events[0] {
         case .finalized(let result):
             XCTAssertEqual(result.text, "final transcript")
             XCTAssertEqual(result.audioDuration, inputBuffer.duration)
         default:
-            XCTFail("Expected finalized event, got \(events[1])")
+            XCTFail("Expected finalized event, got \(events[0])")
         }
     }
 
@@ -482,52 +210,6 @@ private extension FluidAudioStreamingTranscriberAdapterTests {
         }
         return events
     }
-
-    func makeVadFactory(
-        events: [VadEvent?]
-    ) -> VadBoundarySessionFactory {
-        let session = ScriptedVadSession(events: events)
-        return { _ in
-            VadSessionHandle { samples in
-                _ = samples
-                return await session.next()
-            }
-        }
-    }
-
-    func makeLogger(sink: InMemoryTestSink) -> PersonalScribeLogger {
-        PersonalScribeLogger(
-            category: PersonalScribeLogCategory.transcription,
-            reporter: DiagnosticsReporter(
-                sinks: [sink],
-                now: { Date(timeIntervalSince1970: 0) }
-            )
-        )
-    }
-
-    func waitForLogMessages(
-        in sink: InMemoryTestSink,
-        containing fragment: String,
-        expectedCount: Int
-    ) async -> [RedactedDiagnosticsEvent] {
-        for _ in 0..<100 {
-            let messages = await logMessages(in: sink, containing: fragment)
-            if messages.count >= expectedCount {
-                return messages
-            }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-
-        XCTFail("Timed out waiting for \(expectedCount) diagnostics messages containing '\(fragment)'")
-        return await logMessages(in: sink, containing: fragment)
-    }
-
-    func logMessages(
-        in sink: InMemoryTestSink,
-        containing fragment: String
-    ) async -> [RedactedDiagnosticsEvent] {
-        await sink.snapshot().filter { $0.message.contains(fragment) }
-    }
 }
 
 private struct TestStorageLocator: StorageLocator {
@@ -556,8 +238,6 @@ private actor StubFluidAudioStreamingManager: FluidAudioStreamingEouManaging {
     private var loadModelCallCountStorage = 0
     private var downloadDirectoriesStorage: [URL] = []
     private var cleanupCallCountStorage = 0
-    private var eouCallbackSetCountStorage = 0
-    private var resetCallCountStorage = 0
 
     init(
         scriptedProcessActions: [[ScriptedAction]] = [],
@@ -581,7 +261,6 @@ private actor StubFluidAudioStreamingManager: FluidAudioStreamingEouManaging {
 
     func setEouCallback(_ callback: @escaping EouCallback) {
         self.eouCallback = callback
-        eouCallbackSetCountStorage += 1
     }
 
     func setPartialCallback(_ callback: @escaping PartialCallback) {
@@ -606,9 +285,7 @@ private actor StubFluidAudioStreamingManager: FluidAudioStreamingEouManaging {
         finalText
     }
 
-    func reset() async {
-        resetCallCountStorage += 1
-    }
+    func reset() async {}
 
     func cleanup() async {
         cleanupCallCountStorage += 1
@@ -636,28 +313,5 @@ private actor StubFluidAudioStreamingManager: FluidAudioStreamingEouManaging {
 
     func cleanupCallCount() -> Int {
         cleanupCallCountStorage
-    }
-
-    func eouCallbackSetCount() -> Int {
-        eouCallbackSetCountStorage
-    }
-
-    func resetCallCount() -> Int {
-        resetCallCountStorage
-    }
-}
-
-private actor ScriptedVadSession {
-    private var events: [VadEvent?]
-
-    init(events: [VadEvent?]) {
-        self.events = events
-    }
-
-    func next() -> VadEvent? {
-        guard !events.isEmpty else {
-            return nil
-        }
-        return events.removeFirst()
     }
 }

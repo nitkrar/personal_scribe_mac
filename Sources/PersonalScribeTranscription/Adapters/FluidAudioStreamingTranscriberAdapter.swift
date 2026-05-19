@@ -9,10 +9,20 @@ public actor FluidAudioStreamingTranscriberAdapter: VadBoundaryStreamingTranscri
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
     private let managerResult: Result<any FluidAudioStreamingEouManaging, Error>
+    // Kept on the type so the `VadBoundaryStreamingTranscriber` conformance
+    // (added by `9d1945b`) compiles, but NOT used. `9d1945b` reverted on
+    // 2026-05-19: the FluidAudio streaming manager never emitted partial
+    // callbacks while the VAD-gated path was active, so EVERY Parakeet
+    // streaming session produced zero EOUs (see
+    // `plans/056_streaming_dictation/BUG_parakeet_streaming_diagnostic.md`).
+    // Until the underlying FluidAudio streaming decode is debugged or
+    // replaced, we use the manager's own `setEouCallback` directly. This
+    // re-exposes the known sticky `eouDetected` latch (req-0021) — first
+    // utterance pastes, subsequent utterances do not. That is worse than
+    // intended but strictly better than zero EOUs ever pasting.
     private let vadBoundarySessionFactory: VadBoundarySessionFactory?
     private let logger: PersonalScribeLogger
     private nonisolated let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
-    private nonisolated let partialInbox = PartialInbox()
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
 
@@ -108,10 +118,10 @@ public actor FluidAudioStreamingTranscriberAdapter: VadBoundaryStreamingTranscri
         prepareTask = nil
         hasPreparedModel = false
         inFlightPrepare?.cancel()
-        partialInbox.clear()
 
         if let manager = try? resolvedManager() {
             await manager.setPartialCallback { _ in }
+            await manager.setEouCallback { _ in }
             await manager.cleanup()
         }
 
@@ -121,24 +131,11 @@ public actor FluidAudioStreamingTranscriberAdapter: VadBoundaryStreamingTranscri
     public nonisolated func transcribe(
         stream: AsyncThrowingStream<PCMBuffer, Error>
     ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
-        transcribe(
-            stream: stream,
-            eouSilenceThresholdSeconds: Double(
-                PreferenceKeys.streamingEouSilenceThresholdMs.default
-            ) / 1000
-        )
-    }
-
-    public nonisolated func transcribe(
-        stream: AsyncThrowingStream<PCMBuffer, Error>,
-        eouSilenceThresholdSeconds: Double
-    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 await self.executeTranscription(
                     from: stream,
-                    continuation: continuation,
-                    eouSilenceThresholdSeconds: eouSilenceThresholdSeconds
+                    continuation: continuation
                 )
             }
 
@@ -146,6 +143,20 @@ public actor FluidAudioStreamingTranscriberAdapter: VadBoundaryStreamingTranscri
                 task.cancel()
             }
         }
+    }
+
+    // VAD-boundary entry point retained for `VadBoundaryStreamingTranscriber`
+    // protocol conformance. `eouSilenceThresholdSeconds` is intentionally
+    // ignored here — the VAD-gated EOU path from `9d1945b` was reverted on
+    // 2026-05-19 (see header comment on `vadBoundarySessionFactory`). The
+    // orchestrator still calls this overload because it does a runtime type
+    // check; routing through it (vs the plain `transcribe(stream:)`) is a
+    // no-op for now.
+    public nonisolated func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>,
+        eouSilenceThresholdSeconds: Double
+    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
+        transcribe(stream: stream)
     }
 }
 
@@ -178,34 +189,41 @@ protocol FluidAudioStreamingEouManaging: Actor, Sendable {
     func cleanup() async
 }
 
-extension FluidAudioStreamingTranscriberAdapter {
+private extension FluidAudioStreamingTranscriberAdapter {
     func executeTranscription(
         from stream: AsyncThrowingStream<PCMBuffer, Error>,
-        continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation,
-        eouSilenceThresholdSeconds: Double
+        continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation
     ) async {
+        let diagnosticsContext = StreamingDiagnosticsSession.current
+            ?? StreamingDiagnosticsSession.Context()
+
         do {
             try await prepare()
             let manager = try resolvedManager()
-            let diagnosticsContext = StreamingDiagnosticsSession.current
-                ?? StreamingDiagnosticsSession.Context()
 
             await manager.reset()
+            // Direct manager-callback path (restored from pre-`9d1945b`).
+            // Manager fires `partialCallback` with cumulative text on every
+            // decoded chunk and `eouCallback` once per detected end-of-
+            // utterance.
             await manager.setPartialCallback { text in
-                self.partialInbox.append(text)
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                continuation.yield(.partial(text: trimmed))
+            }
+            await manager.setEouCallback { [logger] text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                continuation.yield(.endOfUtterance(text: trimmed))
+                // TEMP-DIAG #056-vad-bug: per-EOU emission trace so we
+                // can confirm manager callbacks are firing.
+                logger.info(
+                    "streaming_eou_emitted_direct session=\(diagnosticsContext.sessionID) chars=\(trimmed.count) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds())"
+                )
             }
 
             var audioDuration: Duration = .zero
             var firstBuffer: PCMBuffer?
-            var latestCumulative = ""
-            var lastCommittedBoundary = ""
-            var emittedUtteranceCount = 0
-            let vadSession = await vadBoundarySessionFactory?(eouSilenceThresholdSeconds)
-            if vadSession == nil {
-                logger.info(
-                    "VAD boundary unavailable; falling back to stream-end boundary session=\(diagnosticsContext.sessionID) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds())"
-                )
-            }
 
             do {
                 for try await buffer in stream {
@@ -218,23 +236,6 @@ extension FluidAudioStreamingTranscriberAdapter {
                     _ = try await manager.process(
                         audioBuffer: try Self.makeAVAudioPCMBuffer(from: buffer)
                     )
-                    drainPartialsAndEmitRevisions(
-                        continuation: continuation,
-                        latestCumulative: &latestCumulative,
-                        lastCommittedBoundary: lastCommittedBoundary,
-                        diagnosticsContext: diagnosticsContext,
-                        nextUtterance: emittedUtteranceCount + 1
-                    )
-                    if let vadEvent = await vadSession?.ingest(buffer.samples),
-                       vadEvent == .speechEnded {
-                        emitBoundaryIfNeeded(
-                            latestCumulative: latestCumulative,
-                            lastCommittedBoundary: &lastCommittedBoundary,
-                            continuation: continuation,
-                            diagnosticsContext: diagnosticsContext,
-                            emittedUtteranceCount: &emittedUtteranceCount
-                        )
-                    }
                 }
             } catch is CancellationError {
                 await reset(manager: manager)
@@ -247,14 +248,6 @@ extension FluidAudioStreamingTranscriberAdapter {
                 throw PersonalScribeError.transcriptionFailure
             }
 
-            drainPartialsAndEmitRevisions(
-                continuation: continuation,
-                latestCumulative: &latestCumulative,
-                lastCommittedBoundary: lastCommittedBoundary,
-                diagnosticsContext: diagnosticsContext,
-                nextUtterance: emittedUtteranceCount + 1
-            )
-
             let finalText: String
             do {
                 finalText = try await manager.finish()
@@ -266,29 +259,11 @@ extension FluidAudioStreamingTranscriberAdapter {
                 throw PersonalScribeError.transcriptionFailure
             }
 
-            // BUG FIX #056-vad-bug: flush a final boundary at stream end
-            // unconditionally, mirroring the WhisperCpp adapter's pattern
-            // (see WhisperCppStreamingTranscriberAdapter.swift:298-313).
-            // Pre-fix: this only ran when `vadSession == nil` (feature-
-            // disabled path). When VAD existed but never returned
-            // `.speechEnded` during the session, ZERO EOU events emitted
-            // for the whole recording — live card + live cursor both
-            // silent. `lastCommittedBoundary` already prevents duplicate
-            // emission when VAD did fire at least once.
-            let canonicalFinal = finalText.isEmpty ? latestCumulative : finalText
-            emitBoundaryIfNeeded(
-                latestCumulative: canonicalFinal,
-                lastCommittedBoundary: &lastCommittedBoundary,
-                continuation: continuation,
-                diagnosticsContext: diagnosticsContext,
-                emittedUtteranceCount: &emittedUtteranceCount
-            )
-
-            // TEMP-DIAG #056-vad-bug: log per-session VAD summary so we
-            // can see if a session ended with zero VAD-driven boundaries.
-            // Remove once the silent-VAD root cause is identified.
+            // TEMP-DIAG #056-vad-bug: per-session summary so we can see
+            // whether the manager produced any EOU events at all. Remove
+            // when the streaming Parakeet path is healthy.
             logger.info(
-                "streaming_session_summary session=\(diagnosticsContext.sessionID) vadSessionPresent=\(vadSession != nil) emittedUtteranceCount=\(emittedUtteranceCount) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds())"
+                "streaming_session_summary session=\(diagnosticsContext.sessionID) finalChars=\(finalText.count) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds())"
             )
 
             continuation.yield(
@@ -338,92 +313,8 @@ extension FluidAudioStreamingTranscriberAdapter {
 
     func reset(manager: any FluidAudioStreamingEouManaging) async {
         await manager.setPartialCallback { _ in }
-        partialInbox.clear()
+        await manager.setEouCallback { _ in }
         await manager.reset()
-    }
-
-    func drainPartialsAndEmitRevisions(
-        continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation,
-        latestCumulative: inout String,
-        lastCommittedBoundary: String,
-        diagnosticsContext: StreamingDiagnosticsSession.Context,
-        nextUtterance: Int
-    ) {
-        let inboxItems = partialInbox.drain()
-        // TEMP-DIAG #056-vad-bug: log drain shape so we can see if
-        // partial callbacks are arriving from the manager and how many
-        // queue up between calls. Remove when bug closes.
-        if !inboxItems.isEmpty {
-            logger.info(
-                "adapter_partial_drain session=\(diagnosticsContext.sessionID) inbox=\(inboxItems.count) nextUtterance=\(nextUtterance) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds())"
-            )
-        }
-        for cumulativeText in inboxItems {
-            latestCumulative = cumulativeText
-            let derivation = Self.deriveDelta(
-                latest: cumulativeText,
-                committed: lastCommittedBoundary
-            )
-            if derivation.usedLongestCommonPrefixFallback {
-                logLcpFallback(
-                    latest: cumulativeText,
-                    committed: lastCommittedBoundary,
-                    diagnosticsContext: diagnosticsContext,
-                    utterance: nextUtterance
-                )
-            }
-            let trimmed = derivation.delta.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                continuation.yield(.partial(text: trimmed))
-            }
-        }
-    }
-
-    func emitBoundaryIfNeeded(
-        latestCumulative: String,
-        lastCommittedBoundary: inout String,
-        continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation,
-        diagnosticsContext: StreamingDiagnosticsSession.Context,
-        emittedUtteranceCount: inout Int
-    ) {
-        let derivation = Self.deriveDelta(
-            latest: latestCumulative,
-            committed: lastCommittedBoundary
-        )
-        if derivation.usedLongestCommonPrefixFallback {
-            logLcpFallback(
-                latest: latestCumulative,
-                committed: lastCommittedBoundary,
-                diagnosticsContext: diagnosticsContext,
-                utterance: emittedUtteranceCount + 1
-            )
-        }
-        let trimmedDelta = derivation.delta.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedDelta.isEmpty else {
-            return
-        }
-        let emittedText = emittedUtteranceCount == 0
-            ? trimmedDelta
-            : " " + trimmedDelta
-
-        emittedUtteranceCount += 1
-        continuation.yield(.endOfUtterance(text: emittedText))
-        lastCommittedBoundary = latestCumulative
-        logger.info(
-            "streaming_eou_emitted session=\(diagnosticsContext.sessionID) utterance=\(emittedUtteranceCount) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds()) chars=\(emittedText.count)"
-        )
-    }
-
-    func logLcpFallback(
-        latest: String,
-        committed: String,
-        diagnosticsContext: StreamingDiagnosticsSession.Context,
-        utterance: Int
-    ) {
-        let lcp = Self.longestCommonPrefix(latest, committed)
-        logger.info(
-            "streaming_lcp_fallback session=\(diagnosticsContext.sessionID) utterance=\(utterance) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds()) latest_chars=\(latest.count) committed_chars=\(committed.count) lcp_chars=\(lcp.count)"
-        )
     }
 
     static func makeAVAudioPCMBuffer(from buffer: PCMBuffer) throws -> AVAudioPCMBuffer {
@@ -457,43 +348,6 @@ extension FluidAudioStreamingTranscriberAdapter {
 
         return audioBuffer
     }
-
-    struct DeltaDerivation: Sendable, Equatable {
-        let delta: String
-        let usedLongestCommonPrefixFallback: Bool
-    }
-
-    static func deriveDelta(
-        latest: String,
-        committed: String
-    ) -> DeltaDerivation {
-        if latest.hasPrefix(committed) {
-            return DeltaDerivation(
-                delta: String(latest.dropFirst(committed.count)),
-                usedLongestCommonPrefixFallback: false
-            )
-        }
-
-        let lcp = longestCommonPrefix(latest, committed)
-        return DeltaDerivation(
-            delta: String(latest.dropFirst(lcp.count)),
-            usedLongestCommonPrefixFallback: true
-        )
-    }
-
-    static func longestCommonPrefix(_ lhs: String, _ rhs: String) -> String {
-        var lhsIndex = lhs.startIndex
-        var rhsIndex = rhs.startIndex
-
-        while lhsIndex < lhs.endIndex,
-              rhsIndex < rhs.endIndex,
-              lhs[lhsIndex] == rhs[rhsIndex] {
-            lhsIndex = lhs.index(after: lhsIndex)
-            rhsIndex = rhs.index(after: rhsIndex)
-        }
-
-        return String(lhs[..<lhsIndex])
-    }
 }
 
 private extension StreamingChunkSize {
@@ -508,30 +362,5 @@ private extension StreamingChunkSize {
         default:
             throw ModelSelectionError.unknownVoiceModelID(descriptor.id)
         }
-    }
-}
-
-private final class PartialInbox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var queue: [String] = []
-
-    func append(_ text: String) {
-        lock.lock()
-        queue.append(text)
-        lock.unlock()
-    }
-
-    func drain() -> [String] {
-        lock.lock()
-        let drained = queue
-        queue.removeAll(keepingCapacity: true)
-        lock.unlock()
-        return drained
-    }
-
-    func clear() {
-        lock.lock()
-        queue.removeAll(keepingCapacity: true)
-        lock.unlock()
     }
 }
