@@ -131,6 +131,12 @@ instead of its contents.
 - Hover tooltips: hovering the magnifying-glass icon shows `Open in
   Finder`; hovering the folder icon shows `Change base directory…`.
 
+## Advanced — recordings card (#069)
+
+- [ ] **MV-REC-1 — fresh install starts with audio saving on and persists toggle changes:** on a fresh defaults state, open `Settings → Advanced` and confirm the `Recordings` card shows `Save audio recordings` enabled by default. Turn it off, relaunch Ninimma, reopen `Advanced`, and confirm it stays off. Turn it back on, relaunch again, and confirm it stays on.
+- [ ] **MV-REC-2 — retention picker defaults to 7 days:** on a fresh defaults state, open `Settings → Advanced` and confirm `Keep recordings for` initially shows `7 days`.
+- [ ] **MV-REC-3 — retention picker disables when audio saving is off:** in `Settings → Advanced`, turn `Save audio recordings` off and confirm the `Keep recordings for` picker greys out while the explanatory copy remains visible. Turn the toggle back on and confirm the picker becomes interactive again with the previous selection preserved.
+
 ## AI Models tab — Stage A (step 3.2)
 
 Stage A replaces the inert AIModelsTab with one `SettingsCard` row per registered voice model. Chip + button are driven by `DefaultModelService.downloadStates[descriptor.id]`. A single `SettingsSection` header (`Voice models`) is used for now; Stage B will add an `AI models` section below without restructuring.

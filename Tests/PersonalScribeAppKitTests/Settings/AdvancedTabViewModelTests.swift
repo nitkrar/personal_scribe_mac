@@ -130,6 +130,39 @@ final class AdvancedTabViewModelTests: XCTestCase {
         XCTAssertEqual(DiagnosticLoggingMode.resolve(from: defaults), .errorsOnly)
     }
 
+    func testRecordAudioEnabledPreferenceRoundtrips() {
+        let defaults = isolatedDefaults()
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            defaults: defaults,
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil }
+        )
+
+        viewModel.setRecordAudioEnabled(false)
+
+        XCTAssertFalse(viewModel.recordAudioEnabled)
+        XCTAssertFalse(RecordAudioEnabledPreference.resolve(from: defaults))
+
+        viewModel.setRecordAudioEnabled(true)
+
+        XCTAssertTrue(viewModel.recordAudioEnabled)
+        XCTAssertTrue(RecordAudioEnabledPreference.resolve(from: defaults))
+    }
+
+    func testRecordAudioEnabledDefaultsToTrue() {
+        let defaults = isolatedDefaults()
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            defaults: defaults,
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil }
+        )
+
+        XCTAssertTrue(viewModel.recordAudioEnabled)
+        XCTAssertTrue(RecordAudioEnabledPreference.resolve(from: defaults))
+    }
+
     func testOpenDiagnosticsWindowInvokesInjectedAction() {
         var openCount = 0
         let viewModel = AdvancedTabViewModel(
@@ -184,6 +217,47 @@ final class AdvancedTabViewModelTests: XCTestCase {
         viewModel.setLogRetentionDays(120)
         XCTAssertEqual(viewModel.logRetentionDays, 90)
         XCTAssertEqual(LogRetentionDaysPreference.resolve(from: defaults), 90)
+    }
+
+    func testAudioRetentionPersistsAllowedValues() {
+        let defaults = isolatedDefaults()
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            defaults: defaults,
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil }
+        )
+
+        XCTAssertEqual(viewModel.audioRetentionDays, 7)
+        XCTAssertEqual(AudioRecordingRetentionDaysPreference.resolve(from: defaults), 7)
+
+        for value in [30, 14, 7, 1, 0] {
+            viewModel.setAudioRetentionDays(value)
+            XCTAssertEqual(viewModel.audioRetentionDays, value)
+            XCTAssertEqual(AudioRecordingRetentionDaysPreference.resolve(from: defaults), value)
+        }
+    }
+
+    func testAudioRetentionSanitizesUnknownValues() {
+        let defaults = isolatedDefaults()
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            defaults: defaults,
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil }
+        )
+
+        viewModel.setAudioRetentionDays(9)
+        XCTAssertEqual(viewModel.audioRetentionDays, 7)
+        XCTAssertEqual(AudioRecordingRetentionDaysPreference.resolve(from: defaults), 7)
+
+        viewModel.setAudioRetentionDays(18)
+        XCTAssertEqual(viewModel.audioRetentionDays, 14)
+        XCTAssertEqual(AudioRecordingRetentionDaysPreference.resolve(from: defaults), 14)
+
+        viewModel.setAudioRetentionDays(45)
+        XCTAssertEqual(viewModel.audioRetentionDays, 30)
+        XCTAssertEqual(AudioRecordingRetentionDaysPreference.resolve(from: defaults), 30)
     }
 
     func testWhisperAdapterFilterMirrorsModelServiceAndPersistsUpdates() {

@@ -42,9 +42,10 @@ public struct AdvancedTab: View {
         SettingsTabContainer {
             SettingsSection(
                 title: "Advanced",
-                description: "Model adapter visibility, filesystem location, and local diagnostics controls."
+                description: "Recordings, model adapter visibility, filesystem location, and local diagnostics controls."
             ) {
                 whisperAdapterCard
+                recordingsCard
                 switch viewModel.baseDirectoryResult {
                 case .success(let baseDirectory):
                     SettingsCard {
@@ -66,6 +67,64 @@ public struct AdvancedTab: View {
                     }
                     diagnosticsCard
                 }
+            }
+        }
+    }
+
+    private var recordingsCard: some View {
+        SettingsCard {
+            Text("Recordings")
+                .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+
+            Text("Store a timestamped WAV copy of each finished session. Transcript text is still saved even if audio write fails.")
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+
+            Toggle(
+                "Save audio recordings",
+                isOn: Binding(
+                    get: { viewModel.recordAudioEnabled },
+                    set: { viewModel.setRecordAudioEnabled($0) }
+                )
+            )
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Keep recordings for")
+                        .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+
+                    Spacer()
+
+                    Text(viewModel.audioRetentionDescription)
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
+                }
+
+                Picker(
+                    "Keep recordings for",
+                    selection: Binding(
+                        get: { viewModel.audioRetentionDays },
+                        set: { viewModel.setAudioRetentionDays($0) }
+                    )
+                ) {
+                    Text("30 days").tag(30)
+                    Text("14 days").tag(14)
+                    Text("7 days").tag(7)
+                    Text("1 day").tag(1)
+                    Text("Never (don't delete)").tag(0)
+                }
+                .pickerStyle(.menu)
+                .disabled(!viewModel.recordAudioEnabled)
+
+                Text(viewModel.audioRetentionSummary)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -268,6 +327,8 @@ final class AdvancedTabViewModel: ObservableObject {
     @Published private(set) var feedback: Feedback?
     @Published private(set) var diagnosticLoggingMode: DiagnosticLoggingMode
     @Published private(set) var logRetentionDays: Int
+    @Published private(set) var recordAudioEnabled: Bool
+    @Published private(set) var audioRetentionDays: Int
     @Published private(set) var whisperAdapterFilter: WhisperAdapterFilter
 
     private let defaults: UserDefaults
@@ -301,6 +362,8 @@ final class AdvancedTabViewModel: ObservableObject {
         let diagnosticLoggingMode = DiagnosticLoggingMode.resolve(from: defaults)
         self.diagnosticLoggingMode = diagnosticLoggingMode
         logRetentionDays = LogRetentionDaysPreference.resolve(from: defaults)
+        recordAudioEnabled = RecordAudioEnabledPreference.resolve(from: defaults)
+        audioRetentionDays = AudioRecordingRetentionDaysPreference.resolve(from: defaults)
         whisperAdapterFilter = modelService.whisperAdapterFilter
         modelService.$whisperAdapterFilter
             .removeDuplicates()
@@ -341,10 +404,47 @@ final class AdvancedTabViewModel: ObservableObject {
         }
     }
 
+    var audioRetentionDescription: String {
+        switch audioRetentionDays {
+        case 0:
+            return "Never"
+        case 1:
+            return "1 day"
+        default:
+            return "\(audioRetentionDays) days"
+        }
+    }
+
+    var audioRetentionSummary: String {
+        if !recordAudioEnabled {
+            return "New recordings are skipped while this setting is off. Existing recordings keep the retention policy shown here."
+        }
+
+        switch audioRetentionDays {
+        case 0:
+            return "Keep saved recordings until you delete them manually or remove the transcript."
+        case 1:
+            return "Delete saved recordings older than 1 day automatically."
+        default:
+            return "Delete saved recordings older than \(audioRetentionDays) days automatically."
+        }
+    }
+
     func setLogRetentionDays(_ days: Int) {
         let sanitized = LogRetentionDaysPreference.sanitized(days)
         logRetentionDays = sanitized
         LogRetentionDaysPreference.persist(sanitized, to: defaults)
+    }
+
+    func setRecordAudioEnabled(_ enabled: Bool) {
+        recordAudioEnabled = enabled
+        RecordAudioEnabledPreference.persist(enabled, to: defaults)
+    }
+
+    func setAudioRetentionDays(_ days: Int) {
+        let sanitized = AudioRecordingRetentionDaysPreference.sanitized(days)
+        audioRetentionDays = sanitized
+        AudioRecordingRetentionDaysPreference.persist(sanitized, to: defaults)
     }
 
     func changeBaseDirectory() async {
