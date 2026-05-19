@@ -8,7 +8,7 @@ final class StorageLocatorTests: XCTestCase {
     func testManagedDirectoryCasesMatchLockedContract() {
         XCTAssertEqual(
             ManagedDirectory.allCases.map(\.pathComponent),
-            ["models", "modes", "recordings", "logs", "cache"]
+            ["models", "modes", "recordings", "db", "logs", "cache"]
         )
     }
 
