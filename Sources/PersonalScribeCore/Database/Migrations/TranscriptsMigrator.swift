@@ -72,6 +72,13 @@ enum TranscriptsMigrator {
             }
         }
 
+        migrator.registerMigration("v6_audio_filename") { db in
+            try wrapMigration(version: "v6_audio_filename") {
+                try db.execute(sql: "ALTER TABLE transcripts ADD COLUMN audio_filename TEXT")
+                try db.execute(sql: "PRAGMA user_version = 6")
+            }
+        }
+
         return migrator
     }
 

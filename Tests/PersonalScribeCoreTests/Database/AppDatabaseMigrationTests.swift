@@ -24,6 +24,26 @@ final class AppDatabaseMigrationTests: XCTestCase {
         XCTAssertEqual(dumped, Self.expectedSchemaDump, diffMessage(actual: dumped, expected: Self.expectedSchemaDump))
     }
 
+    func testV6AddsAudioFilenameColumnNullable() throws {
+        let baseDirectory = try makeTempBaseDir()
+        defer { cleanup(baseDirectory) }
+
+        let locator = FixedBaseDirectoryStorageLocator(baseDirectory: baseDirectory)
+        _ = try AppDatabase(locator: locator)
+
+        let databaseURL = baseDirectory.appendingPathComponent("db/transcripts.sqlite", isDirectory: false)
+        let queue = try DatabaseQueue(path: databaseURL.path)
+        let columns = try queue.read { db in
+            try Row.fetchAll(db, sql: "PRAGMA table_info(transcripts)")
+        }
+
+        let audioFilenameColumn = try XCTUnwrap(
+            columns.first { ($0["name"] as String?) == "audio_filename" }
+        )
+        XCTAssertEqual(audioFilenameColumn["type"] as String?, "TEXT")
+        XCTAssertEqual(audioFilenameColumn["notnull"] as Int64?, 0)
+    }
+
     // MARK: - Expected DDL (byte-identical pin)
 
     /// Format: `<type> <name>\n<sql>\n---\n` per entry, excluding SQLite-internal and GRDB-internal
@@ -37,7 +57,7 @@ final class AppDatabaseMigrationTests: XCTestCase {
         text TEXT NOT NULL,
         audio_duration REAL NOT NULL,
         processing_duration REAL NOT NULL
-    , mode_id TEXT)
+    , mode_id TEXT, audio_filename TEXT)
     ---
     table transcripts_fts
     CREATE VIRTUAL TABLE "transcripts_fts" USING fts5(text, tokenize='''unicode61'' ''remove_diacritics'' ''2''', content='transcripts')

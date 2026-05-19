@@ -14,6 +14,10 @@ public struct TranscriptEntry: Codable, Sendable, Equatable {
     /// preset family by looking up the live mode; when the mode is
     /// gone the badge falls back to `id.split(separator: "-").first`.
     public let modeId: String?
+    /// #069 — relative filename of the persisted session audio recording.
+    /// Optional so rows persisted before audio retention landed decode
+    /// cleanly to `nil`.
+    public let audioFilename: String?
 
     public init(
         id: UUID,
@@ -21,7 +25,8 @@ public struct TranscriptEntry: Codable, Sendable, Equatable {
         text: String,
         audioDuration: TimeInterval,
         processingDuration: TimeInterval,
-        modeId: String? = nil
+        modeId: String? = nil,
+        audioFilename: String? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -29,6 +34,7 @@ public struct TranscriptEntry: Codable, Sendable, Equatable {
         self.audioDuration = audioDuration
         self.processingDuration = processingDuration
         self.modeId = modeId
+        self.audioFilename = audioFilename
     }
 
     /// Snake_case `CodingKeys` aligned to the `transcripts` SQLite schema
@@ -42,6 +48,7 @@ public struct TranscriptEntry: Codable, Sendable, Equatable {
         case audioDuration = "audio_duration"
         case processingDuration = "processing_duration"
         case modeId = "mode_id"
+        case audioFilename = "audio_filename"
     }
 
     public init(from decoder: Decoder) throws {
@@ -54,6 +61,7 @@ public struct TranscriptEntry: Codable, Sendable, Equatable {
             TimeInterval.self, forKey: .processingDuration
         )
         self.modeId = try container.decodeIfPresent(String.self, forKey: .modeId)
+        self.audioFilename = try container.decodeIfPresent(String.self, forKey: .audioFilename)
     }
 }
 
@@ -82,7 +90,8 @@ extension TranscriptEntry: FetchableRecord, PersistableRecord {
             text: row[CodingKeys.text.stringValue],
             audioDuration: row[CodingKeys.audioDuration.stringValue],
             processingDuration: row[CodingKeys.processingDuration.stringValue],
-            modeId: row[CodingKeys.modeId.stringValue]
+            modeId: row[CodingKeys.modeId.stringValue],
+            audioFilename: row[CodingKeys.audioFilename.stringValue]
         )
     }
 
@@ -93,5 +102,6 @@ extension TranscriptEntry: FetchableRecord, PersistableRecord {
         container[CodingKeys.audioDuration.stringValue] = audioDuration
         container[CodingKeys.processingDuration.stringValue] = processingDuration
         container[CodingKeys.modeId.stringValue] = modeId
+        container[CodingKeys.audioFilename.stringValue] = audioFilename
     }
 }
