@@ -6,6 +6,112 @@ Closed items. Source of truth for "what was the fix for that thing I filed month
 
 ---
 
+## Archived 2026-05-19: #027 + #033 + #010 closed (BACKLOG cleanup)
+
+Two done tickets that had lingered in BACKLOG.md since 2026-05-01 / 2026-05-02 plus a won't-fix close for #010.
+
+### #027 — TranscriptEntry needs `modeId` + `trigger`
+
+`refactor` · `P2` · `done` · `phase: 4` · `area: storage, session`
+*Updated 2026-05-01*
+
+Schema evolution to record which mode produced each transcript. Drives the row pill mockup (#032) and downstream filtering once Command Mode (#021) lands. Unparked 2026-04-30 — multiple modes now exist via the #089 editor, so `modeId` has information value even before #021. **Shipped 2026-05-01** in `156f43b` (squashed from `deb807f` + 2 follow-ups, pushed to trunk; 1126 tests / 1 skipped / 0 failures). Trigger field intentionally deferred per locked design.
+
+**Codex follow-up baked into the squash:** `bindRecipeForNextSession(_:)` is mutated mid-flight by `SessionCoordinator` (eager pre-bind of the next session's recipe). The first cut read `boundRecipe?.recipeID` directly in `persist()` — a rebind landing during transcription would have rewritten the modeId. Same race on `runBoundProcessing`, `resolvedVadPreferencesForSession`, `currentBoundRecipe()`. Fix: introduce `activeSessionRecipe: BoundRecipe?` snapshotted at session start, retained through `.completed`, cleared on cancel/discard. Regression: `testCurrentBoundRecipeStaysSessionFrozenDespiteMidTranscriptionRebind`.
+
+**Locked design (2026-04-30 grooming session):**
+
+1. Add `preset: Preset` field to `WorkflowMode`. Codable additive — `decodeIfPresent` with `.dictation` fallback for pre-#027 documents. `Preset.materialize(name:)` sets it at creation time.
+2. Change `WorkflowMode.id` format from `custom-{UUID}` to `{cleanName}-{suffix}` (suffix = short random / hash). One-time migration of existing `customModes` re-mints ids. `cleanName` = user-facing name at creation, stripped to id-safe chars.
+3. Add `modeId: String` to `TranscriptEntry`. Captured at commit time from `registry.currentMode.id`.
+4. #032 row-badge rendering paths:
+   - **Live mode:** `customModes.first(where: { $0.id == modeId })?.preset.displayName` → "Notes" / "Meeting" / "Dictation" / "Streaming Dictation".
+   - **Deleted mode:** `modeId.split(separator: "-").first.map(String.init)` → e.g. "Meeting" for `Meeting-7a3f1c`. Robust to backend file edits — dumb split, no schema dependency.
+5. **No tombstone contract.** Mode deletion stays physical. The id-suffix scheme provides graceful fallback for orphaned transcript references — no GC strategy, no file growth, no naming-conflict tax.
+6. **L-14 skip-gaps logic dissolves.** Any name reuse is fine because the suffix guarantees id uniqueness regardless of name collisions.
+
+**Trigger field — decision deferred to unpark.** Brainstorm proposed `.hotkeyTap / .hotkeyHold / .menuBarClick / .pillClick`. May be dropped if no Command Mode use case requires it.
+
+**Rejected approaches (2026-04-30 conversation):**
+- `WorkflowMode` soft-delete / tombstone (legacy doc's original direction). File-growth + naming-conflict-on-reuse tax with no payoff once preset family is stored as a field.
+- Encoding preset family in the id prefix (e.g. `notes-Meeting-{suffix}`). Field-based lookup on `WorkflowMode.preset` is more resilient — id parsing only used as fallback for orphaned references.
+- Denormalising a `modeName` snapshot onto `TranscriptEntry`. Unnecessary once `WorkflowMode.preset` is a field and id encodes the name.
+
+**Backward compatibility — per legacy doc + 2026-04-21 user direction:** existing `transcripts.jsonl` rows can be wiped (dogfood-era data) or backfilled to a sentinel. Pick at impl time.
+
+**Depends on:** #026 (SQLite migration; sequencing decides whether the JSONL change is throwaway or first-schema-in-the-new-store), #021 (Command Mode — first consumer that drives distinct `modeId` values).
+
+**Legacy:** `plans/_legacy/backlog/transcript-trigger-context.md` (2026-04-21 brainstorm; "Mode reference" section's tombstone direction superseded by the 2026-04-30 lock above).
+
+---
+
+### #033 — Streaming output transport decision
+
+`refactor` · `P2` · `done` · `area: output, session`
+*Updated 2026-05-02*
+
+Live cursor stream transport for #056's streaming dictation. The live seam is `PipelineOutputSink.deliverPartial(_:)` (`Sources/PersonalScribeSession/Pipeline/Contracts/PipelineOutputSink.swift`); pre-#033 it had no production consumer.
+
+**Decisions locked 2026-05-01** (Claude × Codex debate at [`plans/investigations/2026-05-01-033-transport-debate.md`](./plans/investigations/2026-05-01-033-transport-debate.md)):
+
+| Sub-decision | Choice |
+|---|---|
+| Transport | clipboard chunk + synthetic `⌘V` |
+| Undo grouping | per-EOU |
+| Restore policy | save once at session start, restore once at session end (only when sink wrote a chunk) |
+| Cursorless target | silent — last-EOU on clipboard, no UI affordance |
+| Per-mode gate | paired — gate live partial on `liveCursorEnabled`; suppress stop-time `.frontmostPaste` when on |
+| API shape | new `LiveCursorOutput` alongside `ClipboardBatchOutput` |
+| Lifecycle hook | extend `PipelineOutputSink` with `endSession()` (default no-op) |
+
+**Commits**
+- `2a6e91f` — initial cohesive implementation (transport, paired gate, lifecycle hook, 19 tests).
+- `46e2ed8` — Codex review follow-up: snapshot eagerly at session start (anchors locked Q1 wording, not first-chunk timing); `didWriteChunkThisSession` flag so non-streaming sessions don't over-restore; `endSession()` runs **before** `publish(.completed)` / `handleStageFailure` / short-exit publish (closes the ordering hole where menu-bar idle-transition observers could race the snapshot restore); `awaitLiveStreamingEventTaskShutdown` gains graceful-vs-immediate split (stop drains naturally, cancel cancels immediately); `waitForTaskCompletion` replaced with polling-loop + actor tracker (the previous `withTaskGroup` shape had a latent hang — `cancelAll()` doesn't unwind `await task.value` for `Task<Void, Never>`); 5 additional regression tests.
+- `80f9bf0` — race + recipe-clear fix from dogfood errors at 2026-05-02 00:22:23.777Z (per `plans/investigations/2026-05-02-033-runtime-bugs-codex.md`). `startRecording()` gains `startRecordingInFlight` re-entry guard (preserves the prepare-before-publish invariant; closes the duplicate-`capture.start()` race that produced the `audioEngineFailure` errors). Catch-time `activeSessionRecipe = nil` removed from both `startRecording` and `startHoldRecording` — root cause of the downstream `runBoundProcessing → invalidState` chain (call B's catch nulled call A's recipe). `LiveCursorOutput.deliverPartial` now logs when `pasteShortcutPoster()` returns `false` (silent live-paint loss path Codex flagged). 1 new race regression test.
+
+**Implementation surfaces:**
+- `PipelineOutputSink.endSession()` — default no-op extension; called on success / cancel / error / short-exit / discard. Exists for session-scoped sinks like `LiveCursorOutput`.
+- `LiveCursorOutput` (`Sources/PersonalScribeAppKit/Output/LiveCursorOutput.swift`) — captures pre-recording clipboard at `resetForNewSession` (session start); on `deliverPartial` writes the EOU chunk + posts `⌘V` (gated by AX trust + PID externality probe shared with `ClipboardBatchOutput`); on `endSession` restores the snapshot **only when at least one chunk wrote** this session (else discards — preserves user's mid-session clipboard for non-streaming sessions where the orchestrator still calls the sink lifecycle).
+- `SessionPipelineOrchestrator.consumeLiveStreamingEvent` — capture-time `outputSink.deliverPartial(_:)` call gated on `bound.streamingBehavior?.liveCursorEnabled` (EOU events only, per #056 DESIGN's append-only contract).
+- `RecipeBuilder` — paired Q4 gate filters `.frontmostPaste` from the bound recipe when `liveCursorEnabled == true` (avoids double-paste at session end).
+- `SessionCoordinator` — accepts an injected `outputSink:` (falls back to no-op `CoordinatorPipelineOutputSink` for tests).
+- `AppComposition` — constructs `LiveCursorOutput` and passes it to `SessionCoordinator`.
+
+**Tests** (24 new across 4 files):
+- `SessionPipelineOrchestratorTests`: live cursor delivery on EOU only (exact ordered equality, not `.contains`), suppression when disabled, ignores `.partial` events, `endSession` fires on each of {completed, shortExit, cancel, error}, `endSession` runs before `publish(.completed)`.
+- `MenuBarSceneModelTests`: end-to-end ordering — menu-bar `deliverBatch` waits for pipeline `endSession` to complete.
+- `RecipeBuilderTests`: `.frontmostPaste` filtered when live cursor on; preserved when off.
+- `LiveCursorOutputTests`: writes chunk + posts paste, overwrites prior chunk, skips paste when AX untrusted or focus is in self, ignores blank text, `endSession` restores when chunk wrote, `endSession` discards (preserves mid-session clipboard) when no chunk wrote, `resetForNewSession` captures session-start snapshot before first chunk arrives.
+
+Full suite at close: **1190 tests / 1 skipped / 0 failures** (post-`80f9bf0`).
+
+**Known stale UI to clean up before next dogfood**
+- `Sources/PersonalScribeAppKit/UnifiedWindow/Tabs/Modes/ModeDetailView.swift:130` and `Sources/PersonalScribeAppKit/Settings/GeneralTab.swift:341` still ship the caption *"Saved now for streaming recipes. Live cursor transport is not active in this build."* That text was added under #056 when transport was pending #033; now stale. Risk: users won't enable the toggle thinking it's a no-op. One-line removal in each file (or rewrite to reflect actual gating: AX trust + active streaming-ASR model + `liveCursorEnabled`).
+
+**Out of scope (filed if dogfood demands):**
+- Cumulative-during-cursorless clipboard (deliberately last-EOU only — second-pass authoritative final at session end is the safety net).
+- ResponseCard "click into a text field" notice during cursorless period.
+- Hybrid transport (CGEvent for short chunks, paste for long).
+
+**Runtime verification:** in progress 2026-05-02 on the user's other laptop. First dogfood pass surfaced two errors (race + invalidState chain) — fixed in `80f9bf0`. EOU silent-paint inconsistency observed across tests 1-4: per Codex audit the cause is **EOU-only delivery + stop-before-EOU emission** (not a CGEvent paste race — app-side serialization is sound); `.finalized` event at stream-end intentionally doesn't backfill, so short utterances or VAD-pre-empted sessions paste nothing live. Decision pending: ship `.finalized`-backfill (Option B from the debate file) so single-utterance recordings paste at session end, or accept the locked "EOU chunks only" semantics. Reopen ticket if regression observed after rebuild on `80f9bf0`+.
+
+**Legacy:** `backlog/streaming-output-delivery-mechanism.md` + `backlog/pipeline-streaming-defer.md` *(merged — same decision from two layer seats)*
+
+---
+
+### #010 — Drag-suppresses-tap end-to-end test (Test C)
+
+`bug` · `P2` · `done` · `area: pill, testing`
+*Updated 2026-05-19*
+
+**Closed as won't-fix 2026-05-19.** State-machine drag-suppresses-tap test at `Tests/PersonalScribeAppKitTests/PillOverlayPresenterTests.swift` (`testLargeMovementStartsDraggingAndSuppressesClick` + `testDraggingOnlyStartsOnce`) already exercises the contract end-to-end through `OverlayPanelInteractionState`. The hosting-view variant of the same test is gold-plating — same semantics, more brittle plumbing. Mirrors the #019 closure pattern: don't carry a ticket whose value lives only in test redundancy.
+
+Tests A + B landed in `1cb665c`. Reopen only if a hosting-view-only regression appears that the state-machine test cannot reproduce.
+
+**Legacy:** `PLAN_PHASES.md` Step 1.4b
+
+---
+
 ## Archived 2026-05-18: #091 + #095 + #098 closed (multilingual ASR sweep)
 
 Three related tickets closing together. #095 introduced WhisperKit (Tier 2 multilingual). #098 was a follow-up for whisper.cpp as a parallel runtime so we could A/B vs WhisperKit (filed only as broker request scope during execution; never lived in BACKLOG.md). #091 added the per-model language hint picker that those new multilingual runtimes consume.
