@@ -389,23 +389,21 @@ Switch the active mode directly from the pill overlay (or the menu-bar status it
 ### #069 — Persist audio recordings on disk
 
 `feature` · `P2` · `open` · `phase: 3` · `area: audio, storage, session`
-*Updated 2026-04-30*
+*Updated 2026-05-19*
 
-Today audio lives only in `SessionCoordinator.bufferedAudio: [PCMBuffer]` in memory and is dropped after transcription. The `recordings/` directory name is aspirational — `AppConfig.swift:71` literally comments "Reserved for future recordings/ feature." This ticket fills that gap.
+Today audio no longer disappears after transcription. Stage A shipped persisted `.wav` recordings under `<base>/recordings/`, stores the relative filename on the transcript row, cascades transcript deletes to audio-file deletes, and runs a launch + daily retention sweep against stale recordings.
 
 **Why now:** unlocks re-transcription with upgraded voice models, audio replay from the Transcriptions tab, retroactive diarization (re-run #058 / #060 on past recordings), and export. Today all of those require re-capturing the audio.
 
-**Stage A (minimum):** on `SessionCoordinator` stop, write the in-memory buffer as `.wav` (16 kHz mono 16-bit — native capture format, no encoding step) to `<AppConfig.recordingsDirectory()>/<UUID>.wav`. Add an optional `audioFilePath: String?` column to the `transcripts` table via a new migration registered in `TranscriptsMigrator`; the column stores the relative filename, not a full path (base directory is resolved at read time). `TranscriptRepository.append(_:)` writes the path alongside the entry in one transaction. UI: none — metadata-only for now. Feature gate: `RecordAudioEnabled` UserDefaults default `true`; off means fire-and-forget capture (today's behavior).
+**Stage A (shipped on trunk):** landed in `4c0e09a`, `f2d2bb9`, `4cf2ade`, `a31cff0`, `571f0ea`, `ac6b49d`, and `3ed36d3`. That work split the DB into `<base>/db/transcripts.sqlite`, added nullable `audio_filename`, wrote 16 kHz mono `.wav` sidecars with transcript-first failure handling, cascaded transcript deletes to sidecar deletes, shipped the Advanced → `Recordings` toggle + retention picker (`Save audio recordings`, default on; `Keep recordings for`, default 7 days), and added the launch + 24-hour retention sweeper that deletes stale `.wav` files and nulls matching `audio_filename` values.
 
-**Stage B (dogfood-gated):** retention policy — configurable default (suggest 30 days) via a background sweeper that deletes `.wav` files older than N days and nulls the corresponding `audioFilePath` column. Settings UI under Advanced → "Audio recordings" section: toggle, retention slider, current disk-usage readout, "Delete all recordings" button. Compression (`.m4a` or `.caf` via `AVAudioFile` encoding) only if uncompressed disk usage proves painful — `.wav` at 2 MB/minute means a 1-hour meeting is 120 MB; 30-day retention at 10 min/day is ~600 MB. Measure real usage first.
+**Residual Stage B:** user-facing consumers of the persisted audio: replay from the Transcriptions tab, re-transcribe/export flows, and any dogfood follow-up on disk-usage surfacing, bulk deletion (`Delete all recordings`), compression, or alternative retention shapes.
 
 **Open questions:**
-- Format: start `.wav` (no encoding, simplest) or jump straight to compressed? Recommend `.wav` for MVP.
-- Retention default: 30 days / 90 days / never? Lean 30 days with Settings slider.
-- **Retention shape — open discussion (2026-04-30):** "cap at last N recordings" (e.g. 1 or 3) raised as a possible alternative or complement to days-based retention; rationale would be that for the re-transcribe-after-error use case only the most recent recording matters. No concrete proposal — revisit during Stage B scoping alongside the days-based default question above.
+- **Retention shape — open discussion (2026-05-19):** "cap at last N recordings" (e.g. 1 or 3) remains open as a possible alternative or complement to the shipped days-based retention control.
 - Disk-space guardrail: warn or hard-stop when recordings dir exceeds X GB?
-- Transcript deletion (#011) — should it cascade to the audio file?
-- Filesystem permissions: mirror the DB's `0600`.
+- Compression: stay with shipped `.wav`, or add `.m4a` / `.caf` once real dogfood disk-usage data justifies the extra complexity?
+- Replay / re-transcribe UX: Transcriptions row affordances, last-recording shortcut integration (#094), and export surface still need product shaping.
 
 **Depends on:** #026 (schema migration via `TranscriptsMigrator` — done).
 **Unlocks:** #058 retroactive diarization, #060 retroactive voice-ID re-tagging, "replay audio" UI in Transcriptions tab, "re-transcribe" action after upgrading the voice model, **#094 "re-transcribe last recording" UX (combined with #094's file-source pipeline path)**.

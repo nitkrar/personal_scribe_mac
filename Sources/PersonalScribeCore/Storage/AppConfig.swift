@@ -68,7 +68,9 @@ public enum AppConfig {
         try subdirectory(for: .models)
     }
 
-    /// Reserved for future recordings/ feature. Directory is created lazily.
+    /// Persisted `.wav` recordings written by `RecordingFileWriter` when
+    /// the `RecordAudioEnabled` preference is on (#069). Directory is
+    /// created lazily.
     public static func recordingsDirectory() throws -> URL {
         try subdirectory(for: .recordings)
     }
