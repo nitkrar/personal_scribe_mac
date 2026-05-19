@@ -72,6 +72,103 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(events[1], .endOfUtterance(text: "hello world"))
     }
 
+    func testFirstEndOfUtteranceHasNoLeadingSpace() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetEou160ms
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let manager = StubFluidAudioStreamingManager(
+            scriptedProcessActions: [[.partial("hello")]],
+            finalText: "hello"
+        )
+        let adapter = FluidAudioStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            vadBoundarySessionFactory: makeVadFactory(events: [.speechEnded])
+        )
+        let inputBuffer = try makePCMBuffer(sampleCount: 160)
+
+        let events = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer]))
+        )
+
+        XCTAssertEqual(events[0], .partial(text: "hello"))
+        XCTAssertEqual(events[1], .endOfUtterance(text: "hello"))
+    }
+
+    func testSubsequentEndOfUtterancePrependsLeadingSpace() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetEou160ms
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let manager = StubFluidAudioStreamingManager(
+            scriptedProcessActions: [
+                [.partial("hello")],
+                [.partial("helloworld")],
+            ],
+            finalText: "helloworld"
+        )
+        let adapter = FluidAudioStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            vadBoundarySessionFactory: makeVadFactory(events: [.speechEnded, .speechEnded])
+        )
+        let inputBuffer = try makePCMBuffer(sampleCount: 160)
+
+        let events = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer, inputBuffer]))
+        )
+
+        XCTAssertEqual(
+            events.prefix(4).map { $0 },
+            [
+                .partial(text: "hello"),
+                .endOfUtterance(text: "hello"),
+                .partial(text: "world"),
+                .endOfUtterance(text: " world"),
+            ]
+        )
+    }
+
+    func testWhitespaceOnlyDeltaStillDropped() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetEou160ms
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let manager = StubFluidAudioStreamingManager(
+            scriptedProcessActions: [
+                [.partial("hello")],
+                [.partial("hello ")],
+            ],
+            finalText: "hello "
+        )
+        let adapter = FluidAudioStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            vadBoundarySessionFactory: makeVadFactory(events: [.speechEnded, .speechEnded])
+        )
+        let inputBuffer = try makePCMBuffer(sampleCount: 160)
+
+        let events = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [inputBuffer, inputBuffer]))
+        )
+
+        XCTAssertEqual(
+            events.map { $0 },
+            [
+                .partial(text: "hello"),
+                .endOfUtterance(text: "hello"),
+                .finalized(
+                    TranscriptionResult(
+                        text: "hello ",
+                        audioDuration: inputBuffer.duration * 2,
+                        processingDuration: .zero
+                    )
+                ),
+            ]
+        )
+    }
+
     func testStreamEndBeforeAnyBoundaryEmitsOnlyFinalized() async throws {
         let descriptor = BuiltInModelCatalog.parakeetEou160ms
         let rootDirectory = try temporaryRootDirectory()

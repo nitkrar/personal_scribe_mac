@@ -375,16 +375,19 @@ extension FluidAudioStreamingTranscriberAdapter {
                 utterance: emittedUtteranceCount + 1
             )
         }
-        let trimmed = derivation.delta.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        let trimmedDelta = derivation.delta.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedDelta.isEmpty else {
             return
         }
+        let emittedText = emittedUtteranceCount == 0
+            ? trimmedDelta
+            : " " + trimmedDelta
 
         emittedUtteranceCount += 1
-        continuation.yield(.endOfUtterance(text: trimmed))
+        continuation.yield(.endOfUtterance(text: emittedText))
         lastCommittedBoundary = latestCumulative
         logger.info(
-            "streaming_eou_emitted session=\(diagnosticsContext.sessionID) utterance=\(emittedUtteranceCount) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds()) chars=\(trimmed.count)"
+            "streaming_eou_emitted session=\(diagnosticsContext.sessionID) utterance=\(emittedUtteranceCount) ms_since_session_start=\(diagnosticsContext.elapsedMilliseconds()) chars=\(emittedText.count)"
         )
     }
 
