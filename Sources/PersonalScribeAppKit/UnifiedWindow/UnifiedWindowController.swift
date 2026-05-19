@@ -81,6 +81,7 @@ final class UnifiedWindowController: NSWindowController {
         modes: [WorkflowMode] = WorkflowModeRegistry.builtInModes,
         modelService: ActiveModelService,
         offlineTranscriptionCoordinator: (any OfflineTranscriptionCoordinating)? = nil,
+        retranscriptionHandler: (any RetranscriptionPerforming)? = nil,
         setActiveMode: (@MainActor (WorkflowMode) async -> Void)? = nil,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
@@ -95,7 +96,10 @@ final class UnifiedWindowController: NSWindowController {
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.openDiagnosticsWindow = openDiagnosticsWindow
         self.homeViewModel = HomeTabViewModel(reader: metricsReader)
-        self.transcriptionsViewModel = TranscriptionsTabViewModel(reader: transcriptReader)
+        self.transcriptionsViewModel = TranscriptionsTabViewModel(
+            reader: transcriptReader,
+            retranscriptionHandler: retranscriptionHandler
+        )
         self.offlineTranscriptionViewModel = OfflineTranscriptionTabViewModel(
             coordinator: offlineTranscriptionCoordinator ?? DisabledOfflineTranscriptionCoordinator(),
             transcriptReader: transcriptReader,

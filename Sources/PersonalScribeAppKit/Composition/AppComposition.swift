@@ -241,6 +241,50 @@ public enum AppComposition {
         return coordinator
     }()
 
+    private static let offlineTranscriptionRuntime: any OfflineTranscriptionRuntimeProviding = {
+        let activeModelIDsPreferenceKey = ActiveModelService.preferenceKey
+        let activeModelIDsDefault = modelService.activeModelIDs
+
+        return AppCompositionOfflineTranscriptionRuntime(
+            processorProvider: processorProvider,
+            registeredDescriptors: BuiltInModelCatalog.registeredModels,
+            activeModelIDsProvider: {
+                Preference<[ModelKind: String]>(
+                    key: activeModelIDsPreferenceKey,
+                    default: activeModelIDsDefault,
+                    defaults: .standard
+                ).resolve()
+            }
+        )
+    }()
+
+    private static let offlineTranscriptionSessionGate: any SessionGateProviding =
+        SessionCoordinatorOfflineTranscriptionGate(coordinator: sessionCoordinator)
+
+    public static let offlineTranscriptionCoordinator: OfflineTranscriptionCoordinator? = {
+        guard let transcriptRepository else {
+            return nil
+        }
+
+        let activeModelIDsPreferenceKey = ActiveModelService.preferenceKey
+        let activeModelIDsDefault = modelService.activeModelIDs
+
+        return OfflineTranscriptionCoordinator(
+            runtime: offlineTranscriptionRuntime,
+            defaultBatchDescriptorID: {
+                Preference<[ModelKind: String]>(
+                    key: activeModelIDsPreferenceKey,
+                    default: activeModelIDsDefault,
+                    defaults: .standard
+                ).resolve()[.asr]
+            },
+            fileSource: FileSourceAudioStream(),
+            repository: transcriptRepository,
+            sessionGate: offlineTranscriptionSessionGate,
+            logger: makeLogger(PersonalScribeLogCategory.transcription)
+        )
+    }()
+
     /// Wire `modelService.onSetActive` to `coordinator.prepareTranscriber()`
     /// so an explicit Activate flips the transcriber prep at activate-time.
     /// Pulled out of the `sessionCoordinator` lazy initializer to keep the
@@ -488,5 +532,84 @@ public enum AppComposition {
         _ permissionService: Service
     ) -> PermissionServiceAdapter {
         PermissionServiceAdapter(wrapping: permissionService)
+    }
+}
+
+private struct AppCompositionOfflineTranscriptionRuntime: OfflineTranscriptionRuntimeProviding {
+    let processorProvider: any ModelBoundProcessorProviding
+    let registeredDescriptorsByID: [String: ModelDescriptor]
+    let activeModelIDsProvider: @Sendable () -> [ModelKind: String]
+
+    init(
+        processorProvider: any ModelBoundProcessorProviding,
+        registeredDescriptors: [ModelDescriptor],
+        activeModelIDsProvider: @escaping @Sendable () -> [ModelKind: String]
+    ) {
+        self.processorProvider = processorProvider
+        self.registeredDescriptorsByID = Dictionary(
+            uniqueKeysWithValues: registeredDescriptors.map { ($0.id, $0) }
+        )
+        self.activeModelIDsProvider = activeModelIDsProvider
+    }
+
+    func transcriber(for descriptorID: String) async throws -> any Transcriber {
+        guard let descriptor = registeredDescriptorsByID[descriptorID] else {
+            throw ModelSelectionError.descriptorNotRegistered(id: descriptorID)
+        }
+
+        return try processorProvider.transcriber(for: descriptor)
+    }
+
+    func diarizer() async throws -> any SpeakerDiarizer {
+        let activeModelIDs = activeModelIDsProvider()
+        let descriptorID = activeModelIDs[.diarization] ?? BuiltInModelCatalog.speakerDiarization.id
+
+        guard let descriptor = registeredDescriptorsByID[descriptorID] else {
+            throw ModelSelectionError.descriptorNotRegistered(id: descriptorID)
+        }
+
+        return try processorProvider.diarizer(for: descriptor)
+    }
+}
+
+private struct SessionCoordinatorOfflineTranscriptionGate: SessionGateProviding {
+    let coordinator: SessionCoordinator
+
+    func isLiveSessionActive() async -> Bool {
+        let snapshot = await coordinator.snapshot()
+        return Self.blocksOfflineProcessing(snapshot.sessionState)
+    }
+
+    func stateStream() async -> AsyncStream<SessionState> {
+        let coordinator = self.coordinator
+
+        return AsyncStream { continuation in
+            let bridgeTask = Task {
+                let upstream = await coordinator.snapshotStream()
+
+                for await snapshot in upstream {
+                    guard Task.isCancelled == false else {
+                        break
+                    }
+
+                    continuation.yield(snapshot.sessionState)
+                }
+
+                continuation.finish()
+            }
+
+            continuation.onTermination = { _ in
+                bridgeTask.cancel()
+            }
+        }
+    }
+
+    private static func blocksOfflineProcessing(_ state: SessionState) -> Bool {
+        switch state {
+        case .capturing, .holdRecording, .transcribing:
+            true
+        case .idle, .completed, .shortExit, .error:
+            false
+        }
     }
 }

@@ -43,7 +43,7 @@ struct PersonalScribeAppMain: App {
     init(
         coordinator: SessionCoordinator,
         permissionService: (any PermissionService)? = nil,
-        clipboardWriter: @escaping @MainActor (String) -> Void = PersonalScribeAppMain.defaultClipboardWriter,
+        clipboardWriter: @escaping CopyLastTranscriptAction.ClipboardWriter = PersonalScribeAppMain.defaultClipboardWriter,
         outputService: (any OutputService)? = nil,
         openSettings: @escaping @MainActor () -> Void = PersonalScribeAppMain.defaultOpenSettings,
         overlayPanelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
@@ -192,6 +192,24 @@ struct PersonalScribeAppMain: App {
             logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
         )
         let modelService = AppComposition.modelService
+        let offlineTranscriptionCoordinator = AppComposition.offlineTranscriptionCoordinator
+        let retranscriptionHandler: (any RetranscriptionPerforming)? = offlineTranscriptionCoordinator.map {
+            coordinator in
+            RetranscriptionRunner(
+                transcriptReader: unifiedTranscriptReader,
+                coordinator: coordinator,
+                clipboardWriter: clipboardWriter,
+                toastBroadcaster: AppComposition.toastBroadcaster
+            )
+        }
+        let retranscribeLastRecordingAction = offlineTranscriptionCoordinator.map { coordinator in
+            RetranscribeLastRecordingAction(
+                transcriptReader: unifiedTranscriptReader,
+                coordinator: coordinator,
+                clipboardWriter: clipboardWriter,
+                toastBroadcaster: AppComposition.toastBroadcaster
+            )
+        }
         // Shared input-device provider — one `AVFoundationInputDeviceProvider`
         // instance backs both the menu-bar Microphone submenu AND the
         // unified-window sidebar footer readout (#008). The provider is
@@ -215,6 +233,8 @@ struct PersonalScribeAppMain: App {
                     inputDeviceProvider: inputDeviceProvider,
                     modes: WorkflowModeRegistry.builtInModes,
                     modelService: modelService,
+                    offlineTranscriptionCoordinator: offlineTranscriptionCoordinator,
+                    retranscriptionHandler: retranscriptionHandler,
                     setActiveMode: { mode in
                         // #089: menu-bar / pill switcher set the runtime
                         // *current* mode, not the persisted default.
@@ -257,7 +277,7 @@ struct PersonalScribeAppMain: App {
         let copyLastTranscriptLogger = AppComposition.makeLogger(PersonalScribeLogCategory.ui)
         let copyLastTranscriptAction = CopyLastTranscriptAction(
             transcriptReader: unifiedTranscriptReader,
-            clipboardWriter: CopyLastTranscriptAction.defaultClipboardWriter,
+            clipboardWriter: clipboardWriter,
             onCompleted: { outcome in
                 // TODO: wire a user-visible toast once a notice surface
                 // exists — tracked with the general feedback polish pass.
@@ -278,6 +298,7 @@ struct PersonalScribeAppMain: App {
             openCopyLastTranscript: {
                 Task { await copyLastTranscriptAction.perform() }
             },
+            retranscribeLastRecordingAction: retranscribeLastRecordingAction,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider,
             modesProvider: {
@@ -419,7 +440,7 @@ extension PersonalScribeAppMain {
         return repository
     }
 
-    static let defaultClipboardWriter: @MainActor (String) -> Void = { text in
+    static let defaultClipboardWriter: CopyLastTranscriptAction.ClipboardWriter = { text in
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
