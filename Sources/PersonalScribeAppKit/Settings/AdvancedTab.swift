@@ -1,6 +1,8 @@
+import Combine
 import AppKit
 import SwiftUI
 import PersonalScribeCore
+import PersonalScribeSession
 
 @MainActor
 public struct AdvancedTab: View {
@@ -40,8 +42,9 @@ public struct AdvancedTab: View {
         SettingsTabContainer {
             SettingsSection(
                 title: "Advanced",
-                description: "Filesystem location and local diagnostics controls."
+                description: "Model adapter visibility, filesystem location, and local diagnostics controls."
             ) {
+                whisperAdapterCard
                 switch viewModel.baseDirectoryResult {
                 case .success(let baseDirectory):
                     SettingsCard {
@@ -62,6 +65,34 @@ public struct AdvancedTab: View {
                             .foregroundStyle(.secondary)
                     }
                     diagnosticsCard
+                }
+            }
+        }
+    }
+
+    private var whisperAdapterCard: some View {
+        SettingsCard {
+            Text("Whisper Adapter")
+                .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+
+            Text("Choose which Whisper models appear in AI Models and mode pickers. Downloaded files and pinned modes stay intact.")
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(WhisperAdapterFilter.allCases.enumerated()), id: \.element) { index, filter in
+                    if index > 0 {
+                        Divider()
+                    }
+                    WhisperAdapterFilterOptionRow(
+                        filter: filter,
+                        isSelected: viewModel.whisperAdapterFilter == filter
+                    ) {
+                        viewModel.setWhisperAdapterFilter(filter)
+                    }
                 }
             }
         }
@@ -237,16 +268,20 @@ final class AdvancedTabViewModel: ObservableObject {
     @Published private(set) var feedback: Feedback?
     @Published private(set) var diagnosticLoggingMode: DiagnosticLoggingMode
     @Published private(set) var logRetentionDays: Int
+    @Published private(set) var whisperAdapterFilter: WhisperAdapterFilter
 
     private let defaults: UserDefaults
+    private let modelService: ActiveModelService
     private let migrator: any BaseDirectoryMigrating
     private let selectDirectory: @MainActor (URL?) -> URL?
     private let openInFinder: @MainActor (URL) -> Void
     private let openDiagnosticsWindowAction: @MainActor () -> Void
+    private var cancellables: Set<AnyCancellable> = []
 
     init(
         baseDirectoryResult: Result<URL, Error> = Result { try AppConfig.baseDirectory() },
         defaults: UserDefaults = .standard,
+        modelService: ActiveModelService = AppComposition.modelService,
         migrator: any BaseDirectoryMigrating = BaseDirectoryMigrator(
             logger: AppComposition.makeLogger(PersonalScribeLogCategory.app)
         ),
@@ -258,6 +293,7 @@ final class AdvancedTabViewModel: ObservableObject {
     ) {
         self.baseDirectoryResult = baseDirectoryResult
         self.defaults = defaults
+        self.modelService = modelService
         self.migrator = migrator
         self.selectDirectory = selectDirectory
         self.openInFinder = openInFinder
@@ -265,6 +301,13 @@ final class AdvancedTabViewModel: ObservableObject {
         let diagnosticLoggingMode = DiagnosticLoggingMode.resolve(from: defaults)
         self.diagnosticLoggingMode = diagnosticLoggingMode
         logRetentionDays = LogRetentionDaysPreference.resolve(from: defaults)
+        whisperAdapterFilter = modelService.whisperAdapterFilter
+        modelService.$whisperAdapterFilter
+            .removeDuplicates()
+            .sink { [weak self] filter in
+                self?.whisperAdapterFilter = filter
+            }
+            .store(in: &cancellables)
     }
 
     var diagnosticLoggingModeDescription: String {
@@ -333,6 +376,10 @@ final class AdvancedTabViewModel: ObservableObject {
     func setDiagnosticLoggingMode(_ mode: DiagnosticLoggingMode) {
         diagnosticLoggingMode = mode
         mode.persist(to: defaults)
+    }
+
+    func setWhisperAdapterFilter(_ filter: WhisperAdapterFilter) {
+        modelService.setWhisperAdapterFilter(filter)
     }
 
     func openDiagnosticsWindow() {
@@ -416,5 +463,67 @@ private struct IconButton: View {
         .buttonStyle(.plain)
         .disabled(!isEnabled)
         .help(help)
+    }
+}
+
+private struct WhisperAdapterFilterOptionRow: View {
+    let filter: WhisperAdapterFilter
+    let isSelected: Bool
+    let action: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+
+        Button(action: action) {
+            HStack(alignment: .top, spacing: SettingsLayout.itemSpacing) {
+                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(isSelected ? palette.statusLink : palette.secondaryText)
+                    .padding(.top, 2)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(filter.title)
+                        .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+                        .foregroundStyle(palette.primaryText)
+
+                    Text(filter.detail)
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .padding(.vertical, SettingsLayout.inlineSpacing)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private extension WhisperAdapterFilter {
+    var title: String {
+        switch self {
+        case .native:
+            return "Native"
+        case .bridge:
+            return "Bridge"
+        case .both:
+            return "Both"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .native:
+            return "Show WhisperKit-backed Whisper models."
+        case .bridge:
+            return "Show whisper.cpp-backed Whisper models through the bridge adapter."
+        case .both:
+            return "Show every Whisper model regardless of adapter."
+        }
     }
 }

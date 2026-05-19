@@ -11,6 +11,16 @@ import PersonalScribeSession
 /// corresponding adapters land (#078).
 @MainActor
 public struct AIModelsTab: View {
+    enum RowVisibility: Equatable {
+        case standard
+        case filteredActive
+    }
+
+    struct DisplayedModel: Equatable {
+        let descriptor: ModelDescriptor
+        let visibility: RowVisibility
+    }
+
     @ObservedObject private var service: ActiveModelService
 
     public init(service: ActiveModelService = AppComposition.modelService) {
@@ -29,15 +39,32 @@ public struct AIModelsTab: View {
                     description: descriptionForSection(kind: kind)
                 ) {
                     VStack(spacing: SettingsLayout.itemSpacing) {
-                        ForEach(service.enabledModels(kind: kind), id: \.id) { descriptor in
-                            ModelRow(
-                                descriptor: descriptor,
-                                state: service.downloadStates[descriptor.id],
-                                isActive: service.activeDescriptor(for: descriptor.kind)?.id == descriptor.id,
-                                onActivate: { activate(descriptor) },
-                                onDownload: { download(descriptor) },
-                                onDelete: { delete(descriptor) }
-                            )
+                        if let filterNotice = Self.filterNotice(for: kind, service: service) {
+                            Text(filterNotice)
+                                .font(PersonalScribeTheme.Typography.caption.font)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        ForEach(Self.displayedRows(for: kind, service: service), id: \.descriptor.id) { row in
+                            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                                ModelRow(
+                                    descriptor: row.descriptor,
+                                    state: service.downloadStates[row.descriptor.id],
+                                    isActive: service.activeDescriptor(for: row.descriptor.kind)?.id == row.descriptor.id,
+                                    onActivate: { activate(row.descriptor) },
+                                    onDownload: { download(row.descriptor) },
+                                    onDelete: { delete(row.descriptor) }
+                                )
+                                .opacity(row.visibility == .filteredActive ? 0.7 : 1)
+
+                                if row.visibility == .filteredActive {
+                                    Text("Active model stays in use even though this filter hides it. Change Settings > Advanced to show it again.")
+                                        .font(PersonalScribeTheme.Typography.caption.font)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
                         }
                     }
                 }
@@ -55,6 +82,33 @@ public struct AIModelsTab: View {
 
     private var enabledKinds: [ModelKind] {
         ModelKind.allCases.filter(\.isEnabled)
+    }
+
+    static func displayedRows(
+        for kind: ModelKind,
+        service: ActiveModelService
+    ) -> [DisplayedModel] {
+        let activeDescriptorID = service.activeDescriptor(for: kind)?.id
+        return service.enabledModels(kind: kind).compactMap { descriptor in
+            if service.isVisibleModel(descriptor) {
+                return DisplayedModel(descriptor: descriptor, visibility: .standard)
+            }
+            if descriptor.id == activeDescriptorID {
+                return DisplayedModel(descriptor: descriptor, visibility: .filteredActive)
+            }
+            return nil
+        }
+    }
+
+    static func filterNotice(
+        for kind: ModelKind,
+        service: ActiveModelService
+    ) -> String? {
+        let hiddenWhisperModels = service.enabledModels(kind: kind).filter { descriptor in
+            descriptor.engine.isWhisperFamily && !service.isVisibleModel(descriptor)
+        }
+        guard hiddenWhisperModels.isEmpty == false else { return nil }
+        return "Some Whisper models are hidden by Whisper Adapter in Settings > Advanced."
     }
 
     private func descriptionForSection(kind: ModelKind) -> String {

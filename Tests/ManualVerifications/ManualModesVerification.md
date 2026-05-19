@@ -198,3 +198,13 @@ mode-list event or app restart. Acceptable trade-off for V1.
 6. Record with that mode. Expect: a live StreamCard appears during
    capture and stop-time finalization still uses the authoritative
    second pass when an ASR model is available.
+
+## MV-MODES-19 — Hidden pinned Whisper model stays pinned while picker options follow the adapter filter
+1. Create or open a custom mode and pin its `Voice model` to a whisper.cpp descriptor.
+2. Open `Settings → Advanced` and switch `Whisper Adapter` to `Native`.
+3. Return to the mode detail view.
+4. Expect: the `Voice model` caption still says `Pinned to <whisper.cpp name>` and the menu button still shows that pinned model name.
+5. Open the `Voice model` picker.
+6. Expect: the hidden whisper.cpp descriptor is NOT offered as a new choice while the filter remains `Native`.
+7. Switch `Whisper Adapter` back to `Both`.
+8. Reopen the picker. Expect: the whisper.cpp descriptor is available again.

@@ -184,6 +184,10 @@ if you changed it in `Settings → Advanced`, use that location instead.
 - [ ] **MV-WHISPERCPP-6 — delete removes the leaf and redownload recreates it cleanly:** from a downloaded whisper.cpp row, click `Delete`, confirm the corresponding `whispercpp-*` folder disappears from `<base>/models/`, then click `Download` again and confirm the same leaf plus `.bin` file return and the row reaches `Ready` or `Active`.
 - [ ] **MV-WHISPERCPP-7 — WhisperKit and whisper.cpp remain independently activatable:** keep one WhisperKit row and one whisper.cpp row downloaded at the same time. Switch active model from WhisperKit → whisper.cpp → WhisperKit. Each switch should flip `Active`/`Ready` chips correctly without forcing a redownload, and both on-disk leaves (`openai_*` and `whispercpp-*`) should still be present afterward.
 
+## Whisper adapter filter
+
+- [ ] **MV-WHISPER-ADAPTER-1 — Settings filter scopes Whisper visibility without breaking the active model:** keep one WhisperKit row and one whisper.cpp row downloaded. Make the whisper.cpp row active, then open `Settings → Advanced` and switch `Whisper Adapter` to `Native`. Return to `Settings → AI Models` and confirm only WhisperKit rows remain selectable, the active whisper.cpp row still renders dimmed with the "active model stays in use" note, and no model files are deleted from disk. Switch to `Bridge` and confirm only whisper.cpp rows remain selectable. Switch to `Both` and confirm the full Whisper list returns without any redownload.
+
 ## Mode language hint picker (#091)
 
 - [ ] **MV-LANGHINT-MODE-1 — picker stays hidden when the mode uses the default voice model:** open `Modes`, select a custom mode whose `Voice model` field is `Use default model`, and confirm no `Language` picker row appears anywhere in the mode detail pane.

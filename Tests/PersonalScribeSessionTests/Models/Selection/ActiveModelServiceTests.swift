@@ -199,6 +199,69 @@ final class ActiveModelServiceTests: XCTestCase {
         }
     }
 
+    func testVisibleModelsRespectWhisperAdapterFilterWithoutChangingEnabledModels() {
+        let defaults = isolatedDefaults()
+        let activePreference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [:],
+            defaults: defaults
+        )
+        let filterPreference = WhisperAdapterFilter.preference(defaults: defaults)
+        filterPreference.persist(.native)
+        let whisperKit = makeASRDescriptor(id: "whisper-kit", engine: .whisperKit)
+        let whisperBridge = makeASRDescriptor(id: "whisper-bridge", engine: .whisperCpp)
+        let parakeet = makeASRDescriptor(id: "parakeet", engine: .parakeetTDT)
+        let service = ActiveModelService(
+            activeIDsPreference: activePreference,
+            whisperAdapterFilterPreference: filterPreference,
+            registeredModels: [whisperKit, whisperBridge, parakeet],
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        XCTAssertEqual(
+            service.enabledModels(kind: .asr).map(\.id),
+            [whisperKit.id, whisperBridge.id, parakeet.id]
+        )
+        XCTAssertEqual(
+            service.visibleModels(kind: .asr).map(\.id),
+            [whisperKit.id, parakeet.id]
+        )
+    }
+
+    func testSetWhisperAdapterFilterPublishesAndPersists() async {
+        let defaults = isolatedDefaults()
+        let activePreference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [:],
+            defaults: defaults
+        )
+        let filterPreference = WhisperAdapterFilter.preference(defaults: defaults)
+        let service = ActiveModelService(
+            activeIDsPreference: activePreference,
+            whisperAdapterFilterPreference: filterPreference,
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        let publications = Task { @MainActor () -> WhisperAdapterFilter? in
+            for await value in service.$whisperAdapterFilter.dropFirst().values {
+                return value
+            }
+            return nil
+        }
+        await Task.yield()
+
+        service.setWhisperAdapterFilter(.bridge)
+
+        let published = await publications.value
+        XCTAssertEqual(published, .bridge)
+        XCTAssertEqual(service.whisperAdapterFilter, .bridge)
+        XCTAssertEqual(filterPreference.resolve(), .bridge)
+    }
+
     // MARK: - #016 — RAM-aware first-launch default
 
     /// Fresh UserDefaults (no persisted selection) on an 8 GB Mac:
@@ -630,6 +693,7 @@ final class ActiveModelServiceTests: XCTestCase {
 
     private func makeASRDescriptor(
         id: String,
+        engine: TranscriptionEngine = .whisperKit,
         isEnabled: Bool = true,
         requiredChipFamily: ChipFamily? = nil
     ) -> ModelDescriptor {
@@ -643,7 +707,7 @@ final class ActiveModelServiceTests: XCTestCase {
             requiredRelativePaths: [],
             approximateSizeBytes: 0,
             isEnabled: isEnabled,
-            engine: .whisperKit,
+            engine: engine,
             tokenizerSource: nil,
             requiredChipFamily: requiredChipFamily
         )

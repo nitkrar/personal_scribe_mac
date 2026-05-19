@@ -134,6 +134,7 @@ extension PersonalScribeApp {
 extension ActiveModelService {
     convenience init(
         activeIDsPreference: Preference<[ModelKind: String]>,
+        whisperAdapterFilterPreference: Preference<WhisperAdapterFilter>? = nil,
         registeredModels: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
         isDownloaded: @escaping @Sendable (ModelDescriptor) -> Bool,
         download: @escaping @Sendable (
@@ -147,6 +148,7 @@ extension ActiveModelService {
     ) {
         self.init(
             activeIDsPreference: activeIDsPreference,
+            whisperAdapterFilterPreference: whisperAdapterFilterPreference,
             registeredModels: registeredModels,
             isDownloaded: isDownloaded,
             download: download,
