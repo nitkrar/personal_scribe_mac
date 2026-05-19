@@ -45,6 +45,9 @@ public actor SessionCoordinator {
         transcriber: any Transcriber,
         logger: PersonalScribeLogger,
         transcriptRepository: TranscriptRepository? = nil,
+        recordingFileWriter: (any RecordingFileWriting)? = nil,
+        recordAudioEnabled: @escaping @Sendable () -> Bool = { false },
+        recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
         vadProvider: (any VadProviding)? = nil,
         workflowModeRegistry: WorkflowModeRegistry? = nil,
         availableKindsProvider: (@Sendable () -> Set<ModelKind>)? = nil,
@@ -69,6 +72,9 @@ public actor SessionCoordinator {
             capture: capture,
             transcriptRepository: transcriptRepository,
             logger: logger,
+            recordingFileWriter: recordingFileWriter,
+            recordAudioEnabled: recordAudioEnabled,
+            recordingsDirectory: recordingsDirectory,
             vadProvider: vadProvider,
             outputSink: outputSink,
             workflowModeRegistry: workflowModeRegistry
@@ -88,6 +94,9 @@ public actor SessionCoordinator {
         processorProvider: any ModelBoundProcessorProviding,
         logger: PersonalScribeLogger,
         transcriptRepository: TranscriptRepository? = nil,
+        recordingFileWriter: (any RecordingFileWriting)? = nil,
+        recordAudioEnabled: @escaping @Sendable () -> Bool = { false },
+        recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
         vadProvider: (any VadProviding)? = nil,
         workflowModeRegistry: WorkflowModeRegistry,
         availableKindsProvider: @escaping @Sendable () -> Set<ModelKind>,
@@ -105,6 +114,9 @@ public actor SessionCoordinator {
             capture: capture,
             transcriptRepository: transcriptRepository,
             logger: logger,
+            recordingFileWriter: recordingFileWriter,
+            recordAudioEnabled: recordAudioEnabled,
+            recordingsDirectory: recordingsDirectory,
             vadProvider: vadProvider,
             outputSink: outputSink,
             workflowModeRegistry: workflowModeRegistry
@@ -446,6 +458,9 @@ public actor SessionCoordinator {
         capture: any AudioCapturer,
         transcriptRepository: TranscriptRepository?,
         logger: PersonalScribeLogger,
+        recordingFileWriter: (any RecordingFileWriting)? = nil,
+        recordAudioEnabled: @escaping @Sendable () -> Bool = { false },
+        recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
         vadProvider: (any VadProviding)?,
         outputSink: (any PipelineOutputSink)? = nil,
         workflowModeRegistry: WorkflowModeRegistry? = nil
@@ -462,6 +477,9 @@ public actor SessionCoordinator {
                 transcriptRepository: transcriptRepository,
                 logger: logger
             ),
+            recordingFileWriter: recordingFileWriter,
+            recordAudioEnabled: recordAudioEnabled,
+            recordingsDirectory: recordingsDirectory,
             vadProvider: vadProvider
         )
     }

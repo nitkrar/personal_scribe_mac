@@ -202,6 +202,9 @@ public enum AppComposition {
             processorProvider: processorProvider,
             logger: logger,
             transcriptRepository: transcriptRepository,
+            recordingFileWriter: RecordingFileWriter(),
+            recordAudioEnabled: { RecordAudioEnabledPreference.resolve() },
+            recordingsDirectory: { try AppConfig.recordingsDirectory() },
             vadProvider: vadProvider,
             workflowModeRegistry: workflowModeRegistry,
             availableKindsProvider: {

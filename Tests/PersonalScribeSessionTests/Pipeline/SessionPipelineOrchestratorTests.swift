@@ -1622,6 +1622,131 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertTrue(finals.isEmpty)
     }
 
+    func testPersistSkipsWriterWhenPreferenceDisabled() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
+        let persisted = PersistedEntries()
+        let writer = RecordingFileWriterSpy()
+        let recordingsDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: recordingsDirectory) }
+
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(
+                    text: "hello",
+                    audioDuration: .seconds(1),
+                    processingDuration: .milliseconds(100)
+                )
+            ),
+            persistenceHandler: { entry in
+                await persisted.append(entry)
+            },
+            recordingFileWriter: writer,
+            recordAudioEnabled: { false },
+            recordingsDirectory: { recordingsDirectory }
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await waitUntilPersistedEntries(persisted, minimum: 1)
+
+        XCTAssertEqual(writer.callCount(), 0)
+        let capturedEntry = await persisted.first()
+        let entry = try XCTUnwrap(capturedEntry)
+        XCTAssertNil(entry.audioFilename)
+    }
+
+    func testPersistCallsWriterWhenPreferenceEnabled() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
+        let persisted = PersistedEntries()
+        let writer = RecordingFileWriterSpy()
+        let recordingsDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: recordingsDirectory) }
+
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(
+                    text: "hello",
+                    audioDuration: .seconds(1),
+                    processingDuration: .milliseconds(100)
+                )
+            ),
+            persistenceHandler: { entry in
+                await persisted.append(entry)
+            },
+            recordingFileWriter: writer,
+            recordAudioEnabled: { true },
+            recordingsDirectory: { recordingsDirectory }
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await waitUntilPersistedEntries(persisted, minimum: 1)
+
+        XCTAssertEqual(writer.callCount(), 1)
+        let call = try XCTUnwrap(writer.firstCall())
+        let capturedEntry = await persisted.first()
+        let entry = try XCTUnwrap(capturedEntry)
+        XCTAssertEqual(call.buffers, [buffer])
+        XCTAssertEqual(call.url.deletingLastPathComponent(), recordingsDirectory)
+        XCTAssertEqual(entry.audioFilename, call.url.lastPathComponent)
+        XCTAssertTrue(entry.audioFilename?.hasSuffix(".wav") ?? false)
+    }
+
+    func testPersistContinuesWhenWriterFails() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
+        let persisted = PersistedEntries()
+        let diagnosticsSink = InMemoryTestSink()
+        let logger = PersonalScribeLogger(
+            category: PersonalScribeLogCategory.session,
+            reporter: DiagnosticsReporter(sinks: [diagnosticsSink])
+        )
+        let writer = RecordingFileWriterSpy(error: RecordingWriteFailure.writeFailed)
+        let recordingsDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: recordingsDirectory) }
+
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(
+                    text: "hello",
+                    audioDuration: .seconds(1),
+                    processingDuration: .milliseconds(100)
+                )
+            ),
+            logger: logger,
+            persistenceHandler: { entry in
+                await persisted.append(entry)
+            },
+            recordingFileWriter: writer,
+            recordAudioEnabled: { true },
+            recordingsDirectory: { recordingsDirectory }
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await waitUntilPersistedEntries(persisted, minimum: 1)
+        try await withTimeout(.seconds(1)) {
+            while await diagnosticsSink.snapshot().isEmpty {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let capturedEntry = await persisted.first()
+        let entry = try XCTUnwrap(capturedEntry)
+        let events = await diagnosticsSink.snapshot()
+
+        XCTAssertNil(entry.audioFilename)
+        XCTAssertTrue(
+            events.contains { event in
+                event.level == .error &&
+                event.message == "Failed to persist audio recording" &&
+                event.underlyingError?.contains("writeFailed") == true
+            }
+        )
+    }
+
     func testOutputFailurePublishesTypedStageFailure() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let sink = TestPipelineOutputSink(failurePoint: .final)
@@ -1919,10 +2044,16 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             )
         ),
         transcriptRepository: TranscriptRepository? = nil,
+        logger: PersonalScribeLogger = PersonalScribeLogger.testing(
+            category: PersonalScribeLogCategory.session
+        ),
         postProcessingPipeline: any PostProcessingPipeline = DefaultPostProcessingPipeline(),
         outputSink: any PipelineOutputSink = TestPipelineOutputSink(),
         context: PipelineContextSnapshot = PipelineContextSnapshot(streamingOutputEnabled: false),
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)? = nil,
+        recordingFileWriter: (any RecordingFileWriting)? = nil,
+        recordAudioEnabled: @escaping @Sendable () -> Bool = { false },
+        recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
         vadProvider: (any VadProviding)? = nil,
         boundRecipe: BoundRecipe? = nil,
         liveStreamingEventShutdownTimeout: Duration = .seconds(2)
@@ -1943,11 +2074,14 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         if let persistenceHandler {
             return SessionPipelineOrchestrator(
                 capture: capture,
-                logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
+                logger: logger,
                 postProcessingPipeline: postProcessingPipeline,
                 outputSink: outputSink,
                 contextProvider: contextProvider,
                 persistenceHandler: persistenceHandler,
+                recordingFileWriter: recordingFileWriter,
+                recordAudioEnabled: recordAudioEnabled,
+                recordingsDirectory: recordingsDirectory,
                 vadProvider: vadProvider,
                 boundRecipe: resolvedRecipe,
                 liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout
@@ -1957,10 +2091,13 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         return SessionPipelineOrchestrator(
             capture: capture,
             transcriptRepository: transcriptRepository,
-            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
+            logger: logger,
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
             contextProvider: contextProvider,
+            recordingFileWriter: recordingFileWriter,
+            recordAudioEnabled: recordAudioEnabled,
+            recordingsDirectory: recordingsDirectory,
             vadProvider: vadProvider,
             boundRecipe: resolvedRecipe,
             liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout
@@ -2058,6 +2195,20 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         }
 
         XCTFail("TranscriptRepository never reached \(minimum) entries")
+    }
+
+    private func waitUntilPersistedEntries(
+        _ persisted: PersistedEntries,
+        minimum: Int
+    ) async throws {
+        for _ in 0..<100 {
+            if await persisted.count() >= minimum {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail("Persisted entries never reached \(minimum) entries")
     }
 
     private func makeTemporaryDirectory() throws -> URL {
@@ -2791,6 +2942,47 @@ private actor PersistedEntries {
     func first() -> TranscriptEntry? {
         entries.first
     }
+}
+
+private final class RecordingFileWriterSpy: @unchecked Sendable, RecordingFileWriting {
+    struct Call: Equatable {
+        let buffers: [PCMBuffer]
+        let url: URL
+    }
+
+    private let lock = NSLock()
+    private var calls: [Call] = []
+    private let error: (any Error)?
+
+    init(error: (any Error)? = nil) {
+        self.error = error
+    }
+
+    func write(_ buffers: [PCMBuffer], to url: URL) throws {
+        if let error {
+            throw error
+        }
+
+        lock.lock()
+        defer { lock.unlock() }
+        calls.append(Call(buffers: buffers, url: url))
+    }
+
+    func callCount() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return calls.count
+    }
+
+    func firstCall() -> Call? {
+        lock.lock()
+        defer { lock.unlock() }
+        return calls.first
+    }
+}
+
+private enum RecordingWriteFailure: Error {
+    case writeFailed
 }
 
 /// Used by the `#071` race-fix test: `start()` blocks until `release()`
