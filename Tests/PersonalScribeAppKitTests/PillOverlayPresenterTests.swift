@@ -167,6 +167,52 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(panelBuilder.panel.orderFrontCallCount, 1)
     }
 
+    func testVisibilitySinkLogsOnlyWhenVisibilityStateActuallyChanges() async {
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        let viewModel = PillOverlayViewModel(visibility: .hidden, visibilityMode: .autoShow)
+        let panelBuilder = RecordingPanelBuilder()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            diagnosticLogger: logger
+        )
+        _ = presenter
+
+        let initialMessages = await waitForLogMessages(
+            in: sink,
+            containing: "PillOverlayPresenter visibility-sink",
+            expectedCount: 1
+        )
+        XCTAssertTrue(initialMessages[0].message.contains("visibility=hidden"))
+        XCTAssertTrue(initialMessages[0].message.contains("isVisible=false"))
+
+        viewModel.apply(visibility: .hidden)
+        try? await Task.sleep(for: .milliseconds(50))
+        let unchangedHiddenCount = await logMessages(
+            in: sink,
+            containing: "PillOverlayPresenter visibility-sink"
+        ).count
+        XCTAssertEqual(unchangedHiddenCount, 1)
+
+        viewModel.apply(visibility: .recording)
+        let changedMessages = await waitForLogMessages(
+            in: sink,
+            containing: "PillOverlayPresenter visibility-sink",
+            expectedCount: 2
+        )
+        XCTAssertTrue(changedMessages[1].message.contains("visibility=recording"))
+        XCTAssertTrue(changedMessages[1].message.contains("isVisible=true"))
+
+        viewModel.apply(visibility: .recording)
+        try? await Task.sleep(for: .milliseconds(50))
+        let unchangedRecordingCount = await logMessages(
+            in: sink,
+            containing: "PillOverlayPresenter visibility-sink"
+        ).count
+        XCTAssertEqual(unchangedRecordingCount, 2)
+    }
+
     func testShowRecordingStatusCardUsesPersistentAutoDismiss() {
         let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
         viewModel.apply(sessionState: .capturing, preparationProgress: nil)
@@ -565,6 +611,40 @@ final class PillOverlayPresenterTests: XCTestCase {
                 pressure: 1
             )
         )
+    }
+
+    private func makeLogger(sink: InMemoryTestSink) -> PersonalScribeLogger {
+        PersonalScribeLogger(
+            category: PersonalScribeLogCategory.ui,
+            reporter: DiagnosticsReporter(
+                sinks: [sink],
+                now: { Date(timeIntervalSince1970: 0) }
+            )
+        )
+    }
+
+    private func waitForLogMessages(
+        in sink: InMemoryTestSink,
+        containing fragment: String,
+        expectedCount: Int
+    ) async -> [RedactedDiagnosticsEvent] {
+        for _ in 0..<100 {
+            let messages = await logMessages(in: sink, containing: fragment)
+            if messages.count >= expectedCount {
+                return messages
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail("Timed out waiting for \(expectedCount) diagnostics messages containing '\(fragment)'")
+        return await logMessages(in: sink, containing: fragment)
+    }
+
+    private func logMessages(
+        in sink: InMemoryTestSink,
+        containing fragment: String
+    ) async -> [RedactedDiagnosticsEvent] {
+        await sink.snapshot().filter { $0.message.contains(fragment) }
     }
 }
 

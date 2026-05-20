@@ -49,6 +49,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
 
     private var sessionSnapshotHandle: PasteboardSnapshotService.Handle?
     private var didWriteChunkThisSession = false
+    private var didLogAccessibilityTrustSkipThisCycle = false
 
     init(
         logger: PersonalScribeLogger,
@@ -84,9 +85,10 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         didWriteChunkThisSession = true
 
         guard isAccessibilityTrusted() else {
-            logger.info("LiveCursorOutput: Accessibility not trusted; chunk left on clipboard, skipping ⌘V")
+            logAccessibilityTrustSkipIfNeeded()
             return
         }
+        didLogAccessibilityTrustSkipThisCycle = false
 
         guard focusedElementIsInAnotherApp() else {
             logger.info("LiveCursorOutput: focused element is in self; chunk left on clipboard, skipping ⌘V")
@@ -118,6 +120,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
             snapshotService.discardSnapshot(handle)
         }
         didWriteChunkThisSession = false
+        didLogAccessibilityTrustSkipThisCycle = false
         sessionSnapshotHandle = snapshotService.captureTransientSnapshot()
     }
 
@@ -126,11 +129,21 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         sessionSnapshotHandle = nil
         let shouldRestore = didWriteChunkThisSession
         didWriteChunkThisSession = false
+        didLogAccessibilityTrustSkipThisCycle = false
         if shouldRestore {
             snapshotService.restoreSnapshot(handle)
         } else {
             snapshotService.discardSnapshot(handle)
         }
+    }
+
+    private func logAccessibilityTrustSkipIfNeeded() {
+        guard !didLogAccessibilityTrustSkipThisCycle else {
+            return
+        }
+
+        didLogAccessibilityTrustSkipThisCycle = true
+        logger.info("LiveCursorOutput: Accessibility not trusted; chunk left on clipboard, skipping ⌘V")
     }
 
     // MARK: - Live AX probe + paste poster

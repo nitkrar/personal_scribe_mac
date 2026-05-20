@@ -5,93 +5,56 @@ import PersonalScribeCore
 
 @MainActor
 final class LiveDiagnosticsOverlayControllerTests: XCTestCase {
-    func testControllerShowsPanelWhenVerboseOverlayEnabled() {
-        let defaults = isolatedDefaults()
-        DiagnosticLoggingMode.verbose.persist(to: defaults)
-        ShowLiveDiagnosticsOverlayPreference.persist(true, to: defaults)
+    func testControllerStartsHiddenUntilOpenWindowIsCalled() {
         let store = DiagnosticsStore(capacity: 5)
         let panelBuilder = RecordingLiveDiagnosticsPanelBuilder()
 
         let controller = LiveDiagnosticsOverlayController(
             store: store,
-            defaults: defaults,
-            notificationCenter: NotificationCenter(),
             panelBuilder: panelBuilder
         )
+
+        XCTAssertFalse(controller.isPanelVisible)
+        XCTAssertEqual(panelBuilder.panel.orderFrontCallCount, 0)
+
+        controller.openWindow()
 
         XCTAssertTrue(controller.isPanelVisible)
         XCTAssertEqual(panelBuilder.panel.orderFrontCallCount, 1)
         _ = controller
     }
 
-    func testControllerHidesPanelWhenPreferencesDisableOverlay() async throws {
-        let defaults = isolatedDefaults()
-        DiagnosticLoggingMode.verbose.persist(to: defaults)
-        ShowLiveDiagnosticsOverlayPreference.persist(true, to: defaults)
-        let notificationCenter = NotificationCenter()
+    func testDismissActionHidesVisiblePanel() throws {
         let panelBuilder = RecordingLiveDiagnosticsPanelBuilder()
 
         let controller = LiveDiagnosticsOverlayController(
             store: DiagnosticsStore(capacity: 5),
-            defaults: defaults,
-            notificationCenter: notificationCenter,
             panelBuilder: panelBuilder
         )
-        XCTAssertTrue(controller.isPanelVisible)
-
-        DiagnosticLoggingMode.errorsOnly.persist(to: defaults)
-        notificationCenter.post(name: UserDefaults.didChangeNotification, object: defaults)
-
-        try await waitForCondition {
-            panelBuilder.panel.orderOutCallCount == 1
-        }
-        XCTAssertFalse(controller.isPanelVisible)
-    }
-
-    func testDismissActionFlipsShowOverlayPreferenceAndHidesPanel() async throws {
-        let defaults = isolatedDefaults()
-        DiagnosticLoggingMode.verbose.persist(to: defaults)
-        ShowLiveDiagnosticsOverlayPreference.persist(true, to: defaults)
-        let notificationCenter = NotificationCenter()
-        let panelBuilder = RecordingLiveDiagnosticsPanelBuilder()
-
-        let controller = LiveDiagnosticsOverlayController(
-            store: DiagnosticsStore(capacity: 5),
-            defaults: defaults,
-            notificationCenter: notificationCenter,
-            panelBuilder: panelBuilder
-        )
+        controller.openWindow()
         XCTAssertTrue(controller.isPanelVisible)
 
         let dismissAction = try XCTUnwrap(panelBuilder.lastDismissAction)
         dismissAction()
 
-        XCTAssertFalse(ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults))
-
-        notificationCenter.post(name: UserDefaults.didChangeNotification, object: defaults)
-
-        try await waitForCondition {
-            panelBuilder.panel.orderOutCallCount == 1
-        }
+        XCTAssertEqual(panelBuilder.panel.orderOutCallCount, 1)
         XCTAssertFalse(controller.isPanelVisible)
     }
 
-    func testViewModelDismissActionMatchesPanelDismissAction() async throws {
-        let defaults = isolatedDefaults()
-        DiagnosticLoggingMode.verbose.persist(to: defaults)
-        ShowLiveDiagnosticsOverlayPreference.persist(true, to: defaults)
+    func testViewModelDismissActionMatchesPanelDismissAction() {
         let panelBuilder = RecordingLiveDiagnosticsPanelBuilder()
 
         let controller = LiveDiagnosticsOverlayController(
             store: DiagnosticsStore(capacity: 5),
-            defaults: defaults,
-            notificationCenter: NotificationCenter(),
             panelBuilder: panelBuilder
         )
+        controller.openWindow()
+        XCTAssertTrue(controller.isPanelVisible)
 
         controller.viewModel.dismissAction()
 
-        XCTAssertFalse(ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults))
+        XCTAssertEqual(panelBuilder.panel.orderOutCallCount, 1)
+        XCTAssertFalse(controller.isPanelVisible)
         _ = controller
     }
 
@@ -232,12 +195,9 @@ final class LiveDiagnosticsOverlayControllerTests: XCTestCase {
     }
 
     func testControllerStreamsDiagnosticsIntoViewModel() async throws {
-        let defaults = isolatedDefaults()
         let store = DiagnosticsStore(capacity: 5)
         let controller = LiveDiagnosticsOverlayController(
             store: store,
-            defaults: defaults,
-            notificationCenter: NotificationCenter(),
             panelBuilder: RecordingLiveDiagnosticsPanelBuilder()
         )
 
@@ -247,16 +207,6 @@ final class LiveDiagnosticsOverlayControllerTests: XCTestCase {
             controller.currentEvents.count == 1
         }
         XCTAssertEqual(controller.currentEvents.first?.message, "Captured diagnostics")
-    }
-
-    private func isolatedDefaults() -> UserDefaults {
-        let suiteName = "LiveDiagnosticsOverlayControllerTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        addTeardownBlock {
-            UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
-        }
-        return defaults
     }
 
     private func waitForCondition(

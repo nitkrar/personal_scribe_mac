@@ -409,6 +409,33 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
+    private func logSessionStartedBound(sessionRecipe: BoundRecipe?, holdToRecord: Bool) {
+        guard let recipe = sessionRecipe else {
+            logger.info("session_started_bound — recipe=nil holdToRecord=\(holdToRecord)")
+            return
+        }
+        let processorTypes = recipe.processors.map { processor -> String in
+            switch processor {
+            case .transcriber:
+                return "transcriber"
+            case .streamingTranscriber:
+                return "streamingTranscriber"
+            case .diarizedTurns:
+                return "diarizedTurns"
+            }
+        }.joined(separator: ",")
+        let streamingBehaviorDesc: String
+        if let behavior = recipe.streamingBehavior {
+            streamingBehaviorDesc = "liveCard=\(behavior.liveCardEnabled),liveCursor=\(behavior.liveCursorEnabled),secondPass=\(behavior.secondPassEnabled)"
+        } else {
+            streamingBehaviorDesc = "nil"
+        }
+        let secondPassDesc = recipe.streamingSecondPassTranscriber == nil ? "nil" : "set"
+        logger.info(
+            "session_started_bound — recipeID=\(recipe.recipeID) recipeName=\(recipe.recipeName) pipelineShape=\(recipe.pipelineShape.rawValue) processors=[\(processorTypes)] streamingBehavior=\(streamingBehaviorDesc) secondPassTranscriber=\(secondPassDesc) holdToRecord=\(holdToRecord)"
+        )
+    }
+
     private func startRecording() async {
         guard !startRecordingInFlight else {
             logger.info("Ignored re-entrant startRecording while a prior start is still awaiting capture.start()")
@@ -424,6 +451,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         resetGraceForNewSession()
         let sessionRecipe = boundRecipe
         activeSessionRecipe = sessionRecipe
+        logSessionStartedBound(sessionRecipe: sessionRecipe, holdToRecord: false)
 
         do {
             let stream = try await capture.start()
@@ -528,6 +556,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         resetGraceForNewSession()
         let sessionRecipe = boundRecipe
         activeSessionRecipe = sessionRecipe
+        logSessionStartedBound(sessionRecipe: sessionRecipe, holdToRecord: true)
 
         publish { snapshot in
             snapshot.sessionState = .holdRecording
@@ -1307,12 +1336,32 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         liveStreamingAccumulator = nil
         liveStreamingFailure = nil
 
-        guard let recipe,
-              let processor = recipe.processors.first,
-              case .streamingTranscriber(let streamingTranscriber) = processor
-        else {
+        guard let recipe else {
+            logger.info("streaming_session_skipped — reason=no_recipe")
             return
         }
+        guard let processor = recipe.processors.first else {
+            logger.info("streaming_session_skipped — reason=no_processor recipeID=\(recipe.recipeID)")
+            return
+        }
+        guard case .streamingTranscriber(let streamingTranscriber) = processor else {
+            let processorType: String
+            switch processor {
+            case .transcriber:
+                processorType = "transcriber"
+            case .streamingTranscriber:
+                processorType = "streamingTranscriber"
+            case .diarizedTurns:
+                processorType = "diarizedTurns"
+            }
+            logger.info(
+                "streaming_session_skipped — reason=non_streaming_processor recipeID=\(recipe.recipeID) processorType=\(processorType)"
+            )
+            return
+        }
+        logger.info(
+            "streaming_session_started — recipeID=\(recipe.recipeID) processorTypeName=\(String(describing: type(of: streamingTranscriber)))"
+        )
 
         let (inputStream, continuation) = Self.makeLiveStreamingInputStream()
         let events = streamingTranscriber.transcribe(stream: inputStream)

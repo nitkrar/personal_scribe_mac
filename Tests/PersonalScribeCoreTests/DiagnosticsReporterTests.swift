@@ -98,6 +98,25 @@ final class DiagnosticsReporterTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: logURL.path))
     }
 
+    func testEmissionsReachOverlayStoreInEmissionOrderWhenEarlierDeliverySuspends() async {
+        let store = DiagnosticsStore(capacity: 5)
+        let reporter = DiagnosticsReporter(
+            sinks: [
+                DelayedStoreDiagnosticsSink(
+                    store: store,
+                    delays: ["first": .milliseconds(50)]
+                ),
+            ],
+            now: { Date(timeIntervalSince1970: 123) }
+        )
+
+        reporter.error("first", category: PersonalScribeLogCategory.ui)
+        reporter.error("second", category: PersonalScribeLogCategory.ui)
+
+        let bufferedEvents = await waitForEvents(in: store, expectedCount: 2)
+        XCTAssertEqual(bufferedEvents.map(\.message), ["second", "first"])
+    }
+
     func testUserMessageStaysUnderResponseCardCap() throws {
         let cases: [PersonalScribeError] = [
             .micPermissionDenied,
@@ -158,6 +177,22 @@ final class DiagnosticsReporterTests: XCTestCase {
         return []
     }
 
+    private func waitForEvents(
+        in store: DiagnosticsStore,
+        expectedCount: Int
+    ) async -> [RedactedDiagnosticsEvent] {
+        for _ in 0..<100 {
+            let events = await store.snapshot()
+            if events.count >= expectedCount {
+                return events
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail("Timed out waiting for buffered diagnostics events")
+        return []
+    }
+
     private func waitForLogContents(at url: URL) async throws -> String {
         for _ in 0..<100 {
             if let contents = try? String(contentsOf: url, encoding: .utf8) {
@@ -173,4 +208,17 @@ final class DiagnosticsReporterTests: XCTestCase {
 
 private enum PersistenceFailure: Error {
     case writeFailed
+}
+
+private struct DelayedStoreDiagnosticsSink: DiagnosticsSink {
+    let store: DiagnosticsStore
+    let delays: [String: Duration]
+
+    func record(_ event: RedactedDiagnosticsEvent) async {
+        if let delay = delays[event.message] {
+            try? await Task.sleep(for: delay)
+        }
+
+        await store.append(event)
+    }
 }

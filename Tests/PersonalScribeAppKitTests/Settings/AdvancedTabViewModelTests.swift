@@ -106,10 +106,8 @@ final class AdvancedTabViewModelTests: XCTestCase {
         XCTAssertEqual(recordedDestinations, [selectedBase])
     }
 
-    func testDiagnosticLoggingModePersistsAndDisablesOverlayWhenLeavingVerbose() {
+    func testDiagnosticLoggingModePersistsUpdates() {
         let defaults = isolatedDefaults()
-        DiagnosticLoggingMode.verbose.persist(to: defaults)
-        ShowLiveDiagnosticsOverlayPreference.persist(true, to: defaults)
 
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
@@ -118,18 +116,35 @@ final class AdvancedTabViewModelTests: XCTestCase {
             selectDirectory: { _ in nil }
         )
 
+        XCTAssertEqual(viewModel.diagnosticLoggingMode, .errorsOnly)
+
+        viewModel.setDiagnosticLoggingMode(.verbose)
+
         XCTAssertEqual(viewModel.diagnosticLoggingMode, .verbose)
-        XCTAssertTrue(viewModel.showLiveDiagnosticsOverlay)
+        XCTAssertEqual(DiagnosticLoggingMode.resolve(from: defaults), .verbose)
 
         viewModel.setDiagnosticLoggingMode(.errorsOnly)
 
         XCTAssertEqual(viewModel.diagnosticLoggingMode, .errorsOnly)
-        XCTAssertFalse(viewModel.showLiveDiagnosticsOverlay)
         XCTAssertEqual(DiagnosticLoggingMode.resolve(from: defaults), .errorsOnly)
-        XCTAssertFalse(ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults))
     }
 
-    func testLiveDiagnosticsOverlayTogglePersistsOnlyWhenVerbose() {
+    func testOpenDiagnosticsWindowInvokesInjectedAction() {
+        var openCount = 0
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil },
+            openDiagnosticsWindow: { openCount += 1 }
+        )
+
+        viewModel.openDiagnosticsWindow()
+        viewModel.openDiagnosticsWindow()
+
+        XCTAssertEqual(openCount, 2)
+    }
+
+    func testLogRetentionDaysDefaultsToFourteenAndPersistsUpdates() {
         let defaults = isolatedDefaults()
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
@@ -138,18 +153,18 @@ final class AdvancedTabViewModelTests: XCTestCase {
             selectDirectory: { _ in nil }
         )
 
-        XCTAssertEqual(viewModel.diagnosticLoggingMode, .errorsOnly)
-        XCTAssertTrue(viewModel.isLiveDiagnosticsOverlayToggleDisabled)
+        XCTAssertEqual(viewModel.logRetentionDays, 14)
+        XCTAssertEqual(LogRetentionDaysPreference.resolve(from: defaults), 14)
 
-        viewModel.setShowLiveDiagnosticsOverlay(true)
-        XCTAssertFalse(viewModel.showLiveDiagnosticsOverlay)
-        XCTAssertFalse(ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults))
+        viewModel.setLogRetentionDays(30)
 
-        viewModel.setDiagnosticLoggingMode(.verbose)
-        viewModel.setShowLiveDiagnosticsOverlay(true)
+        XCTAssertEqual(viewModel.logRetentionDays, 30)
+        XCTAssertEqual(LogRetentionDaysPreference.resolve(from: defaults), 30)
 
-        XCTAssertTrue(viewModel.showLiveDiagnosticsOverlay)
-        XCTAssertTrue(ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults))
+        viewModel.setLogRetentionDays(0)
+
+        XCTAssertEqual(viewModel.logRetentionDays, 0)
+        XCTAssertEqual(LogRetentionDaysPreference.resolve(from: defaults), 0)
     }
 
     private func isolatedDefaults() -> UserDefaults {

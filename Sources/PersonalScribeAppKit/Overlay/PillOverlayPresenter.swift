@@ -317,6 +317,7 @@ public final class PillOverlayPresenter {
     /// time), and pill↔cancel transitions are crossfaded by SwiftUI so
     /// the frame update itself is not animated.
     private var lastSizedVisibility: PillOverlayViewModel.Visibility?
+    private var lastLoggedVisibilitySinkState: VisibilitySinkLogState?
 
     public convenience init(
         model: PillOverlayViewModel,
@@ -354,8 +355,6 @@ public final class PillOverlayPresenter {
                 return
             }
 
-            diagnosticLogger.info("PillOverlayPresenter visibility-sink — visibility=\(visibility) isVisible=\(isVisible)")
-
             switch visibility {
             case .hidden:
                 hide()
@@ -377,7 +376,29 @@ public final class PillOverlayPresenter {
                     show(initialVisibility: visibility)
                 }
             }
+
+            logVisibilitySinkIfNeeded(for: visibility)
         }
+    }
+
+    private struct VisibilitySinkLogState: Equatable {
+        let visibility: PillOverlayViewModel.Visibility
+        let isVisible: Bool
+    }
+
+    private func logVisibilitySinkIfNeeded(for visibility: PillOverlayViewModel.Visibility) {
+        let state = VisibilitySinkLogState(
+            visibility: visibility,
+            isVisible: isVisible
+        )
+        guard state != lastLoggedVisibilitySinkState else {
+            return
+        }
+
+        lastLoggedVisibilitySinkState = state
+        diagnosticLogger.info(
+            "PillOverlayPresenter visibility-sink — visibility=\(visibility) isVisible=\(state.isVisible)"
+        )
     }
 
     /// Core #044 resize logic. Given the new visibility, compute the

@@ -396,6 +396,9 @@ public actor SessionCoordinator {
     /// (legacy state).
     private func resolveRecipe() async throws -> BoundRecipe? {
         if let fixedRecipe {
+            logger.info(
+                "session_started_intent — source=fixedRecipe recipeID=\(fixedRecipe.recipeID) recipeName=\(fixedRecipe.recipeName)"
+            )
             return fixedRecipe
         }
         guard let registry = workflowModeRegistry,
@@ -406,6 +409,21 @@ public actor SessionCoordinator {
         }
         return try await MainActor.run {
             let mode = registry.currentMode
+            let activeASR = modelService.activeDescriptor(for: .asr)?.id ?? "<none>"
+            let activeStreamingASR = modelService.activeDescriptor(for: .streamingASR)?.id ?? "<none>"
+            let processorKinds = mode.processors.map { spec -> String in
+                switch spec {
+                case .transcriber(let kind, let descriptorID):
+                    return "transcriber(kind=\(kind.rawValue),pinned=\(descriptorID ?? "nil"))"
+                case .streamingTranscriber(let kind, let descriptorID):
+                    return "streamingTranscriber(kind=\(kind.rawValue),pinned=\(descriptorID ?? "nil"))"
+                case .diarizedTurns(let dKind, let tKind, let tID, _):
+                    return "diarizedTurns(diarizer=\(dKind.rawValue),transcriber=\(tKind.rawValue),pinned=\(tID ?? "nil"))"
+                }
+            }.joined(separator: ",")
+            logger.info(
+                "session_started_intent — modeID=\(mode.id) modeName=\(mode.name) pipelineShape=\(mode.pipelineShape.rawValue) processors=[\(processorKinds)] activeASR=\(activeASR) activeStreamingASR=\(activeStreamingASR)"
+            )
             let builder = RecipeBuilder(
                 modelService: modelService,
                 processorProvider: processorProvider

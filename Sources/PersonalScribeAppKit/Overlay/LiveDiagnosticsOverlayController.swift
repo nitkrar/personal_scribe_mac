@@ -79,43 +79,44 @@ private final class LiveDiagnosticsOverlayPanel: NSPanel {
 }
 
 @MainActor
+private final class LiveDiagnosticsOverlayDismissCoordinator {
+    var dismiss: (() -> Void)?
+
+    func invoke() {
+        dismiss?()
+    }
+}
+
+@MainActor
 final class LiveDiagnosticsOverlayController: ObservableObject {
-    private let defaults: UserDefaults
-    private let notificationCenter: NotificationCenter
     private let store: DiagnosticsStore
     private let panel: any LiveDiagnosticsOverlayPaneling
     let viewModel: LiveDiagnosticsOverlayViewModel
     private let panelSize = NSSize(width: 480, height: 320)
+    private let dismissCoordinator = LiveDiagnosticsOverlayDismissCoordinator()
 
-    private var defaultsDidChangeObserver: NSObjectProtocol?
     private var storeObservationTask: Task<Void, Never>?
 
     init(
         store: DiagnosticsStore,
-        defaults: UserDefaults = .standard,
-        notificationCenter: NotificationCenter = .default,
         panelBuilder: any LiveDiagnosticsOverlayPanelBuilding = AppKitLiveDiagnosticsOverlayPanelBuilder()
     ) {
         self.store = store
-        self.defaults = defaults
-        self.notificationCenter = notificationCenter
-        let dismissAction: () -> Void = { [defaults] in
-            ShowLiveDiagnosticsOverlayPreference.persist(false, to: defaults)
+        let dismissAction: () -> Void = { [dismissCoordinator] in
+            dismissCoordinator.invoke()
         }
         viewModel = LiveDiagnosticsOverlayViewModel(dismissAction: dismissAction)
         panel = panelBuilder.makePanel(initialSize: panelSize, dismissAction: dismissAction)
 
         configurePanel()
         startObservingDiagnostics()
-        startObservingPreferences()
-        refreshVisibility()
+        dismissCoordinator.dismiss = { [weak self] in
+            self?.closeWindow()
+        }
     }
 
     isolated deinit {
         storeObservationTask?.cancel()
-        if let defaultsDidChangeObserver {
-            notificationCenter.removeObserver(defaultsDidChangeObserver)
-        }
     }
 
     var currentEvents: [RedactedDiagnosticsEvent] {
@@ -124,6 +125,19 @@ final class LiveDiagnosticsOverlayController: ObservableObject {
 
     var isPanelVisible: Bool {
         panel.isVisible
+    }
+
+    func openWindow() {
+        positionPanel()
+        panel.orderFrontRegardless()
+    }
+
+    func closeWindow() {
+        guard panel.isVisible else {
+            return
+        }
+
+        panel.orderOut(nil)
     }
 
     private func configurePanel() {
@@ -144,30 +158,6 @@ final class LiveDiagnosticsOverlayController: ObservableObject {
                     self?.viewModel.update(events: events)
                 }
             }
-        }
-    }
-
-    private func startObservingPreferences() {
-        defaultsDidChangeObserver = notificationCenter.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: defaults,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.refreshVisibility()
-            }
-        }
-    }
-
-    private func refreshVisibility() {
-        let shouldShow = DiagnosticLoggingMode.resolve(from: defaults) == .verbose
-            && ShowLiveDiagnosticsOverlayPreference.resolve(from: defaults)
-
-        if shouldShow {
-            positionPanel()
-            panel.orderFrontRegardless()
-        } else if panel.isVisible {
-            panel.orderOut(nil)
         }
     }
 

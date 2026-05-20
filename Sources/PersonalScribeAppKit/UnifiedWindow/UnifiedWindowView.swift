@@ -28,6 +28,7 @@ struct UnifiedWindowView: View {
     let defaults: UserDefaults
     let menuBarVisibilityProvider: @MainActor () -> Bool
     let menuBarVisibilitySetter: @MainActor (Bool) -> Void
+    let openDiagnosticsWindow: @MainActor () -> Void
 
     init(
         model: UnifiedWindowModel,
@@ -39,7 +40,8 @@ struct UnifiedWindowView: View {
         permissionService: any PermissionService,
         defaults: UserDefaults = .standard,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
-        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in }
+        menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
+        openDiagnosticsWindow: @escaping @MainActor () -> Void = {}
     ) {
         self.model = model
         self.windowTint = windowTint
@@ -51,6 +53,7 @@ struct UnifiedWindowView: View {
         self.defaults = defaults
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
+        self.openDiagnosticsWindow = openDiagnosticsWindow
     }
 
     var body: some View {
@@ -214,7 +217,8 @@ struct UnifiedWindowView: View {
                 defaults: defaults,
                 permissionService: permissionService,
                 menuBarVisibilityProvider: menuBarVisibilityProvider,
-                menuBarVisibilitySetter: menuBarVisibilitySetter
+                menuBarVisibilitySetter: menuBarVisibilitySetter,
+                openDiagnosticsWindow: openDiagnosticsWindow
             )
         case .about:
             AboutSubTab()

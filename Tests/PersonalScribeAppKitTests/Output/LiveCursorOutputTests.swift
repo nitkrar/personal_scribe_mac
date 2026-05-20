@@ -6,6 +6,14 @@ import PersonalScribeSession
 
 @MainActor
 final class LiveCursorOutputTests: XCTestCase {
+    private final class MutableBoolBox: @unchecked Sendable {
+        var value: Bool
+
+        init(_ value: Bool) {
+            self.value = value
+        }
+    }
+
     private func makePasteboard() -> NSPasteboard {
         NSPasteboard(name: NSPasteboard.Name(rawValue: "personal_scribe.test.\(UUID().uuidString)"))
     }
@@ -29,12 +37,15 @@ final class LiveCursorOutputTests: XCTestCase {
 
     private func makeOutput(
         pasteboard: NSPasteboard,
+        logger: PersonalScribeLogger = PersonalScribeLogger.testing(
+            category: PersonalScribeLogCategory.ui
+        ),
         isAccessibilityTrusted: @escaping @MainActor () -> Bool = { true },
         pasteShortcutPoster: @escaping @MainActor () -> Bool = { true },
         focusedElementIsInAnotherApp: @escaping @MainActor () -> Bool = { true }
     ) -> LiveCursorOutput {
         LiveCursorOutput(
-            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
+            logger: logger,
             snapshotService: makeSnapshotService(for: pasteboard),
             isAccessibilityTrusted: isAccessibilityTrusted,
             pasteShortcutPoster: pasteShortcutPoster,
@@ -96,6 +107,56 @@ final class LiveCursorOutputTests: XCTestCase {
 
         XCTAssertEqual(pasteboard.string(forType: .string), "hello")
         XCTAssertEqual(pasteCount, 0)
+    }
+
+    func testDeliverPartialLogsAccessibilityTrustSkipOncePerClearCycle() async throws {
+        let pasteboard = makePasteboard()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        var pasteCount = 0
+        let trustState = MutableBoolBox(false)
+        let output = makeOutput(
+            pasteboard: pasteboard,
+            logger: logger,
+            isAccessibilityTrusted: { trustState.value },
+            pasteShortcutPoster: {
+                pasteCount += 1
+                return true
+            }
+        )
+
+        try await output.deliverPartial(makeProgress("hello", revision: 1))
+        try await output.deliverPartial(makeProgress("world", revision: 2))
+
+        _ = await waitForLogMessages(
+            in: sink,
+            containing: "Accessibility not trusted",
+            expectedCount: 1
+        )
+        try? await Task.sleep(for: .milliseconds(50))
+        let firstAxSkipCount = await logMessages(
+            in: sink,
+            containing: "Accessibility not trusted"
+        ).count
+        XCTAssertEqual(firstAxSkipCount, 1)
+
+        trustState.value = true
+        try await output.deliverPartial(makeProgress("trusted", revision: 3))
+        XCTAssertEqual(pasteCount, 1)
+
+        trustState.value = false
+        try await output.deliverPartial(makeProgress("again", revision: 4))
+        _ = await waitForLogMessages(
+            in: sink,
+            containing: "Accessibility not trusted",
+            expectedCount: 2
+        )
+        try? await Task.sleep(for: .milliseconds(50))
+        let secondAxSkipCount = await logMessages(
+            in: sink,
+            containing: "Accessibility not trusted"
+        ).count
+        XCTAssertEqual(secondAxSkipCount, 2)
     }
 
     func testDeliverPartialSkipsPasteWhenFocusInSelf() async throws {
@@ -230,6 +291,40 @@ final class LiveCursorOutputTests: XCTestCase {
             "manual-paste-after-restore",
             "Second endSession() must NOT restore (snapshot was already consumed)"
         )
+    }
+
+    private func makeLogger(sink: InMemoryTestSink) -> PersonalScribeLogger {
+        PersonalScribeLogger(
+            category: PersonalScribeLogCategory.ui,
+            reporter: DiagnosticsReporter(
+                sinks: [sink],
+                now: { Date(timeIntervalSince1970: 0) }
+            )
+        )
+    }
+
+    private func waitForLogMessages(
+        in sink: InMemoryTestSink,
+        containing fragment: String,
+        expectedCount: Int
+    ) async -> [RedactedDiagnosticsEvent] {
+        for _ in 0..<100 {
+            let messages = await logMessages(in: sink, containing: fragment)
+            if messages.count >= expectedCount {
+                return messages
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail("Timed out waiting for \(expectedCount) diagnostics messages containing '\(fragment)'")
+        return await logMessages(in: sink, containing: fragment)
+    }
+
+    private func logMessages(
+        in sink: InMemoryTestSink,
+        containing fragment: String
+    ) async -> [RedactedDiagnosticsEvent] {
+        await sink.snapshot().filter { $0.message.contains(fragment) }
     }
 
     func testDeliverFinalIsNoOp() async throws {

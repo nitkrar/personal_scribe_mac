@@ -1,7 +1,40 @@
 import Foundation
 
+private final class DiagnosticsSinkFanout: @unchecked Sendable {
+    private let continuation: AsyncStream<RedactedDiagnosticsEvent>.Continuation
+    private let worker: Task<Void, Never>
+
+    init(sinks: [AnyDiagnosticsSink]) {
+        var streamContinuation: AsyncStream<RedactedDiagnosticsEvent>.Continuation?
+        let stream = AsyncStream<RedactedDiagnosticsEvent> { continuation in
+            streamContinuation = continuation
+        }
+        guard let streamContinuation else {
+            preconditionFailure("Diagnostics sink fanout failed to initialize its event stream.")
+        }
+
+        continuation = streamContinuation
+        worker = Task.detached(priority: .utility) {
+            for await event in stream {
+                for sink in sinks {
+                    await sink.record(event)
+                }
+            }
+        }
+    }
+
+    deinit {
+        continuation.finish()
+        worker.cancel()
+    }
+
+    func submit(_ event: RedactedDiagnosticsEvent) {
+        continuation.yield(event)
+    }
+}
+
 public struct DiagnosticsReporter: Sendable {
-    private let sinks: [AnyDiagnosticsSink]
+    private let fanout: DiagnosticsSinkFanout
     private let redactor: PIIRedactor
     private let now: @Sendable () -> Date
 
@@ -10,7 +43,7 @@ public struct DiagnosticsReporter: Sendable {
         redactor: PIIRedactor = PIIRedactor(),
         now: @escaping @Sendable () -> Date = Date.init
     ) {
-        self.sinks = sinks.map { $0.eraseToAnyDiagnosticsSink() }
+        fanout = DiagnosticsSinkFanout(sinks: sinks.map { $0.eraseToAnyDiagnosticsSink() })
         self.redactor = redactor
         self.now = now
     }
@@ -136,11 +169,7 @@ public struct DiagnosticsReporter: Sendable {
         )
 
         let redacted = redactor.redact(event)
-        for sink in sinks {
-            Task {
-                await sink.record(redacted)
-            }
-        }
+        fanout.submit(redacted)
 
         return event
     }
