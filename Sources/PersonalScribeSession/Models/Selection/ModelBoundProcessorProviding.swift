@@ -22,4 +22,9 @@ public protocol ModelBoundProcessorProviding: Sendable {
     /// active descriptor for the same kind so a switch does not leak
     /// the prior model's CoreML weights into the app's resident set.
     func evict(_ descriptor: ModelDescriptor)
+
+    /// Snapshots the descriptors whose adapters are currently cached in
+    /// memory. Used by app-termination cleanup to target only runtimes
+    /// that have actually been prepared.
+    func preparedDescriptors() -> [ModelDescriptor]
 }

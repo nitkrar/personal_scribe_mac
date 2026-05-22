@@ -131,6 +131,49 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
         XCTAssertTrue((first as AnyObject) === (second as AnyObject))
     }
 
+    func testPreparedDescriptorsSnapshotsOnlyCachedAdapters() throws {
+        let batchDescriptor = BuiltInModelCatalog.whisperCppTiny
+        let streamingDescriptor = BuiltInModelCatalog.parakeetEou160ms
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: TestStorageLocator.make(),
+            adapterFactory: { descriptor in
+                switch descriptor.id {
+                case batchDescriptor.id:
+                    return AdapterRecord(
+                        descriptorID: descriptor.id,
+                        transcriber: MarkerTranscriber()
+                    )
+                case streamingDescriptor.id:
+                    return AdapterRecord(
+                        descriptorID: descriptor.id,
+                        streamingTranscriber: MarkerStreamingTranscriber()
+                    )
+                default:
+                    XCTFail("Unexpected descriptor: \(descriptor.id)")
+                    return AdapterRecord(
+                        descriptorID: descriptor.id,
+                        transcriber: MarkerTranscriber()
+                    )
+                }
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        XCTAssertEqual(provider.preparedDescriptors(), [])
+
+        _ = try provider.transcriber(for: batchDescriptor)
+        _ = try provider.streamingTranscriber(for: streamingDescriptor)
+
+        XCTAssertEqual(
+            Set(provider.preparedDescriptors().map(\.id)),
+            Set([batchDescriptor.id, streamingDescriptor.id])
+        )
+
+        provider.evict(batchDescriptor)
+
+        XCTAssertEqual(provider.preparedDescriptors(), [streamingDescriptor])
+    }
+
     func testRemoveDownloadedFilesEvictsAllAdapterTypes() throws {
         let storageLocator = TestStorageLocator.make()
         let batchDescriptor = BuiltInModelCatalog.parakeetTDT06Bv2

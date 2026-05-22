@@ -203,6 +203,13 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
             await lifecycle.cleanup()
         }
     }
+
+    public func preparedDescriptors() -> [ModelDescriptor] {
+        let preparedIDs = lock.withLock {
+            Array(records.keys)
+        }
+        return preparedIDs.compactMap { registeredDescriptorsByID[$0] }
+    }
 }
 
 

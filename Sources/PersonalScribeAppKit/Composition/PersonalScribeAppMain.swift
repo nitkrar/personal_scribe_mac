@@ -297,6 +297,8 @@ struct PersonalScribeAppMain: App {
                 // Stop an active recording before terminate so
                 // `SystemAudioMuter` restores the prior output mute state.
                 await AppComposition.sessionCoordinator.stopIfActive()
+                await AppComposition.sessionCoordinator
+                    .shutdownPreparedWhisperCppAdaptersForApplicationTermination()
             }
         )
         // Back-wire the menu-bar visibility ref so the unified window's

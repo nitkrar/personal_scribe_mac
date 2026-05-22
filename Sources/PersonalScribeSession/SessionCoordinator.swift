@@ -324,8 +324,112 @@ public actor SessionCoordinator {
         }
     }
 
+    /// App-quit helper for the whisper.cpp runtime. Waits briefly for any
+    /// in-flight capture/transcribe work to settle, then evicts cached
+    /// whisper.cpp adapters so their explicit `cleanup()` path can release
+    /// the underlying `whisper_context` before process teardown reaches
+    /// ggml's Metal static destructors.
+    public func shutdownPreparedWhisperCppAdaptersForApplicationTermination(
+        waitTimeout: Duration = .seconds(2)
+    ) async {
+        guard !Task.isCancelled else {
+            return
+        }
+
+        do {
+            try await waitForSessionToSettleBeforeApplicationTermination(
+                timeout: waitTimeout
+            )
+        } catch is ApplicationTerminationWaitTimeout {
+            logger.info(
+                "Application termination timed out waiting for session to settle; evicting cached whisper.cpp adapters anyway"
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            logger.error(
+                "Application termination encountered an unexpected shutdown wait failure",
+                error: error
+            )
+            return
+        }
+
+        guard
+            !Task.isCancelled,
+            let processorProvider
+        else {
+            return
+        }
+
+        let descriptors = await whisperCppDescriptorsForApplicationTermination()
+        for descriptor in descriptors {
+            if Task.isCancelled {
+                return
+            }
+
+            processorProvider.evict(descriptor)
+        }
+    }
+
     private func removeAudioLevelContinuation(id: UUID) {
         audioLevelContinuations[id] = nil
+    }
+
+    private func waitForSessionToSettleBeforeApplicationTermination(
+        timeout: Duration
+    ) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { [self] in
+                while await isBusyForApplicationTermination() {
+                    try Task.checkCancellation()
+                    try await Task.sleep(for: .milliseconds(25))
+                }
+            }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw ApplicationTerminationWaitTimeout()
+            }
+
+            do {
+                _ = try await group.next()
+                group.cancelAll()
+            } catch {
+                group.cancelAll()
+                throw error
+            }
+        }
+    }
+
+    private func isBusyForApplicationTermination() async -> Bool {
+        switch await pipeline.snapshot().sessionState {
+        case .capturing, .holdRecording, .transcribing:
+            return true
+        case .idle, .completed, .shortExit, .error:
+            return false
+        }
+    }
+
+    private func whisperCppDescriptorsForApplicationTermination() async -> [ModelDescriptor] {
+        let preparedWhisperDescriptors = processorProvider?.preparedDescriptors().filter {
+            $0.engine == .whisperCpp
+        } ?? []
+        let modelService = self.modelService
+        return await MainActor.run {
+            guard let modelService else {
+                return preparedWhisperDescriptors
+            }
+
+            guard
+                let activeDescriptor = modelService.activeDescriptor(for: .asr),
+                activeDescriptor.engine == .whisperCpp
+            else {
+                return preparedWhisperDescriptors
+            }
+
+            return [activeDescriptor] + preparedWhisperDescriptors.filter {
+                $0.id != activeDescriptor.id
+            }
+        }
     }
 
     /// #078.28 + #089 L-8 — re-validate the registry's current recipe
@@ -528,6 +632,8 @@ public actor SessionCoordinator {
             return state
         }
     }
+
+    private struct ApplicationTerminationWaitTimeout: Error {}
 }
 
 private struct CoordinatorPipelineOutputSink: PipelineOutputSink {

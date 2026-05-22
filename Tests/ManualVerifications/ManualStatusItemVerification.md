@@ -62,3 +62,8 @@ or `StatusItemIconLoader`.
 - [ ] **MV-SI-13** With an active mode, open the status-item menu. The top header reads `<AppBrand.displayName> — <active mode>` on a single line (e.g. "Ninimma — Dictation") — NOT two stacked grey rows. With no active mode, the header reads just `<AppBrand.displayName>`. Regression guard for bug #6 (2026-04-21 dogfood) where the two-header layout wrapped as "Ninimma — dictation" across two lines.
 - [ ] **MV-SI-14** With the unified window closed, click the status-item menu → **History**. The unified window opens pre-selected to the Transcriptions tab. Close it; click **Settings** — window opens on the Settings tab. Regression guard for bug #16.
 - [ ] **MV-SI-15** Menu row order under the header: **Home** (house.fill) → **History** (waveform) → **Settings** (gearshape). Then a separator, then **Start Recording** / **Copy Last Transcript**, separator, and **Quit** terminates the menu. Submenu (Microphone) slots between the trailing separator and Quit when input devices are discoverable.
+
+## Quit teardown
+
+- [ ] **MV-SI-16** Set the active ASR model to a `whisper.cpp` descriptor, let the model prewarm (or record once), then quit from the status-item menu three times. The app exits cleanly each time with no `ggml_metal_rsets_free` / `ggml_abort` crash on exit.
+- [ ] **MV-SI-17** With a `whisper.cpp` ASR model active, start and stop a short recording so the status item enters the orange transcribing state, then click **Quit**. The app may pause briefly to let shutdown drain, but it exits cleanly without the Metal teardown crash.
