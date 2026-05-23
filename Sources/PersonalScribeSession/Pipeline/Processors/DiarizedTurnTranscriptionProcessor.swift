@@ -6,21 +6,39 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
     private let transcriber: any Transcriber
     private let sensitivity: SpeakerSeparationSensitivity
     private let languageHint: String?
+    private let logger: PersonalScribeLogger?
     private let lock = NSLock()
 
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
 
-    public init(
+    public convenience init(
         diarizer: any SpeakerDiarizer,
         transcriber: any Transcriber,
         sensitivity: SpeakerSeparationSensitivity = .balanced,
         languageHint: String? = nil
     ) {
+        self.init(
+            diarizer: diarizer,
+            transcriber: transcriber,
+            sensitivity: sensitivity,
+            languageHint: languageHint,
+            logger: nil
+        )
+    }
+
+    package init(
+        diarizer: any SpeakerDiarizer,
+        transcriber: any Transcriber,
+        sensitivity: SpeakerSeparationSensitivity = .balanced,
+        languageHint: String? = nil,
+        logger: PersonalScribeLogger? = nil
+    ) {
         self.diarizer = diarizer
         self.transcriber = transcriber
         self.sensitivity = sensitivity
         self.languageHint = languageHint
+        self.logger = logger
     }
 
     public func prepare() async throws {
@@ -99,9 +117,12 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
     ) async throws -> ProcessorOutput {
         try await prepare()
 
-        let diarizationStream = priorTurnsStream(from: priors) ?? diarizer.diarize(audio)
+        let priorTurns = priorTurnsStream(from: priors)
+        let diarizationStream = priorTurns ?? diarizer.diarize(audio)
+        let usedPriorTurns = priorTurns != nil
         var processedTurns: [SpeakerTurn] = []
         var transcribedTurns: [TurnTranscription] = []
+        var skippedEmptySliceCount = 0
 
         for await event in diarizationStream {
             // Surface adapter-side failures rather than collapsing them
@@ -129,6 +150,7 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
                     sampleRate: audio.sampleRate
                 )
                 guard !slice.samples.isEmpty else {
+                    skippedEmptySliceCount += 1
                     continue
                 }
 
@@ -146,7 +168,11 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
             }
         }
 
-        return .text(Self.aggregate(transcribedTurns, audioDuration: audio.duration))
+        let result = Self.aggregate(transcribedTurns, audioDuration: audio.duration)
+        logger?.info(
+            "diarized_processor_summary — usedPriorTurns=\(usedPriorTurns) finalizedTurnCount=\(processedTurns.count) transcribedTurnCount=\(transcribedTurns.count) skippedEmptySliceCount=\(skippedEmptySliceCount) textLength=\(result.text.count) segmentCount=\(result.segments.count) audioDurationMs=\(Self.milliseconds(result.audioDuration))"
+        )
+        return .text(result)
     }
 }
 
@@ -415,6 +441,10 @@ private extension DiarizedTurnTranscriptionProcessor {
         let components = duration.components
         let attosecondsPerSecond = 1_000_000_000_000_000_000.0
         return Double(components.seconds) + (Double(components.attoseconds) / attosecondsPerSecond)
+    }
+
+    static func milliseconds(_ duration: Duration) -> Int {
+        Int((seconds(duration) * 1000).rounded())
     }
 
     func priorTurnsStream(

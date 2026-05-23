@@ -85,7 +85,8 @@ public final class PillOverlayController: ObservableObject {
         defaults: UserDefaults = .standard,
         onTap: @escaping @MainActor () -> Void = {},
         panelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
-        openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil
+        openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil,
+        diagnosticLogger: PersonalScribeLogger = AppComposition.makeLogger(PersonalScribeLogCategory.ui)
     ) {
         self.init(
             appStore: appStore,
@@ -94,7 +95,8 @@ public final class PillOverlayController: ObservableObject {
             legacyVisibilityModeBridge: nil,
             onTap: onTap,
             panelBuilder: panelBuilder,
-            openVadSettingsAction: openVadSettingsAction
+            openVadSettingsAction: openVadSettingsAction,
+            diagnosticLogger: diagnosticLogger
         )
     }
 
@@ -105,7 +107,8 @@ public final class PillOverlayController: ObservableObject {
         legacyVisibilityModeBridge: LegacyVisibilityModeBridge?,
         onTap: @escaping @MainActor () -> Void = {},
         panelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
-        openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil
+        openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil,
+        diagnosticLogger: PersonalScribeLogger = AppComposition.makeLogger(PersonalScribeLogCategory.ui)
     ) {
         let initialMode = legacyVisibilityModeBridge?.currentPillVisibility()
             ?? PillVisibility.resolve(from: defaults ?? .standard)
@@ -124,7 +127,7 @@ public final class PillOverlayController: ObservableObject {
             model: viewModel,
             onTap: onTap,
             panelBuilder: panelBuilder,
-            diagnosticLogger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
+            diagnosticLogger: diagnosticLogger
         )
 
         applySnapshot(appStore.snapshot)
@@ -171,6 +174,10 @@ public final class PillOverlayController: ObservableObject {
     /// "Update settings to change" link on the VAD auto-stopped notification.
     public func setOpenVadSettingsAction(_ action: @escaping @MainActor @Sendable () -> Void) {
         openVadSettingsAction = action
+    }
+
+    package func applySnapshotForTesting(_ snapshot: AppStoreSnapshot) {
+        applySnapshot(snapshot)
     }
 
     private func applySnapshot(_ snapshot: AppStoreSnapshot) {
@@ -237,7 +244,6 @@ public final class PillOverlayController: ObservableObject {
                 onLinkTap: linkTapHandler(for: next)
             )
             recordingStatusCardContent = next
-            streamCardText = nil
             advanceLastSeenFireToken(renderedContent: next, snapshotToken: vadFireToken)
         case (let current?, let next?) where current != next:
             // When the new content only differs from the current card
@@ -263,7 +269,6 @@ public final class PillOverlayController: ObservableObject {
                 )
             }
             recordingStatusCardContent = next
-            streamCardText = nil
             advanceLastSeenFireToken(renderedContent: next, snapshotToken: vadFireToken)
         case (let current?, nil):
             // Notifications self-dismiss via the ResponseCard's 2.0s timer
@@ -287,8 +292,7 @@ public final class PillOverlayController: ObservableObject {
 
     private func applyStreamCardState(session: SessionSnapshot) {
         guard recordingStatusCardContent == nil else {
-            presenter.hideStreamCard()
-            streamCardText = nil
+            hideStreamCardIfNeeded(reason: "recording_status_card_visible", session: session)
             return
         }
 
@@ -301,29 +305,58 @@ public final class PillOverlayController: ObservableObject {
         }
 
         guard session.isStreamingSession, isLiveCaptureState else {
-            presenter.hideStreamCard()
-            streamCardText = nil
+            let reason = session.isStreamingSession ? "not_live_capture_state" : "streaming_session_disabled"
+            hideStreamCardIfNeeded(reason: reason, session: session)
             return
         }
 
         let nextText = session.transcriptProgress?.text
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !nextText.isEmpty else {
-            presenter.hideStreamCard()
-            streamCardText = nil
+            hideStreamCardIfNeeded(reason: "empty_text", session: session)
             return
         }
 
         switch streamCardText {
         case nil:
             presenter.showStreamCard(text: nextText)
+            presenter.logStreamCardStateChanged(
+                action: "show",
+                reason: "new_text",
+                textLength: nextText.count,
+                sessionState: session.sessionState,
+                isStreamingSession: session.isStreamingSession
+            )
             streamCardText = nextText
         case nextText:
             break
         case .some:
             presenter.updateStreamCard(text: nextText)
+            presenter.logStreamCardStateChanged(
+                action: "update",
+                reason: "text_changed",
+                textLength: nextText.count,
+                sessionState: session.sessionState,
+                isStreamingSession: session.isStreamingSession
+            )
             streamCardText = nextText
         }
+    }
+
+    private func hideStreamCardIfNeeded(reason: String, session: SessionSnapshot) {
+        guard streamCardText != nil else {
+            return
+        }
+
+        presenter.hideStreamCard()
+        presenter.logStreamCardStateChanged(
+            action: "hide",
+            reason: reason,
+            textLength: 0,
+            sessionState: session.sessionState,
+            isStreamingSession: session.isStreamingSession
+        )
+        streamCardText = nil
     }
 
     /// Builds a link-tap callback that invokes `openVadSettingsAction`

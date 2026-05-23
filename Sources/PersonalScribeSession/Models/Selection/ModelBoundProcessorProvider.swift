@@ -57,7 +57,8 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                     descriptorID: descriptor.id,
                     streamingTranscriber: FluidAudioStreamingTranscriberAdapter(
                         descriptor: descriptor,
-                        storageLocator: storageLocator
+                        storageLocator: storageLocator,
+                        logger: logger
                     )
                 )
             case .diarization:

@@ -9,6 +9,7 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
     private let managerResult: Result<any FluidAudioStreamingEouManaging, Error>
+    private let logger: PersonalScribeLogger?
     private nonisolated let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
@@ -17,23 +18,59 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
         descriptor: ModelDescriptor,
         storageLocator: any StorageLocator = AppConfig.liveStorageLocator()
     ) {
-        self.descriptor = descriptor
-        self.storageLocator = storageLocator
-        self.managerResult = Result {
-            StreamingEouAsrManager(
-                chunkSize: try StreamingChunkSize(descriptor: descriptor)
-            )
-        }
+        self.init(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            managerResult: Result {
+                StreamingEouAsrManager(
+                    chunkSize: try StreamingChunkSize(descriptor: descriptor)
+                )
+            },
+            logger: nil
+        )
+    }
+
+    package init(
+        descriptor: ModelDescriptor,
+        storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
+        logger: PersonalScribeLogger
+    ) {
+        self.init(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            managerResult: Result {
+                StreamingEouAsrManager(
+                    chunkSize: try StreamingChunkSize(descriptor: descriptor)
+                )
+            },
+            logger: logger
+        )
     }
 
     init(
         descriptor: ModelDescriptor,
         storageLocator: any StorageLocator,
-        manager: any FluidAudioStreamingEouManaging
+        manager: any FluidAudioStreamingEouManaging,
+        logger: PersonalScribeLogger? = nil
+    ) {
+        self.init(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            managerResult: .success(manager),
+            logger: logger
+        )
+    }
+
+    private init(
+        descriptor: ModelDescriptor,
+        storageLocator: any StorageLocator,
+        managerResult: Result<any FluidAudioStreamingEouManaging, Error>,
+        logger: PersonalScribeLogger?
     ) {
         self.descriptor = descriptor
         self.storageLocator = storageLocator
-        self.managerResult = .success(manager)
+        self.managerResult = managerResult
+        self.logger = logger
     }
 
     public func prepare() async throws {
@@ -159,19 +196,33 @@ private extension FluidAudioStreamingTranscriberAdapter {
         from stream: AsyncThrowingStream<PCMBuffer, Error>,
         continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation
     ) async {
+        let callbackSummary = StreamingCallbackSummary()
+        var bufferCount = 0
+        var audioDuration: Duration = .zero
+        var outcome = "prepare_failed"
+        var finalTextEmpty = true
+        defer {
+            let callbackSnapshot = callbackSummary.snapshot()
+            logger?.info(
+                "streaming_adapter_summary — descriptorID=\(descriptor.id) bufferCount=\(bufferCount) partialCount=\(callbackSnapshot.partialCount) eouCount=\(callbackSnapshot.eouCount) outcome=\(outcome) finalTextEmpty=\(finalTextEmpty) audioDurationMs=\(Self.milliseconds(from: audioDuration))"
+            )
+        }
+
         do {
             try await prepare()
             let manager = try resolvedManager()
+            outcome = "completed"
 
             await manager.reset()
             await manager.setPartialCallback { text in
+                callbackSummary.recordPartial()
                 continuation.yield(.partial(text: text))
             }
             await manager.setEouCallback { text in
+                callbackSummary.recordEndOfUtterance()
                 continuation.yield(.endOfUtterance(text: text))
             }
 
-            var audioDuration: Duration = .zero
             var firstBuffer: PCMBuffer?
 
             do {
@@ -181,18 +232,22 @@ private extension FluidAudioStreamingTranscriberAdapter {
                     if firstBuffer == nil {
                         firstBuffer = buffer
                     }
+                    bufferCount += 1
                     audioDuration = audioDuration + buffer.duration
                     _ = try await manager.process(
                         audioBuffer: try Self.makeAVAudioPCMBuffer(from: buffer)
                     )
                 }
             } catch is CancellationError {
+                outcome = "cancelled"
                 await reset(manager: manager)
                 return
             } catch let error as PersonalScribeError {
+                outcome = "stream_failed"
                 await reset(manager: manager)
                 throw error
             } catch {
+                outcome = "stream_failed"
                 await reset(manager: manager)
                 throw PersonalScribeError.transcriptionFailure
             }
@@ -201,12 +256,15 @@ private extension FluidAudioStreamingTranscriberAdapter {
             do {
                 finalText = try await manager.finish()
             } catch let error as PersonalScribeError {
+                outcome = "finish_failed"
                 await reset(manager: manager)
                 throw error
             } catch {
+                outcome = "finish_failed"
                 await reset(manager: manager)
                 throw PersonalScribeError.transcriptionFailure
             }
+            finalTextEmpty = finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
             continuation.yield(
                 .finalized(
@@ -220,6 +278,7 @@ private extension FluidAudioStreamingTranscriberAdapter {
             continuation.finish()
             await reset(manager: manager)
         } catch is CancellationError {
+            outcome = "cancelled"
             continuation.finish()
         } catch {
             continuation.finish(throwing: error)
@@ -259,6 +318,13 @@ private extension FluidAudioStreamingTranscriberAdapter {
         await manager.reset()
     }
 
+    static func milliseconds(from duration: Duration) -> Int {
+        let components = duration.components
+        let attosecondsPerSecond = 1_000_000_000_000_000_000.0
+        let seconds = Double(components.seconds) + (Double(components.attoseconds) / attosecondsPerSecond)
+        return Int((seconds * 1000).rounded())
+    }
+
     static func makeAVAudioPCMBuffer(from buffer: PCMBuffer) throws -> AVAudioPCMBuffer {
         guard
             let format = AVAudioFormat(
@@ -289,6 +355,38 @@ private extension FluidAudioStreamingTranscriberAdapter {
         }
 
         return audioBuffer
+    }
+}
+
+private final class StreamingCallbackSummary: @unchecked Sendable {
+    struct Snapshot: Sendable {
+        let partialCount: Int
+        let eouCount: Int
+    }
+
+    private let lock = NSLock()
+    private var partialCount = 0
+    private var eouCount = 0
+
+    func recordPartial() {
+        lock.withLock {
+            partialCount += 1
+        }
+    }
+
+    func recordEndOfUtterance() {
+        lock.withLock {
+            eouCount += 1
+        }
+    }
+
+    func snapshot() -> Snapshot {
+        lock.withLock {
+            Snapshot(
+                partialCount: partialCount,
+                eouCount: eouCount
+            )
+        }
     }
 }
 

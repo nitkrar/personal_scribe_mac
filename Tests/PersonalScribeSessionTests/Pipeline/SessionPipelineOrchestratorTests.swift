@@ -598,6 +598,94 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(snapshot.lastCompletedResult?.text, "Streaming final.")
     }
 
+    func testStreamingObservabilityLogsForwardingStopResolutionAndProcessingSummaries() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.1),
+            try makeBuffer(sampleCount: 1_600, sampleValue: 0.2),
+        ]
+        let diagnosticsSink = InMemoryTestSink()
+        let logger = makeLogger(sink: diagnosticsSink)
+        let streamingTranscriber = ScriptedStreamingTranscriber(
+            perBufferEvents: [
+                [.partial(text: "hello")],
+                [.endOfUtterance(text: "hello world")],
+            ],
+            terminalResult: nil
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: buffers),
+            logger: logger,
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: true
+                ),
+                secondPassTranscriber: ReturningTranscriber(
+                    result: TranscriptionResult(
+                        text: "   ",
+                        audioDuration: .milliseconds(200),
+                        processingDuration: .milliseconds(15)
+                    )
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+
+        let forwardingLog = try await waitForLogMessage(
+            in: diagnosticsSink,
+            containing: "streaming_input_forwarded"
+        )
+        XCTAssertTrue(forwardingLog.message.contains("recipeID=streaming-dictation"))
+        XCTAssertTrue(forwardingLog.message.contains("forwardedBufferCount=1"))
+        XCTAssertTrue(forwardingLog.message.contains("bufferSampleCount=1600"))
+
+        let orchestratorSummary = try await waitForLogMessage(
+            in: diagnosticsSink,
+            containing: "streaming_orchestrator_summary"
+        )
+        XCTAssertTrue(orchestratorSummary.message.contains("recipeID=streaming-dictation"))
+        XCTAssertTrue(orchestratorSummary.message.contains("forwardedBufferCount=2"))
+        XCTAssertTrue(orchestratorSummary.message.contains("partialCount=1"))
+        XCTAssertTrue(orchestratorSummary.message.contains("eouCount=1"))
+        XCTAssertTrue(orchestratorSummary.message.contains("finalizedCount=0"))
+        XCTAssertTrue(orchestratorSummary.message.contains("terminalFinalResult=false"))
+        XCTAssertTrue(orchestratorSummary.message.contains("liveFailure=false"))
+
+        let resolutionLog = try await waitForLogMessage(
+            in: diagnosticsSink,
+            containing: "streaming_stop_resolution"
+        )
+        XCTAssertTrue(resolutionLog.message.contains("recipeID=streaming-dictation"))
+        XCTAssertTrue(resolutionLog.message.contains("secondPassOutcome=blank"))
+        XCTAssertTrue(resolutionLog.message.contains("fallbackSource=terminalText"))
+        XCTAssertTrue(resolutionLog.message.contains("liveFailure=false"))
+        XCTAssertTrue(resolutionLog.message.contains("finalSource=streamingFallback"))
+
+        let processingStartLog = try await waitForLogMessage(
+            in: diagnosticsSink,
+            containing: "pipeline_processing_started"
+        )
+        XCTAssertTrue(processingStartLog.message.contains("recipeID=streaming-dictation"))
+        XCTAssertTrue(processingStartLog.message.contains("processor=streamingTranscriber"))
+        XCTAssertTrue(processingStartLog.message.contains("replayBufferCount=2"))
+        XCTAssertTrue(processingStartLog.message.contains("languageHintSet=false"))
+        XCTAssertTrue(processingStartLog.message.contains("finishedStreamingState=true"))
+
+        let processingResultLog = try await waitForLogMessage(
+            in: diagnosticsSink,
+            containing: "pipeline_processing_result"
+        )
+        XCTAssertTrue(processingResultLog.message.contains("recipeID=streaming-dictation"))
+        XCTAssertTrue(processingResultLog.message.contains("processor=streamingTranscriber"))
+        XCTAssertTrue(processingResultLog.message.contains("textLength=11"))
+        XCTAssertTrue(processingResultLog.message.contains("segmentCount=0"))
+        XCTAssertTrue(processingResultLog.message.contains("audioDurationMs=200"))
+    }
+
     func testStreamingLiveCursorDeliversEachEouChunkToOutputSink() async throws {
         let buffers = [
             try makeBuffer(sampleCount: 1_600, sampleValue: 0.1),
@@ -1924,6 +2012,16 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
     }
 
+    private func makeLogger(sink: InMemoryTestSink) -> PersonalScribeLogger {
+        PersonalScribeLogger(
+            category: PersonalScribeLogCategory.session,
+            reporter: DiagnosticsReporter(
+                sinks: [sink],
+                now: { Date(timeIntervalSince1970: 0) }
+            )
+        )
+    }
+
     private func makeBuffer(
         sampleCount: Int,
         sampleValue: Float = 0
@@ -2000,6 +2098,25 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         }
 
         XCTFail("Persisted entries never reached \(minimum) entries")
+    }
+
+    private func waitForLogMessage(
+        in sink: InMemoryTestSink,
+        containing fragment: String,
+        timeout: Duration = .seconds(2)
+    ) async throws -> RedactedDiagnosticsEvent {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if let message = await sink.snapshot().first(where: { $0.message.contains(fragment) }) {
+                return message
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail("Timed out waiting for diagnostics message containing '\(fragment)'")
+        let fallback = await sink.snapshot().first(where: { $0.message.contains(fragment) })
+        return try XCTUnwrap(fallback)
     }
 
     private func makeTemporaryDirectory() throws -> URL {

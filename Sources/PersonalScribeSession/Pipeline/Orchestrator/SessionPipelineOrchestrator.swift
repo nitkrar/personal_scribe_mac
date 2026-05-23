@@ -78,6 +78,33 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         case cancelled
     }
 
+    private struct LiveStreamingObservabilityState: Sendable {
+        var forwardedBufferCount = 0
+        var partialCount = 0
+        var endOfUtteranceCount = 0
+        var finalizedCount = 0
+
+        mutating func recordForwardedBuffer() {
+            forwardedBufferCount += 1
+        }
+
+        mutating func record(_ event: StreamingTranscriptionEvent) {
+            switch event {
+            case .partial:
+                partialCount += 1
+            case .endOfUtterance:
+                endOfUtteranceCount += 1
+            case .finalized:
+                finalizedCount += 1
+            }
+        }
+    }
+
+    private struct StreamingFallbackResolution: Sendable {
+        let result: TranscriptionResult?
+        let source: String
+    }
+
     private var currentSnapshot: SessionSnapshot
     private var activeContext: PipelineContextSnapshot
     private var latestStageFailure: PipelineStageFailure?
@@ -99,6 +126,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private var liveStreamingEventTask: Task<Void, Never>?
     private var liveStreamingAccumulator: StreamingTranscriptAccumulator?
     private var liveStreamingFailure: PipelineStageFailure?
+    private var liveStreamingObservability = LiveStreamingObservabilityState()
     private var audioLevelContinuations: [UUID: AsyncStream<Float>.Continuation] = [:]
     private var currentAudioLevel: Float = 0.0
     private var audioLevelTask: Task<Void, Never>?
@@ -451,6 +479,64 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         )
     }
 
+    private func recordStreamingInputForwarded(_ buffer: PCMBuffer) {
+        liveStreamingObservability.recordForwardedBuffer()
+        guard liveStreamingObservability.forwardedBufferCount == 1 else {
+            return
+        }
+
+        logger.info(
+            "streaming_input_forwarded — recipeID=\(activeSessionRecipe?.recipeID ?? "nil") forwardedBufferCount=\(liveStreamingObservability.forwardedBufferCount) bufferSampleCount=\(buffer.samples.count) sampleRate=\(buffer.sampleRate) channelCount=\(buffer.channelCount)"
+        )
+    }
+
+    private func logStreamingOrchestratorSummary(
+        accumulator: StreamingTranscriptAccumulator?,
+        failure: PipelineStageFailure?
+    ) {
+        guard activeSessionRecipe?.streamingBehavior != nil else {
+            return
+        }
+
+        let terminalText = accumulator?.terminalText.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        logger.info(
+            "streaming_orchestrator_summary — recipeID=\(activeSessionRecipe?.recipeID ?? "nil") forwardedBufferCount=\(liveStreamingObservability.forwardedBufferCount) partialCount=\(liveStreamingObservability.partialCount) eouCount=\(liveStreamingObservability.endOfUtteranceCount) finalizedCount=\(liveStreamingObservability.finalizedCount) terminalTextLength=\(terminalText.count) terminalFinalResult=\(accumulator?.terminalFinalResult != nil) liveFailure=\(failure != nil)"
+        )
+    }
+
+    private func logStreamingStopResolution(
+        secondPassOutcome: String,
+        fallbackSource: String,
+        liveFailure: Bool,
+        finalSource: String
+    ) {
+        logger.info(
+            "streaming_stop_resolution — recipeID=\(activeSessionRecipe?.recipeID ?? "nil") secondPassOutcome=\(secondPassOutcome) fallbackSource=\(fallbackSource) liveFailure=\(liveFailure) finalSource=\(finalSource)"
+        )
+    }
+
+    private func logPipelineProcessingStarted(
+        processor: BoundProcessor,
+        replayBuffers: [PCMBuffer],
+        finishedLiveStreamingState:
+            (accumulator: StreamingTranscriptAccumulator?, failure: PipelineStageFailure?)?,
+        languageHint: String?
+    ) {
+        let bufferedDuration = replayBuffers.reduce(Duration.zero) { $0 + $1.duration }
+        logger.info(
+            "pipeline_processing_started — recipeID=\(activeSessionRecipe?.recipeID ?? "nil") processor=\(Self.processorLabel(for: processor)) replayBufferCount=\(replayBuffers.count) bufferedDurationMs=\(Self.milliseconds(from: bufferedDuration)) languageHintSet=\(languageHint != nil) finishedStreamingState=\(finishedLiveStreamingState != nil)"
+        )
+    }
+
+    private func logPipelineProcessingResult(
+        processor: BoundProcessor,
+        result: TranscriptionResult
+    ) {
+        logger.info(
+            "pipeline_processing_result — recipeID=\(activeSessionRecipe?.recipeID ?? "nil") processor=\(Self.processorLabel(for: processor)) textLength=\(result.text.count) segmentCount=\(result.segments.count) audioDurationMs=\(Self.milliseconds(from: result.audioDuration)) processingDurationMs=\(Self.milliseconds(from: result.processingDuration))"
+        )
+    }
+
     private func startRecording() async {
         guard !startRecordingInFlight else {
             logger.info("Ignored re-entrant startRecording while a prior start is still awaiting capture.start()")
@@ -657,7 +743,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             canFinalizeShortStreamingCapture = resolveStreamingFallbackResult(
                 accumulator: liveState.accumulator,
                 bufferedDuration: bufferedDuration
-            ) != nil
+            ).result != nil
         } else {
             canFinalizeShortStreamingCapture = false
         }
@@ -815,30 +901,43 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
         do {
             let languageHint = await resolveLanguageHintForCurrentMode()
+            logPipelineProcessingStarted(
+                processor: processor,
+                replayBuffers: replayBuffers,
+                finishedLiveStreamingState: finishedLiveStreamingState,
+                languageHint: languageHint
+            )
             switch processor {
             case .transcriber(let transcriber):
                 let coalesced = try Self.coalesce(replayBuffers)
-                return try await transcriber.transcribe(
+                let result = try await transcriber.transcribe(
                     coalesced,
                     languageHint: languageHint
                 )
+                logPipelineProcessingResult(processor: processor, result: result)
+                return result
 
             case .streamingTranscriber:
-                return try await runBoundStreamingTranscription(
+                let result = try await runBoundStreamingTranscription(
                     replayBuffers: replayBuffers,
                     finishedLiveStreamingState: finishedLiveStreamingState
                 )
+                logPipelineProcessingResult(processor: processor, result: result)
+                return result
 
             case .diarizedTurns(let diarizer, let perTurnTranscriber, let sensitivity):
                 let fusion = DiarizedTurnTranscriptionProcessor(
                     diarizer: diarizer,
                     transcriber: perTurnTranscriber,
                     sensitivity: sensitivity,
-                    languageHint: languageHint
+                    languageHint: languageHint,
+                    logger: logger
                 )
                 let coalesced = try Self.coalesce(replayBuffers)
                 let output = try await fusion.process(audio: coalesced, priors: [])
-                return try Self.unwrapTextOutput(output)
+                let result = try Self.unwrapTextOutput(output)
+                logPipelineProcessingResult(processor: processor, result: result)
+                return result
             }
         } catch let failure as PipelineStageFailure {
             throw failure
@@ -861,10 +960,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             await finishLiveStreamingSessionForStop()
         }
 
-        let streamingFallbackResult = resolveStreamingFallbackResult(
+        let streamingFallbackResolution = resolveStreamingFallbackResult(
             accumulator: accumulator,
             bufferedDuration: bufferedDuration
         )
+        var secondPassOutcome = "not_attempted"
 
         if let secondPassTranscriber = activeSessionRecipe?.streamingSecondPassTranscriber {
             do {
@@ -872,11 +972,26 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                     with: secondPassTranscriber,
                     replayBuffers: replayBuffers
                 ) {
+                    secondPassOutcome = "authoritative"
+                    logStreamingStopResolution(
+                        secondPassOutcome: secondPassOutcome,
+                        fallbackSource: streamingFallbackResolution.source,
+                        liveFailure: liveFailure != nil,
+                        finalSource: "secondPass"
+                    )
                     return authoritativeResult
                 }
+                secondPassOutcome = "blank"
             } catch {
+                secondPassOutcome = "failed"
                 logger.error("Streaming second pass failed; falling back to streaming final", error: error)
-                if streamingFallbackResult == nil {
+                if streamingFallbackResolution.result == nil {
+                    logStreamingStopResolution(
+                        secondPassOutcome: secondPassOutcome,
+                        fallbackSource: streamingFallbackResolution.source,
+                        liveFailure: liveFailure != nil,
+                        finalSource: "secondPassError"
+                    )
                     throw makeStageFailure(
                         stage: .transcription,
                         error: error,
@@ -886,14 +1001,32 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             }
         }
 
-        if let streamingFallbackResult {
+        if let streamingFallbackResult = streamingFallbackResolution.result {
+            logStreamingStopResolution(
+                secondPassOutcome: secondPassOutcome,
+                fallbackSource: streamingFallbackResolution.source,
+                liveFailure: liveFailure != nil,
+                finalSource: "streamingFallback"
+            )
             return streamingFallbackResult
         }
 
         if let liveFailure {
+            logStreamingStopResolution(
+                secondPassOutcome: secondPassOutcome,
+                fallbackSource: streamingFallbackResolution.source,
+                liveFailure: true,
+                finalSource: "liveFailure"
+            )
             throw liveFailure
         }
 
+        logStreamingStopResolution(
+            secondPassOutcome: secondPassOutcome,
+            fallbackSource: streamingFallbackResolution.source,
+            liveFailure: false,
+            finalSource: "noResult"
+        )
         throw makeStageFailure(
             stage: .transcription,
             error: PersonalScribeError.transcriptionFailure,
@@ -1053,6 +1186,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             for try await buffer in stream {
                 bufferedAudio.append(buffer)
                 if liveStreamingFailure == nil {
+                    if liveStreamingInputContinuation != nil {
+                        recordStreamingInputForwarded(buffer)
+                    }
                     liveStreamingInputContinuation?.yield(buffer)
                 }
                 publish { snapshot in
@@ -1370,6 +1506,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         liveStreamingEventTask = nil
         liveStreamingAccumulator = nil
         liveStreamingFailure = nil
+        liveStreamingObservability = LiveStreamingObservabilityState()
 
         guard let recipe else {
             logger.info("streaming_session_skipped — reason=no_recipe")
@@ -1429,6 +1566,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             return
         }
 
+        liveStreamingObservability.record(event)
         let text = accumulator.apply(event)
         liveStreamingAccumulator = accumulator
 
@@ -1509,10 +1647,12 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
         let accumulator = liveStreamingAccumulator
         let failure = liveStreamingFailure
+        logStreamingOrchestratorSummary(accumulator: accumulator, failure: failure)
 
         liveStreamingEventTask = nil
         liveStreamingAccumulator = nil
         liveStreamingFailure = nil
+        liveStreamingObservability = LiveStreamingObservabilityState()
         return (accumulator, failure)
     }
 
@@ -1530,6 +1670,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         liveStreamingEventTask = nil
         liveStreamingAccumulator = nil
         liveStreamingFailure = nil
+        liveStreamingObservability = LiveStreamingObservabilityState()
     }
 
     private func awaitLiveStreamingEventTaskShutdown(
@@ -1605,11 +1746,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private func resolveStreamingFallbackResult(
         accumulator: StreamingTranscriptAccumulator?,
         bufferedDuration: Duration
-    ) -> TranscriptionResult? {
+    ) -> StreamingFallbackResolution {
         if let terminalFinalResult = accumulator?.terminalFinalResult {
             let text = terminalFinalResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
-                return terminalFinalResult
+                return StreamingFallbackResolution(
+                    result: terminalFinalResult,
+                    source: "terminalFinalResult"
+                )
             }
         }
 
@@ -1617,13 +1761,19 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             in: .whitespacesAndNewlines
         ) ?? ""
         guard !terminalText.isEmpty else {
-            return nil
+            return StreamingFallbackResolution(
+                result: nil,
+                source: "none"
+            )
         }
 
-        return TranscriptionResult(
-            text: terminalText,
-            audioDuration: bufferedDuration,
-            processingDuration: .zero
+        return StreamingFallbackResolution(
+            result: TranscriptionResult(
+                text: terminalText,
+                audioDuration: bufferedDuration,
+                processingDuration: .zero
+            ),
+            source: "terminalText"
         )
     }
 
@@ -1711,6 +1861,21 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         let components = duration.components
         return TimeInterval(components.seconds)
             + TimeInterval(components.attoseconds) / 1_000_000_000_000_000_000
+    }
+
+    private static func milliseconds(from duration: Duration) -> Int {
+        Int((seconds(from: duration) * 1000).rounded())
+    }
+
+    private static func processorLabel(for processor: BoundProcessor) -> String {
+        switch processor {
+        case .transcriber:
+            "transcriber"
+        case .streamingTranscriber:
+            "streamingTranscriber"
+        case .diarizedTurns:
+            "diarizedTurns"
+        }
     }
 
     private static func makeLiveStreamingInputStream()

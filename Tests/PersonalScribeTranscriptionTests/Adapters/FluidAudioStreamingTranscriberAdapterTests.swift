@@ -165,9 +165,56 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
             "cleanup must clear the prepared latch so a later prepare reloads the model"
         )
     }
+
+    func testTranscribeLogsStreamingAdapterSummary() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetEou160ms
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let diagnosticsSink = InMemoryTestSink()
+        let manager = StubFluidAudioStreamingManager(
+            scriptedProcessActions: [
+                [.partial("hello"), .endOfUtterance("hello world")],
+            ],
+            finalText: "hello world"
+        )
+        let adapter = FluidAudioStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            logger: makeLogger(sink: diagnosticsSink)
+        )
+
+        _ = try await collectEvents(
+            from: adapter.transcribe(
+                stream: makeStream(buffers: [try makePCMBuffer(sampleCount: 1_600)])
+            )
+        )
+
+        let summaryLog = try await waitForLogMessage(
+            in: diagnosticsSink,
+            containing: "streaming_adapter_summary"
+        )
+        XCTAssertTrue(summaryLog.message.contains("descriptorID=\(descriptor.id)"))
+        XCTAssertTrue(summaryLog.message.contains("bufferCount=1"))
+        XCTAssertTrue(summaryLog.message.contains("partialCount=1"))
+        XCTAssertTrue(summaryLog.message.contains("eouCount=1"))
+        XCTAssertTrue(summaryLog.message.contains("outcome=completed"))
+        XCTAssertTrue(summaryLog.message.contains("finalTextEmpty=false"))
+        XCTAssertTrue(summaryLog.message.contains("audioDurationMs=100"))
+    }
 }
 
 private extension FluidAudioStreamingTranscriberAdapterTests {
+    func makeLogger(sink: InMemoryTestSink) -> PersonalScribeLogger {
+        PersonalScribeLogger(
+            category: PersonalScribeLogCategory.transcription,
+            reporter: DiagnosticsReporter(
+                sinks: [sink],
+                now: { Date(timeIntervalSince1970: 0) }
+            )
+        )
+    }
+
     func temporaryRootDirectory() throws -> URL {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -209,6 +256,25 @@ private extension FluidAudioStreamingTranscriberAdapterTests {
             events.append(event)
         }
         return events
+    }
+
+    func waitForLogMessage(
+        in sink: InMemoryTestSink,
+        containing fragment: String,
+        timeout: Duration = .seconds(2)
+    ) async throws -> RedactedDiagnosticsEvent {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if let message = await sink.snapshot().first(where: { $0.message.contains(fragment) }) {
+                return message
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail("Timed out waiting for diagnostics message containing '\(fragment)'")
+        let fallback = await sink.snapshot().first(where: { $0.message.contains(fragment) })
+        return try XCTUnwrap(fallback)
     }
 }
 

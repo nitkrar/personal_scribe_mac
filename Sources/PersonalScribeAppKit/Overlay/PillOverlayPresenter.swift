@@ -616,6 +616,18 @@ public final class PillOverlayPresenter {
         streamCard?.hide()
     }
 
+    func logStreamCardStateChanged(
+        action: String,
+        reason: String,
+        textLength: Int,
+        sessionState: SessionState,
+        isStreamingSession: Bool
+    ) {
+        diagnosticLogger.info(
+            "stream_card_state_changed — action=\(action) reason=\(reason) textLength=\(textLength) sessionState=\(sessionState) isStreamingSession=\(isStreamingSession)"
+        )
+    }
+
     public func hide() {
         intendsToShow = false
         panel?.orderOut(nil)

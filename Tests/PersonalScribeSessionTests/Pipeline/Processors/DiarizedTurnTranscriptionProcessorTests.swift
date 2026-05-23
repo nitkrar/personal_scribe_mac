@@ -268,9 +268,70 @@ final class DiarizedTurnTranscriptionProcessorTests: XCTestCase {
             XCTFail("Expected batch text output")
         }
     }
+
+    func testProcessLogsDiarizedProcessorSummary() async throws {
+        let firstTurn = makeTurn(speakerID: "speaker_0", startMS: 0, endMS: 200)
+        let secondTurn = makeTurn(speakerID: "speaker_1", startMS: 500, endMS: 700)
+        let diarizer = StubSpeakerDiarizer(events: [.terminal([firstTurn, secondTurn])])
+        let transcriber = RecordingTranscriber(
+            results: [
+                makeResult(text: "alpha", startMS: 0, endMS: 200, processingMS: 8),
+                makeResult(text: "beta", startMS: 0, endMS: 200, processingMS: 7),
+            ]
+        )
+        let diagnosticsSink = InMemoryTestSink()
+        let processor = DiarizedTurnTranscriptionProcessor(
+            diarizer: diarizer,
+            transcriber: transcriber,
+            logger: makeLogger(sink: diagnosticsSink)
+        )
+
+        _ = try await processor.process(audio: try makeBuffer(), priors: [])
+
+        let summaryLog = try await waitForLogMessage(
+            in: diagnosticsSink,
+            containing: "diarized_processor_summary"
+        )
+        XCTAssertTrue(summaryLog.message.contains("usedPriorTurns=false"))
+        XCTAssertTrue(summaryLog.message.contains("finalizedTurnCount=2"))
+        XCTAssertTrue(summaryLog.message.contains("transcribedTurnCount=2"))
+        XCTAssertTrue(summaryLog.message.contains("skippedEmptySliceCount=0"))
+        XCTAssertTrue(summaryLog.message.contains("textLength=33"))
+        XCTAssertTrue(summaryLog.message.contains("segmentCount=2"))
+        XCTAssertTrue(summaryLog.message.contains("audioDurationMs=1000"))
+    }
 }
 
 private extension DiarizedTurnTranscriptionProcessorTests {
+    func makeLogger(sink: InMemoryTestSink) -> PersonalScribeLogger {
+        PersonalScribeLogger(
+            category: PersonalScribeLogCategory.session,
+            reporter: DiagnosticsReporter(
+                sinks: [sink],
+                now: { Date(timeIntervalSince1970: 0) }
+            )
+        )
+    }
+
+    func waitForLogMessage(
+        in sink: InMemoryTestSink,
+        containing fragment: String,
+        timeout: Duration = .seconds(2)
+    ) async throws -> RedactedDiagnosticsEvent {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if let message = await sink.snapshot().first(where: { $0.message.contains(fragment) }) {
+                return message
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail("Timed out waiting for diagnostics message containing '\(fragment)'")
+        let fallback = await sink.snapshot().first(where: { $0.message.contains(fragment) })
+        return try XCTUnwrap(fallback)
+    }
+
     func makeBuffer() throws -> PCMBuffer {
         try PCMBuffer(
             samples: (0..<10).map(Float.init),
