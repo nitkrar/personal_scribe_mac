@@ -157,8 +157,11 @@ final class AppCompositionTests: XCTestCase {
         let qwenHint = await preference.hint(for: BuiltInModelCatalog.qwen3AsrF32.id)
         let removedHint = await preference.hint(for: "removed-model")
 
+        // whisperKitTiny + qwen3AsrF32 both have `supportedLanguages` lists
+        // containing "ja", so init-time sanitization keeps both hints. Only
+        // the unregistered "removed-model" entry should be dropped.
         XCTAssertEqual(whisperHint, "ja")
-        XCTAssertNil(qwenHint)
+        XCTAssertEqual(qwenHint, "ja")
         XCTAssertNil(removedHint)
         XCTAssertEqual(
             Preference<[String: String]>(
@@ -166,7 +169,10 @@ final class AppCompositionTests: XCTestCase {
                 default: [:],
                 defaults: defaults
             ).resolve(),
-            [BuiltInModelCatalog.whisperKitTiny.id: "ja"]
+            [
+                BuiltInModelCatalog.whisperKitTiny.id: "ja",
+                BuiltInModelCatalog.qwen3AsrF32.id: "ja",
+            ]
         )
     }
 

@@ -2,6 +2,10 @@
 
 Extends `~/Projects/nitkrar/CLAUDE.md` (local-first search, backward-compat APIs, don't break core functionality) and `~/.claude/CLAUDE.md` (global operating principles).
 
+**Delegated-agent rules (atlas + hermes + pool workers)**: see `AGENTS.md` — full-suite test gate before DONE, launch-verification gate for composition changes, DONE message format.
+
+**Instrumentation rules**: see `docs/INSTRUMENTATION_PRINCIPLES.md` — log file routing, retention, per-log frequency budget.
+
 ## Testing Discipline
 - **Rigid TDD** for logic, protocols, state machines: write a failing test demonstrating the exact broken/missing behavior *first*. Commit test + fix together; reference the test name in the commit message.
 - **Flexible TDD** for SwiftUI UI that can't be XCTest'd: test what can be tested (view model, published state, presenter behavior). Add a manual-verification checklist entry to the relevant `Tests/*/Manual*Verification.md` runbook before claiming shipped.
