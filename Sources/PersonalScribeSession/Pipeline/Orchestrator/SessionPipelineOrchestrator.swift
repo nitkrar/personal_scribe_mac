@@ -12,6 +12,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private let contextProvider: any PipelineContextProviding
     private let modelLanguagePreference: ModelLanguagePreference?
     private let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
+    private let recordingFileWriter: (any RecordingFileWriting)?
+    private let recordAudioEnabled: @Sendable () -> Bool
+    private let recordingsDirectory: @Sendable () throws -> URL
     /// VAD provider — nil means the feature is compiled in but not wired (tests)
     /// OR the bundled model failed to load and the provider elected to go silent.
     /// Orchestrator treats either case identically: no VAD monitoring.
@@ -109,6 +112,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
         modelLanguagePreference: ModelLanguagePreference? = nil,
+        recordingFileWriter: (any RecordingFileWriting)? = nil,
+        recordAudioEnabled: @escaping @Sendable () -> Bool = { false },
+        recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
         vadProvider: (any VadProviding)? = nil,
         boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds,
@@ -130,6 +136,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             contextProvider: contextProvider,
             modelLanguagePreference: modelLanguagePreference,
             persistenceHandler: persistenceHandler,
+            recordingFileWriter: recordingFileWriter,
+            recordAudioEnabled: recordAudioEnabled,
+            recordingsDirectory: recordingsDirectory,
             vadProvider: vadProvider,
             boundRecipe: boundRecipe,
             graceDurationSeconds: graceDurationSeconds,
@@ -145,6 +154,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         contextProvider: any PipelineContextProviding,
         modelLanguagePreference: ModelLanguagePreference? = nil,
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?,
+        recordingFileWriter: (any RecordingFileWriting)? = nil,
+        recordAudioEnabled: @escaping @Sendable () -> Bool = { false },
+        recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
         vadProvider: (any VadProviding)? = nil,
         boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds,
@@ -158,6 +170,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.contextProvider = contextProvider
         self.modelLanguagePreference = modelLanguagePreference
         self.persistenceHandler = persistenceHandler
+        self.recordingFileWriter = recordingFileWriter
+        self.recordAudioEnabled = recordAudioEnabled
+        self.recordingsDirectory = recordingsDirectory
         self.vadProvider = vadProvider
         self.boundRecipe = boundRecipe
         self.graceDurationSeconds = graceDurationSeconds
@@ -746,7 +761,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.recordingDuration = rawResult.audioDuration
             }
 
-            try await persist(finalResult)
+            try await persist(finalResult, replayBuffers: replayBuffers)
 
             publish { snapshot in
                 snapshot.sessionState = .transcribing
@@ -945,9 +960,28 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
-    private func persist(_ result: TranscriptionResult) async throws {
+    private func persist(
+        _ result: TranscriptionResult,
+        replayBuffers: [PCMBuffer]
+    ) async throws {
         guard let persistenceHandler else {
             return
+        }
+
+        var audioFilename: String?
+        if recordAudioEnabled(),
+           let recordingFileWriter,
+           !replayBuffers.isEmpty {
+            do {
+                let directory = try recordingsDirectory()
+                let filename = RecordingFileWriter.filename(for: Date(), in: directory)
+                let fileURL = directory.appendingPathComponent(filename, isDirectory: false)
+                try recordingFileWriter.write(replayBuffers, to: fileURL)
+                audioFilename = filename
+            } catch {
+                logger.error("Failed to persist audio recording", error: error)
+                audioFilename = nil
+            }
         }
 
         let entry = TranscriptEntry(
@@ -964,7 +998,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             // `nil` only when no recipe was frozen for the session
             // (legacy / fixed-recipe test paths); production
             // session-starts always bind.
-            modeId: activeSessionRecipe?.recipeID
+            modeId: activeSessionRecipe?.recipeID,
+            audioFilename: audioFilename
         )
 
         do {

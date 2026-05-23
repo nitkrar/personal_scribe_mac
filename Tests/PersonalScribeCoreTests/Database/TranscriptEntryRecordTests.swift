@@ -18,7 +18,8 @@ final class TranscriptEntryRecordTests: XCTestCase {
                     text TEXT NOT NULL,
                     audio_duration REAL NOT NULL,
                     processing_duration REAL NOT NULL,
-                    mode_id TEXT
+                    mode_id TEXT,
+                    audio_filename TEXT
                 )
                 """)
         }
@@ -122,6 +123,50 @@ final class TranscriptEntryRecordTests: XCTestCase {
         }
         XCTAssertEqual(fetched.count, 1)
         XCTAssertNil(fetched.first?.modeId)
+    }
+
+    func testTranscriptEntryRoundtripsAudioFilename() throws {
+        let dbQueue = try makeInMemoryQueue()
+        let entry = TranscriptEntry(
+            id: UUID(),
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
+            text: "with audio",
+            audioDuration: 1.0,
+            processingDuration: 0.1,
+            modeId: "Meeting-7a3f1c",
+            audioFilename: "20260519_113345.wav"
+        )
+
+        try dbQueue.write { db in
+            try entry.insert(db)
+        }
+
+        let fetched = try dbQueue.read { db in
+            try TranscriptEntry.fetchAll(db, sql: "SELECT * FROM transcripts")
+        }
+        XCTAssertEqual(fetched, [entry])
+        XCTAssertEqual(fetched.first?.audioFilename, "20260519_113345.wav")
+    }
+
+    func testTranscriptEntryDecodesLegacyRowWithNilAudioFilename() throws {
+        let dbQueue = try makeInMemoryQueue()
+        let id = UUID()
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO transcripts (
+                    id, timestamp, text, audio_duration, processing_duration, mode_id, audio_filename
+                ) VALUES (?, ?, ?, ?, ?, NULL, NULL)
+                """,
+                arguments: [id.uuidString, 1_700_000_000.0, "legacy row", 0.5, 0.05]
+            )
+        }
+
+        let fetched = try dbQueue.read { db in
+            try TranscriptEntry.fetchAll(db, sql: "SELECT * FROM transcripts")
+        }
+        XCTAssertEqual(fetched.count, 1)
+        XCTAssertNil(fetched.first?.audioFilename)
     }
 
     func testTimestampRoundTripPrecision() throws {

@@ -131,6 +131,12 @@ instead of its contents.
 - Hover tooltips: hovering the magnifying-glass icon shows `Open in
   Finder`; hovering the folder icon shows `Change base directory…`.
 
+## Advanced — recordings card (#069)
+
+- [ ] **MV-REC-4 — recording writes a timestamped WAV that plays back:** with `Save audio recordings` enabled, capture a short dictation, then inspect `<base>/recordings/` (`~/Library/Application Support/personal_scribe/recordings/` unless you changed the base directory). Confirm a new `YYYYMMDD_HHMMSS.wav` file appears, or `YYYYMMDD_HHMMSS_2.wav` if you intentionally forced a same-second collision. Open the file in QuickTime Player and confirm it plays the recorded speech cleanly.
+- [ ] **MV-REC-5 — deleting a transcript cascades to the saved audio file:** after creating a saved recording, open `Transcriptions`, delete that transcript row, and confirm the matching `.wav` disappears from `<base>/recordings/` immediately after the delete completes.
+- [ ] **MV-REC-6 — launch sweep deletes stale audio and nulls the DB link:** in `Settings → Advanced`, set `Keep recordings for` to `1 day`, record a short clip, then age its `.wav` file to at least two days old with Finder metadata tools or `touch`. Relaunch Ninimma and confirm the stale `.wav` is removed during launch. Then inspect `<base>/db/transcripts.sqlite` with `sqlite3` (or the current Transcriptions UI if it exposes audio affordances) and confirm the corresponding transcript row no longer carries a playable audio link because `audio_filename` was nulled by the sweep.
+
 ## AI Models tab — Stage A (step 3.2)
 
 Stage A replaces the inert AIModelsTab with one `SettingsCard` row per registered voice model. Chip + button are driven by `DefaultModelService.downloadStates[descriptor.id]`. A single `SettingsSection` header (`Voice models`) is used for now; Stage B will add an `AI models` section below without restructuring.
@@ -324,4 +330,3 @@ summary caption at the bottom that adapts to toggle state.
 - **MV-072-8 — Restore default bump:** fresh install (delete
   `UserDefaults` for `PasteRestoreDelaySeconds`). Open Settings, flip
   Restore ON. Slider sits at `3.0`s — not the pre-#072 `0.5`s default.
-

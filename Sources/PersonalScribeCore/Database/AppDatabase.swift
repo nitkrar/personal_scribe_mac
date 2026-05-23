@@ -11,8 +11,8 @@ import GRDB
 /// without a new guarantee (plan §3 Q-A1).
 ///
 /// On init, we:
-///   1. Ensure the recordings directory exists.
-///   2. Open a `DatabaseQueue` on `<recordings>/<filename>`.
+///   1. Ensure the database directory exists.
+///   2. Open a `DatabaseQueue` on `<db>/<filename>`.
 ///   3. Run runtime pre-checks (SQLite version ≥ 3.38.0, FTS5 compile option)
 ///      against the opened queue — before migrations run.
 ///   4. Migrate via `TranscriptsMigrator.makeMigrator()`.
@@ -38,14 +38,14 @@ public struct AppDatabase: Sendable {
         filename: String = "transcripts.sqlite"
     ) throws {
         let fileManager = FileManager.default
-        let recordingsDirectory = locator.url(for: .recordings)
-        let databaseURL = recordingsDirectory
+        let databaseDirectory = locator.url(for: .db)
+        let databaseURL = databaseDirectory
             .appendingPathComponent(filename, isDirectory: false)
             .standardizedFileURL
 
         do {
             try fileManager.createDirectory(
-                at: recordingsDirectory,
+                at: databaseDirectory,
                 withIntermediateDirectories: true
             )
         } catch {

@@ -22,14 +22,20 @@ struct PersonalScribeAppMain: App {
     @StateObject private var diagnosticsOverlayController: LiveDiagnosticsOverlayController
 
     init() {
+        let defaults = UserDefaults.standard
+        // Run preference migrations before any AppComposition access so
+        // shared singletons resolve upgraded defaults on first launch
+        // after a migration lands.
+        PreferenceMigrator.migrate(defaults: defaults)
         AppComposition.startDiagnosticsMaintenanceIfNeeded()
+        AppComposition.startRecordingRetentionSweeperIfNeeded()
         self.init(
             coordinator: AppComposition.sessionCoordinator,
             permissionService: AppComposition.makePermissionService(),
             clipboardWriter: PersonalScribeAppMain.defaultClipboardWriter,
             openSettings: PersonalScribeAppMain.defaultOpenSettings,
             overlayPanelBuilder: AppKitPillOverlayPanelBuilder(),
-            defaults: .standard,
+            defaults: defaults,
             startupCoordinator: nil
         )
     }

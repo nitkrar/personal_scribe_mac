@@ -15,18 +15,72 @@ final class AppDatabaseMigrationTests: XCTestCase {
         let baseDirectory = try makeTempBaseDir()
         defer { cleanup(baseDirectory) }
 
-        let recordings = baseDirectory.appendingPathComponent("recordings", isDirectory: true)
-        try fileManager.createDirectory(at: recordings, withIntermediateDirectories: true)
-        let locator = FixedBaseDirectoryStorageLocator(
-            baseDirectory: baseDirectory,
-            managedDirectoryOverrides: [.recordings: recordings]
-        )
+        let locator = FixedBaseDirectoryStorageLocator(baseDirectory: baseDirectory)
         _ = try AppDatabase(locator: locator)
 
-        let databaseURL = recordings.appendingPathComponent("transcripts.sqlite", isDirectory: false)
+        let databaseURL = baseDirectory.appendingPathComponent("db/transcripts.sqlite", isDirectory: false)
         let dumped = try dumpSchema(at: databaseURL)
 
         XCTAssertEqual(dumped, Self.expectedSchemaDump, diffMessage(actual: dumped, expected: Self.expectedSchemaDump))
+    }
+
+    func testV6AddsAudioFilenameColumnNullable() throws {
+        let baseDirectory = try makeTempBaseDir()
+        defer { cleanup(baseDirectory) }
+
+        let databaseURL = baseDirectory.appendingPathComponent("db/transcripts.sqlite", isDirectory: false)
+        try fileManager.createDirectory(
+            at: databaseURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let queue = try DatabaseQueue(path: databaseURL.path)
+        try queue.write { db in
+            try db.execute(sql: """
+                CREATE TABLE transcripts (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    timestamp REAL NOT NULL,
+                    text TEXT NOT NULL,
+                    audio_duration REAL NOT NULL,
+                    processing_duration REAL NOT NULL,
+                    mode_id TEXT
+                )
+                """)
+            try db.execute(
+                sql: "CREATE TABLE IF NOT EXISTS grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)"
+            )
+            for migration in [
+                "v1_transcripts_table",
+                "v2_fts_search",
+                "v3_jsonl_bootstrap",
+                "v4_runtime_guard_marker",
+                "v5_mode_id",
+            ] {
+                try db.execute(
+                    sql: "INSERT INTO grdb_migrations (identifier) VALUES (?)",
+                    arguments: [migration]
+                )
+            }
+            try db.execute(sql: "PRAGMA user_version = 5")
+        }
+
+        let migrator = TranscriptsMigrator.makeMigrator()
+        try migrator.migrate(queue)
+        try migrator.migrate(queue)
+
+        let columns = try queue.read { db in
+            try Row.fetchAll(db, sql: "PRAGMA table_info(transcripts)")
+        }
+
+        let audioFilenameColumns = columns.filter { ($0["name"] as String?) == "audio_filename" }
+        XCTAssertEqual(audioFilenameColumns.count, 1)
+        let audioFilenameColumn = try XCTUnwrap(audioFilenameColumns.first)
+        XCTAssertEqual(audioFilenameColumn["type"] as String?, "TEXT")
+        XCTAssertEqual(audioFilenameColumn["notnull"] as Int64?, 0)
+
+        let userVersion = try queue.read { db in
+            try Int.fetchOne(db, sql: "PRAGMA user_version")
+        }
+        XCTAssertEqual(userVersion, 6)
     }
 
     // MARK: - Expected DDL (byte-identical pin)
@@ -42,7 +96,7 @@ final class AppDatabaseMigrationTests: XCTestCase {
         text TEXT NOT NULL,
         audio_duration REAL NOT NULL,
         processing_duration REAL NOT NULL
-    , mode_id TEXT)
+    , mode_id TEXT, audio_filename TEXT)
     ---
     table transcripts_fts
     CREATE VIRTUAL TABLE "transcripts_fts" USING fts5(text, tokenize='''unicode61'' ''remove_diacritics'' ''2''', content='transcripts')

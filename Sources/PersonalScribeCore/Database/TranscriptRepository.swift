@@ -16,13 +16,14 @@ import GRDB
 ///
 /// SQL shape parity with `SQLiteTranscriptStore` (lines 78-175) is maintained
 /// so Pass 2 can delete the legacy store without query-plan drift.
-public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDeleting, TranscriptUpdating {
+public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDeleting, TranscriptUpdating, TranscriptAudioFilenameNullifying {
     private static let transcriptsFTSTableName = "transcripts_fts"
 
     private let database: AppDatabase
     private let logger: PersonalScribeLogger
     private let operationObserver: any DatabaseOperationObserving
     private let notificationCenter: NotificationCenter
+    private let audioFileRemover: @Sendable (String) throws -> Void
 
     /// Pass 1 init takes the shared database plus an optional per-operation
     /// observer. Plan §3 Q-F1: "no raw `DatabaseReader`/`DatabaseWriter`
@@ -38,10 +39,32 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
         notificationCenter: NotificationCenter = .default,
         logger: PersonalScribeLogger
     ) {
+        self.init(
+            database: database,
+            operationObserver: operationObserver,
+            notificationCenter: notificationCenter,
+            audioFileRemover: { filename in
+                let fileURL = try AppConfig
+                    .recordingsDirectory()
+                    .appendingPathComponent(filename, isDirectory: false)
+                try FileManager.default.removeItem(at: fileURL)
+            },
+            logger: logger
+        )
+    }
+
+    public init(
+        database: AppDatabase,
+        operationObserver: any DatabaseOperationObserving = NullDatabaseOperationObserver(),
+        notificationCenter: NotificationCenter = .default,
+        audioFileRemover: @escaping @Sendable (String) throws -> Void,
+        logger: PersonalScribeLogger
+    ) {
         self.database = database
         self.logger = logger
         self.operationObserver = operationObserver
         self.notificationCenter = notificationCenter
+        self.audioFileRemover = audioFileRemover
     }
 
     // MARK: - Write
@@ -69,17 +92,31 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
         }
     }
 
-    /// Deletes the transcript row for `id`. This only removes the SQLite row;
-    /// any optional on-disk audio sidecars are intentionally left untouched
-    /// until ticket #069 owns that lifecycle.
+    /// Deletes the transcript row for `id` and best-effort removes any
+    /// persisted audio sidecar named by `audio_filename`.
     public func delete(id: UUID) async throws {
         do {
-            try await database.write { db in
+            let audioFilename = try await database.write { db -> String? in
+                let filename = try String.fetchOne(
+                    db,
+                    sql: "SELECT audio_filename FROM transcripts WHERE id = ?",
+                    arguments: [id.uuidString]
+                )
                 try db.execute(
                     sql: "DELETE FROM transcripts WHERE id = ?",
                     arguments: [id.uuidString]
                 )
+                return filename
             }
+
+            if let audioFilename {
+                do {
+                    try audioFileRemover(audioFilename)
+                } catch {
+                    logger.error("TranscriptRepository.delete file removal failed", error: error)
+                }
+            }
+
             notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
             operationObserver.record(.writeSucceeded)
         } catch let error as TranscriptStorageError {
@@ -117,6 +154,34 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
         }
     }
 
+    public func nullifyAudioFilenames(_ filenames: [String]) async throws {
+        guard !filenames.isEmpty else {
+            return
+        }
+
+        let placeholders = Array(repeating: "?", count: filenames.count).joined(separator: ", ")
+        do {
+            try await database.write { db in
+                try db.execute(
+                    sql: """
+                    UPDATE transcripts
+                    SET audio_filename = NULL
+                    WHERE audio_filename IN (\(placeholders))
+                    """,
+                    arguments: StatementArguments(filenames)
+                )
+            }
+            notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
+            operationObserver.record(.writeSucceeded)
+        } catch let error as TranscriptStorageError {
+            operationObserver.record(.writeFailed)
+            throw error
+        } catch {
+            operationObserver.record(.writeFailed)
+            throw TranscriptStorageError.queryFailed(underlying: error)
+        }
+    }
+
     // MARK: - Reads (non-throwing; swallow + log)
 
     /// Most recent `limit` entries in reverse-chronological order. A non-
@@ -137,7 +202,9 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         timestamp,
                         text,
                         audio_duration,
-                        processing_duration
+                        processing_duration,
+                        mode_id,
+                        audio_filename
                     FROM transcripts
                     ORDER BY timestamp DESC
                     LIMIT ?
@@ -198,7 +265,9 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         transcripts.timestamp,
                         transcripts.text,
                         transcripts.audio_duration,
-                        transcripts.processing_duration
+                        transcripts.processing_duration,
+                        transcripts.mode_id,
+                        transcripts.audio_filename
                     FROM transcripts
                     JOIN transcripts_fts
                       ON transcripts_fts.rowid = transcripts.rowid
@@ -231,7 +300,9 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         timestamp,
                         text,
                         audio_duration,
-                        processing_duration
+                        processing_duration,
+                        mode_id,
+                        audio_filename
                     FROM transcripts
                     ORDER BY timestamp DESC
                     """
@@ -274,7 +345,9 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         timestamp,
                         text,
                         audio_duration,
-                        processing_duration
+                        processing_duration,
+                        mode_id,
+                        audio_filename
                     FROM transcripts
                     WHERE timestamp BETWEEN ? AND ?
                     ORDER BY timestamp \(orderClause)

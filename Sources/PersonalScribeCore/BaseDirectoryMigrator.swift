@@ -101,6 +101,70 @@ public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable
         logger.info("BaseDirectoryMigrator: moved \(legacy.path) → \(current.path)")
     }
 
+    /// One-shot first-launch migration for the transcripts database moving from
+    /// `<base>/recordings/` to `<base>/db/`.
+    ///
+    /// Idempotent + safe:
+    ///   - No-op if the destination database already exists.
+    ///   - No-op if the legacy source database does not exist.
+    ///   - Moves the main SQLite file plus any `-wal` / `-shm` sidecars that
+    ///     are present, leaving the source path empty after success.
+    ///   - Throws on actual filesystem errors from `FileManager.moveItem`.
+    public func relocateLegacyDatabaseIfNeeded(
+        filename: String = "transcripts.sqlite"
+    ) throws {
+        let storageLocator = AppConfig.liveStorageLocator(
+            fileManager: fileManager,
+            defaults: defaults,
+            environment: environment
+        )
+        let recordingsDirectory = storageLocator.url(for: .recordings)
+        let databaseDirectory = storageLocator.url(for: .db)
+        let destinationDatabaseURL = databaseDirectory
+            .appendingPathComponent(filename, isDirectory: false)
+            .standardizedFileURL
+
+        guard !fileManager.fileExists(atPath: destinationDatabaseURL.path) else {
+            return
+        }
+
+        let fileSuffixes = ["", "-wal", "-shm"]
+        let candidateMoves = fileSuffixes.compactMap { suffix -> (source: URL, destination: URL)? in
+            let sourceURL = recordingsDirectory
+                .appendingPathComponent(filename + suffix, isDirectory: false)
+                .standardizedFileURL
+            guard fileManager.fileExists(atPath: sourceURL.path) else {
+                return nil
+            }
+
+            let destinationURL = databaseDirectory
+                .appendingPathComponent(filename + suffix, isDirectory: false)
+                .standardizedFileURL
+            return (source: sourceURL, destination: destinationURL)
+        }
+
+        guard !candidateMoves.isEmpty else {
+            return
+        }
+
+        try fileManager.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
+
+        var movedFiles: [(source: URL, destination: URL)] = []
+        do {
+            for file in candidateMoves {
+                try fileManager.moveItem(at: file.source, to: file.destination)
+                movedFiles.append(file)
+            }
+        } catch {
+            rollbackDatabaseRelocation(movedFiles)
+            throw error
+        }
+
+        logger.info(
+            "BaseDirectoryMigrator: relocated legacy database files from \(recordingsDirectory.path) to \(databaseDirectory.path)"
+        )
+    }
+
     public func migrate(to newBase: URL) async throws -> MigrationReport {
         let destinationBase = newBase.standardizedFileURL
         let sourceStorageLocator = AppConfig.liveStorageLocator(
@@ -207,6 +271,22 @@ public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable
                 NSLog(
                     "BaseDirectoryMigrator rollback failed for %@: %@",
                     subdirectory.pathComponent,
+                    error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func rollbackDatabaseRelocation(
+        _ movedFiles: [(source: URL, destination: URL)]
+    ) {
+        for file in movedFiles.reversed() {
+            do {
+                try fileManager.moveItem(at: file.destination, to: file.source)
+            } catch {
+                NSLog(
+                    "BaseDirectoryMigrator rollback failed for database file %@: %@",
+                    file.destination.lastPathComponent,
                     error.localizedDescription
                 )
             }

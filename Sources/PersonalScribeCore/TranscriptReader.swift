@@ -13,3 +13,7 @@ public protocol TranscriptDeleting: Sendable {
 public protocol TranscriptUpdating: Sendable {
     func update(id: UUID, text: String) async throws
 }
+
+public protocol TranscriptAudioFilenameNullifying: Sendable {
+    func nullifyAudioFilenames(_ filenames: [String]) async throws
+}
