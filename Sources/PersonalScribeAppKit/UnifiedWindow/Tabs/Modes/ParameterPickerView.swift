@@ -36,8 +36,8 @@ struct ParameterPickerView: View {
 
             Picker("", selection: selectionBinding) {
                 Text(defaultLabel).tag(Selection.useDefault)
-                Text("Force On").tag(Selection.forceOn)
-                Text("Force Off").tag(Selection.forceOff)
+                Text(Self.overrideLabel(for: true)).tag(Selection.forceOn)
+                Text(Self.overrideLabel(for: false)).tag(Selection.forceOff)
             }
             .labelsHidden()
             .pickerStyle(.menu)
@@ -47,7 +47,15 @@ struct ParameterPickerView: View {
 
     private var defaultLabel: String {
         let live = settingKey.resolve(from: defaults)
-        return "Default (Live: \(live ? "On" : "Off"))"
+        return Self.defaultLabel(for: live)
+    }
+
+    static func defaultLabel(for value: Bool) -> String {
+        "Default (\(overrideLabel(for: value)))"
+    }
+
+    static func overrideLabel(for value: Bool) -> String {
+        value ? "On" : "Off"
     }
 
     private var selectionBinding: Binding<Selection> {
