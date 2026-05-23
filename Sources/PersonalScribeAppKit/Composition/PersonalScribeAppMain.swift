@@ -13,6 +13,8 @@ struct PersonalScribeAppMain: App {
     let startupCoordinator: AppStartupCoordinator
     let onboardingCompletionObserver: OnboardingCompletionObserver
 
+    @NSApplicationDelegateAdaptor(FastExitApplicationTerminationDelegate.self)
+    private var applicationTerminationDelegate
     @StateObject private var sceneModel: MenuBarSceneModel
     @StateObject private var pillController: PillOverlayController
     @StateObject private var statusItemController: StatusItemControllerHost
@@ -378,6 +380,8 @@ struct PersonalScribeAppMain: App {
                 unifiedWindowControllerHost.showWindow(selecting: .settings)
             }
         }
+
+        applicationTerminationDelegate.installPrequitHandler(prequitHandler)
     }
 
     var body: some Scene {
