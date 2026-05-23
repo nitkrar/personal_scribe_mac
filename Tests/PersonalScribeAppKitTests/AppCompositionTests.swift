@@ -170,6 +170,27 @@ final class AppCompositionTests: XCTestCase {
         )
     }
 
+    func testReporterIncludesDebugFileSink() async throws {
+        let tempDirectory = try makeTemporaryDirectory()
+        let reporter = AppComposition.makeDiagnosticsReporter(
+            storageLocatorProvider: { TestStorageLocator(baseDirectory: tempDirectory) },
+            diagnosticLoggingModeProvider: { .verbose },
+            diagnosticsStore: DiagnosticsStore(capacity: 20)
+        )
+
+        reporter.debug("debug-only", category: PersonalScribeLogCategory.app)
+        reporter.info("info-only", category: PersonalScribeLogCategory.app)
+
+        let debugContents = try await waitForLogContents(named: "debug.log", in: tempDirectory)
+        let diagnosticsContents = try await waitForLogContents(named: "diagnostics.log", in: tempDirectory)
+
+        XCTAssertTrue(debugContents.contains("level=debug"))
+        XCTAssertTrue(debugContents.contains("message=\"debug-only\""))
+        XCTAssertTrue(diagnosticsContents.contains("level=info"))
+        XCTAssertTrue(diagnosticsContents.contains("message=\"info-only\""))
+        XCTAssertFalse(diagnosticsContents.contains("message=\"debug-only\""))
+    }
+
     private func makePinnedAsrModelService() -> ActiveModelService {
         let suiteName = "AppCompositionTests.\(#function).\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -218,6 +239,29 @@ final class AppCompositionTests: XCTestCase {
         }
         XCTFail("Timed out waiting for condition after \(timeout)")
     }
+
+    private func makeTemporaryDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private func waitForLogContents(named fileName: String, in baseDirectory: URL) async throws -> String {
+        let url = baseDirectory
+            .appendingPathComponent(ManagedDirectory.logs.pathComponent, isDirectory: true)
+            .appendingPathComponent(fileName)
+
+        for _ in 0..<100 {
+            if let contents = try? String(contentsOf: url, encoding: .utf8) {
+                return contents
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail("Timed out waiting for log at \(url.path)")
+        return ""
+    }
 }
 
 @MainActor
@@ -250,4 +294,16 @@ private final class FakePermissionService: PermissionService {
     func systemSettingsDeepLink(for permission: Permission) -> URL {
         URL(string: "https://example.invalid/\(permission.rawValue)")!
     }
+}
+
+private struct TestStorageLocator: StorageLocator {
+    let baseDirectory: URL
+
+    func url(for directory: ManagedDirectory) -> URL {
+        baseDirectory
+            .appendingPathComponent(directory.pathComponent, isDirectory: true)
+            .standardizedFileURL
+    }
+
+    func ensureDirectoriesExist() throws {}
 }

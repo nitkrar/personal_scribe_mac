@@ -2,6 +2,8 @@ import Foundation
 import os
 
 public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
+    private static let debugLogRetentionDays = 3
+
     private let storageLocatorProvider: @Sendable () -> any StorageLocator
     private let retentionDaysProvider: @Sendable () -> Int
     private let calendar: Calendar
@@ -38,10 +40,7 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
 
             let currentDayStart = calendar.startOfDay(for: now)
             try rotateStaleCurrentLogs(in: logsDirectory, currentDayStart: currentDayStart)
-            try pruneArchivedLogs(
-                in: logsDirectory,
-                retentionDays: LogRetentionDaysPreference.sanitized(retentionDaysProvider())
-            )
+            try pruneArchivedLogs(in: logsDirectory)
         } catch {
             fallbackLogger.error("Failed to maintain diagnostics logs")
         }
@@ -69,16 +68,15 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
         }
     }
 
-    private func pruneArchivedLogs(
-        in logsDirectory: URL,
-        retentionDays: Int
-    ) throws {
-        guard retentionDays > 0 else {
-            return
-        }
-
+    private func pruneArchivedLogs(in logsDirectory: URL) throws {
+        let mainLogRetentionDays = LogRetentionDaysPreference.sanitized(retentionDaysProvider())
         let groupedArchives = Dictionary(grouping: try archivedLogs(in: logsDirectory)) { $0.baseLogName }
-        for archives in groupedArchives.values {
+        for (baseLogName, archives) in groupedArchives {
+            let retentionDays = retentionDays(for: baseLogName, mainLogRetentionDays: mainLogRetentionDays)
+            guard retentionDays > 0 else {
+                continue
+            }
+
             let sorted = archives.sorted { lhs, rhs in
                 if lhs.archiveDate == rhs.archiveDate {
                     return lhs.url.lastPathComponent > rhs.url.lastPathComponent
@@ -208,6 +206,15 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
+    }
+
+    private func retentionDays(for baseLogName: String, mainLogRetentionDays: Int) -> Int {
+        switch baseLogName {
+        case "debug.log":
+            Self.debugLogRetentionDays
+        default:
+            mainLogRetentionDays
+        }
     }
 }
 

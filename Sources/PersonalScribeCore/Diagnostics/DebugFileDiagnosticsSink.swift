@@ -1,28 +1,23 @@
 import Foundation
 
-public struct VerboseFileDiagnosticsSink: DiagnosticsSink {
+public struct DebugFileDiagnosticsSink: DiagnosticsSink {
     private let writer: DiagnosticsFileWriter
-    private let isEnabled: @Sendable () -> Bool
 
     public init(
         storageLocatorProvider: @escaping @Sendable () -> any StorageLocator = { AppConfig.liveStorageLocator() },
-        isEnabled: @escaping @Sendable () -> Bool = {
-            DiagnosticLoggingMode.resolve() == .verbose
-        },
         atomicFileWriter: any AtomicFileWriter = FileManagerAtomicFileWriter(),
         maxLogSizeBytes: Int = 1_000_000
     ) {
         writer = DiagnosticsFileWriter(
-            fileName: "diagnostics.log",
+            fileName: "debug.log",
             storageLocatorProvider: storageLocatorProvider,
             atomicFileWriter: atomicFileWriter,
             maxLogSizeBytes: maxLogSizeBytes
         )
-        self.isEnabled = isEnabled
     }
 
     public func record(_ event: RedactedDiagnosticsEvent) async {
-        guard isEnabled(), event.level == .info || event.level == .notice else {
+        guard event.level == .debug else {
             return
         }
 

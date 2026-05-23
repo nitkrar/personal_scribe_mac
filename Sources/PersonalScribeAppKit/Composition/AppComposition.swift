@@ -27,22 +27,32 @@ public enum AppComposition {
     }()
 
     public static let diagnostics: DiagnosticsReporter = {
-        return DiagnosticsReporter(
+        makeDiagnosticsReporter()
+    }()
+
+    static func makeDiagnosticsReporter(
+        storageLocatorProvider: @escaping @Sendable () -> any StorageLocator = { AppConfig.liveStorageLocator() },
+        diagnosticLoggingModeProvider: @escaping @Sendable () -> DiagnosticLoggingMode = { DiagnosticLoggingMode.resolve() },
+        diagnosticsStore: DiagnosticsStore = AppComposition.diagnosticsStore
+    ) -> DiagnosticsReporter {
+        DiagnosticsReporter(
             sinks: [
                 OSLogDiagnosticsSink(),
-                ErrorFileDiagnosticsSink(),
+                ErrorFileDiagnosticsSink(storageLocatorProvider: storageLocatorProvider),
+                DebugFileDiagnosticsSink(storageLocatorProvider: storageLocatorProvider),
                 VerboseFileDiagnosticsSink(
-                    isEnabled: { DiagnosticLoggingMode.resolve() == .verbose }
+                    storageLocatorProvider: storageLocatorProvider,
+                    isEnabled: { diagnosticLoggingModeProvider() == .verbose }
                 ),
                 RingBufferDiagnosticsSink(
                     store: diagnosticsStore,
                     minimumLevelProvider: {
-                        DiagnosticLoggingMode.resolve().minimumBufferedLevel
+                        diagnosticLoggingModeProvider().minimumBufferedLevel
                     }
                 ),
             ]
         )
-    }()
+    }
 
     public static func startDiagnosticsMaintenanceIfNeeded() {
         diagnosticsMaintenanceController.start()
