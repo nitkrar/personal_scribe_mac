@@ -269,6 +269,16 @@ struct PersonalScribeAppMain: App {
                 }
             }
         )
+        let prequitHandler = FastExitApplicationTerminationHandler.makePrequitHandler(
+            stopIfActive: {
+                // Stop an active recording before fast-exit so
+                // `SystemAudioMuter` restores the prior output mute state.
+                await coordinator.stopIfActive()
+            },
+            shutdownPreparedWhisperCppAdapters: {
+                await coordinator.shutdownPreparedWhisperCppAdaptersForApplicationTermination()
+            }
+        )
         let statusItemControllerHost = StatusItemControllerHost(
             sceneModel: sceneModel,
             appStore: appStore,
@@ -299,13 +309,7 @@ struct PersonalScribeAppMain: App {
                 // happens at session start via RecipeBuilder.
                 AppComposition.workflowModeRegistry.setCurrent(id: mode.id)
             },
-            prequitHandler: {
-                // Stop an active recording before terminate so
-                // `SystemAudioMuter` restores the prior output mute state.
-                await AppComposition.sessionCoordinator.stopIfActive()
-                await AppComposition.sessionCoordinator
-                    .shutdownPreparedWhisperCppAdaptersForApplicationTermination()
-            }
+            prequitHandler: prequitHandler
         )
         // Back-wire the menu-bar visibility ref so the unified window's
         // Settings → General "Show menu bar item" toggle actually flips
