@@ -36,21 +36,19 @@ public final class RecipeBuilder {
     public func build(_ mode: WorkflowMode) throws -> BoundRecipe {
         let processors = try mode.processors.map { try buildProcessor($0) }
         let captureControllers = mode.captureControllers.map { buildCaptureController($0) }
-        let rawOutputSinks = mode.outputSinks.map { buildOutputSink($0) }
+        let outputSinks = mode.outputSinks.map { buildOutputSink($0) }
         let streamingBehavior = buildStreamingBehavior(mode.streamingBehavior)
-        // #033 paired Q4 gate — when live cursor streaming is on, the
-        // capture-time path posts ⌘V per EOU chunk; the stop-time
-        // `.frontmostPaste` sink would re-paste the authoritative final
-        // and double-deliver. Filter it out at bind time so the bound
-        // recipe matches the locked semantics from #056 DESIGN
-        // ("If live cursor streaming is on, there is never an extra
-        // stop-time cursor write").
-        let outputSinks = streamingBehavior?.liveCursorEnabled == true
-            ? rawOutputSinks.filter { sink in
-                if case .frontmostPaste = sink { return false }
-                return true
-            }
-            : rawOutputSinks
+        // #098 (2026-05-24): streaming mode's auto-paste setting now
+        // flows through unchanged. Pre-#098 behavior filtered out
+        // `.frontmostPaste` whenever `liveCursorEnabled == true` to
+        // avoid double-pasting at session end. Dogfood proved this was
+        // wrong: live cursor only pastes EoU chunks (often zero per
+        // session with Parakeet), and the second-pass authoritative
+        // final is different text than what was live-pasted. Users
+        // want BOTH pasted and choose which they keep. The newline
+        // separator between live-pasted chunks and the final paste is
+        // owned by `ClipboardBatchOutput` using #097's accumulator
+        // signal.
         let streamingSecondPassTranscriber = try buildStreamingSecondPassTranscriber(
             streamingBehavior: streamingBehavior
         )

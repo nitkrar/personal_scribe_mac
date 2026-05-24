@@ -825,6 +825,88 @@ final class ClipboardBatchOutputTests: XCTestCase {
         )
         XCTAssertFalse(result)
     }
+
+    // MARK: - #098 newline-before-final-paste
+
+    func testFinalPastePrependsNewlineWhenLiveCursorDidPaste() async {
+        // #098: live cursor pasted ≥1 chunk this session, paste enabled.
+        // ClipboardBatchOutput prepends "\n" so the final paste lands
+        // on its own line rather than running into the last live chunk.
+        let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
+        let service = ClipboardBatchOutput(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            snapshotService: makeSnapshotService(for: pasteboard),
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in true },
+            focusedElementIsInAnotherApp: { true },
+            liveCursorPasteSnapshot: { 3 }
+        )
+
+        let result = await service.deliverBatch(text: "Final paragraph.", sinks: Self.sinks())
+
+        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(pasteboard.string(forType: .string), "\nFinal paragraph.")
+    }
+
+    func testFinalPasteDoesNotPrependNewlineWhenLiveCursorDidNotPaste() async {
+        // #098: zero live chunks this session (typical short Parakeet
+        // session with no EoU fires). No newline.
+        let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
+        let service = ClipboardBatchOutput(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            snapshotService: makeSnapshotService(for: pasteboard),
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in true },
+            focusedElementIsInAnotherApp: { true },
+            liveCursorPasteSnapshot: { 0 }
+        )
+
+        let result = await service.deliverBatch(text: "Final paragraph.", sinks: Self.sinks())
+
+        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Final paragraph.")
+    }
+
+    func testFinalPasteDoesNotPrependNewlineWhenPasteDisabled() async {
+        // #098: live cursor pasted, but auto-paste is OFF in the mode
+        // (clipboard-only delivery). No newline — user pastes manually,
+        // they don't want a stray leading newline.
+        let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
+        let service = ClipboardBatchOutput(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            snapshotService: makeSnapshotService(for: pasteboard),
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in true },
+            focusedElementIsInAnotherApp: { true },
+            liveCursorPasteSnapshot: { 3 }
+        )
+
+        let result = await service.deliverBatch(text: "Final paragraph.", sinks: Self.sinks(autoPaste: false))
+
+        XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Final paragraph.")
+    }
 }
 
 @MainActor

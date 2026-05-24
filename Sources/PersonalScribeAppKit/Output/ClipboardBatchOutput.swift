@@ -27,6 +27,15 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
     private let requestAccessibilityPrompt: @MainActor () -> Void
     private let pasteShortcutPoster: @MainActor () -> Bool
     private let focusedElementIsInAnotherApp: FocusedElementExternalityProbe
+    /// #098: Closure that reports how many chunks the live-cursor sink
+    /// pasted in the most-recently-completed streaming session. When
+    /// the value is `> 0` AND `.frontmostPaste(enabled: true)` is in
+    /// the sinks, `deliverBatch` prepends `"\n"` to the text before
+    /// the clipboard write so the authoritative final paste lands on
+    /// its own line instead of running into the last live-pasted
+    /// chunk. Defaults to a constant 0 so non-streaming callers and
+    /// older tests opt out cleanly.
+    private let liveCursorPasteSnapshot: @MainActor () -> Int
 
     init(
         logger: PersonalScribeLogger,
@@ -48,7 +57,8 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         },
         pasteShortcutPoster: @escaping PasteShortcutPoster = ClipboardBatchOutput.postPasteShortcut,
         focusedElementIsInAnotherApp: @escaping FocusedElementExternalityProbe
-            = ClipboardBatchOutput.liveFocusedElementIsInAnotherApp
+            = ClipboardBatchOutput.liveFocusedElementIsInAnotherApp,
+        liveCursorPasteSnapshot: @escaping @MainActor () -> Int = { 0 }
     ) {
         self.logger = logger
         self.defaults = defaults
@@ -62,6 +72,7 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
             pasteShortcutPoster(logger)
         }
         self.focusedElementIsInAnotherApp = focusedElementIsInAnotherApp
+        self.liveCursorPasteSnapshot = liveCursorPasteSnapshot
     }
 
     public func deliverBatch(text: String, sinks: [BoundOutputSink]) async -> OutputResult {
@@ -109,24 +120,39 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
 
         pasteAccumulator.recordFinalAttempted(chars: text.count)
 
+        // #098: when live cursor pasted ≥1 chunk in the just-ended
+        // streaming session AND `.frontmostPaste` is enabled, prepend
+        // a newline so the authoritative final lands on its own line
+        // instead of running into the last live-pasted chunk
+        // (`"hello world" + "Final paragraph."` was landing as
+        // `"hello worldFinal paragraph."` pre-fix). The split between
+        // live-paste-only mode and live-paste + final-paste both
+        // shipping is by-design as of #098 (RecipeBuilder filter
+        // dropped). The newline only applies in the both-enabled
+        // case; clipboard-only delivery is unaffected.
+        let textToWrite: String =
+            liveCursorPasteSnapshot() > 0 && pasteEnabled
+                ? "\n\(text)"
+                : text
+
         let restoreDelay = ClipboardRestoreDelay.resolve(from: defaults).seconds
         let handle = snapshotService.captureTransientSnapshot()
 
-        guard let writeToken = snapshotService.replaceContents(with: text) else {
+        guard let writeToken = snapshotService.replaceContents(with: textToWrite) else {
             pasteAccumulator.recordFinalFailed(reason: .pasteboardWriteFailed)
             logger.error(
                 pasteFailedLogLine(
                     sink: .batch,
                     stage: "final",
                     reason: .pasteboardWriteFailed,
-                    attemptedChars: text.count,
+                    attemptedChars: textToWrite.count,
                     sessionID: sessionID
                 )
             )
             snapshotService.restoreSnapshot(handle)
             return .failed(.clipboardWriteFailed)
         }
-        pasteAccumulator.recordFinalClipboardWrite(chars: text.count)
+        pasteAccumulator.recordFinalClipboardWrite(chars: textToWrite.count)
 
         // Schedules the user's pre-transcript clipboard to be restored after
         // `restoreDelay` seconds, but only if nothing has written to the

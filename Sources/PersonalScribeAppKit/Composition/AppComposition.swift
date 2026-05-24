@@ -200,6 +200,24 @@ public enum AppComposition {
         logger: makeLogger(PersonalScribeLogCategory.ui)
     )
 
+    /// #033 — live cursor stream output for streaming-with-liveCursorEnabled
+    /// sessions. Routed through the orchestrator's `PipelineOutputSink`
+    /// seam; gated on `bound.streamingBehavior?.liveCursorEnabled` inside
+    /// `consumeLiveStreamingEvent`. For non-live-cursor sessions, the
+    /// sink is dormant (no chunks arrive) and `endSession()` is a no-op
+    /// (no snapshot was captured).
+    ///
+    /// Lifted to a top-level `public static let` so
+    /// `PersonalScribeAppMain` can read `lastSessionLivePasteAttempts`
+    /// off it to drive #098's newline-before-final-paste decision in
+    /// `ClipboardBatchOutput`. Construction must happen before
+    /// `sessionCoordinator` so both initializers see the same
+    /// instance.
+    @MainActor
+    public static let liveCursorOutput = LiveCursorOutput(
+        logger: makeLogger(PersonalScribeLogCategory.ui)
+    )
+
     public static let sessionCoordinator: SessionCoordinator = {
         let logger = makeLogger(PersonalScribeLogCategory.session)
         let capture = AVAudioCaptureService(
@@ -214,9 +232,12 @@ public enum AppComposition {
         // `consumeLiveStreamingEvent`. For non-live-cursor sessions, the
         // sink is dormant (no chunks arrive) and `endSession()` is a no-op
         // (no snapshot was captured).
-        let liveCursorOutput = LiveCursorOutput(
-            logger: makeLogger(PersonalScribeLogCategory.ui)
-        )
+        //
+        // #098: the same instance is exposed as `AppComposition.liveCursorOutput`
+        // so `ClipboardBatchOutput` can read `lastSessionLivePasteAttempts`
+        // when deciding whether to prepend a newline before the final
+        // paste.
+        let liveCursorOutput = Self.liveCursorOutput
 
         let coordinator = SessionCoordinator(
             capture: capture,

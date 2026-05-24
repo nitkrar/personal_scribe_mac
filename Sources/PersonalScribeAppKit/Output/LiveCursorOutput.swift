@@ -53,6 +53,13 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
     private var pasteSessionID: String?
     private var pasteAccumulator = PasteSessionAccumulator()
 
+    /// #098: last completed session's live-paste attempt count. Read by
+    /// `ClipboardBatchOutput.deliverBatch` to decide whether to prepend
+    /// a newline before the authoritative final paste. Set in
+    /// `endSession()` immediately before the accumulator is wiped.
+    /// Resets to 0 at the start of every new session.
+    public private(set) var lastSessionLivePasteAttempts: Int = 0
+
     init(
         logger: PersonalScribeLogger,
         snapshotService: PasteboardSnapshotService = PasteboardSnapshotService(),
@@ -73,16 +80,24 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         guard !chunk.isEmpty else { return }
 
         let sessionID = ensurePasteSessionStarted()
-        pasteAccumulator.recordLiveAttempt(chars: chunk.count)
+        // #098: subsequent chunks within the same session prepend a
+        // single space so consecutive EoU pastes don't concatenate
+        // (`"hello world" + "how are you"` was landing as
+        // `"hello worldhow are you"` pre-fix). First chunk pastes as
+        // is; from chunk N+1 onward we prepend " " before the
+        // clipboard write. Accumulator counts the actual written
+        // length so cumulativeCharsWritten reflects bytes-on-clipboard.
+        let chunkToWrite = didWriteChunkThisSession ? " \(chunk)" : chunk
+        pasteAccumulator.recordLiveAttempt(chars: chunkToWrite.count)
 
-        guard snapshotService.replaceContents(with: chunk) != nil else {
+        guard snapshotService.replaceContents(with: chunkToWrite) != nil else {
             pasteAccumulator.recordLiveFailed(reason: .pasteboardWriteFailed)
             logger.error(
                 pasteFailedLogLine(
                     sink: .live,
                     stage: "live",
                     reason: .pasteboardWriteFailed,
-                    attemptedChars: chunk.count,
+                    attemptedChars: chunkToWrite.count,
                     sessionID: sessionID
                 )
             )
@@ -91,7 +106,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         didWriteChunkThisSession = true
 
         guard isAccessibilityTrusted() else {
-            pasteAccumulator.recordLiveClipboardWrite(chars: chunk.count)
+            pasteAccumulator.recordLiveClipboardWrite(chars: chunkToWrite.count)
             pasteAccumulator.recordLiveSkipped()
             logAccessibilityTrustSkipIfNeeded()
             return
@@ -99,7 +114,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         didLogAccessibilityTrustSkipThisCycle = false
 
         guard focusedElementIsInAnotherApp() else {
-            pasteAccumulator.recordLiveClipboardWrite(chars: chunk.count)
+            pasteAccumulator.recordLiveClipboardWrite(chars: chunkToWrite.count)
             pasteAccumulator.recordLiveSkipped()
             logger.info("LiveCursorOutput: focused element is in self; chunk left on clipboard, skipping ⌘V")
             return
@@ -110,30 +125,33 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         // path: the chunk landed on the clipboard but no ⌘V actually
         // posted, and the user sees nothing in the target app.
         if !pasteShortcutPoster() {
-            pasteAccumulator.recordLiveClipboardWrite(chars: chunk.count)
+            pasteAccumulator.recordLiveClipboardWrite(chars: chunkToWrite.count)
             pasteAccumulator.recordLiveFailed(reason: .eventPostFailed)
             logger.error(
                 pasteFailedLogLine(
                     sink: .live,
                     stage: "live",
                     reason: .eventPostFailed,
-                    attemptedChars: chunk.count,
+                    attemptedChars: chunkToWrite.count,
                     sessionID: sessionID
                 )
             )
             return
         }
 
-        pasteAccumulator.recordLiveSucceeded(chars: chunk.count)
+        pasteAccumulator.recordLiveSucceeded(chars: chunkToWrite.count)
         recordObservedTargetIfAvailable()
     }
 
     public func deliverFinal(_ result: TranscriptionResult) async throws {
         // Live cursor mode does not stop-time deliver via this sink.
-        // The authoritative second-pass writes through MenuBarSceneModel
-        // + ClipboardBatchOutput, and `RecipeBuilder` filters the
-        // `.frontmostPaste` sink when live cursor is on so no double
-        // paste lands at session end.
+        // The authoritative second-pass writes through
+        // `ClipboardBatchOutput` when `.frontmostPaste` is in the
+        // bound recipe sinks. Pre-#098 RecipeBuilder filtered that
+        // sink out under liveCursor=true to avoid double-paste; #098
+        // restored it so the user can opt into both surfaces. The
+        // newline separator before the final paste is owned by
+        // ClipboardBatchOutput using #097's accumulator signal.
     }
 
     public func resetForNewSession() async {
@@ -155,6 +173,13 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         guard let handle = sessionSnapshotHandle else { return }
         let sessionID = pasteSessionID ?? UUID().uuidString
         logger.info(pasteAccumulator.summary(sink: .live, sessionID: sessionID).formatLogLine())
+        // #098: snapshot the live-session paste count BEFORE wiping
+        // the accumulator. ClipboardBatchOutput reads this to decide
+        // whether to prepend a newline before the final paste — if
+        // live cursor pasted ≥1 chunk and the recipe also wants
+        // final-paste, the newline avoids running the last live chunk
+        // into the first word of the authoritative final.
+        lastSessionLivePasteAttempts = pasteAccumulator.livePasteAttempts
         sessionSnapshotHandle = nil
         let shouldRestore = didWriteChunkThisSession
         didWriteChunkThisSession = false

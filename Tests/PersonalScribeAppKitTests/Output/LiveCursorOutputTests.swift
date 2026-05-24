@@ -95,7 +95,43 @@ final class LiveCursorOutputTests: XCTestCase {
         try await output.deliverPartial(makeProgress("hello", revision: 1))
         try await output.deliverPartial(makeProgress("world", revision: 2))
 
-        XCTAssertEqual(pasteboard.string(forType: .string), "world")
+        // #098: subsequent chunks prepend a single space so consecutive
+        // EoU pastes don't concatenate. Clipboard ends with the second
+        // chunk's payload (with leading space), not just "world".
+        XCTAssertEqual(pasteboard.string(forType: .string), " world")
+    }
+
+    func testFirstChunkPastesUnchangedSecondChunkPrependsSpace() async throws {
+        // #098: explicit guarantee that the chunk separator only kicks
+        // in from the second chunk onward. Avoids leading-space on the
+        // very first paste at session start.
+        let pasteboard = makePasteboard()
+        let output = makeOutput(pasteboard: pasteboard)
+
+        try await output.deliverPartial(makeProgress("hello", revision: 1))
+        XCTAssertEqual(pasteboard.string(forType: .string), "hello")
+
+        try await output.deliverPartial(makeProgress("world", revision: 2))
+        XCTAssertEqual(pasteboard.string(forType: .string), " world")
+
+        try await output.deliverPartial(makeProgress("how are you", revision: 3))
+        XCTAssertEqual(pasteboard.string(forType: .string), " how are you")
+    }
+
+    func testResetForNewSessionResetsChunkSeparatorGate() async throws {
+        // #098: a new session starts the chunk counter fresh — first
+        // chunk of session 2 pastes without a leading space even
+        // though session 1 had written multiple chunks.
+        let pasteboard = makePasteboard()
+        let output = makeOutput(pasteboard: pasteboard)
+
+        try await output.deliverPartial(makeProgress("hello", revision: 1))
+        try await output.deliverPartial(makeProgress("world", revision: 2))
+        await output.endSession()
+
+        await output.resetForNewSession()
+        try await output.deliverPartial(makeProgress("fresh", revision: 1))
+        XCTAssertEqual(pasteboard.string(forType: .string), "fresh")
     }
 
     func testDeliverPartialSkipsPasteWhenAxNotTrusted() async throws {
@@ -155,7 +191,10 @@ final class LiveCursorOutputTests: XCTestCase {
         XCTAssertTrue(summary.message.contains("livePasteSucceeded=3"))
         XCTAssertTrue(summary.message.contains("livePasteFailed=1"))
         XCTAssertTrue(summary.message.contains("livePasteSkipped=0"))
-        XCTAssertTrue(summary.message.contains("livePasteCumulativeCharsWritten=11"))
+        // #098: chars-written counts the with-separator payload.
+        // "one"(3) + " two"(4) + " three"(6) = 13. The 4th attempt
+        // failed via stringWriter returning false; nothing added.
+        XCTAssertTrue(summary.message.contains("livePasteCumulativeCharsWritten=13"))
         XCTAssertTrue(summary.message.contains("finalPasteAttempted=false"))
         XCTAssertTrue(summary.message.contains("finalPasteSucceeded=false"))
     }

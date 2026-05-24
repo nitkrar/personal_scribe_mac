@@ -235,7 +235,7 @@ final class RecipeBuilderTests: XCTestCase {
         )
     }
 
-    func testBuilderFiltersFrontmostPasteWhenLiveCursorEnabled() throws {
+    func testBuilderPreservesFrontmostPasteWhenLiveCursorEnabled() throws {
         defaults.set(false, forKey: PreferenceKeys.streamingLiveCardEnabled.key)
         defaults.set(true, forKey: PreferenceKeys.streamingLiveCursorEnabled.key)
         defaults.set(false, forKey: PreferenceKeys.streamingSecondPassEnabled.key)
@@ -257,25 +257,27 @@ final class RecipeBuilderTests: XCTestCase {
         )
 
         XCTAssertTrue(bound.streamingBehavior?.liveCursorEnabled == true)
+        // #098: `.frontmostPaste` survives even when liveCursor=true.
+        // Both sinks fire; user picks which output they keep.
         let pasteSinks = bound.outputSinks.filter { sink in
             if case .frontmostPaste = sink {
                 return true
             }
             return false
         }
-        XCTAssertTrue(
-            pasteSinks.isEmpty,
-            "Expected .frontmostPaste to be filtered when liveCursorEnabled = true; got \(bound.outputSinks)"
+        XCTAssertEqual(
+            pasteSinks.count,
+            1,
+            "Expected .frontmostPaste to survive when liveCursorEnabled = true; got \(bound.outputSinks)"
         )
-        // Sanity: clipboard sink should still be present (live cursor needs
-        // it to write per-chunk text).
+        // Sanity: clipboard sink should still be present.
         let clipboardSinks = bound.outputSinks.filter { sink in
             if case .clipboard = sink {
                 return true
             }
             return false
         }
-        XCTAssertEqual(clipboardSinks.count, 1, "Clipboard sink should survive the live-cursor filter")
+        XCTAssertEqual(clipboardSinks.count, 1, "Clipboard sink should also be present")
     }
 
     func testBuilderRetainsFrontmostPasteWhenLiveCursorDisabled() throws {

@@ -77,7 +77,15 @@ struct PersonalScribeAppMain: App {
                 logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui),
                 defaults: defaults,
                 snapshotService: sharedSnapshotService,
-                isAccessibilityTrusted: isAccessibilityTrusted
+                isAccessibilityTrusted: isAccessibilityTrusted,
+                liveCursorPasteSnapshot: {
+                    // #098: read the just-ended streaming session's live
+                    // paste count. ClipboardBatchOutput prepends "\n"
+                    // before the final paste when this is > 0 and
+                    // .frontmostPaste is enabled, so the authoritative
+                    // final lands on its own line.
+                    AppComposition.liveCursorOutput.lastSessionLivePasteAttempts
+                }
             )
         var clipboardOnlyNotice: (@MainActor () -> Void)?
         let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
