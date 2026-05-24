@@ -174,7 +174,8 @@ public final class RecipeBuilder {
             return nil
         }
 
-        if let streamingDescriptor, streamingDescriptor.engine == .whisperCpp {
+        if let streamingDescriptor,
+           streamingDescriptor.engine == .whisperCpp || streamingDescriptor.engine == .whisperKit {
             return try processorProvider.transcriber(for: streamingDescriptor)
         }
 

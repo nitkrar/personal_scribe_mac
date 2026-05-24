@@ -4,9 +4,9 @@ import XCTest
 @testable import PersonalScribeCore
 @testable import PersonalScribeTranscription
 
-final class WhisperKitTranscriberAdapterTests: XCTestCase {
+final class WhisperKitAdapterTests: XCTestCase {
     func testCapabilitiesAdvertiseNoOptionalMetadataSupport() throws {
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: BuiltInModelCatalog.whisperKitTiny,
             storageLocator: TestStorageLocator(baseDirectory: try temporaryRootDirectory()),
             manager: StubWhisperKitManager()
@@ -27,7 +27,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let manager = StubWhisperKitManager()
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -55,7 +55,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let manager = StubWhisperKitManager()
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -73,7 +73,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         try seedArtifacts(for: descriptor, storageLocator: storageLocator)
         let manager = StubWhisperKitManager()
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -89,7 +89,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let manager = StubWhisperKitManager()
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -110,7 +110,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let manager = StubWhisperKitManager(loadDelay: .milliseconds(50))
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -134,7 +134,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let manager = StubWhisperKitManager(loadFailuresRemaining: 1)
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -154,7 +154,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let manager = StubWhisperKitManager(downloadFailureRepoID: descriptor.tokenizerSource)
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -185,7 +185,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
                 WhisperKitManagerResult(text: "world"),
             ]
         )
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -218,7 +218,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let manager = StubWhisperKitManager(
             result: [WhisperKitManagerResult(text: "hello world")]
         )
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -242,7 +242,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let manager = StubWhisperKitManager(
             result: [WhisperKitManagerResult(text: "hello world")]
         )
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -263,7 +263,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let manager = StubWhisperKitManager(result: [])
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -284,7 +284,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let manager = StubWhisperKitManager(transcribeError: StubWhisperKitManager.ErrorStub.transcribeFailed)
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -301,11 +301,198 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         }
     }
 
+    func testPrepareIdempotentAcrossBatchAndStreamingCallSites() async throws {
+        let descriptor = BuiltInModelCatalog.whisperKitTiny
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let manager = StubWhisperKitManager(
+            result: [WhisperKitManagerResult(text: "batch result")],
+            finalStates: [
+                WhisperKitStreamingState(
+                    confirmedSegments: [],
+                    unconfirmedSegments: [
+                        makeSegment(start: 0, end: 0.5, text: "stream result"),
+                    ]
+                ),
+            ]
+        )
+        let adapter = WhisperKitAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+        let audio = try makePCMBuffer(sampleCount: 4_000)
+
+        _ = try await adapter.transcribe(audio)
+        _ = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [audio]))
+        )
+
+        let loadCallCount = await manager.loadCallCount()
+        XCTAssertEqual(loadCallCount, 1)
+    }
+
+    func testTranscribeStreamEmitsPartialsFromUnconfirmedSegments() async throws {
+        let manager = StubWhisperKitManager(
+            appendedStates: [
+                [
+                    WhisperKitStreamingState(
+                        confirmedSegments: [],
+                        unconfirmedSegments: [
+                            makeSegment(start: 0, end: 0.5, text: "hello"),
+                        ]
+                    ),
+                ],
+                [
+                    WhisperKitStreamingState(
+                        confirmedSegments: [],
+                        unconfirmedSegments: [
+                            makeSegment(start: 0, end: 0.5, text: "hello"),
+                            makeSegment(start: 0.5, end: 1.0, text: "world"),
+                        ]
+                    ),
+                ],
+            ],
+            finalStates: [
+                WhisperKitStreamingState(
+                    confirmedSegments: [],
+                    unconfirmedSegments: [
+                        makeSegment(start: 0, end: 0.5, text: "hello"),
+                        makeSegment(start: 0.5, end: 1.0, text: "world"),
+                    ]
+                ),
+            ]
+        )
+        let adapter = makeAdapter(manager: manager)
+        let buffer = try makePCMBuffer(sampleCount: 4_000)
+
+        let events = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [buffer, buffer]))
+        )
+
+        XCTAssertEqual(events.count, 3)
+        XCTAssertEqual(events[0], .partial(text: "hello"))
+        XCTAssertEqual(events[1], .partial(text: "hello world"))
+        guard case .finalized(let result) = events[2] else {
+            return XCTFail("Expected finalized event, got \(events)")
+        }
+        XCTAssertEqual(result.text, "hello world")
+        XCTAssertEqual(result.audioDuration, buffer.duration + buffer.duration)
+    }
+
+    func testTranscribeStreamEmitsEndOfUtteranceFromConfirmedWatermark() async throws {
+        let manager = StubWhisperKitManager(
+            appendedStates: [
+                [
+                    WhisperKitStreamingState(
+                        confirmedSegments: [
+                            makeSegment(start: 0, end: 0.5, text: "hello"),
+                        ],
+                        unconfirmedSegments: [
+                            makeSegment(start: 0.5, end: 1.0, text: "world"),
+                        ]
+                    ),
+                ],
+            ],
+            finalStates: [
+                WhisperKitStreamingState(
+                    confirmedSegments: [
+                        makeSegment(start: 0, end: 0.5, text: "hello"),
+                    ],
+                    unconfirmedSegments: [
+                        makeSegment(start: 0.5, end: 1.0, text: "world"),
+                    ]
+                ),
+            ]
+        )
+        let adapter = makeAdapter(manager: manager)
+        let buffer = try makePCMBuffer(sampleCount: 4_000)
+
+        let events = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [buffer]))
+        )
+
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events[0], .endOfUtterance(text: "hello"))
+        guard case .finalized(let result) = events[1] else {
+            return XCTFail("Expected finalized event, got \(events)")
+        }
+        XCTAssertEqual(result.text, "hello world")
+        XCTAssertEqual(result.audioDuration, buffer.duration)
+    }
+
+    func testTranscribeStreamFinalizedYieldsLedgerFullTextAtEnd() async throws {
+        let manager = StubWhisperKitManager(
+            appendedStates: [
+                [
+                    WhisperKitStreamingState(
+                        confirmedSegments: [
+                            makeSegment(start: 0, end: 0.5, text: "hello"),
+                        ],
+                        unconfirmedSegments: [
+                            makeSegment(start: 0.5, end: 1.0, text: "world"),
+                        ]
+                    ),
+                ],
+            ],
+            finalStates: []
+        )
+        let adapter = makeAdapter(manager: manager)
+        let buffer = try makePCMBuffer(sampleCount: 4_000)
+
+        let events = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [buffer]))
+        )
+
+        guard case .finalized(let result) = try XCTUnwrap(events.last) else {
+            return XCTFail("Expected finalized event, got \(events)")
+        }
+        XCTAssertEqual(result.text, "hello world")
+    }
+
+    func testCancellationStopsStreamWithoutThrow() async throws {
+        let adapter = makeAdapter(manager: StubWhisperKitManager())
+        let buffer = try makePCMBuffer(sampleCount: 4_000)
+
+        let events = try await collectEvents(
+            from: adapter.transcribe(stream: makeCancellingStream(buffers: [buffer]))
+        )
+
+        XCTAssertTrue(events.isEmpty)
+    }
+
+    func testBatchAndStreamingShareSameUnderlyingWhisperKitInstance() async throws {
+        let manager = StubWhisperKitManager(
+            result: [WhisperKitManagerResult(text: "hello")],
+            finalStates: [
+                WhisperKitStreamingState(
+                    confirmedSegments: [],
+                    unconfirmedSegments: [
+                        makeSegment(start: 0, end: 0.5, text: "world"),
+                    ]
+                ),
+            ]
+        )
+        let adapter = makeAdapter(manager: manager)
+        let audio = try makePCMBuffer(sampleCount: 4_000)
+
+        _ = try await adapter.transcribe(audio)
+        _ = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [audio]))
+        )
+
+        let loadCallCount = await manager.loadCallCount()
+        let transcribeCallCount = await manager.transcribeCallCount()
+        let startCallCount = await manager.startCallCount()
+        XCTAssertEqual(loadCallCount, 1)
+        XCTAssertEqual(transcribeCallCount, 1)
+        XCTAssertEqual(startCallCount, 1)
+    }
+
     func testCleanupForwardsToManagerAndAllowsPrepareToReload() async throws {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let manager = StubWhisperKitManager()
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager
@@ -321,12 +508,12 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(loadCallCount, 2)
     }
 
-    func testReleaseIdleResourcesEvictsWhisperKitManagerAfterDelay() async throws {
+    func testReleaseIdleResourcesUnloadsAfterDelay() async throws {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let diagnosticsSink = InMemoryTestSink()
         let manager = StubWhisperKitManager()
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager,
@@ -349,18 +536,18 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
             containing: "adapter_idle_release"
         )
         XCTAssertTrue(releaseLog.message.contains("descriptorID=\(descriptor.id)"))
-        XCTAssertTrue(releaseLog.message.contains("adapter=WhisperKitTranscriberAdapter"))
+        XCTAssertTrue(releaseLog.message.contains("adapter=WhisperKitAdapter"))
         XCTAssertTrue(releaseLog.message.contains("releasedAfterMs=20"))
         XCTAssertTrue(releaseLog.message.contains("hadPrepared=true"))
         XCTAssertTrue(releaseLog.message.contains("hadInFlightPrepare=false"))
     }
 
-    func testReleaseIdleResourcesCancelsIfNewSessionStartsBeforeDelay() async throws {
+    func testReleaseIdleResourcesIsCancelledIfNewSessionStartsBeforeDelay() async throws {
         let descriptor = BuiltInModelCatalog.whisperKitTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let diagnosticsSink = InMemoryTestSink()
         let manager = StubWhisperKitManager()
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager,
@@ -390,7 +577,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let diagnosticsSink = InMemoryTestSink()
         let manager = StubWhisperKitManager()
-        let adapter = WhisperKitTranscriberAdapter(
+        let adapter = WhisperKitAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager,
@@ -409,6 +596,65 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
             $0.message.contains("adapter_idle_release")
         }
         XCTAssertTrue(releaseLogs.isEmpty)
+    }
+
+    func testStreamingAdapterSummaryLogIncludesExpectedFields() async throws {
+        let sink = InMemoryTestSink()
+        let manager = StubWhisperKitManager(
+            appendedStates: [
+                [
+                    WhisperKitStreamingState(
+                        confirmedSegments: [],
+                        unconfirmedSegments: [
+                            makeSegment(start: 0, end: 0.5, text: "hello"),
+                        ]
+                    ),
+                ],
+                [
+                    WhisperKitStreamingState(
+                        confirmedSegments: [
+                            makeSegment(start: 0, end: 0.5, text: "hello"),
+                        ],
+                        unconfirmedSegments: [
+                            makeSegment(start: 0.5, end: 1.0, text: "world"),
+                        ]
+                    ),
+                ],
+            ],
+            finalStates: [
+                WhisperKitStreamingState(
+                    confirmedSegments: [
+                        makeSegment(start: 0, end: 0.5, text: "hello"),
+                    ],
+                    unconfirmedSegments: [
+                        makeSegment(start: 0.5, end: 1.0, text: "world"),
+                    ]
+                ),
+            ]
+        )
+        let adapter = WhisperKitAdapter(
+            descriptor: BuiltInModelCatalog.whisperKitTiny,
+            storageLocator: TestStorageLocator(baseDirectory: try temporaryRootDirectory()),
+            manager: manager,
+            logger: makeTranscriptionLogger(sink: sink)
+        )
+        let buffer = try makePCMBuffer(sampleCount: 4_000)
+
+        _ = try await collectEvents(
+            from: adapter.transcribe(stream: makeStream(buffers: [buffer, buffer]))
+        )
+
+        let summaryLog = try await waitForTranscriptionLogMessage(
+            in: sink,
+            containing: "streaming_adapter_summary"
+        )
+        XCTAssertTrue(summaryLog.message.contains("descriptorID=whisperkit-tiny"))
+        XCTAssertTrue(summaryLog.message.contains("bufferCount=2"))
+        XCTAssertTrue(summaryLog.message.contains("partialCount=1"))
+        XCTAssertTrue(summaryLog.message.contains("eouCount=1"))
+        XCTAssertTrue(summaryLog.message.contains("outcome=completed"))
+        XCTAssertTrue(summaryLog.message.contains("finalTextEmpty=false"))
+        XCTAssertTrue(summaryLog.message.contains("audioDurationMs=500"))
     }
 
     func testLiveManagerDownloadAndStageMovesBundleLeafIntoDestinationAndCleansStaging() async throws {
@@ -521,6 +767,9 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let modelFolder = root
             .appendingPathComponent("openai_whisper-tiny", isDirectory: true)
             .standardizedFileURL
+        let tokenizerFolder = modelFolder
+            .appendingPathComponent("tokenizer", isDirectory: true)
+            .standardizedFileURL
         try FileManager.default.createDirectory(
             at: modelFolder,
             withIntermediateDirectories: true
@@ -545,7 +794,8 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         await XCTAssertThrowsErrorAsync(
             try await manager.loadModel(
                 modelName: "openai_whisper-tiny",
-                modelFolder: modelFolder
+                modelFolder: modelFolder,
+                tokenizerFolder: tokenizerFolder
             )
         ) { error in
             XCTAssertEqual(error as? LoadModelFactoryError, .expected)
@@ -554,12 +804,7 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         let snapshot = await recorder.snapshot()
         XCTAssertEqual(snapshot?.model, "openai_whisper-tiny")
         XCTAssertEqual(snapshot?.modelFolder, modelFolder.path)
-        XCTAssertEqual(
-            snapshot?.tokenizerFolder?.standardizedFileURL,
-            modelFolder
-                .appendingPathComponent("tokenizer", isDirectory: true)
-                .standardizedFileURL
-        )
+        XCTAssertEqual(snapshot?.tokenizerFolder?.standardizedFileURL, tokenizerFolder)
         XCTAssertEqual(snapshot?.load, true)
         XCTAssertEqual(snapshot?.download, false)
         XCTAssertEqual(snapshot?.verbose, false)
@@ -580,6 +825,9 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
                             decodeOptions: decodeOptions
                         )
                     },
+                    start: {},
+                    appendAudioSamples: { _ in [] },
+                    finish: { [] },
                     unloadModels: {
                         await runtime.unloadModels()
                     }
@@ -588,11 +836,14 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         )
         let modelFolder = try temporaryRootDirectory()
             .appendingPathComponent("openai_whisper-tiny", isDirectory: true)
+        let tokenizerFolder = modelFolder
+            .appendingPathComponent("tokenizer", isDirectory: true)
         try FileManager.default.createDirectory(at: modelFolder, withIntermediateDirectories: true)
 
         try await manager.loadModel(
             modelName: "openai_whisper-tiny",
-            modelFolder: modelFolder
+            modelFolder: modelFolder,
+            tokenizerFolder: tokenizerFolder
         )
         _ = try await manager.transcribe(audioSamples: [0.1, 0.2, 0.3], languageHint: nil)
 
@@ -614,6 +865,9 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
                             decodeOptions: decodeOptions
                         )
                     },
+                    start: {},
+                    appendAudioSamples: { _ in [] },
+                    finish: { [] },
                     unloadModels: {
                         await runtime.unloadModels()
                     }
@@ -622,11 +876,14 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         )
         let modelFolder = try temporaryRootDirectory()
             .appendingPathComponent("openai_whisper-tiny", isDirectory: true)
+        let tokenizerFolder = modelFolder
+            .appendingPathComponent("tokenizer", isDirectory: true)
         try FileManager.default.createDirectory(at: modelFolder, withIntermediateDirectories: true)
 
         try await manager.loadModel(
             modelName: "openai_whisper-tiny",
-            modelFolder: modelFolder
+            modelFolder: modelFolder,
+            tokenizerFolder: tokenizerFolder
         )
         _ = try await manager.transcribe(audioSamples: [0.1, 0.2, 0.3], languageHint: "ja")
 
@@ -646,6 +903,77 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
             try? FileManager.default.removeItem(at: root)
         }
         return root
+    }
+}
+
+private extension WhisperKitAdapterTests {
+    func makeAdapter(
+        descriptor: ModelDescriptor = BuiltInModelCatalog.whisperKitTiny,
+        manager: StubWhisperKitManager
+    ) -> WhisperKitAdapter {
+        WhisperKitAdapter(
+            descriptor: descriptor,
+            storageLocator: TestStorageLocator(baseDirectory: try! temporaryRootDirectory()),
+            manager: manager
+        )
+    }
+
+    func makePCMBuffer(
+        sampleCount: Int,
+        sampleRate: Double = AppConfig.sampleRate,
+        channelCount: Int = AppConfig.channelCount,
+        sampleValue: Float = 0.25
+    ) throws -> PCMBuffer {
+        try PCMBuffer(
+            samples: Array(repeating: sampleValue, count: sampleCount),
+            sampleRate: sampleRate,
+            channelCount: channelCount,
+            timestamp: ContinuousClock.now
+        )
+    }
+
+    func makeSegment(
+        start: Float,
+        end: Float,
+        text: String
+    ) -> TranscriptionSegment {
+        TranscriptionSegment(
+            start: start,
+            end: end,
+            text: text
+        )
+    }
+
+    func makeStream(
+        buffers: [PCMBuffer]
+    ) -> AsyncThrowingStream<PCMBuffer, Error> {
+        AsyncThrowingStream { continuation in
+            for buffer in buffers {
+                continuation.yield(buffer)
+            }
+            continuation.finish()
+        }
+    }
+
+    func makeCancellingStream(
+        buffers: [PCMBuffer]
+    ) -> AsyncThrowingStream<PCMBuffer, Error> {
+        AsyncThrowingStream { continuation in
+            for buffer in buffers {
+                continuation.yield(buffer)
+            }
+            continuation.finish(throwing: CancellationError())
+        }
+    }
+
+    func collectEvents(
+        from stream: AsyncThrowingStream<StreamingTranscriptionEvent, Error>
+    ) async throws -> [StreamingTranscriptionEvent] {
+        var events: [StreamingTranscriptionEvent] = []
+        for try await event in stream {
+            events.append(event)
+        }
+        return events
     }
 }
 
@@ -686,31 +1014,46 @@ private actor StubWhisperKitManager: WhisperKitManaging {
         let destination: URL
     }
 
+    struct LoadCall: Equatable {
+        let modelName: String
+        let modelFolder: URL
+        let tokenizerFolder: URL
+    }
+
     private let result: [WhisperKitManagerResult]
     private let downloadFailureRepoID: String?
     private let transcribeError: Error?
     private let loadDelay: Duration
+    private let appendedStates: [[WhisperKitStreamingState]]
+    private let finalStates: [WhisperKitStreamingState]
     private var loadFailuresRemaining: Int
     private var downloadCallsStorage: [DownloadCall] = []
-    private var loadCallCountStorage = 0
+    private var loadCallsStorage: [LoadCall] = []
     private var loadedModelNamesStorage: [String] = []
     private var transcribeCallCountStorage = 0
     private var lastSamplesStorage: [Float] = []
     private var lastLanguageHintStorage: String?
     private var cleanupCallCountStorage = 0
+    private var startCallCountStorage = 0
+    private var finishCallCountStorage = 0
+    private var appendCallIndex = 0
 
     init(
         result: [WhisperKitManagerResult] = [],
         downloadFailureRepoID: String? = nil,
         loadFailuresRemaining: Int = 0,
         transcribeError: Error? = nil,
-        loadDelay: Duration = .zero
+        loadDelay: Duration = .zero,
+        appendedStates: [[WhisperKitStreamingState]] = [],
+        finalStates: [WhisperKitStreamingState] = []
     ) {
         self.result = result
         self.downloadFailureRepoID = downloadFailureRepoID
         self.loadFailuresRemaining = loadFailuresRemaining
         self.transcribeError = transcribeError
         self.loadDelay = loadDelay
+        self.appendedStates = appendedStates
+        self.finalStates = finalStates
     }
 
     func downloadAndStage(
@@ -751,15 +1094,23 @@ private actor StubWhisperKitManager: WhisperKitManaging {
 
     func loadModel(
         modelName: String,
-        modelFolder: URL
+        modelFolder: URL,
+        tokenizerFolder: URL
     ) async throws {
         if loadDelay > .zero {
             try await Task.sleep(for: loadDelay)
         }
 
-        loadCallCountStorage += 1
+        loadCallsStorage.append(
+            LoadCall(
+                modelName: modelName,
+                modelFolder: modelFolder,
+                tokenizerFolder: tokenizerFolder
+            )
+        )
         loadedModelNamesStorage.append(modelName)
         XCTAssertFalse(modelFolder.path.isEmpty)
+        XCTAssertFalse(tokenizerFolder.path.isEmpty)
 
         if loadFailuresRemaining > 0 {
             loadFailuresRemaining -= 1
@@ -780,6 +1131,25 @@ private actor StubWhisperKitManager: WhisperKitManaging {
         return result
     }
 
+    func start() async throws {
+        startCallCountStorage += 1
+    }
+
+    func appendAudioSamples(_ audioSamples: [Float]) async throws -> [WhisperKitStreamingState] {
+        lastSamplesStorage = audioSamples
+        guard appendCallIndex < appendedStates.count else {
+            return []
+        }
+        let states = appendedStates[appendCallIndex]
+        appendCallIndex += 1
+        return states
+    }
+
+    func finish() async throws -> [WhisperKitStreamingState] {
+        finishCallCountStorage += 1
+        return finalStates
+    }
+
     func cleanup() async {
         cleanupCallCountStorage += 1
     }
@@ -789,7 +1159,11 @@ private actor StubWhisperKitManager: WhisperKitManaging {
     }
 
     func loadCallCount() -> Int {
-        loadCallCountStorage
+        loadCallsStorage.count
+    }
+
+    func loadCalls() -> [LoadCall] {
+        loadCallsStorage
     }
 
     func loadedModelNames() -> [String] {
@@ -810,6 +1184,14 @@ private actor StubWhisperKitManager: WhisperKitManaging {
 
     func cleanupCallCount() -> Int {
         cleanupCallCountStorage
+    }
+
+    func startCallCount() -> Int {
+        startCallCountStorage
+    }
+
+    func finishCallCount() -> Int {
+        finishCallCountStorage
     }
 }
 

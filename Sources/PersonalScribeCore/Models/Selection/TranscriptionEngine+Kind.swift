@@ -11,7 +11,7 @@ extension TranscriptionEngine {
         case .qwen3ASR:
             return [.asr]
         case .whisperKit:
-            return [.asr]
+            return [.asr, .streamingASR]
         case .whisperCpp:
             return [.asr, .streamingASR]
         case .parakeetEOU:

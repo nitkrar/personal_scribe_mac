@@ -195,7 +195,7 @@ final class BuiltInModelCatalogTests: XCTestCase {
 
         for item in expected {
             XCTAssertEqual(item.descriptor.engine, .whisperKit)
-            XCTAssertEqual(item.descriptor.engine.capabilities, [.asr])
+            XCTAssertEqual(item.descriptor.engine.capabilities, [.asr, .streamingASR])
             XCTAssertEqual(item.descriptor.repository, "argmaxinc/whisperkit-coreml")
             XCTAssertEqual(item.descriptor.revision, "main")
             XCTAssertFalse(item.descriptor.shortDescription.isEmpty)

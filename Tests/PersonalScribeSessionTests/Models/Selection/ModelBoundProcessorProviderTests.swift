@@ -70,7 +70,7 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
         }
     }
 
-    func testWhisperKitDescriptorResolvesToWhisperKitTranscriberAdapter() throws {
+    func testWhisperKitDescriptorResolvesToWhisperKitAdapter() throws {
         let provider = ModelBoundProcessorProvider(
             storageLocator: TestStorageLocator.make(),
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
@@ -80,10 +80,32 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
         let transcriberTypeName = String(reflecting: type(of: transcriber))
 
         XCTAssertTrue(
-            transcriberTypeName == "WhisperKitTranscriberAdapter"
-                || transcriberTypeName.hasSuffix(".WhisperKitTranscriberAdapter"),
-            "WhisperKit descriptors should route to the real adapter after #095 B.5"
+            transcriberTypeName == "WhisperKitAdapter"
+                || transcriberTypeName.hasSuffix(".WhisperKitAdapter"),
+            "WhisperKit descriptors should route to the unified adapter"
         )
+    }
+
+    func testWhisperKitDescriptorResolvesSameInstanceAsBothBatchAndStreaming() throws {
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: TestStorageLocator.make(),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        let batch = try provider.transcriber(for: BuiltInModelCatalog.whisperKitTiny)
+        let streaming = try provider.streamingTranscriber(for: BuiltInModelCatalog.whisperKitTiny)
+        let batchTypeName = String(reflecting: type(of: batch))
+        let streamingTypeName = String(reflecting: type(of: streaming))
+
+        XCTAssertTrue(
+            batchTypeName == "WhisperKitAdapter"
+                || batchTypeName.hasSuffix(".WhisperKitAdapter")
+        )
+        XCTAssertTrue(
+            streamingTypeName == "WhisperKitAdapter"
+                || streamingTypeName.hasSuffix(".WhisperKitAdapter")
+        )
+        XCTAssertTrue((batch as AnyObject) === (streaming as AnyObject))
     }
 
     func testWhisperCppDescriptorResolvesBatchTranscriber() throws {

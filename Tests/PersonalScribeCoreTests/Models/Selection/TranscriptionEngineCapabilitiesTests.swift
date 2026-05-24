@@ -14,8 +14,8 @@ final class TranscriptionEngineCapabilitiesTests: XCTestCase {
         XCTAssertEqual(TranscriptionEngine.qwen3ASR.capabilities, [.asr])
     }
 
-    func testWhisperKitHasASRCapability() {
-        XCTAssertEqual(TranscriptionEngine.whisperKit.capabilities, [.asr])
+    func testWhisperKitHasBatchAndStreamingCapabilities() {
+        XCTAssertEqual(TranscriptionEngine.whisperKit.capabilities, [.asr, .streamingASR])
     }
 
     func testWhisperCppHasBatchAndStreamingCapabilities() {

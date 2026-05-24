@@ -282,6 +282,48 @@ final class RecipeBuilderTests: XCTestCase {
         XCTAssertTrue((streamingProcessor as AnyObject) === (secondPass as AnyObject))
     }
 
+    func testStreamingSecondPassForcesWhisperKitWhenStreamingIsWhisperKit() throws {
+        let service = makeServiceWithActive(
+            asr: BuiltInModelCatalog.parakeetTDT06Bv2.id,
+            streamingAsr: BuiltInModelCatalog.parakeetEou160ms.id
+        )
+        let provider = StubProcessorProvider()
+        let builder = RecipeBuilder(
+            modelService: service,
+            processorProvider: provider,
+            defaults: defaults
+        )
+        let mode = makePinnedStreamingMode(
+            descriptorID: BuiltInModelCatalog.whisperKitTiny.id,
+            secondPassEnabled: true
+        )
+
+        let bound = try builder.build(mode)
+        let streamingProcessor = try XCTUnwrap(
+            bound.processors.compactMap { processor in
+                if case .streamingTranscriber(let transcriber) = processor {
+                    return transcriber
+                }
+                return nil
+            }.first
+        )
+        let secondPass = try XCTUnwrap(bound.streamingSecondPassTranscriber)
+
+        XCTAssertEqual(
+            provider.streamingTranscriberRequests.map(\.id),
+            [BuiltInModelCatalog.whisperKitTiny.id]
+        )
+        XCTAssertEqual(
+            provider.transcriberRequests.map(\.id),
+            [BuiltInModelCatalog.whisperKitTiny.id]
+        )
+        XCTAssertFalse(
+            provider.transcriberRequests.contains { $0.id == BuiltInModelCatalog.parakeetTDT06Bv2.id },
+            "Active .asr descriptor must NOT be requested when streaming is WhisperKit"
+        )
+        XCTAssertTrue((streamingProcessor as AnyObject) === (secondPass as AnyObject))
+    }
+
     func testBuilderPreservesFrontmostPasteWhenLiveCursorEnabled() throws {
         defaults.set(false, forKey: PreferenceKeys.streamingLiveCardEnabled.key)
         defaults.set(true, forKey: PreferenceKeys.streamingLiveCursorEnabled.key)
@@ -525,6 +567,7 @@ private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchec
     private var transcribers: [String: any Transcriber] = [:]
     private var streamingTranscribers: [String: any StreamingTranscriber] = [:]
     private var sharedWhisperCppAdapters: [String: SharedWhisperCppAdapter] = [:]
+    private var sharedWhisperKitAdapters: [String: SharedWhisperKitAdapter] = [:]
     private(set) var transcriberRequests: [ModelDescriptor] = []
     private(set) var streamingTranscriberRequests: [ModelDescriptor] = []
 
@@ -537,6 +580,14 @@ private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchec
                 }
                 let new = SharedWhisperCppAdapter()
                 sharedWhisperCppAdapters[descriptor.id] = new
+                return new
+            }
+            if descriptor.engine == .whisperKit {
+                if let existing = sharedWhisperKitAdapters[descriptor.id] {
+                    return existing
+                }
+                let new = SharedWhisperKitAdapter()
+                sharedWhisperKitAdapters[descriptor.id] = new
                 return new
             }
             if let existing = transcribers[descriptor.id] {
@@ -557,6 +608,14 @@ private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchec
                 }
                 let new = SharedWhisperCppAdapter()
                 sharedWhisperCppAdapters[descriptor.id] = new
+                return new
+            }
+            if descriptor.engine == .whisperKit {
+                if let existing = sharedWhisperKitAdapters[descriptor.id] {
+                    return existing
+                }
+                let new = SharedWhisperKitAdapter()
+                sharedWhisperKitAdapters[descriptor.id] = new
                 return new
             }
             if let existing = streamingTranscribers[descriptor.id] {
@@ -641,6 +700,48 @@ private actor SharedWhisperCppAdapter: Transcriber, StreamingTranscriber {
         _ audio: PCMBuffer,
         languageHint: String?
     ) async throws -> TranscriptionResult {
+        _ = languageHint
+        return TranscriptionResult(
+            text: "",
+            audioDuration: .zero,
+            processingDuration: .zero
+        )
+    }
+
+    func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>
+    ) async throws -> TranscriptionResult {
+        _ = stream
+        return TranscriptionResult(
+            text: "",
+            audioDuration: .zero,
+            processingDuration: .zero
+        )
+    }
+
+    nonisolated func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>
+    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
+        _ = stream
+        return AsyncThrowingStream { $0.finish() }
+    }
+}
+
+private actor SharedWhisperKitAdapter: Transcriber, StreamingTranscriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+
+    func prepare() async throws {}
+    func releaseIdleResources() async {}
+
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = audio
         _ = languageHint
         return TranscriptionResult(
             text: "",

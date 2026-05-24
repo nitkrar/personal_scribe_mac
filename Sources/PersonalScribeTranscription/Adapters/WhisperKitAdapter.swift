@@ -15,13 +15,18 @@ protocol WhisperKitManaging: Sendable {
 
     func loadModel(
         modelName: String,
-        modelFolder: URL
+        modelFolder: URL,
+        tokenizerFolder: URL
     ) async throws
 
     func transcribe(
         audioSamples: [Float],
         languageHint: String?
     ) async throws -> [WhisperKitManagerResult]
+
+    func start() async throws
+    func appendAudioSamples(_ audioSamples: [Float]) async throws -> [WhisperKitStreamingState]
+    func finish() async throws -> [WhisperKitStreamingState]
     func cleanup() async
 }
 
@@ -37,9 +42,12 @@ struct WhisperKitManagerResult: Sendable, Equatable {
     let text: String
 }
 
-struct WhisperKitRuntimeHandle {
-    let transcribeSamples: ([Float], DecodingOptions?) async throws -> [WhisperKitManagerResult]
-    let unloadModels: () async -> Void
+struct WhisperKitRuntimeHandle: Sendable {
+    let transcribeSamples: @Sendable ([Float], DecodingOptions?) async throws -> [WhisperKitManagerResult]
+    let start: @Sendable () async throws -> Void
+    let appendAudioSamples: @Sendable ([Float]) async throws -> [WhisperKitStreamingState]
+    let finish: @Sendable () async throws -> [WhisperKitStreamingState]
+    let unloadModels: @Sendable () async -> Void
 }
 
 extension HubApiWrapper: WhisperKitHubSnapshotting {
@@ -56,7 +64,7 @@ extension HubApiWrapper: WhisperKitHubSnapshotting {
     }
 }
 
-public actor WhisperKitTranscriberAdapter: Transcriber {
+public actor WhisperKitAdapter: Transcriber, StreamingTranscriber {
     public nonisolated let capabilities = TranscriberCapabilities()
 
     private let descriptor: ModelDescriptor
@@ -209,9 +217,26 @@ public actor WhisperKitTranscriberAdapter: Transcriber {
             throw PersonalScribeError.transcriptionFailure
         }
     }
+
+    public nonisolated func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>
+    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                await self.executeTranscription(
+                    from: stream,
+                    continuation: continuation
+                )
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
+        }
+    }
 }
 
-private extension WhisperKitTranscriberAdapter {
+private extension WhisperKitAdapter {
     struct DownloadPlan: Sendable {
         let bundlePatterns: [String]
         let tokenizerRelativePaths: [String]
@@ -219,20 +244,179 @@ private extension WhisperKitTranscriberAdapter {
         let tokenizerFractionRange: ClosedRange<Double>
     }
 
+    struct StreamingEventSummary {
+        var partialCount = 0
+        var eouCount = 0
+    }
+
     func performPrepare() async throws {
         let modelDirectory = try modelDirectory()
+        let tokenizerDirectory = modelDirectory
+            .appendingPathComponent("tokenizer", isDirectory: true)
+            .standardizedFileURL
         try await performDownloadIfNeeded(emitFinished: false)
         progressBroadcaster.emit(.loading)
 
         do {
             try await manager.loadModel(
                 modelName: descriptor.repoFolderName,
-                modelFolder: modelDirectory
+                modelFolder: modelDirectory,
+                tokenizerFolder: tokenizerDirectory
             )
             progressBroadcaster.emit(.finished)
         } catch {
             await manager.cleanup()
             throw PersonalScribeError.modelLoadFailure
+        }
+    }
+
+    func executeTranscription(
+        from stream: AsyncThrowingStream<PCMBuffer, Error>,
+        continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation
+    ) async {
+        let startedAt = ContinuousClock.now
+        var bufferCount = 0
+        var audioDuration: Duration = .zero
+        var summary = StreamingEventSummary()
+        var outcome = "prepare_failed"
+        var finalTextEmpty = true
+
+        defer {
+            logger?.info(
+                "streaming_adapter_summary — descriptorID=\(descriptor.id) bufferCount=\(bufferCount) partialCount=\(summary.partialCount) eouCount=\(summary.eouCount) outcome=\(outcome) finalTextEmpty=\(finalTextEmpty) audioDurationMs=\(Self.milliseconds(from: audioDuration))"
+            )
+        }
+
+        do {
+            try await prepare()
+            outcome = "start_failed"
+            try await manager.start()
+            outcome = "completed"
+
+            var ledger = WhisperKitStreamingLedger()
+            var emittedUtteranceCount = 0
+            var lastState: WhisperKitStreamingState?
+            var firstBuffer: PCMBuffer?
+
+            do {
+                for try await buffer in stream {
+                    try Task.checkCancellation()
+                    try validateStreamShape(buffer, against: firstBuffer)
+                    if firstBuffer == nil {
+                        firstBuffer = buffer
+                    }
+
+                    bufferCount += 1
+                    audioDuration += buffer.duration
+
+                    let states = try await manager.appendAudioSamples(buffer.samples)
+                    for state in states {
+                        guard state != lastState else {
+                            continue
+                        }
+                        lastState = state
+                        emitEvents(
+                            ledger.consume(state),
+                            continuation: continuation,
+                            summary: &summary,
+                            emittedUtteranceCount: &emittedUtteranceCount
+                        )
+                    }
+                }
+            } catch is CancellationError {
+                outcome = "cancelled"
+                _ = try? await manager.finish()
+                continuation.finish()
+                return
+            } catch let error as PersonalScribeError {
+                outcome = "stream_failed"
+                _ = try? await manager.finish()
+                throw error
+            } catch {
+                outcome = "stream_failed"
+                _ = try? await manager.finish()
+                throw PersonalScribeError.transcriptionFailure
+            }
+
+            let finalStates: [WhisperKitStreamingState]
+            do {
+                finalStates = try await manager.finish()
+            } catch is CancellationError {
+                outcome = "cancelled"
+                continuation.finish()
+                return
+            } catch let error as PersonalScribeError {
+                outcome = "finish_failed"
+                throw error
+            } catch {
+                outcome = "finish_failed"
+                throw PersonalScribeError.transcriptionFailure
+            }
+
+            for state in finalStates {
+                guard state != lastState else {
+                    continue
+                }
+                lastState = state
+                emitEvents(
+                    ledger.consume(state),
+                    continuation: continuation,
+                    summary: &summary,
+                    emittedUtteranceCount: &emittedUtteranceCount
+                )
+            }
+
+            let finalText = ledger.finalText(fallbackState: lastState)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            finalTextEmpty = finalText.isEmpty
+            finalize(
+                text: finalText,
+                audioDuration: audioDuration,
+                processingDuration: startedAt.duration(to: ContinuousClock.now),
+                continuation: continuation
+            )
+        } catch is CancellationError {
+            outcome = "cancelled"
+            continuation.finish()
+        } catch {
+            continuation.finish(throwing: error)
+        }
+    }
+
+    func emitEvents(
+        _ events: [StreamingTranscriptionEvent],
+        continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation,
+        summary: inout StreamingEventSummary,
+        emittedUtteranceCount: inout Int
+    ) {
+        for event in events {
+            switch event {
+            case .partial:
+                summary.partialCount += 1
+            case .endOfUtterance(let text):
+                summary.eouCount += 1
+                emittedUtteranceCount += 1
+                logger?.info(
+                    "streaming_eou_emitted descriptorID=\(descriptor.id) utterance=\(emittedUtteranceCount) chars=\(text.count)"
+                )
+            case .finalized:
+                break
+            }
+
+            continuation.yield(event)
+        }
+    }
+
+    func validateStreamShape(_ buffer: PCMBuffer, against firstBuffer: PCMBuffer?) throws {
+        guard let firstBuffer else {
+            return
+        }
+
+        guard
+            buffer.sampleRate == firstBuffer.sampleRate,
+            buffer.channelCount == firstBuffer.channelCount
+        else {
+            throw PersonalScribeError.transcriptionFailure
         }
     }
 
@@ -396,9 +580,6 @@ private extension WhisperKitTranscriberAdapter {
             throw PersonalScribeError.modelLoadFailure
         }
 
-        // Tokenizer support files are only a few MB versus the
-        // CoreML bundle's hundreds of MB, so reserve the final 5% of
-        // the synthetic fraction range for the tokenizer phase.
         return DownloadPlan(
             bundlePatterns: bundlePatterns,
             tokenizerRelativePaths: tokenizerRelativePaths,
@@ -435,6 +616,24 @@ private extension WhisperKitTranscriberAdapter {
             audioDuration: audioDuration,
             processingDuration: processingDuration
         )
+    }
+
+    func finalize(
+        text: String,
+        audioDuration: Duration,
+        processingDuration: Duration,
+        continuation: AsyncThrowingStream<StreamingTranscriptionEvent, Error>.Continuation
+    ) {
+        continuation.yield(
+            .finalized(
+                TranscriptionResult(
+                    text: text,
+                    audioDuration: audioDuration,
+                    processingDuration: processingDuration
+                )
+            )
+        )
+        continuation.finish()
     }
 
     static func milliseconds(from duration: Duration) -> Int {
@@ -498,17 +697,34 @@ internal actor LiveWhisperKitManager: WhisperKitManaging {
             HubApiWrapper(downloadBase: $0)
         },
         whisperFactory: @escaping (WhisperKitConfig) async throws -> WhisperKitRuntimeHandle = { config in
+            let audioProcessor = (config.audioProcessor as? BufferFedWhisperKitAudioProcessor)
+                ?? BufferFedWhisperKitAudioProcessor()
+            config.audioProcessor = audioProcessor
+
             let whisperKit = try await WhisperKit(config)
+            let runtimeBridge = LiveWhisperKitRuntimeBridge(
+                whisperKit: whisperKit,
+                audioProcessor: audioProcessor
+            )
+
             return WhisperKitRuntimeHandle(
                 transcribeSamples: { audioArray, decodeOptions in
-                    let results = try await whisperKit.transcribe(
+                    try await runtimeBridge.transcribeSamples(
                         audioArray: audioArray,
                         decodeOptions: decodeOptions
                     )
-                    return results.map { WhisperKitManagerResult(text: $0.text) }
+                },
+                start: {
+                    try await runtimeBridge.start()
+                },
+                appendAudioSamples: { audioSamples in
+                    try await runtimeBridge.appendAudioSamples(audioSamples)
+                },
+                finish: {
+                    try await runtimeBridge.finish()
                 },
                 unloadModels: {
-                    await whisperKit.unloadModels()
+                    await runtimeBridge.unloadModels()
                 }
             )
         }
@@ -562,12 +778,18 @@ internal actor LiveWhisperKitManager: WhisperKitManaging {
 
     func loadModel(
         modelName: String,
-        modelFolder: URL
+        modelFolder: URL,
+        tokenizerFolder: URL
     ) async throws {
+        if whisperKit != nil {
+            await cleanup()
+        }
+
         let config = WhisperKitConfig(
             model: modelName,
             modelFolder: modelFolder.path,
-            tokenizerFolder: modelFolder.appendingPathComponent("tokenizer", isDirectory: true),
+            tokenizerFolder: tokenizerFolder,
+            audioProcessor: BufferFedWhisperKitAudioProcessor(),
             verbose: false,
             logLevel: .none,
             prewarm: false,
@@ -588,6 +810,30 @@ internal actor LiveWhisperKitManager: WhisperKitManaging {
 
         let decodeOptions = languageHint.map { DecodingOptions(language: $0) }
         return try await whisperKit.transcribeSamples(audioSamples, decodeOptions)
+    }
+
+    func start() async throws {
+        guard let whisperKit else {
+            throw PersonalScribeError.modelLoadFailure
+        }
+
+        try await whisperKit.start()
+    }
+
+    func appendAudioSamples(_ audioSamples: [Float]) async throws -> [WhisperKitStreamingState] {
+        guard let whisperKit else {
+            throw PersonalScribeError.modelLoadFailure
+        }
+
+        return try await whisperKit.appendAudioSamples(audioSamples)
+    }
+
+    func finish() async throws -> [WhisperKitStreamingState] {
+        guard let whisperKit else {
+            throw PersonalScribeError.modelLoadFailure
+        }
+
+        return try await whisperKit.finish()
     }
 
     func cleanup() async {
@@ -626,5 +872,145 @@ internal actor LiveWhisperKitManager: WhisperKitManaging {
         return snapshotRoot
             .appendingPathComponent(component, isDirectory: true)
             .standardizedFileURL
+    }
+}
+
+private actor LiveWhisperKitRuntimeBridge {
+    private let whisperKit: WhisperKit
+    private let audioProcessor: BufferFedWhisperKitAudioProcessor
+    private var transcriber: AudioStreamTranscriber?
+    private var transcriberTask: Task<Void, Error>?
+    private var pendingStates: [WhisperKitStreamingState] = []
+    private var latestState: WhisperKitStreamingState?
+
+    init(
+        whisperKit: WhisperKit,
+        audioProcessor: BufferFedWhisperKitAudioProcessor
+    ) {
+        self.whisperKit = whisperKit
+        self.audioProcessor = audioProcessor
+    }
+
+    func transcribeSamples(
+        audioArray: [Float],
+        decodeOptions: DecodingOptions?
+    ) async throws -> [WhisperKitManagerResult] {
+        let results = try await whisperKit.transcribe(
+            audioArray: audioArray,
+            decodeOptions: decodeOptions
+        )
+        return results.map { WhisperKitManagerResult(text: $0.text) }
+    }
+
+    func start() async throws {
+        guard transcriberTask == nil else {
+            return
+        }
+        guard let tokenizer = whisperKit.tokenizer else {
+            throw PersonalScribeError.modelLoadFailure
+        }
+
+        pendingStates.removeAll(keepingCapacity: true)
+        latestState = nil
+
+        let transcriber = AudioStreamTranscriber(
+            audioEncoder: whisperKit.audioEncoder,
+            featureExtractor: whisperKit.featureExtractor,
+            segmentSeeker: whisperKit.segmentSeeker,
+            textDecoder: whisperKit.textDecoder,
+            tokenizer: tokenizer,
+            audioProcessor: audioProcessor,
+            decodingOptions: DecodingOptions(),
+            requiredSegmentsForConfirmation: 2,
+            stateChangeCallback: { [weak self] oldState, newState in
+                guard
+                    oldState.confirmedSegments != newState.confirmedSegments
+                        || oldState.unconfirmedSegments != newState.unconfirmedSegments
+                else {
+                    return
+                }
+
+                let snapshot = WhisperKitStreamingState(
+                    confirmedSegments: newState.confirmedSegments,
+                    unconfirmedSegments: newState.unconfirmedSegments
+                )
+                Task {
+                    await self?.record(snapshot)
+                }
+            }
+        )
+
+        self.transcriber = transcriber
+        transcriberTask = Task {
+            try await transcriber.startStreamTranscription()
+        }
+        await Task.yield()
+    }
+
+    func appendAudioSamples(_ audioSamples: [Float]) async throws -> [WhisperKitStreamingState] {
+        guard transcriberTask != nil else {
+            throw PersonalScribeError.modelLoadFailure
+        }
+
+        audioProcessor.append(samples: audioSamples)
+        await Task.yield()
+        return drainPendingStates()
+    }
+
+    func finish() async throws -> [WhisperKitStreamingState] {
+        if let transcriber {
+            await transcriber.stopStreamTranscription()
+        }
+
+        if let task = transcriberTask {
+            do {
+                try await task.value
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                throw PersonalScribeError.transcriptionFailure
+            }
+        }
+
+        transcriberTask = nil
+        transcriber = nil
+
+        var states = drainPendingStates()
+        if let latestState, states.last != latestState {
+            states.append(latestState)
+        }
+        return states
+    }
+
+    func cleanup() async {
+        if let transcriber {
+            await transcriber.stopStreamTranscription()
+        }
+
+        if let task = transcriberTask {
+            task.cancel()
+            _ = try? await task.value
+        }
+
+        transcriberTask = nil
+        transcriber = nil
+        pendingStates.removeAll(keepingCapacity: true)
+        latestState = nil
+    }
+
+    func unloadModels() async {
+        await cleanup()
+        await whisperKit.unloadModels()
+    }
+
+    private func record(_ state: WhisperKitStreamingState) {
+        latestState = state
+        pendingStates.append(state)
+    }
+
+    private func drainPendingStates() -> [WhisperKitStreamingState] {
+        let states = pendingStates
+        pendingStates.removeAll(keepingCapacity: true)
+        return states
     }
 }

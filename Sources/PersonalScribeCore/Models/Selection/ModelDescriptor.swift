@@ -11,8 +11,8 @@ public enum TranscriptionEngine: Sendable, Equatable {
     /// and int8 precision variants.
     case qwen3ASR
     /// Whisper via WhisperKit. CoreML bundle + tokenizer are staged
-    /// into Ninimma's models directory and loaded by
-    /// `WhisperKitTranscriberAdapter`.
+    /// into Ninimma's models directory and loaded by `WhisperKitAdapter`
+    /// for both batch and streaming transcription.
     case whisperKit
     /// Whisper via whisper.cpp. Single-file ggml model artifacts are
     /// staged into Ninimma's models directory and loaded by

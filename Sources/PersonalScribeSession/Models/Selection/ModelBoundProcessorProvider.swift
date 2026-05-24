@@ -39,13 +39,15 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                     )
                 )
             case .whisperKit:
+                let adapter = WhisperKitAdapter(
+                    descriptor: descriptor,
+                    storageLocator: storageLocator,
+                    logger: logger
+                )
                 return AdapterRecord(
                     descriptorID: descriptor.id,
-                    transcriber: WhisperKitTranscriberAdapter(
-                        descriptor: descriptor,
-                        storageLocator: storageLocator,
-                        logger: logger
-                    )
+                    transcriber: adapter,
+                    streamingTranscriber: adapter
                 )
             case .whisperCpp:
                 let adapter = WhisperCppAdapter(
