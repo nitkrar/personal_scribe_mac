@@ -669,8 +669,13 @@ That split is workable for the immediate error-display fix but is the wrong long
 
 ### #097 — Paste pipeline observability (summary-shape)
 
-`infra` · `P2` · `open` · `area: paste, diagnostics, observability`
-*Filed 2026-05-24*
+`infra` · `P2` · `landed` · `area: paste, diagnostics, observability`
+*Landed 2026-05-24 as `2dc0619` — squashed from req-0053 / pool-codex-1 (+15 tests; full suite 1437/0/1)*
+
+Stage A shipped. 10x-engineer review C1 (clipboard-only delivery was
+recording `finalPasteSucceeded=true`) folded into the same commit:
+`finalPasteSkipped` field now distinguishes clipboard-only delivery
+from `⌘V` landing.
 
 The paste pipeline has **zero structured logging today**. Symptom that surfaced this gap (2026-05-24 dogfood):
 
