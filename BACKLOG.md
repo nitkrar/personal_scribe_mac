@@ -739,8 +739,17 @@ paste_failed — stage=<live|final> reason=<noTargetCursor|pidProbeRejected|even
 
 ### #098 — Streaming paste fixes (drop double-paste filter + chunk spacing + final-paste newline)
 
-`bug` · `P2` · `open` · `area: paste, streaming, recipes`
-*Filed 2026-05-24*
+`bug` · `P2` · `landed` · `area: paste, streaming, recipes`
+*Landed 2026-05-24 as `6e68933` — atlas direct (+5 tests; full suite 1442/0/1)*
+
+Three coupled fixes shipped: (A) RecipeBuilder no longer filters
+`.frontmostPaste` when liveCursor=true; (B) `LiveCursorOutput`
+prepends a single space between EoU chunks; (C)
+`ClipboardBatchOutput` prepends `"\n"` before the final paste when
+`AppComposition.liveCursorOutput.lastSessionLivePasteAttempts > 0`
+and `.frontmostPaste(enabled: true)`. Wiring uses a closure
+parameter on `ClipboardBatchOutput` reading from a lifted
+`AppComposition.liveCursorOutput` static.
 
 Surfaced 2026-05-24 dogfood, confirmed via #097 logs:
 
