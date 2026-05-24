@@ -190,11 +190,12 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
         ])
     }
 
-    func testPerformMaintenancePrunesLegacyDotLogDotDateArchives() throws {
+    func testPerformMaintenanceMigratesLegacyDotLogDotDateArchivesToNewShape() throws {
         // Pre-2026-05-24 archives used `<base>.log.<YYYY-MM-DD>` (no .log
-        // suffix on the rotated file). Reader stays backwards-compatible
-        // so existing on-disk archives still participate in retention
-        // even though new rotations write the new shape.
+        // suffix on the rotated file). On first run the maintenance pass
+        // renames them in place to `<base>.<YYYY-MM-DD>.log` so the rest
+        // of the pipeline can assume the new shape. After migration the
+        // pruner applies retention against the renamed files.
         let tempDirectory = try makeTemporaryDirectory()
         let locator = FixedStorageLocator(baseDirectory: tempDirectory)
         let logsDirectory = locator.url(for: .logs)
@@ -202,8 +203,6 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
         let now = date("2026-05-18T12:00:00Z")
         let currentLog = logsDirectory.appendingPathComponent("errors.log")
         try "current\n".write(to: currentLog, atomically: true, encoding: .utf8)
-        // Three legacy-format archives. With retentionDays=2, the
-        // pruner keeps the 2 newest and drops the oldest.
         try "old-12\n".write(
             to: logsDirectory.appendingPathComponent("errors.log.2026-05-12"),
             atomically: true,
@@ -223,18 +222,44 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
         makeService(locator: locator, retentionDays: 2).performMaintenance(now: now)
 
         let remaining = (try FileManager.default.contentsOfDirectory(atPath: logsDirectory.path)).sorted()
-        XCTAssertFalse(
-            remaining.contains("errors.log.2026-05-12"),
-            "Oldest legacy archive should be pruned. Remaining: \(remaining)"
+        // Legacy shape gone entirely after migration.
+        XCTAssertFalse(remaining.contains("errors.log.2026-05-12"), "Legacy filename should be migrated away. Remaining: \(remaining)")
+        XCTAssertFalse(remaining.contains("errors.log.2026-05-13"), "Legacy filename should be migrated away. Remaining: \(remaining)")
+        XCTAssertFalse(remaining.contains("errors.log.2026-05-15"), "Legacy filename should be migrated away. Remaining: \(remaining)")
+        // Oldest archive pruned per retentionDays=2; 2 newest survived in new shape.
+        XCTAssertFalse(remaining.contains("errors.2026-05-12.log"), "Oldest archive should be pruned post-migration. Remaining: \(remaining)")
+        XCTAssertTrue(remaining.contains("errors.2026-05-13.log"), "Second-newest archive should survive in new shape. Remaining: \(remaining)")
+        XCTAssertTrue(remaining.contains("errors.2026-05-15.log"), "Newest archive should survive in new shape. Remaining: \(remaining)")
+    }
+
+    func testMigrationDropsLegacyArchiveWhenNewShapeAlreadyExists() throws {
+        // If a previous maintenance run already wrote the new-shape
+        // archive (e.g. partial migration after a crash), the legacy
+        // duplicate is removed rather than overwriting the new file.
+        let tempDirectory = try makeTemporaryDirectory()
+        let locator = FixedStorageLocator(baseDirectory: tempDirectory)
+        let logsDirectory = locator.url(for: .logs)
+        try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
+        let now = date("2026-05-18T12:00:00Z")
+        try "current\n".write(to: logsDirectory.appendingPathComponent("errors.log"), atomically: true, encoding: .utf8)
+        try "legacy-contents\n".write(
+            to: logsDirectory.appendingPathComponent("errors.log.2026-05-17"),
+            atomically: true,
+            encoding: .utf8
         )
-        XCTAssertTrue(
-            remaining.contains("errors.log.2026-05-13"),
-            "Second-newest legacy archive should survive. Remaining: \(remaining)"
+        try "canonical-contents\n".write(
+            to: logsDirectory.appendingPathComponent("errors.2026-05-17.log"),
+            atomically: true,
+            encoding: .utf8
         )
-        XCTAssertTrue(
-            remaining.contains("errors.log.2026-05-15"),
-            "Newest legacy archive should survive. Remaining: \(remaining)"
-        )
+
+        makeService(locator: locator, retentionDays: 7).performMaintenance(now: now)
+
+        let remaining = (try FileManager.default.contentsOfDirectory(atPath: logsDirectory.path)).sorted()
+        XCTAssertFalse(remaining.contains("errors.log.2026-05-17"), "Legacy duplicate should be removed when new-shape file already exists.")
+        XCTAssertTrue(remaining.contains("errors.2026-05-17.log"), "Canonical new-shape file should remain untouched.")
+        let canonical = try String(contentsOf: logsDirectory.appendingPathComponent("errors.2026-05-17.log"), encoding: .utf8)
+        XCTAssertEqual(canonical, "canonical-contents\n", "Canonical file's contents must not be overwritten by the legacy duplicate.")
     }
 
     private func fixedCalendar() -> Calendar {

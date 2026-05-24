@@ -38,6 +38,13 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
             try locator.ensureDirectoriesExist()
             try fileManager.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
 
+            // One-shot rename of legacy `<base>.log.<YYYY-MM-DD>` archives
+            // into the new `<base>.<YYYY-MM-DD>.log` shape. Idempotent —
+            // any file that already matches the new shape (or doesn't
+            // match the legacy shape) is left alone. After this returns
+            // the rest of the pipeline can assume new-format only.
+            try migrateLegacyArchives(in: logsDirectory)
+
             let currentDayStart = calendar.startOfDay(for: now)
             try rotateStaleCurrentLogs(in: logsDirectory, currentDayStart: currentDayStart)
             try pruneArchivedLogs(in: logsDirectory)
@@ -71,6 +78,46 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
             }
 
             try touchEmptyLog(at: activeLog.url)
+        }
+    }
+
+    /// One-shot migration of pre-2026-05-24 archives. Renames any file
+    /// matching `<base>.log.<YYYY-MM-DD>` into `<base>.<YYYY-MM-DD>.log`
+    /// so the rest of the pipeline can assume the new shape. Idempotent:
+    /// if a target name already exists (e.g. partial migration from a
+    /// previous run), the legacy file is removed. Files that don't fit
+    /// the legacy shape are skipped untouched.
+    private func migrateLegacyArchives(in logsDirectory: URL) throws {
+        let entries = try fileManager.contentsOfDirectory(
+            at: logsDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+        for url in entries {
+            let fileName = url.lastPathComponent
+            guard fileName.count > 11, !fileName.hasSuffix(".log") else {
+                // New-shape archives end in `.log`; legacy ones don't.
+                // The current `errors.log` / `diagnostics.log` / `debug.log`
+                // active files end in `.log` with no date suffix → also skip.
+                continue
+            }
+            let dateSuffix = String(fileName.suffix(10))
+            guard archiveDate(from: dateSuffix) != nil else {
+                continue
+            }
+            let stemWithLog = String(fileName.dropLast(11))
+            guard stemWithLog.hasSuffix(".log") else {
+                continue
+            }
+            let stem = String(stemWithLog.dropLast(4))
+            let newName = "\(stem).\(dateSuffix).log"
+            let newURL = logsDirectory.appendingPathComponent(newName, isDirectory: false)
+            if fileManager.fileExists(atPath: newURL.path) {
+                // Target already exists — drop the legacy duplicate.
+                try? fileManager.removeItem(at: url)
+            } else {
+                try fileManager.moveItem(at: url, to: newURL)
+            }
         }
     }
 
@@ -152,46 +199,37 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
 
     private func archivedLog(for url: URL) -> ArchivedLogFile? {
         let fileName = url.lastPathComponent
-
-        // New format: `<basename>.<YYYY-MM-DD>.log` (e.g. `errors.2026-05-23.log`).
-        // Use this shape for all newly-written archives; recognized as the
-        // canonical form.
-        if fileName.hasSuffix(".log") {
-            let withoutExtension = String(fileName.dropLast(4))
-            if withoutExtension.count > 11 {
-                let archiveDateSuffix = String(withoutExtension.suffix(10))
-                if let archiveDate = archiveDate(from: archiveDateSuffix) {
-                    let baseNameStem = String(withoutExtension.dropLast(11))
-                    if !baseNameStem.isEmpty {
-                        return ArchivedLogFile(
-                            url: url,
-                            baseLogName: "\(baseNameStem).log",
-                            archiveDate: archiveDate
-                        )
-                    }
-                }
-            }
+        guard fileName.hasSuffix(".log") else {
+            return nil
         }
 
-        // Legacy format: `<basename>.log.<YYYY-MM-DD>` (e.g.
-        // `errors.log.2026-05-23`). Kept readable so existing on-disk
-        // archives from before 2026-05-24 still participate in retention
-        // pruning. New archives never use this shape.
-        guard fileName.count > 11 else {
+        let withoutExtension = String(fileName.dropLast(4))
+        // Archive shape: `<basename>.<YYYY-MM-DD>.log`. Require the 10-char
+        // date suffix on what remains after stripping `.log`. Files that
+        // don't fit this shape (e.g. the current `errors.log`, or a custom
+        // sidecar) are not classified as archives.
+        guard withoutExtension.count > 11 else {
             return nil
         }
-        let legacyDateSuffix = String(fileName.suffix(10))
-        guard let legacyDate = archiveDate(from: legacyDateSuffix) else {
+
+        let archiveDateSuffix = String(withoutExtension.suffix(10))
+        guard let archiveDate = archiveDate(from: archiveDateSuffix) else {
             return nil
         }
-        let legacyBase = String(fileName.dropLast(11))
-        guard legacyBase.hasSuffix(".log") else {
+
+        // baseName is `<basename>.log` (drops the `.<date>` middle), matching
+        // the active-log filename so retention grouping pairs `errors.log`
+        // current with `errors.<date>.log` archives.
+        let baseNameStem = String(withoutExtension.dropLast(11))
+        guard !baseNameStem.isEmpty else {
             return nil
         }
+        let baseName = "\(baseNameStem).log"
+
         return ArchivedLogFile(
             url: url,
-            baseLogName: legacyBase,
-            archiveDate: legacyDate
+            baseLogName: baseName,
+            archiveDate: archiveDate
         )
     }
 
