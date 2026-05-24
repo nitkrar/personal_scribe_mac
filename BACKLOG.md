@@ -482,49 +482,57 @@ Transcriptions tab today is a flat scrolling list with per-row delete (`#011` do
 
 ### #094 — Offline file transcription (tab + menu-bar shortcut)
 
-`feature` · `P2` · `open` · `area: ui, transcription, dictation, diarization, menu-bar`
-*Updated 2026-04-30*
+`feature` · `P2` · `open` · `stage: followup` · `area: ui, transcription, dictation, diarization, menu-bar`
+*Updated 2026-05-24*
 
-Two entry points for offline transcription of audio files.
+Stage A landed as `bef41f7` on 2026-05-24 (single squashed commit; full
+`swift test` clean at 1422/0/1, +41 over baseline). User launched the
+bundle locally after Santa reapproval. Manual verification entries
+`MV-OFFLINE-1..9` queued in
+`Tests/ManualVerifications/ManualOfflineTranscriptionVerification.md`
+— per project TDD rules, SwiftUI work earns the "shipped" label only
+after MV runs complete.
 
-**1. Right-pane tab** (rich entry):
-- **Batch ASR model picker** — selector for the transcriber descriptor used for the run.
-- **Speaker detection toggle** — binary on/off; on = wraps in `.diarizedTurns`, off = bare `.transcriber`. (Replaces the prior "dictation vs. meeting mode picker" idea — knobs, not modes; keeps the tab out of the WorkflowMode abstraction entirely.)
-- **File area** — click opens file picker defaulting to `<AppConfig.recordingsDirectory()>` (so users can re-transcribe their own past recordings without browsing); drag-drop also accepted. `.wav` for v1.
-- **Selected-files table** — 2 columns: filename + realtime progress. Multi-file accepted; processed **serially** (one in flight at a time, others queued — this reconciles "Light queue UI" + "minimal one-at-a-time concurrency"). Cancel mid-run for the in-progress file; queued files dequeueable.
+**Stage A landed**
+- Unified-window **Offline** tab with persisted batch-ASR model +
+  diarization preferences, drag-drop + Browse rooted at
+  `<AppConfig.recordingsDirectory()>`, serial queueing, cancel/dequeue,
+  and completed-job transcript inspection.
+- File-source offline transcription path built on the shared session
+  adapters rather than a separate local pipeline.
+- Status-item **Retranscribe Last Recording** action that re-runs the
+  most recent persisted recording, copies the new transcript to the
+  clipboard, and surfaces toast feedback.
+- `Transcriptions` row-level re-transcribe affordance with visible press
+  feedback and per-source busy state while a matching job is in flight.
+- Transcript-history refresh on offline append / retranscribe
+  completion, so new rows appear without reopening the window.
 
-**2. Menu-bar item — "Retranscribe last recording"**:
-- Single click. No picker, no preview, no inline UI.
-- Always re-runs against the most recently persisted recording from #069.
-- **Hardcoded dictation-only recipe** (fixed default transcriber descriptor, no diarization). Streaming-active-mode wrinkle resolved by ignoring active mode entirely.
-- **Out-of-band**: does NOT mutate active mode, active model, or the menu-bar's currently-displayed chord/mode. Active-mode state machine never sees this action.
-- Users wanting batch + diarized re-transcription go through the tab.
+**Implementation note**
+- Phase-1 step `2.1` through `2.9.1` landed as 10 intermediate req-0051
+  commits, squashed by atlas into `bef41f7`. Two reviewer findings
+  (10x-engineer + pool-codex-1) folded into the same commit before
+  squash.
+- `BACKLOG.md` remains intentionally unstaged during agent work; atlas
+  batches the backlog commit separately.
 
-**Defaults (first launch / persistence):**
-- Tab batch-ASR model picker — first launch matches the user's current `activeModel`, then persists independently within the tab.
-- Speaker detection toggle — first launch off, thereafter persists last state.
-
-**Scope:**
-- **File-source audio adapter** — finite file-read stream emitting PCM frames at the rate the pipeline expects, replacing `AudioCaptureActor`'s live mic stream. Reuse existing transcriber + diarizer adapters (#078 protocols are source-agnostic).
-- Format conversion via `AVAudioFile`: read source, downmix to mono, resample to 16 kHz.
-- Right-pane tab SwiftUI: model picker + diarization toggle + drop zone + queue table + per-file progress.
-- Menu-bar item wired to a fixed dictation recipe + `<recordingsDirectory>/most-recent` lookup.
-
-**Open questions:**
-- Format breadth — start with `.wav` (matches what #069 will write) + `.m4a` (Voice Memos export)? Others on demand.
-- Long files — stream frames in, don't load whole file. Cancel button mid-run.
-- Live-capture interaction — block file transcription during an active session, queue it, or allow concurrently? Concurrent needs careful model-load management.
-- Tab placement — alongside Transcriptions / Modes / AI Models. Pick during design.
-
-**Connected work — "re-transcribe last recording":**
-- Falls out of #094 (menu-bar item) + #069 (persisted recording). No new pipeline work.
-- User's "cap at last N" retention shape captured as an open discussion on #069.
+**Stage B / residual scope**
+- Broader import ergonomics beyond the current local-audio flow
+  (additional formats, richer picker/import affordances, automation).
+- Deeper long-file progress / queue inspection / retry UX.
+- Playback / compare tooling in History for persisted recordings and
+  retranscribed variants.
+- Folder-watch / bulk-import workflows.
+- Any future offline recipes that go beyond the current fixed
+  retranscribe path plus the tab-level model + diarization knobs.
 
 **Depends on:**
-- None blocking the tab — the file-source adapter is the new piece; transcriber + diarizer protocols (#078) are already source-agnostic.
-- Menu-bar "Retranscribe last recording" item: #069 (persist audio recordings).
+- None blocking shipped Stage A.
+- #069 for the persisted-recording retranscribe surfaces.
 
-**Unblocks:** error-recovery when pipeline fails post-capture, ad-hoc transcription of imported audio (Voice Memos, meeting MP3s).
+**Unblocks:** ad-hoc transcription of saved recordings, retranscribe
+recovery after a bad live result, and future replay / compare affordances
+on transcript rows.
 
 **Legacy:** none — net-new.
 
