@@ -789,6 +789,115 @@ Surfaced 2026-05-24 dogfood, confirmed via #097 logs:
 
 ---
 
+### #100 — Engine capabilities + unified WhisperCpp adapter (collapse #099 split)
+
+`refactor` · `P2` · `open` · `area: models, transcription, recipes, picker`
+*Filed 2026-05-24*
+
+#099 shipped whisper.cpp streaming by adding a new `.whisperCppStreaming`
+engine case + 3 paired ModelDescriptor entries that share `repoFolderName`
+with their batch siblings. That choice (Option 1, mirroring pre-reset
+`5a0df9e`) was driven by a kind-system constraint: `ActiveModelService.visibleModels(kind:)`
+and `RecipeBuilder.resolveDescriptor` both filter by singular
+`descriptor.engine.kind`, so a whisper.cpp model that's batch-AND-streaming
+capable couldn't appear in both picker sections under a single descriptor.
+
+The cost of #099's choice:
+- 6 catalog rows for 3 underlying `.bin` files (user sees duplicate-looking
+  picker entries)
+- Two adapter instances per `.bin` when streaming + batch are both active
+  (RAM doubles: ~200-600MB extra per session depending on model size)
+- 3 descriptors to maintain per future whisper.cpp model addition
+
+**Design (user-locked 2026-05-24):**
+
+Replace singular `TranscriptionEngine.kind: ModelKind` with capability set
+`TranscriptionEngine.capabilities: Set<ModelKind>`. `.whisperCpp.capabilities = [.asr, .streamingASR]`;
+all other engines stay single-capability. Filter sites (`visibleModels(kind:)`,
+`RecipeBuilder.resolveDescriptor` pinned-kind check, AIModelsTab section
+filter) use `capabilities.contains(kind)` instead of `kind == kind`.
+
+`ActiveModelService.setActive(_:)` fans out across all capabilities the
+descriptor satisfies — picking whisper.cpp activates it as both
+`activeModelIDs[.asr]` AND `activeModelIDs[.streamingASR]` in one call.
+The user clicks "Make active" on a whisper.cpp row; it becomes the user's
+whisper.cpp model for both jobs.
+
+Merge `WhisperCppStreamingTranscriberAdapter` + `WhisperCppTranscriberAdapter`
+into ONE `WhisperCppAdapter` actor conforming to both `Transcriber` AND
+`StreamingTranscriber`. Single whisper.cpp context per descriptor; both
+decode entry points operate on it. `ModelBoundProcessorProvider`'s `.whisperCpp`
+factory returns one adapter instance, populated as both `transcriber:` AND
+`streamingTranscriber:` in the `AdapterRecord`. `releaseIdleResources()`
+contract honored at the actor level (one timer guarding the one context).
+
+Drop:
+- `TranscriptionEngine.whisperCppStreaming` case + Codable + kind mapping
+- 3 catalog descriptors `whispercpp-streaming-tiny`, `whispercpp-streaming-small-q5_1`,
+  `whispercpp-streaming-large-v3-turbo-q5_0`
+- `ModelBoundProcessorProvider.AdapterRecord` factory case for `.whisperCppStreaming`
+- `SessionCoordinator.whisperCppDescriptorsForApplicationTermination`'s
+  `.streamingASR` union (now redundant — capability fan-out covers it)
+- All tests asserting the split shape
+
+**UserDefaults migration:**
+
+Users who already saw the post-#099 picker may have activated
+`whispercpp-streaming-small-q5_1` (the streaming descriptor). After this
+ticket those IDs no longer exist. `ActiveModelService.init` reads stored
+IDs from UserDefaults — if a stored ID looks like `whispercpp-streaming-*`,
+strip the `-streaming` segment and rewrite to the surviving batch descriptor
+ID (e.g. `whispercpp-streaming-small-q5_1` → `whispercpp-small-q5_1`).
+One-shot migration; safe because the underlying `.bin` is identical.
+
+**Concurrency note:**
+
+Within a single session: streaming (during recording) and batch second-pass
+(after recording stops) never overlap in time. One context, two sequential
+consumers — no internal serialization needed.
+
+Across sessions: if user starts session N+1 before session N's second-pass
+batch decode finishes, both call sites on the same actor compete. Actor's
+isolation serializes them — second-pass blocks streaming briefly OR
+streaming blocks second-pass briefly. Either is acceptable for the rare
+back-to-back case. Surface the trade-off in adapter logging
+(`whispercpp_concurrent_access`) if it ever matters for diagnostics.
+
+**Scope:**
+
+- `Sources/PersonalScribeCore/Models/Selection/ModelDescriptor.swift` — `capabilities` field on TranscriptionEngine; remove `whisperCppStreaming` case
+- `Sources/PersonalScribeCore/Models/Selection/TranscriptionEngine+Codable.swift` — remove streaming case
+- `Sources/PersonalScribeCore/Models/Selection/TranscriptionEngine+Kind.swift` — replace `kind` property with `capabilities`
+- `Sources/PersonalScribeCore/Models/Selection/BuiltInModelCatalog.swift` — drop 3 streaming descriptor entries + the `whisperCppStreamingDescriptor(pairedWith:)` helper
+- `Sources/PersonalScribeSession/Models/Selection/ActiveModelService.swift` — `setActive(_:)` fans out to all capabilities; `visibleModels(kind:)` uses capabilities.contains
+- `Sources/PersonalScribeSession/Models/Selection/ModelBoundProcessorProvider.swift` — `.whisperCpp` factory creates one merged adapter, populates both slots
+- `Sources/PersonalScribeSession/WorkflowMode/RecipeBuilder.swift` — pinned-kind check uses capabilities.contains
+- `Sources/PersonalScribeSession/SessionCoordinator.swift` — eviction filter drops streaming union (now redundant)
+- `Sources/PersonalScribeTranscription/Adapters/WhisperCppAdapter.swift` — NEW merged actor (replaces both batch + streaming adapters)
+- `Sources/PersonalScribeAppKit/Settings/AIModelsTab.swift` — section filter uses capabilities.contains
+- `Sources/PersonalScribeAppKit/Settings/ActiveModelIDsMigration.swift` — NEW one-shot migration for stored whispercpp-streaming-* IDs
+
+**Out of scope:**
+- Expanding capabilities for other engines (whisperKit, parakeetTDT) — they could add `.streamingASR` later but that's per-engine work
+- Per-mode whisper.cpp settings split between streaming and batch passes (currently both use the same defaults; future ticket if dogfood asks)
+- Cross-process whisper.cpp context sharing
+
+**Tests:**
+- `TranscriptionEngineCapabilitiesTests` (NEW) — per-engine capability set
+- `ActiveModelServiceTests` extended — setActive fans out across capabilities; visibleModels uses contains
+- `BuiltInModelCatalogTests` — drop 3 streaming-descriptor assertions
+- `ModelBoundProcessorProviderTests` — same descriptor resolves to both transcriber AND streamingTranscriber, same instance
+- `WhisperCppAdapterTests` (NEW or renamed) — merged tests from former streaming + batch adapter tests
+- `ActiveModelIDsMigrationTests` (NEW) — stored `whispercpp-streaming-*` ID gets rewritten on first read
+
+**Depends on**: #099 (this is its partial revert + redesign).
+
+**Unblocks**: future engines that grow multi-capability without further refactors; ~300-600MB RAM saved per whisper.cpp streaming session that also runs second-pass.
+
+**Legacy:** partially reverts #099's catalog-split decision. Net delta: fewer files, cleaner kind taxonomy, less duplicated RAM.
+
+---
+
 
 
 `refactor` · `P2` · `open` · `area: transcription, models, modes, recipes`
