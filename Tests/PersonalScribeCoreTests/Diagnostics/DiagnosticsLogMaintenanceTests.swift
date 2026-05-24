@@ -30,11 +30,11 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
         service.performMaintenance(now: now)
 
         XCTAssertEqual(
-            try String(contentsOf: logsDirectory.appendingPathComponent("errors.log.2026-05-17"), encoding: .utf8),
+            try String(contentsOf: logsDirectory.appendingPathComponent("errors.2026-05-17.log"), encoding: .utf8),
             "errors-yesterday\n"
         )
         XCTAssertEqual(
-            try String(contentsOf: logsDirectory.appendingPathComponent("diagnostics.log.2026-05-17"), encoding: .utf8),
+            try String(contentsOf: logsDirectory.appendingPathComponent("diagnostics.2026-05-17.log"), encoding: .utf8),
             "diagnostics-yesterday\n"
         )
         XCTAssertEqual(try String(contentsOf: errorsLog, encoding: .utf8), "")
@@ -52,12 +52,12 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
 
         try "current-errors\n".write(to: currentLog, atomically: true, encoding: .utf8)
         try "older-errors-1\n".write(
-            to: logsDirectory.appendingPathComponent("errors.log.2026-05-15"),
+            to: logsDirectory.appendingPathComponent("errors.2026-05-15.log"),
             atomically: true,
             encoding: .utf8
         )
         try "older-errors-2\n".write(
-            to: logsDirectory.appendingPathComponent("errors.log.2026-05-16"),
+            to: logsDirectory.appendingPathComponent("errors.2026-05-16.log"),
             atomically: true,
             encoding: .utf8
         )
@@ -66,8 +66,8 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
         makeService(locator: locator, retentionDays: 2).performMaintenance(now: now)
 
         XCTAssertEqual(existingArchiveNames(for: "errors.log", in: logsDirectory), [
-            "errors.log.2026-05-16",
-            "errors.log.2026-05-17",
+            "errors.2026-05-16.log",
+            "errors.2026-05-17.log",
         ])
         XCTAssertEqual(try String(contentsOf: currentLog, encoding: .utf8), "")
     }
@@ -83,12 +83,12 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
 
         try "current-diagnostics\n".write(to: currentLog, atomically: true, encoding: .utf8)
         try "older-diagnostics-1\n".write(
-            to: logsDirectory.appendingPathComponent("diagnostics.log.2026-05-15"),
+            to: logsDirectory.appendingPathComponent("diagnostics.2026-05-15.log"),
             atomically: true,
             encoding: .utf8
         )
         try "older-diagnostics-2\n".write(
-            to: logsDirectory.appendingPathComponent("diagnostics.log.2026-05-16"),
+            to: logsDirectory.appendingPathComponent("diagnostics.2026-05-16.log"),
             atomically: true,
             encoding: .utf8
         )
@@ -97,8 +97,8 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
         makeService(locator: locator, retentionDays: 2).performMaintenance(now: now)
 
         XCTAssertEqual(existingArchiveNames(for: "diagnostics.log", in: logsDirectory), [
-            "diagnostics.log.2026-05-16",
-            "diagnostics.log.2026-05-17",
+            "diagnostics.2026-05-16.log",
+            "diagnostics.2026-05-17.log",
         ])
         XCTAssertEqual(try String(contentsOf: currentLog, encoding: .utf8), "")
     }
@@ -114,17 +114,17 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
 
         try "current-debug\n".write(to: currentLog, atomically: true, encoding: .utf8)
         try "older-debug-1\n".write(
-            to: logsDirectory.appendingPathComponent("debug.log.2026-05-14"),
+            to: logsDirectory.appendingPathComponent("debug.2026-05-14.log"),
             atomically: true,
             encoding: .utf8
         )
         try "older-debug-2\n".write(
-            to: logsDirectory.appendingPathComponent("debug.log.2026-05-15"),
+            to: logsDirectory.appendingPathComponent("debug.2026-05-15.log"),
             atomically: true,
             encoding: .utf8
         )
         try "older-debug-3\n".write(
-            to: logsDirectory.appendingPathComponent("debug.log.2026-05-16"),
+            to: logsDirectory.appendingPathComponent("debug.2026-05-16.log"),
             atomically: true,
             encoding: .utf8
         )
@@ -133,9 +133,9 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
         makeService(locator: locator, retentionDays: 90).performMaintenance(now: now)
 
         XCTAssertEqual(existingArchiveNames(for: "debug.log", in: logsDirectory), [
-            "debug.log.2026-05-15",
-            "debug.log.2026-05-16",
-            "debug.log.2026-05-17",
+            "debug.2026-05-15.log",
+            "debug.2026-05-16.log",
+            "debug.2026-05-17.log",
         ])
         XCTAssertEqual(try String(contentsOf: currentLog, encoding: .utf8), "")
     }
@@ -147,32 +147,32 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
         try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
 
         try "debug-1\n".write(
-            to: logsDirectory.appendingPathComponent("debug.log.2026-05-12"),
+            to: logsDirectory.appendingPathComponent("debug.2026-05-12.log"),
             atomically: true,
             encoding: .utf8
         )
         try "debug-2\n".write(
-            to: logsDirectory.appendingPathComponent("debug.log.2026-05-13"),
+            to: logsDirectory.appendingPathComponent("debug.2026-05-13.log"),
             atomically: true,
             encoding: .utf8
         )
         try "debug-3\n".write(
-            to: logsDirectory.appendingPathComponent("debug.log.2026-05-14"),
+            to: logsDirectory.appendingPathComponent("debug.2026-05-14.log"),
             atomically: true,
             encoding: .utf8
         )
         try "debug-4\n".write(
-            to: logsDirectory.appendingPathComponent("debug.log.2026-05-15"),
+            to: logsDirectory.appendingPathComponent("debug.2026-05-15.log"),
             atomically: true,
             encoding: .utf8
         )
         try "errors-1\n".write(
-            to: logsDirectory.appendingPathComponent("errors.log.2026-05-12"),
+            to: logsDirectory.appendingPathComponent("errors.2026-05-12.log"),
             atomically: true,
             encoding: .utf8
         )
         try "errors-2\n".write(
-            to: logsDirectory.appendingPathComponent("errors.log.2026-05-13"),
+            to: logsDirectory.appendingPathComponent("errors.2026-05-13.log"),
             atomically: true,
             encoding: .utf8
         )
@@ -180,14 +180,61 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
         makeService(locator: locator, retentionDays: 0).performMaintenance(now: date("2026-05-18T12:00:00Z"))
 
         XCTAssertEqual(existingArchiveNames(for: "debug.log", in: logsDirectory), [
-            "debug.log.2026-05-13",
-            "debug.log.2026-05-14",
-            "debug.log.2026-05-15",
+            "debug.2026-05-13.log",
+            "debug.2026-05-14.log",
+            "debug.2026-05-15.log",
         ])
         XCTAssertEqual(existingArchiveNames(for: "errors.log", in: logsDirectory), [
-            "errors.log.2026-05-12",
-            "errors.log.2026-05-13",
+            "errors.2026-05-12.log",
+            "errors.2026-05-13.log",
         ])
+    }
+
+    func testPerformMaintenancePrunesLegacyDotLogDotDateArchives() throws {
+        // Pre-2026-05-24 archives used `<base>.log.<YYYY-MM-DD>` (no .log
+        // suffix on the rotated file). Reader stays backwards-compatible
+        // so existing on-disk archives still participate in retention
+        // even though new rotations write the new shape.
+        let tempDirectory = try makeTemporaryDirectory()
+        let locator = FixedStorageLocator(baseDirectory: tempDirectory)
+        let logsDirectory = locator.url(for: .logs)
+        try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
+        let now = date("2026-05-18T12:00:00Z")
+        let currentLog = logsDirectory.appendingPathComponent("errors.log")
+        try "current\n".write(to: currentLog, atomically: true, encoding: .utf8)
+        // Three legacy-format archives. With retentionDays=2, the
+        // pruner keeps the 2 newest and drops the oldest.
+        try "old-12\n".write(
+            to: logsDirectory.appendingPathComponent("errors.log.2026-05-12"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "old-13\n".write(
+            to: logsDirectory.appendingPathComponent("errors.log.2026-05-13"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "old-15\n".write(
+            to: logsDirectory.appendingPathComponent("errors.log.2026-05-15"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        makeService(locator: locator, retentionDays: 2).performMaintenance(now: now)
+
+        let remaining = (try FileManager.default.contentsOfDirectory(atPath: logsDirectory.path)).sorted()
+        XCTAssertFalse(
+            remaining.contains("errors.log.2026-05-12"),
+            "Oldest legacy archive should be pruned. Remaining: \(remaining)"
+        )
+        XCTAssertTrue(
+            remaining.contains("errors.log.2026-05-13"),
+            "Second-newest legacy archive should survive. Remaining: \(remaining)"
+        )
+        XCTAssertTrue(
+            remaining.contains("errors.log.2026-05-15"),
+            "Newest legacy archive should survive. Remaining: \(remaining)"
+        )
     }
 
     private func fixedCalendar() -> Calendar {
@@ -227,10 +274,16 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
     }
 
     private func existingArchiveNames(for baseLogName: String, in logsDirectory: URL) -> [String] {
-        let prefix = "\(baseLogName)."
+        // baseLogName is e.g. "errors.log"; archives are
+        // "errors.<YYYY-MM-DD>.log". Filter to that prefix shape and
+        // exclude the current `errors.log` itself.
+        let stem = baseLogName.hasSuffix(".log")
+            ? String(baseLogName.dropLast(4))
+            : baseLogName
+        let archivePrefix = "\(stem)."
         let fileNames = (try? FileManager.default.contentsOfDirectory(atPath: logsDirectory.path)) ?? []
         return fileNames
-            .filter { $0.hasPrefix(prefix) }
+            .filter { $0 != baseLogName && $0.hasPrefix(archivePrefix) && $0.hasSuffix(".log") }
             .sorted()
     }
 }

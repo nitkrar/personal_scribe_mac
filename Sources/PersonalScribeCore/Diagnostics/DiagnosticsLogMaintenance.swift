@@ -57,8 +57,14 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
             }
 
             if activeLog.sizeInBytes > 0 {
+                // Archive shape `<basename>.<YYYY-MM-DD>.log` so Finder and
+                // text editors recognize the extension; the previous
+                // `<basename>.log.<date>` form left files without a .log
+                // suffix.
+                let baseName = activeLog.url.deletingPathExtension().lastPathComponent
+                let dateString = archiveDateString(for: modificationDayStart)
                 let archiveURL = logsDirectory.appendingPathComponent(
-                    "\(activeLog.url.lastPathComponent).\(archiveDateString(for: modificationDayStart))",
+                    "\(baseName).\(dateString).log",
                     isDirectory: false
                 )
                 try archive(activeLog.url, to: archiveURL)
@@ -104,6 +110,12 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
             guard url.lastPathComponent.hasSuffix(".log") else {
                 return nil
             }
+            // Skip archive files (shape `<base>.<YYYY-MM-DD>.log`). The
+            // archive parser will pick these up via the separate
+            // archivedLogs scan.
+            if archivedLog(for: url) != nil {
+                return nil
+            }
 
             let values = try url.resourceValues(forKeys: [
                 .contentModificationDateKey,
@@ -140,24 +152,46 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
 
     private func archivedLog(for url: URL) -> ArchivedLogFile? {
         let fileName = url.lastPathComponent
+
+        // New format: `<basename>.<YYYY-MM-DD>.log` (e.g. `errors.2026-05-23.log`).
+        // Use this shape for all newly-written archives; recognized as the
+        // canonical form.
+        if fileName.hasSuffix(".log") {
+            let withoutExtension = String(fileName.dropLast(4))
+            if withoutExtension.count > 11 {
+                let archiveDateSuffix = String(withoutExtension.suffix(10))
+                if let archiveDate = archiveDate(from: archiveDateSuffix) {
+                    let baseNameStem = String(withoutExtension.dropLast(11))
+                    if !baseNameStem.isEmpty {
+                        return ArchivedLogFile(
+                            url: url,
+                            baseLogName: "\(baseNameStem).log",
+                            archiveDate: archiveDate
+                        )
+                    }
+                }
+            }
+        }
+
+        // Legacy format: `<basename>.log.<YYYY-MM-DD>` (e.g.
+        // `errors.log.2026-05-23`). Kept readable so existing on-disk
+        // archives from before 2026-05-24 still participate in retention
+        // pruning. New archives never use this shape.
         guard fileName.count > 11 else {
             return nil
         }
-
-        let archiveDateSuffix = String(fileName.suffix(10))
-        guard let archiveDate = archiveDate(from: archiveDateSuffix) else {
+        let legacyDateSuffix = String(fileName.suffix(10))
+        guard let legacyDate = archiveDate(from: legacyDateSuffix) else {
             return nil
         }
-
-        let baseName = String(fileName.dropLast(11))
-        guard baseName.hasSuffix(".log") else {
+        let legacyBase = String(fileName.dropLast(11))
+        guard legacyBase.hasSuffix(".log") else {
             return nil
         }
-
         return ArchivedLogFile(
             url: url,
-            baseLogName: baseName,
-            archiveDate: archiveDate
+            baseLogName: legacyBase,
+            archiveDate: legacyDate
         )
     }
 
