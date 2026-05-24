@@ -18,7 +18,11 @@ struct ModeDetailView: View {
         modelService: ActiveModelService
     ) {
         _viewModel = StateObject(
-            wrappedValue: ModeDetailViewModel(mode: mode, registry: registry)
+            wrappedValue: ModeDetailViewModel(
+                mode: mode,
+                registry: registry,
+                registeredDescriptors: modelService.registeredModels
+            )
         )
         self.modelService = modelService
         _nameDraft = State(initialValue: mode.name)
@@ -162,6 +166,15 @@ struct ModeDetailView: View {
                 Spacer(minLength: PersonalScribeTheme.Spacing.sm)
                 voiceModelMenu
             }
+
+            if !viewModel.languageOptions.isEmpty {
+                Divider()
+                ModeLanguagePickerView(
+                    selectedLanguage: viewModel.selectedLanguage,
+                    options: viewModel.languageOptions,
+                    onChange: { viewModel.setLanguage($0) }
+                )
+            }
         }
     }
 
@@ -239,18 +252,15 @@ struct ModeDetailView: View {
     /// caption inverted: pinned shows the model name; unpinned shows
     /// "Globally active".
     private var voiceModelMenuButtonLabel: String {
-        if let pinID = viewModel.voiceModelPinID {
-            if let pinned = modelService.registeredModels.first(where: { $0.id == pinID }) {
-                return pinned.displayName
-            }
-            return "Unknown model"
-        }
-        return "Globally active"
+        Self.resolvedVoiceModelMenuButtonLabel(
+            pinID: viewModel.voiceModelPinID,
+            modelService: modelService
+        )
     }
 
     private var pickableDescriptors: [ModelDescriptor] {
         let kind: ModelKind = viewModel.realtimeOn ? .streamingASR : .asr
-        return modelService.enabledModels(kind: kind)
+        return Self.pickableDescriptorsForKind(kind, modelService: modelService)
     }
 
     private var activeVoiceModelDisplayName: String {
@@ -291,6 +301,26 @@ struct ModeDetailView: View {
             get: { viewModel.diarizationOn },
             set: { viewModel.setDiarization($0) }
         )
+    }
+
+    static func resolvedVoiceModelMenuButtonLabel(
+        pinID: String?,
+        modelService: ActiveModelService
+    ) -> String {
+        if let pinID {
+            if let pinned = modelService.registeredModels.first(where: { $0.id == pinID }) {
+                return pinned.displayName
+            }
+            return "Unknown model"
+        }
+        return "Globally active"
+    }
+
+    static func pickableDescriptorsForKind(
+        _ kind: ModelKind,
+        modelService: ActiveModelService
+    ) -> [ModelDescriptor] {
+        modelService.visibleModels(kind: kind)
     }
 
     private var captureCard: some View {

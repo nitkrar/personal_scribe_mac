@@ -274,4 +274,84 @@ final class WorkflowModeValidatorTests: XCTestCase {
             )
         }
     }
+
+    func testLanguageRequiresPinnedDescriptor() {
+        let mode = WorkflowMode(
+            id: "unpinned-language",
+            name: "Unpinned Language",
+            language: Parameter<String?>.override("ja"),
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        XCTAssertThrowsError(
+            try WorkflowModeValidator.validate(
+                mode,
+                availableKinds: [.asr],
+                registeredDescriptors: [BuiltInModelCatalog.whisperKitTiny]
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? WorkflowModeValidationError,
+                .languageRequiresPinnedDescriptor
+            )
+        }
+    }
+
+    func testLanguageRequiresPinnedDescriptorWithPickerSupport() {
+        let mode = WorkflowMode(
+            id: "monolingual-language",
+            name: "Monolingual Language",
+            language: Parameter<String?>.override("ja"),
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.whisperKitSmallEn217MB.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        XCTAssertThrowsError(
+            try WorkflowModeValidator.validate(
+                mode,
+                availableKinds: [.asr],
+                registeredDescriptors: [BuiltInModelCatalog.whisperKitSmallEn217MB]
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? WorkflowModeValidationError,
+                .languageRequiresMultilingualPinnedDescriptor(
+                    id: BuiltInModelCatalog.whisperKitSmallEn217MB.id
+                )
+            )
+        }
+    }
+
+    func testLanguagePassesForPinnedMultilingualDescriptor() throws {
+        let mode = WorkflowMode(
+            id: "multilingual-language",
+            name: "Multilingual Language",
+            language: Parameter<String?>.override("ja"),
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.whisperKitTiny.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        try WorkflowModeValidator.validate(
+            mode,
+            availableKinds: [],
+            registeredDescriptors: [BuiltInModelCatalog.whisperKitTiny]
+        )
+    }
 }

@@ -196,6 +196,10 @@ final class ModesListViewModel: ObservableObject {
                 return "Pinned model \"\(id)\" is no longer available. Pick another in the mode's settings."
             case .pinnedDescriptorKindMismatch(let id, let expected, _):
                 return "Pinned model \"\(id)\" can't be used as \(expected.displayName). Pick another in the mode's settings."
+            case .languageRequiresPinnedDescriptor:
+                return "Language hint requires a specific pinned voice model. Pick one in the mode's settings."
+            case .languageRequiresMultilingualPinnedDescriptor(let id):
+                return "Pinned model \"\(id)\" doesn't support language selection. Choose a multilingual model or clear the language."
             }
         }
         return (error as? LocalizedError)?.errorDescription ?? "\(error)"

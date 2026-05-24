@@ -128,54 +128,6 @@ final class AppCompositionTests: XCTestCase {
         XCTAssertEqual(registry.currentMode.id, "med-notes")
     }
 
-    func testMakeModelLanguagePreferenceValidatesPersistedHintsOnInit() async {
-        let suiteName = "AppCompositionTests.\(#function).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        Preference<[String: String]>(
-            key: ModelLanguagePreference.userDefaultsKey,
-            default: [:],
-            defaults: defaults
-        ).persist([
-            BuiltInModelCatalog.whisperKitTiny.id: "ja",
-            BuiltInModelCatalog.qwen3AsrF32.id: "ja",
-            "removed-model": "en",
-        ])
-
-        let preference = AppComposition.makeModelLanguagePreference(
-            suiteName: suiteName,
-            registeredModels: [
-                BuiltInModelCatalog.whisperKitTiny,
-                BuiltInModelCatalog.qwen3AsrF32,
-            ],
-            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
-        )
-
-        let whisperHint = await preference.hint(for: BuiltInModelCatalog.whisperKitTiny.id)
-        let qwenHint = await preference.hint(for: BuiltInModelCatalog.qwen3AsrF32.id)
-        let removedHint = await preference.hint(for: "removed-model")
-
-        // whisperKitTiny + qwen3AsrF32 both have `supportedLanguages` lists
-        // containing "ja", so init-time sanitization keeps both hints. Only
-        // the unregistered "removed-model" entry should be dropped.
-        XCTAssertEqual(whisperHint, "ja")
-        XCTAssertEqual(qwenHint, "ja")
-        XCTAssertNil(removedHint)
-        XCTAssertEqual(
-            Preference<[String: String]>(
-                key: ModelLanguagePreference.userDefaultsKey,
-                default: [:],
-                defaults: defaults
-            ).resolve(),
-            [
-                BuiltInModelCatalog.whisperKitTiny.id: "ja",
-                BuiltInModelCatalog.qwen3AsrF32.id: "ja",
-            ]
-        )
-    }
-
     func testReporterIncludesDebugFileSink() async throws {
         let tempDirectory = try makeTemporaryDirectory()
         let reporter = AppComposition.makeDiagnosticsReporter(

@@ -35,6 +35,10 @@ import Foundation
 /// menu-bar / pill switcher only; non-nil = a dedicated binding that
 /// activates this mode AND starts recording.
 ///
+/// `language` (#091 v2) — optional per-mode language hint. `nil` means
+/// auto-detect. Present only when a mode pins a multilingual ASR
+/// descriptor.
+///
 /// Codable: serialised as part of `WorkflowModeDocument` (#078.12) on
 /// `workflow-modes.json` in `AppConfig.baseDirectory()`.
 ///
@@ -45,6 +49,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
     public var glyph: String
     public var preset: Preset
     public var hotkey: HotkeyPreference?
+    public var language: Parameter<String?>?
     public var pipelineShape: PipelineShape
     public var processors: [ProcessorSpec]
     public var captureControllers: [CaptureControllerSpec]
@@ -57,6 +62,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         glyph: String = "mic",
         preset: Preset = .dictation,
         hotkey: HotkeyPreference? = nil,
+        language: Parameter<String?>? = nil,
         pipelineShape: PipelineShape,
         processors: [ProcessorSpec],
         captureControllers: [CaptureControllerSpec],
@@ -68,6 +74,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         self.glyph = glyph
         self.preset = preset
         self.hotkey = hotkey
+        self.language = language
         self.pipelineShape = pipelineShape
         self.processors = processors
         self.captureControllers = captureControllers
@@ -81,6 +88,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         case glyph
         case preset
         case hotkey
+        case language
         case pipelineShape
         case processors
         case captureControllers
@@ -99,6 +107,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         self.preset = try container.decodeIfPresent(Preset.self, forKey: .preset)
             ?? Preset.inferred(fromGlyph: glyph)
         self.hotkey = try container.decodeIfPresent(HotkeyPreference.self, forKey: .hotkey)
+        self.language = try container.decodeIfPresent(Parameter<String?>.self, forKey: .language)
         self.pipelineShape = try container.decode(PipelineShape.self, forKey: .pipelineShape)
         self.processors = try container.decode([ProcessorSpec].self, forKey: .processors)
         self.captureControllers = try container.decode(

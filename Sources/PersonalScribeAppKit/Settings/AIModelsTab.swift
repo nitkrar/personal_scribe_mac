@@ -11,15 +11,20 @@ import PersonalScribeSession
 /// corresponding adapters land (#078).
 @MainActor
 public struct AIModelsTab: View {
-    @ObservedObject private var service: ActiveModelService
-    private let modelLanguagePreference: ModelLanguagePreference
+    enum RowVisibility: Equatable {
+        case standard
+        case filteredActive
+    }
 
-    public init(
-        service: ActiveModelService = AppComposition.modelService,
-        modelLanguagePreference: ModelLanguagePreference = AppComposition.modelLanguagePreference
-    ) {
+    struct DisplayedModel: Equatable {
+        let descriptor: ModelDescriptor
+        let visibility: RowVisibility
+    }
+
+    @ObservedObject private var service: ActiveModelService
+
+    public init(service: ActiveModelService = AppComposition.modelService) {
         self.service = service
-        self.modelLanguagePreference = modelLanguagePreference
     }
 
     public var body: some View {
@@ -34,16 +39,32 @@ public struct AIModelsTab: View {
                     description: descriptionForSection(kind: kind)
                 ) {
                     VStack(spacing: SettingsLayout.itemSpacing) {
-                        ForEach(service.enabledModels(kind: kind), id: \.id) { descriptor in
-                            ModelRow(
-                                descriptor: descriptor,
-                                state: service.downloadStates[descriptor.id],
-                                isActive: service.activeDescriptor(for: descriptor.kind)?.id == descriptor.id,
-                                modelLanguagePreference: modelLanguagePreference,
-                                onActivate: { activate(descriptor) },
-                                onDownload: { download(descriptor) },
-                                onDelete: { delete(descriptor) }
-                            )
+                        if let filterNotice = Self.filterNotice(for: kind, service: service) {
+                            Text(filterNotice)
+                                .font(PersonalScribeTheme.Typography.caption.font)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        ForEach(Self.displayedRows(for: kind, service: service), id: \.descriptor.id) { row in
+                            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                                ModelRow(
+                                    descriptor: row.descriptor,
+                                    state: service.downloadStates[row.descriptor.id],
+                                    isActive: service.activeDescriptor(for: row.descriptor.kind)?.id == row.descriptor.id,
+                                    onActivate: { activate(row.descriptor) },
+                                    onDownload: { download(row.descriptor) },
+                                    onDelete: { delete(row.descriptor) }
+                                )
+                                .opacity(row.visibility == .filteredActive ? 0.7 : 1)
+
+                                if row.visibility == .filteredActive {
+                                    Text("Active model stays in use even though this filter hides it. Change Settings > Advanced to show it again.")
+                                        .font(PersonalScribeTheme.Typography.caption.font)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
                         }
                     }
                 }
@@ -61,6 +82,35 @@ public struct AIModelsTab: View {
 
     private var enabledKinds: [ModelKind] {
         ModelKind.allCases.filter(\.isEnabled)
+    }
+
+    static func displayedRows(
+        for kind: ModelKind,
+        service: ActiveModelService
+    ) -> [DisplayedModel] {
+        let activeDescriptorID = service.activeDescriptor(for: kind)?.id
+        return service.enabledModels(kind: kind).compactMap { descriptor in
+            if service.isVisibleModel(descriptor) {
+                return DisplayedModel(descriptor: descriptor, visibility: .standard)
+            }
+            if descriptor.id == activeDescriptorID {
+                return DisplayedModel(descriptor: descriptor, visibility: .filteredActive)
+            }
+            return nil
+        }
+    }
+
+    static func filterNotice(
+        for kind: ModelKind,
+        service: ActiveModelService
+    ) -> String? {
+        let hiddenWhisperModels = service.enabledModels(kind: kind).filter { descriptor in
+            descriptor.engine.isWhisperFamily && !service.isVisibleModel(descriptor)
+        }
+        guard hiddenWhisperModels.isEmpty == false else {
+            return nil
+        }
+        return "Some Whisper models are hidden by Whisper Adapter in Settings > Advanced."
     }
 
     private func descriptionForSection(kind: ModelKind) -> String {
@@ -109,7 +159,6 @@ struct ModelRow: View {
     let descriptor: ModelDescriptor
     let state: ModelDownloadState?
     let isActive: Bool
-    let modelLanguagePreference: ModelLanguagePreference
     /// Siblings used for the info popover's relative-rank computation.
     /// Defaults to the catalog-registered list.
     let siblings: [ModelDescriptor]
@@ -123,7 +172,6 @@ struct ModelRow: View {
         descriptor: ModelDescriptor,
         state: ModelDownloadState?,
         isActive: Bool,
-        modelLanguagePreference: ModelLanguagePreference = AppComposition.modelLanguagePreference,
         siblings: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
         onActivate: @escaping () -> Void,
         onDownload: @escaping () -> Void = {},
@@ -132,7 +180,6 @@ struct ModelRow: View {
         self.descriptor = descriptor
         self.state = state
         self.isActive = isActive
-        self.modelLanguagePreference = modelLanguagePreference
         self.siblings = siblings
         self.onActivate = onActivate
         self.onDownload = onDownload
@@ -166,14 +213,6 @@ struct ModelRow: View {
                 Spacer(minLength: 0)
 
                 trailingControls
-            }
-
-            if showsLanguagePicker {
-                ModelLanguagePicker(
-                    descriptor: descriptor,
-                    phase: phase,
-                    preference: modelLanguagePreference
-                )
             }
         }
         // Tapping anywhere on the card (outside the trailing buttons)
@@ -302,13 +341,6 @@ struct ModelRow: View {
             let concise = trimmed.count > 40 ? String(trimmed.prefix(37)) + "…" : trimmed
             return (.failed, "Failed: \(concise)")
         }
-    }
-
-    var showsLanguagePicker: Bool {
-        ModelLanguagePicker.isVisible(
-            descriptor: descriptor,
-            phase: phase
-        )
     }
 
     // MARK: - Action button (transient phases only)

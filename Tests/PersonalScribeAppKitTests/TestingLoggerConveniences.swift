@@ -134,6 +134,7 @@ extension PersonalScribeApp {
 extension ActiveModelService {
     convenience init(
         activeIDsPreference: Preference<[ModelKind: String]>,
+        whisperAdapterFilterPreference: Preference<WhisperAdapterFilter>? = nil,
         registeredModels: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
         isDownloaded: @escaping @Sendable (ModelDescriptor) -> Bool,
         download: @escaping @Sendable (
@@ -143,10 +144,12 @@ extension ActiveModelService {
         removeDownloaded: @escaping @Sendable (ModelDescriptor) throws -> Void = { _ in },
         evict: @escaping @Sendable (ModelDescriptor) -> Void = { _ in },
         modelsDirectoryProvider: @escaping @Sendable () -> URL? = { nil },
-        diskSpaceProvider: @escaping @Sendable (URL) -> Int64? = { _ in nil }
+        diskSpaceProvider: @escaping @Sendable (URL) -> Int64? = { _ in nil },
+        logger: PersonalScribeLogger = AppKitTestingDiagnostics.logger(PersonalScribeLogCategory.session)
     ) {
         self.init(
             activeIDsPreference: activeIDsPreference,
+            whisperAdapterFilterPreference: whisperAdapterFilterPreference,
             registeredModels: registeredModels,
             isDownloaded: isDownloaded,
             download: download,
@@ -154,7 +157,8 @@ extension ActiveModelService {
             evict: evict,
             modelsDirectoryProvider: modelsDirectoryProvider,
             diskSpaceProvider: diskSpaceProvider,
-            logger: AppKitTestingDiagnostics.logger(PersonalScribeLogCategory.session)
+            chipFamily: ChipFamily.current,
+            logger: logger
         )
     }
 }

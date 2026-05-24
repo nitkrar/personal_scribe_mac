@@ -70,6 +70,38 @@ final class WorkflowModeTests: XCTestCase {
         XCTAssertEqual(decoded, original)
     }
 
+    func testLanguageFieldRoundTripsViaCodable() throws {
+        let original = WorkflowMode(
+            id: "ja-mode",
+            name: "Japanese Mode",
+            language: Parameter<String?>.override("ja"),
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(
+                    kind: .asr,
+                    descriptorID: BuiltInModelCatalog.whisperKitTiny.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(WorkflowMode.self, from: data)
+
+        XCTAssertEqual(decoded.language, Parameter<String?>.override("ja"))
+        XCTAssertEqual(decoded, original)
+    }
+
+    func testLegacyDecodeWithoutLanguageDefaultsToNil() throws {
+        let decoded = try JSONDecoder().decode(
+            WorkflowMode.self,
+            from: legacyJSON(glyph: "mic")
+        )
+
+        XCTAssertNil(decoded.language)
+    }
+
     func testLegacyStreamingDecodeWithoutStreamingBehaviorSynthesizesDefaultSettings() throws {
         let decoded = try JSONDecoder().decode(
             WorkflowMode.self,

@@ -55,6 +55,11 @@ public protocol ModelLifecycle: Sendable {
     /// (loaded CoreML models, decoder caches, auxiliary managers)
     /// without relying on `deinit`.
     func cleanup() async
+
+    /// Optional idle-unload hook. Called after a session ends so
+    /// heavyweight runtimes can drop prepared state after a grace
+    /// period instead of pinning RAM indefinitely.
+    func releaseIdleResources() async
 }
 
 public extension ModelLifecycle {
@@ -73,4 +78,8 @@ public extension ModelLifecycle {
     /// Default backstop for lightweight or pure-value conformers that
     /// have no retained runtime state to release on eviction.
     func cleanup() async {}
+
+    /// Default no-op for conformers that don't retain heavyweight
+    /// runtime state between sessions.
+    func releaseIdleResources() async {}
 }

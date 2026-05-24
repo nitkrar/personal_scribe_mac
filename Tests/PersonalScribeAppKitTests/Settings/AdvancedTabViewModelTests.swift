@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 import PersonalScribeCore
+import PersonalScribeSession
 @testable import PersonalScribeAppKit
 
 @MainActor
@@ -198,6 +199,39 @@ final class AdvancedTabViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.logRetentionDays, 0)
         XCTAssertEqual(LogRetentionDaysPreference.resolve(from: defaults), 0)
+    }
+
+    func testWhisperAdapterFilterMirrorsModelServiceAndPersistsUpdates() {
+        let defaults = isolatedDefaults()
+        let modelService = ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
+                defaults: defaults
+            ),
+            registeredModels: [
+                BuiltInModelCatalog.whisperKitSmall216MB,
+                BuiltInModelCatalog.whisperCppSmallQ51,
+            ],
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            defaults: defaults,
+            modelService: modelService,
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil }
+        )
+
+        XCTAssertEqual(viewModel.whisperAdapterFilter, .both)
+
+        viewModel.setWhisperAdapterFilter(.bridge)
+
+        XCTAssertEqual(viewModel.whisperAdapterFilter, .bridge)
+        XCTAssertEqual(modelService.whisperAdapterFilter, .bridge)
+        XCTAssertEqual(WhisperAdapterFilter.resolve(from: defaults), .bridge)
     }
 
     func testAudioRetentionPersistsAllowedValues() {

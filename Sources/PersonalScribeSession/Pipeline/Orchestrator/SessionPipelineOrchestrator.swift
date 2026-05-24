@@ -10,7 +10,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private let postProcessingPipeline: any PostProcessingPipeline
     private let outputSink: any PipelineOutputSink
     private let contextProvider: any PipelineContextProviding
-    private let modelLanguagePreference: ModelLanguagePreference?
     private let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
     private let recordingFileWriter: (any RecordingFileWriting)?
     private let recordAudioEnabled: @Sendable () -> Bool
@@ -139,7 +138,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         postProcessingPipeline: any PostProcessingPipeline = DefaultPostProcessingPipeline(),
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
-        modelLanguagePreference: ModelLanguagePreference? = nil,
         recordingFileWriter: (any RecordingFileWriting)? = nil,
         recordAudioEnabled: @escaping @Sendable () -> Bool = { false },
         recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
@@ -162,7 +160,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             postProcessingPipeline: postProcessingPipeline,
             outputSink: outputSink,
             contextProvider: contextProvider,
-            modelLanguagePreference: modelLanguagePreference,
             persistenceHandler: persistenceHandler,
             recordingFileWriter: recordingFileWriter,
             recordAudioEnabled: recordAudioEnabled,
@@ -180,7 +177,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         postProcessingPipeline: any PostProcessingPipeline,
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
-        modelLanguagePreference: ModelLanguagePreference? = nil,
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?,
         recordingFileWriter: (any RecordingFileWriting)? = nil,
         recordAudioEnabled: @escaping @Sendable () -> Bool = { false },
@@ -196,7 +192,6 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.postProcessingPipeline = postProcessingPipeline
         self.outputSink = outputSink
         self.contextProvider = contextProvider
-        self.modelLanguagePreference = modelLanguagePreference
         self.persistenceHandler = persistenceHandler
         self.recordingFileWriter = recordingFileWriter
         self.recordAudioEnabled = recordAudioEnabled
@@ -624,9 +619,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         bufferedAudio.removeAll(keepingCapacity: true)
         nextRevision = 0
         latestStageFailure = nil
+        let completedRecipe = activeSessionRecipe
         activeSessionRecipe = nil
 
-        await outputSink.endSession()
+        await endSessionAndReleaseIdleResources(for: completedRecipe)
 
         publish { snapshot in
             snapshot.sessionState = .idle
@@ -752,7 +748,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             if isStreamingSession, finishedLiveStreamingState == nil {
                 await cancelLiveStreamingSession()
             }
-            await outputSink.endSession()
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
             publish { snapshot in
                 // `#075`: Short-hold is a pipeline shortcut (nothing to
                 // transcribe), not an error. Publishing `.shortExit`
@@ -857,7 +853,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             }
 
             try await deliverFinal(finalResult)
-            await outputSink.endSession()
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
 
             publish { snapshot in
                 snapshot.sessionState = .completed
@@ -869,10 +865,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.isStreamingSession = false
             }
         } catch let failure as PipelineStageFailure {
-            await outputSink.endSession()
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
             handleStageFailure(failure)
         } catch {
-            await outputSink.endSession()
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
             handleStageFailure(makeStageFailure(stage: .transcription, error: error, fallback: .transcriptionFailure))
         }
     }
@@ -1221,7 +1217,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             }
         } catch {
             await cancelLiveStreamingSession()
-            await outputSink.endSession()
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
             handleStageFailure(makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure))
         }
     }
@@ -1796,40 +1792,35 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     private func resolveLanguageHintForCurrentMode() async -> String? {
-        guard
-            let modelLanguagePreference,
-            let descriptorID = pinnedASRDescriptorIDForLanguageHint(in: activeContext.activeMode)
-        else {
-            return nil
-        }
-
-        return await modelLanguagePreference.hint(for: descriptorID)
+        activeContext.activeMode?.language?.resolved
     }
 
-    private func pinnedASRDescriptorIDForLanguageHint(
-        in mode: WorkflowMode?
-    ) -> String? {
-        guard let mode else {
-            return nil
-        }
+    private func endSessionAndReleaseIdleResources(for recipe: BoundRecipe?) async {
+        await outputSink.endSession()
+        await releaseIdleResources(for: recipe)
+    }
 
-        for processor in mode.processors {
-            switch processor {
-            case .transcriber(let kind, let descriptorID) where kind == .asr:
-                if let descriptorID {
-                    return descriptorID
+    private func releaseIdleResources(for recipe: BoundRecipe?) async {
+        if let recipe {
+            for processor in recipe.processors {
+                switch processor {
+                case .transcriber(let transcriber):
+                    await transcriber.releaseIdleResources()
+                case .streamingTranscriber(let streamingTranscriber):
+                    await streamingTranscriber.releaseIdleResources()
+                case .diarizedTurns(let diarizer, let transcriber, _):
+                    await diarizer.releaseIdleResources()
+                    await transcriber.releaseIdleResources()
                 }
-            case .diarizedTurns(_, let transcriberKind, let descriptorID, _)
-                where transcriberKind == .asr:
-                if let descriptorID {
-                    return descriptorID
-                }
-            default:
-                continue
+            }
+            if let secondPassTranscriber = recipe.streamingSecondPassTranscriber {
+                await secondPassTranscriber.releaseIdleResources()
             }
         }
 
-        return nil
+        if let vadProvider {
+            await vadProvider.releaseIdleResources()
+        }
     }
 
     /// Sequentially prepare every processor referenced by `recipe`.

@@ -40,4 +40,14 @@ public enum WorkflowModeValidationError: Error, Equatable, Sendable {
     /// `kind` differs from the spec's `kind`. E.g. pinning a
     /// diarization descriptor to a `.transcriber(kind: .asr)` spec.
     case pinnedDescriptorKindMismatch(id: String, expected: ModelKind, actual: ModelKind)
+
+    /// #091 v2: per-mode language hints only make sense when the mode
+    /// pins a specific descriptor. Default-model modes must keep
+    /// language unset so they continue to auto-detect.
+    case languageRequiresPinnedDescriptor
+
+    /// #091 v2: the pinned descriptor must advertise picker support
+    /// through `supportedLanguages`; monolingual / non-forwarding
+    /// descriptors cannot carry a per-mode language hint.
+    case languageRequiresMultilingualPinnedDescriptor(id: String)
 }

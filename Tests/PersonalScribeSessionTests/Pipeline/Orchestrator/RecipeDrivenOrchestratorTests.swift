@@ -322,7 +322,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         XCTAssertEqual(snapshot.lastCompletedResult?.text, "Ok.")
     }
 
-    func testOrchestratorPassesLanguageHintWhenModePinsDescriptor() async throws {
+    func testOrchestratorPassesModeLanguageHintWhenModePinsDescriptor() async throws {
         let buffer = try Self.makeBuffer(sampleCount: 16_000)
         let stubTranscriber = StubBoundTranscriber(
             result: TranscriptionResult(
@@ -334,6 +334,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         let mode = WorkflowMode(
             id: "pinned-whisper",
             name: "Pinned Whisper",
+            language: Parameter<String?>.override("ja"),
             pipelineShape: .batch,
             processors: [
                 .transcriber(
@@ -344,8 +345,6 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
             captureControllers: [.manualHotkey],
             outputSinks: [.frontmostPaste(enabled: .override(true))]
         )
-        let preference = makeModelLanguagePreference()
-        await preference.setHint("ja", for: BuiltInModelCatalog.whisperKitTiny.id)
         let recipe = BoundRecipe(
             recipeID: mode.id,
             recipeName: mode.name,
@@ -357,8 +356,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         let orchestrator = makeOrchestrator(
             capture: FakeAudioCapturer(buffers: [buffer]),
             context: PipelineContextSnapshot(activeMode: mode, streamingOutputEnabled: false),
-            boundRecipe: recipe,
-            modelLanguagePreference: preference
+            boundRecipe: recipe
         )
 
         await orchestrator.toggleCapture()
@@ -372,7 +370,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         XCTAssertEqual(lastLanguageHint, "ja")
     }
 
-    func testOrchestratorPassesNilLanguageHintWhenPinnedDescriptorHasNoPreference() async throws {
+    func testOrchestratorPassesNilLanguageHintWhenModeLanguageUnset() async throws {
         let buffer = try Self.makeBuffer(sampleCount: 16_000)
         let stubTranscriber = StubBoundTranscriber(
             result: TranscriptionResult(
@@ -405,8 +403,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         let orchestrator = makeOrchestrator(
             capture: FakeAudioCapturer(buffers: [buffer]),
             context: PipelineContextSnapshot(activeMode: mode, streamingOutputEnabled: false),
-            boundRecipe: recipe,
-            modelLanguagePreference: makeModelLanguagePreference()
+            boundRecipe: recipe
         )
 
         await orchestrator.toggleCapture()
@@ -420,52 +417,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         XCTAssertNil(lastLanguageHint)
     }
 
-    func testOrchestratorSuppressesLanguageHintWhenModeUsesDefaultDescriptor() async throws {
-        let buffer = try Self.makeBuffer(sampleCount: 16_000)
-        let stubTranscriber = StubBoundTranscriber(
-            result: TranscriptionResult(
-                text: "hello",
-                audioDuration: .seconds(1),
-                processingDuration: .zero
-            )
-        )
-        let mode = WorkflowMode(
-            id: "default-whisper",
-            name: "Default Whisper",
-            pipelineShape: .batch,
-            processors: [.transcriber(kind: .asr)],
-            captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste(enabled: .override(true))]
-        )
-        let preference = makeModelLanguagePreference()
-        await preference.setHint("ja", for: BuiltInModelCatalog.whisperKitTiny.id)
-        let recipe = BoundRecipe(
-            recipeID: mode.id,
-            recipeName: mode.name,
-            pipelineShape: .batch,
-            processors: [.transcriber(stubTranscriber)],
-            captureControllers: [.manualHotkey],
-            outputSinks: [.frontmostPaste(enabled: true)]
-        )
-        let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturer(buffers: [buffer]),
-            context: PipelineContextSnapshot(activeMode: mode, streamingOutputEnabled: false),
-            boundRecipe: recipe,
-            modelLanguagePreference: preference
-        )
-
-        await orchestrator.toggleCapture()
-        await orchestrator.toggleCapture()
-        try await waitUntil(.seconds(2)) {
-            let snapshot = await orchestrator.snapshot()
-            return snapshot.lastCompletedResult != nil
-        }
-
-        let lastLanguageHint = await stubTranscriber.lastLanguageHint()
-        XCTAssertNil(lastLanguageHint)
-    }
-
-    func testOrchestratorPassesLanguageHintThroughDiarizedRecipeWhenModePinsDescriptor() async throws {
+    func testOrchestratorPassesModeLanguageHintThroughDiarizedRecipe() async throws {
         let buffer = try Self.makeBuffer(sampleCount: 16_000)
         let diarizer = StubBoundDiarizer(
             terminalTurns: [
@@ -486,6 +438,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         let mode = WorkflowMode(
             id: "pinned-diarized-whisper",
             name: "Pinned Diarized Whisper",
+            language: Parameter<String?>.override("ja"),
             pipelineShape: .batch,
             processors: [
                 .diarizedTurns(
@@ -497,8 +450,6 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
             captureControllers: [.manualHotkey],
             outputSinks: [.frontmostPaste(enabled: .override(true))]
         )
-        let preference = makeModelLanguagePreference()
-        await preference.setHint("ja", for: BuiltInModelCatalog.whisperKitTiny.id)
         let recipe = BoundRecipe(
             recipeID: mode.id,
             recipeName: mode.name,
@@ -516,8 +467,7 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         let orchestrator = makeOrchestrator(
             capture: FakeAudioCapturer(buffers: [buffer]),
             context: PipelineContextSnapshot(activeMode: mode, streamingOutputEnabled: false),
-            boundRecipe: recipe,
-            modelLanguagePreference: preference
+            boundRecipe: recipe
         )
 
         await orchestrator.toggleCapture()
@@ -540,7 +490,6 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
         vadPreferences: (any VadPreferencesReading)? = nil,
         context: PipelineContextSnapshot = PipelineContextSnapshot(streamingOutputEnabled: false),
         boundRecipe: BoundRecipe? = nil,
-        modelLanguagePreference: ModelLanguagePreference? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds
     ) -> SessionPipelineOrchestrator {
         // #078.29: orchestrator init dropped `transcriber:` and
@@ -553,21 +502,9 @@ final class RecipeDrivenOrchestratorTests: XCTestCase {
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
             outputSink: outputSink,
             contextProvider: StaticPipelineContextProvider(context: context),
-            modelLanguagePreference: modelLanguagePreference,
             vadProvider: vadProvider,
             boundRecipe: boundRecipe,
             graceDurationSeconds: graceDurationSeconds
-        )
-    }
-
-    private func makeModelLanguagePreference() -> ModelLanguagePreference {
-        let suiteName = "RecipeDrivenOrchestratorTests.\(UUID().uuidString)"
-        addTeardownBlock {
-            UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
-        }
-        return ModelLanguagePreference(
-            suiteName: suiteName,
-            registeredModels: BuiltInModelCatalog.registeredModels
         )
     }
 

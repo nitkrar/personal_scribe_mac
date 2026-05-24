@@ -44,9 +44,11 @@ public final class ActiveModelService: ObservableObject {
 
     public let registeredModels: [ModelDescriptor]
     @Published public private(set) var activeModelIDs: [ModelKind: String]
+    @Published public private(set) var whisperAdapterFilter: WhisperAdapterFilter
     @Published public private(set) var downloadStates: [String: ModelDownloadState]
 
     private let activeIDsPreference: Preference<[ModelKind: String]>
+    private let whisperAdapterFilterPreference: Preference<WhisperAdapterFilter>
     private let isDownloadedHandler: @Sendable (ModelDescriptor) -> Bool
     private let downloadHandler: @Sendable (
         ModelDescriptor,
@@ -93,9 +95,11 @@ public final class ActiveModelService: ObservableObject {
             default: recommendedDefault,
             defaults: defaults
         )
+        let whisperAdapterFilterPreference = WhisperAdapterFilter.preference(defaults: defaults)
 
         self.init(
             activeIDsPreference: activeIDsPreference,
+            whisperAdapterFilterPreference: whisperAdapterFilterPreference,
             registeredModels: BuiltInModelCatalog.registeredModels,
             isDownloaded: { descriptor in
                 provider.isDownloaded(descriptor)
@@ -118,6 +122,7 @@ public final class ActiveModelService: ObservableObject {
 
     init(
         activeIDsPreference: Preference<[ModelKind: String]>,
+        whisperAdapterFilterPreference: Preference<WhisperAdapterFilter>? = nil,
         registeredModels: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
         isDownloaded: @escaping @Sendable (ModelDescriptor) -> Bool,
         download: @escaping @Sendable (
@@ -131,7 +136,10 @@ public final class ActiveModelService: ObservableObject {
         chipFamily: @escaping @Sendable () -> ChipFamily = ChipFamily.current,
         logger: PersonalScribeLogger
     ) {
+        let resolvedWhisperAdapterFilterPreference = whisperAdapterFilterPreference
+            ?? WhisperAdapterFilter.preference(defaults: activeIDsPreference.defaults)
         self.activeIDsPreference = activeIDsPreference
+        self.whisperAdapterFilterPreference = resolvedWhisperAdapterFilterPreference
         self.registeredModels = registeredModels
         self.isDownloadedHandler = isDownloaded
         self.downloadHandler = download
@@ -148,6 +156,9 @@ public final class ActiveModelService: ObservableObject {
                 chipFamily: chipFamily(),
                 logger: logger
             )
+        )
+        self._whisperAdapterFilter = Published(
+            initialValue: resolvedWhisperAdapterFilterPreference.resolve()
         )
         self._downloadStates = Published(
             initialValue: Self.initialDownloadStates(
@@ -204,6 +215,28 @@ public final class ActiveModelService: ObservableObject {
         registeredModels.filter { d in
             d.kind.isEnabled && canActivate(d) && (kind == nil || d.kind == kind)
         }
+    }
+
+    /// UI-facing subset of `enabledModels`. Runtime resolution and
+    /// pinned-mode validation stay unchanged; only user-facing pickers
+    /// and lists honor the Whisper adapter visibility preference.
+    public func visibleModels(kind: ModelKind? = nil) -> [ModelDescriptor] {
+        enabledModels(kind: kind).filter { whisperAdapterFilter.includes($0) }
+    }
+
+    public func isVisibleModel(_ descriptor: ModelDescriptor) -> Bool {
+        descriptor.kind.isEnabled
+            && canActivate(descriptor)
+            && whisperAdapterFilter.includes(descriptor)
+    }
+
+    public func setWhisperAdapterFilter(_ filter: WhisperAdapterFilter) {
+        guard whisperAdapterFilter != filter else {
+            return
+        }
+
+        whisperAdapterFilter = filter
+        whisperAdapterFilterPreference.persist(filter)
     }
 
     func canActivate(_ descriptor: ModelDescriptor) -> Bool {

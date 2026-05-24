@@ -51,8 +51,7 @@ public actor SessionCoordinator {
         vadProvider: (any VadProviding)? = nil,
         workflowModeRegistry: WorkflowModeRegistry? = nil,
         availableKindsProvider: (@Sendable () -> Set<ModelKind>)? = nil,
-        outputSink: (any PipelineOutputSink)? = nil,
-        modelLanguagePreference: ModelLanguagePreference? = nil
+        outputSink: (any PipelineOutputSink)? = nil
     ) {
         self.capture = capture
         self.fixedRecipe = BoundRecipe(
@@ -78,8 +77,7 @@ public actor SessionCoordinator {
             recordingsDirectory: recordingsDirectory,
             vadProvider: vadProvider,
             outputSink: outputSink,
-            workflowModeRegistry: workflowModeRegistry,
-            modelLanguagePreference: modelLanguagePreference
+            workflowModeRegistry: workflowModeRegistry
         )
         Task { [weak self] in
             await self?.installAutoStopHandler()
@@ -102,8 +100,7 @@ public actor SessionCoordinator {
         vadProvider: (any VadProviding)? = nil,
         workflowModeRegistry: WorkflowModeRegistry,
         availableKindsProvider: @escaping @Sendable () -> Set<ModelKind>,
-        outputSink: (any PipelineOutputSink)? = nil,
-        modelLanguagePreference: ModelLanguagePreference? = nil
+        outputSink: (any PipelineOutputSink)? = nil
     ) {
         self.capture = capture
         self.fixedRecipe = nil
@@ -122,8 +119,7 @@ public actor SessionCoordinator {
             recordingsDirectory: recordingsDirectory,
             vadProvider: vadProvider,
             outputSink: outputSink,
-            workflowModeRegistry: workflowModeRegistry,
-            modelLanguagePreference: modelLanguagePreference
+            workflowModeRegistry: workflowModeRegistry
         )
         Task { [weak self] in
             await self?.installAutoStopHandler()
@@ -589,8 +585,7 @@ public actor SessionCoordinator {
         recordingsDirectory: @escaping @Sendable () throws -> URL,
         vadProvider: (any VadProviding)?,
         outputSink: (any PipelineOutputSink)? = nil,
-        workflowModeRegistry: WorkflowModeRegistry? = nil,
-        modelLanguagePreference: ModelLanguagePreference? = nil
+        workflowModeRegistry: WorkflowModeRegistry? = nil
     ) -> SessionPipelineOrchestrator {
         SessionPipelineOrchestrator(
             capture: capture,
@@ -600,7 +595,6 @@ public actor SessionCoordinator {
             contextProvider: CoordinatorPipelineContextProvider(
                 workflowModeRegistry: workflowModeRegistry
             ),
-            modelLanguagePreference: modelLanguagePreference,
             persistenceHandler: makePersistenceHandler(
                 transcriptRepository: transcriptRepository,
                 logger: logger

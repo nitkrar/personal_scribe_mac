@@ -34,4 +34,9 @@ public struct VadSessionHandle: Sendable {
 /// `SessionState.error`.
 public protocol VadProviding: Sendable {
     func makeSession(silenceThresholdSeconds: Double) async -> VadSessionHandle?
+    func releaseIdleResources() async
+}
+
+public extension VadProviding {
+    func releaseIdleResources() async {}
 }

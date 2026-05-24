@@ -4,19 +4,18 @@ import XCTest
 /// #078.1 — `ModelLifecycle` is the shared lifecycle protocol the new
 /// output protocols (`Transcriber`, `StreamingTranscriber`,
 /// `SpeakerDiarizer`) compose. These tests pin the surface so the
-/// composition contract stays small (only `prepare` + progress) and
-/// stays Sendable for the strict-concurrency boundary the provider
-/// crosses.
+/// composition contract stays minimal for conformers (they only need
+/// `prepare()` + progress; the other hooks have defaults) and stays
+/// Sendable for the strict-concurrency boundary the provider crosses.
 final class ModelLifecycleTests: XCTestCase {
 
     // MARK: - Test fixtures
 
     /// Minimal conformer used to assert that satisfying `prepare()`
-    /// and `modelDownloadProgress()` is sufficient — no other
-    /// requirements leak in. If a third member is ever added to
-    /// `ModelLifecycle`, this fixture stops compiling and the test
-    /// fails the build, which is the load-bearing oracle for
-    /// `testModelLifecycleHasOnlyPrepareAndProgress`.
+    /// and `modelDownloadProgress()` is sufficient — the other hooks
+    /// remain covered by protocol defaults. If a new required member
+    /// is ever added without a default, this fixture stops compiling
+    /// and the test fails the build.
     private struct MinimalLifecycle: ModelLifecycle {
         let prepareCount: AsyncCounter
 
@@ -46,16 +45,17 @@ final class ModelLifecycleTests: XCTestCase {
 
     // MARK: - Tests
 
-    func testModelLifecycleHasOnlyPrepareAndProgress() async throws {
+    func testModelLifecycleDefaultHooksKeepMinimalConformerViable() async throws {
         // The `MinimalLifecycle` fixture only implements `prepare()`
-        // and `modelDownloadProgress()`. If the protocol required any
-        // other method, this file would fail to compile — which is the
-        // intended behavioral oracle for "the protocol surface is
-        // exactly two members."
+        // and `modelDownloadProgress()`. `downloadIfNeeded`, `cleanup`,
+        // and `releaseIdleResources` must stay defaultable so simple
+        // conformers remain legal.
         let counter = AsyncCounter()
         let lifecycle = MinimalLifecycle(prepareCount: counter)
 
         try await lifecycle.prepare()
+        await lifecycle.cleanup()
+        await lifecycle.releaseIdleResources()
 
         let invocations = await counter.value
         XCTAssertEqual(invocations, 1, "prepare() should be invokable on a minimal conformer")
