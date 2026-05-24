@@ -791,8 +791,16 @@ Surfaced 2026-05-24 dogfood, confirmed via #097 logs:
 
 ### #100 — Engine capabilities + unified WhisperCpp adapter (collapse #099 split)
 
-`refactor` · `P2` · `open` · `area: models, transcription, recipes, picker`
-*Filed 2026-05-24*
+`refactor` · `P2` · `landed` · `area: models, transcription, recipes, picker`
+*Landed 2026-05-24 as `bc27776` — co-implemented by codex-hermes via req-0058 + req-0059 (+8 net tests; full suite 1473/0/1)*
+
+Shipped: capability-set on TranscriptionEngine, per-section
+setActive(_:forKind:), merged WhisperCppAdapter (one actor, both
+protocols, single context), force-second-pass for whisper.cpp
+streaming. .whisperCppStreaming engine case + 3 streaming
+descriptors from #099 dropped. 10x review folded in (C1+C2+C4).
+No UserDefaults migration (whispercpp-streaming-* IDs never
+released).
 
 #099 shipped whisper.cpp streaming by adding a new `.whisperCppStreaming`
 engine case + 3 paired ModelDescriptor entries that share `repoFolderName`
