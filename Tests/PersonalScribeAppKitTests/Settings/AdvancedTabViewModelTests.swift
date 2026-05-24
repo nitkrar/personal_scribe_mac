@@ -82,6 +82,48 @@ final class AdvancedTabViewModelTests: XCTestCase {
         XCTAssertTrue(openedURLs.isEmpty, "Must not call openInFinder when the base directory is unresolvable.")
     }
 
+    func testRevealLogFile_opensFileWhenItExists() throws {
+        let tempDirectory = try makeTemporaryDirectory()
+        let locator = AdvancedTabTestStorageLocator(baseDirectory: tempDirectory)
+        let logsDir = locator.url(for: .logs)
+        try FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
+        let errorsLog = logsDir.appendingPathComponent("errors.log", isDirectory: false)
+        try Data("hello".utf8).write(to: errorsLog)
+
+        var openedURLs: [URL] = []
+
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(tempDirectory),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil },
+            openInFinder: { openedURLs.append($0) },
+            storageLocator: locator
+        )
+
+        viewModel.revealLogFile(named: "errors.log")
+
+        XCTAssertEqual(openedURLs, [errorsLog])
+    }
+
+    func testRevealLogFile_fallsBackToLogsDirectoryWhenFileMissing() throws {
+        let tempDirectory = try makeTemporaryDirectory()
+        let locator = AdvancedTabTestStorageLocator(baseDirectory: tempDirectory)
+
+        var openedURLs: [URL] = []
+
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(tempDirectory),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil },
+            openInFinder: { openedURLs.append($0) },
+            storageLocator: locator
+        )
+
+        viewModel.revealLogFile(named: "debug.log")
+
+        XCTAssertEqual(openedURLs, [locator.url(for: .logs)])
+    }
+
     func testChangeBaseDirectory_reportsErrorMessageOnFailure() async {
         let currentBase = URL(fileURLWithPath: "/tmp/current-base", isDirectory: true).standardizedFileURL
         let selectedBase = URL(fileURLWithPath: "/tmp/next-base", isDirectory: true).standardizedFileURL
@@ -320,5 +362,29 @@ private struct StubMigrationError: LocalizedError, Sendable, Equatable {
 
     var errorDescription: String? {
         message
+    }
+}
+
+private struct AdvancedTabTestStorageLocator: StorageLocator {
+    let baseDirectory: URL
+
+    func url(for directory: ManagedDirectory) -> URL {
+        baseDirectory
+            .appendingPathComponent(directory.pathComponent, isDirectory: true)
+            .standardizedFileURL
+    }
+
+    func ensureDirectoriesExist() throws {}
+}
+
+private extension AdvancedTabViewModelTests {
+    func makeTemporaryDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AdvancedTabViewModelTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        return directory
     }
 }

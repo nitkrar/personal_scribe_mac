@@ -222,6 +222,25 @@ public struct AdvancedTab: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                Text("Log files")
+                    .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+
+                HStack(spacing: SettingsLayout.inlineSpacing) {
+                    Button("errors.log") { viewModel.revealLogFile(named: "errors.log") }
+                    Button("diagnostics.log") { viewModel.revealLogFile(named: "diagnostics.log") }
+                    Button("debug.log") { viewModel.revealLogFile(named: "debug.log") }
+                    Spacer()
+                }
+
+                Text("Errors fire to errors.log (14d retention). Info and notice to diagnostics.log (14d). Debug to debug.log (3d). Buttons reveal each in Finder; archived rotations sit alongside.")
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -339,6 +358,7 @@ final class AdvancedTabViewModel: ObservableObject {
     private let selectDirectory: @MainActor (URL?) -> URL?
     private let openInFinder: @MainActor (URL) -> Void
     private let openDiagnosticsWindowAction: @MainActor () -> Void
+    private let storageLocator: any StorageLocator
     private var cancellables: Set<AnyCancellable> = []
 
     init(
@@ -352,7 +372,8 @@ final class AdvancedTabViewModel: ObservableObject {
         openInFinder: @escaping @MainActor (URL) -> Void = { url in
             NSWorkspace.shared.open(url)
         },
-        openDiagnosticsWindow: @escaping @MainActor () -> Void = {}
+        openDiagnosticsWindow: @escaping @MainActor () -> Void = {},
+        storageLocator: any StorageLocator = AppConfig.liveStorageLocator()
     ) {
         self.baseDirectoryResult = baseDirectoryResult
         self.defaults = defaults
@@ -361,6 +382,7 @@ final class AdvancedTabViewModel: ObservableObject {
         self.selectDirectory = selectDirectory
         self.openInFinder = openInFinder
         openDiagnosticsWindowAction = openDiagnosticsWindow
+        self.storageLocator = storageLocator
         let diagnosticLoggingMode = DiagnosticLoggingMode.resolve(from: defaults)
         self.diagnosticLoggingMode = diagnosticLoggingMode
         logRetentionDays = LogRetentionDaysPreference.resolve(from: defaults)
@@ -477,6 +499,21 @@ final class AdvancedTabViewModel: ObservableObject {
     func revealInFinder() {
         guard let currentBaseDirectory else { return }
         openInFinder(currentBaseDirectory)
+    }
+
+    /// Reveal a log file in Finder. The injected opener selects the
+    /// file when it exists; when the file hasn't been written yet
+    /// (e.g. `debug.log` before any `.debug` event fires), the opener
+    /// falls back to revealing the parent `logs/` directory so users
+    /// always see a sensible Finder window.
+    func revealLogFile(named filename: String) {
+        let logsDirectory = storageLocator.url(for: .logs)
+        let fileURL = logsDirectory.appendingPathComponent(filename, isDirectory: false)
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            openInFinder(fileURL)
+        } else {
+            openInFinder(logsDirectory)
+        }
     }
 
     func setDiagnosticLoggingMode(_ mode: DiagnosticLoggingMode) {
