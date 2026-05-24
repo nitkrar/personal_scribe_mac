@@ -26,13 +26,14 @@ final class UnifiedWindowModelTests: XCTestCase {
     func testAppTabCasesInOrder() {
         XCTAssertEqual(
             AppTab.allCases,
-            [.home, .transcriptions, .modes, .settings, .about]
+            [.home, .transcriptions, .offline, .modes, .settings, .about]
         )
     }
 
     func testAppTabRawValuesAreStable() {
         XCTAssertEqual(AppTab.home.rawValue, "Home")
         XCTAssertEqual(AppTab.transcriptions.rawValue, "Transcriptions")
+        XCTAssertEqual(AppTab.offline.rawValue, "Offline")
         XCTAssertEqual(AppTab.modes.rawValue, "Modes")
         XCTAssertEqual(AppTab.settings.rawValue, "Settings")
         XCTAssertEqual(AppTab.about.rawValue, "About")
@@ -41,6 +42,7 @@ final class UnifiedWindowModelTests: XCTestCase {
     func testAppTabSystemImageNames() {
         XCTAssertEqual(AppTab.home.systemImageName, "house.fill")
         XCTAssertEqual(AppTab.transcriptions.systemImageName, "waveform")
+        XCTAssertEqual(AppTab.offline.systemImageName, "arrow.up.doc")
         XCTAssertEqual(AppTab.modes.systemImageName, "square.grid.2x2")
         XCTAssertEqual(AppTab.settings.systemImageName, "gearshape")
         XCTAssertEqual(AppTab.about.systemImageName, "info.circle")
@@ -53,7 +55,7 @@ final class UnifiedWindowModelTests: XCTestCase {
     func testSidebarListCasesExcludesAbout() {
         XCTAssertEqual(
             AppTab.sidebarListCases,
-            [.home, .transcriptions, .modes, .settings]
+            [.home, .transcriptions, .offline, .modes, .settings]
         )
         XCTAssertFalse(AppTab.sidebarListCases.contains(.about))
     }

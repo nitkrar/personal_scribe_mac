@@ -4,6 +4,16 @@ public protocol TranscriptReading: Sendable {
     func recent(limit: Int) async -> [TranscriptEntry]
     func search(query: String) async -> [TranscriptEntry]
     func all() async -> [TranscriptEntry]
+    func mostRecentEntryWithAudio() async -> TranscriptEntry?
+}
+
+public extension TranscriptReading {
+    func mostRecentEntryWithAudio() async -> TranscriptEntry? {
+        let entries = await all()
+        return entries.first { entry in
+            entry.audioFilename != nil
+        }
+    }
 }
 
 public protocol TranscriptDeleting: Sendable {

@@ -1,5 +1,6 @@
 import Foundation
 import PersonalScribeCore
+import PersonalScribeSession
 import XCTest
 @testable import PersonalScribeAppKit
 
@@ -31,42 +32,52 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
     private func makeEntry(
         id: UUID = UUID(),
         text: String,
-        timestamp: Date
+        timestamp: Date,
+        audioFilename: String? = nil
     ) -> TranscriptEntry {
         TranscriptEntry(
             id: id,
             timestamp: timestamp,
             text: text,
             audioDuration: 3.0,
-            processingDuration: 0.5
+            processingDuration: 0.5,
+            audioFilename: audioFilename
         )
     }
 
     private func makeViewModel(
         entries: [TranscriptEntry] = [],
-        now: Date? = nil
+        now: Date? = nil,
+        offlineRetranscriptionAction: OfflineRetranscriptionAction? = nil,
+        notificationCenter: NotificationCenter = .default
     ) -> TranscriptionsTabViewModel {
         let fixedNow = now ?? makeNow()
         let store = InlineFakeTranscriptStore(entries: entries)
         return TranscriptionsTabViewModel(
             reader: store,
+            offlineRetranscriptionAction: offlineRetranscriptionAction,
             clock: { fixedNow },
             calendar: testCalendar,
-            locale: Locale(identifier: "en_US_POSIX")
+            locale: Locale(identifier: "en_US_POSIX"),
+            notificationCenter: notificationCenter
         )
     }
 
     private func makeHarness(
         entries: [TranscriptEntry] = [],
-        now: Date? = nil
+        now: Date? = nil,
+        offlineRetranscriptionAction: OfflineRetranscriptionAction? = nil,
+        notificationCenter: NotificationCenter = .default
     ) -> (viewModel: TranscriptionsTabViewModel, store: InlineFakeTranscriptStore) {
         let fixedNow = now ?? makeNow()
         let store = InlineFakeTranscriptStore(entries: entries)
         let viewModel = TranscriptionsTabViewModel(
             reader: store,
+            offlineRetranscriptionAction: offlineRetranscriptionAction,
             clock: { fixedNow },
             calendar: testCalendar,
-            locale: Locale(identifier: "en_US_POSIX")
+            locale: Locale(identifier: "en_US_POSIX"),
+            notificationCenter: notificationCenter
         )
         return (viewModel, store)
     }
@@ -144,6 +155,101 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
         )
         let updateCalls = await harness.store.updateCalls()
         XCTAssertEqual(updateCalls, [UpdateCall(id: edited.id, text: "after")])
+    }
+
+    func testListReloadsOnTranscriptCommitNotification() async throws {
+        let now = makeNow()
+        let notificationCenter = NotificationCenter()
+        let older = makeEntry(
+            text: "older",
+            timestamp: now.addingTimeInterval(-120)
+        )
+        let newest = makeEntry(
+            text: "newest",
+            timestamp: now
+        )
+        let harness = makeHarness(
+            entries: [older],
+            now: now,
+            notificationCenter: notificationCenter
+        )
+
+        await harness.viewModel.load(limit: 1)
+        XCTAssertEqual(harness.viewModel.entries.map(\.text), ["older"])
+
+        await harness.store.setEntries([newest, older])
+        notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
+        try await waitUntil(description: "transcriptions tab reloads on transcript commit") {
+            await harness.viewModel.entries.map(\.text) == ["newest"]
+        }
+
+        XCTAssertEqual(harness.viewModel.entries.map(\.text), ["newest"])
+    }
+
+    func testReTranscribeIconAppearsOnlyForRowsWithAudioFilename() {
+        let now = makeNow()
+        let withAudio = makeEntry(
+            text: "with audio",
+            timestamp: now,
+            audioFilename: "with-audio.wav"
+        )
+        let withoutAudio = makeEntry(
+            text: "without audio",
+            timestamp: now.addingTimeInterval(-60)
+        )
+        let harness = makeRetranscriptionHarness(entries: [withAudio, withoutAudio], now: now)
+
+        XCTAssertTrue(harness.viewModel.showsRetranscribeIcon(for: withAudio))
+        XCTAssertFalse(harness.viewModel.showsRetranscribeIcon(for: withoutAudio))
+    }
+
+    func testReTranscribeIconClickInvokesCoordinatorWithRowAudioFilename() async {
+        let now = makeNow()
+        let entry = makeEntry(
+            text: "with audio",
+            timestamp: now,
+            audioFilename: "row-audio.wav"
+        )
+        let harness = makeRetranscriptionHarness(entries: [entry], now: now)
+
+        await harness.viewModel.reTranscribe(entry)
+
+        let calls = await harness.coordinator.retranscribeCalls()
+        XCTAssertEqual(calls, ["row-audio.wav"])
+    }
+
+    func testReTranscribeIconShowsBusyWhileInFlight() async throws {
+        let now = makeNow()
+        let entry = makeEntry(
+            text: "with audio",
+            timestamp: now,
+            audioFilename: "busy.wav"
+        )
+        let harness = makeRetranscriptionHarness(entries: [entry], now: now)
+
+        await harness.viewModel.reTranscribe(entry)
+        try await waitUntil(description: "offline retranscription observer subscribes") {
+            await harness.coordinator.continuationCount() >= 1
+        }
+
+        let jobID = await harness.coordinator.nextJobID()
+        let inFlightJob = OfflineTranscriptionCoordinator.Job(
+            id: jobID,
+            url: URL(fileURLWithPath: "/tmp/busy.wav"),
+            sourceFilename: "busy.wav",
+            descriptorID: "asr-test",
+            diarize: false,
+            recipeOverride: .fixedDictation,
+            enqueuedAt: now,
+            status: .inFlight(progress: 0.4)
+        )
+        await harness.coordinator.emitSnapshot([inFlightJob])
+
+        try await waitUntil(description: "row retranscribe busy state propagates") {
+            await harness.viewModel.isRetranscribing(entry)
+        }
+
+        XCTAssertTrue(harness.viewModel.isRetranscribing(entry))
     }
 
     // MARK: - filteredEntries
@@ -262,6 +368,33 @@ final class TranscriptionsTabViewModelTests: XCTestCase {
         XCTAssertEqual(groups[3].bucket, "APR 13")
         XCTAssertEqual(groups[3].entries.map(\.text), ["seven days ago"])
     }
+
+    private func makeRetranscriptionHarness(
+        entries: [TranscriptEntry] = [],
+        now: Date? = nil
+    ) -> (
+        viewModel: TranscriptionsTabViewModel,
+        store: InlineFakeTranscriptStore,
+        coordinator: FakeOfflineTranscriptionCoordinator
+    ) {
+        let fixedNow = now ?? makeNow()
+        let store = InlineFakeTranscriptStore(entries: entries)
+        let coordinator = FakeOfflineTranscriptionCoordinator()
+        let action = OfflineRetranscriptionAction(
+            transcriptReader: store,
+            coordinator: coordinator,
+            toastBroadcaster: ToastBroadcaster(),
+            clipboardWriter: { _ in }
+        )
+        let viewModel = TranscriptionsTabViewModel(
+            reader: store,
+            offlineRetranscriptionAction: action,
+            clock: { fixedNow },
+            calendar: testCalendar,
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+        return (viewModel, store, coordinator)
+    }
 }
 
 // MARK: - Inline fake
@@ -276,6 +409,10 @@ private actor InlineFakeTranscriptStore: TranscriptReading, TranscriptDeleting, 
     private var updateCallsStorage: [UpdateCall] = []
 
     init(entries: [TranscriptEntry]) {
+        self.entries = entries
+    }
+
+    func setEntries(_ entries: [TranscriptEntry]) {
         self.entries = entries
     }
 
@@ -318,6 +455,90 @@ private actor InlineFakeTranscriptStore: TranscriptReading, TranscriptDeleting, 
     func updateCalls() async -> [UpdateCall] {
         updateCallsStorage
     }
+}
+
+private actor FakeOfflineTranscriptionCoordinator: OfflineTranscriptionJobManaging {
+    private let fixedJobID = UUID()
+    private var jobs: [OfflineTranscriptionCoordinator.Job] = []
+    private var continuations: [UUID: AsyncStream<[OfflineTranscriptionCoordinator.Job]>.Continuation] = [:]
+    private var retranscribeCallsStorage: [String] = []
+
+    func enqueueFile(url: URL, descriptorID: String, diarize: Bool) async -> UUID {
+        UUID()
+    }
+
+    func reTranscribe(sourceFilename: String) async -> UUID {
+        retranscribeCallsStorage.append(sourceFilename)
+        return fixedJobID
+    }
+
+    func cancelJob(id: UUID) async {}
+
+    func dequeueJob(id: UUID) async {}
+
+    func snapshot() async -> [OfflineTranscriptionCoordinator.Job] {
+        jobs
+    }
+
+    func snapshotStream() async -> AsyncStream<[OfflineTranscriptionCoordinator.Job]> {
+        let continuationID = UUID()
+        let snapshot = jobs
+        return AsyncStream { continuation in
+            self.continuations[continuationID] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task {
+                    await self?.removeContinuation(id: continuationID)
+                }
+            }
+            continuation.yield(snapshot)
+        }
+    }
+
+    func emitSnapshot(_ snapshot: [OfflineTranscriptionCoordinator.Job]) {
+        jobs = snapshot
+        for continuation in continuations.values {
+            continuation.yield(snapshot)
+        }
+    }
+
+    func retranscribeCalls() -> [String] {
+        retranscribeCallsStorage
+    }
+
+    func continuationCount() -> Int {
+        continuations.count
+    }
+
+    func nextJobID() -> UUID {
+        fixedJobID
+    }
+
+    deinit {
+        for continuation in continuations.values {
+            continuation.finish()
+        }
+    }
+
+    private func removeContinuation(id: UUID) {
+        continuations[id] = nil
+    }
+}
+
+private func waitUntil(
+    description: String,
+    timeout: Duration = .seconds(1),
+    pollInterval: Duration = .milliseconds(10),
+    condition: @escaping @Sendable () async -> Bool
+) async throws {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while ContinuousClock.now < deadline {
+        if await condition() {
+            return
+        }
+        try await Task.sleep(for: pollInterval)
+    }
+
+    XCTFail("Timed out waiting for condition: \(description)")
 }
 
 private struct UpdateCall: Equatable {

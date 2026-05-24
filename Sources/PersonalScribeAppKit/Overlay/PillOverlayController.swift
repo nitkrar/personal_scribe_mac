@@ -39,6 +39,7 @@ public final class PillOverlayController: ObservableObject {
     public convenience init(
         statePublisher: AnyPublisher<SessionState, Never>,
         preparationProgressPublisher: AnyPublisher<ModelDownloadProgress?, Never>,
+        toastPublisher: AnyPublisher<ResponseCardMessage, Never>? = nil,
         onTap: @escaping @MainActor () -> Void = {}
     ) {
         self.init(
@@ -46,6 +47,7 @@ public final class PillOverlayController: ObservableObject {
             preparationProgressPublisher: preparationProgressPublisher,
             audioLevelPublisher: nil,
             visibilityMode: PillVisibility.resolve(),
+            toastPublisher: toastPublisher,
             onTap: onTap
         )
     }
@@ -57,6 +59,7 @@ public final class PillOverlayController: ObservableObject {
         preparationProgressPublisher: AnyPublisher<ModelDownloadProgress?, Never>,
         audioLevelPublisher: AnyPublisher<Double, Never>?,
         visibilityMode: PillVisibility = .autoShow,
+        toastPublisher: AnyPublisher<ResponseCardMessage, Never>? = nil,
         onTap: @escaping @MainActor () -> Void = {},
         openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil
     ) {
@@ -75,6 +78,7 @@ public final class PillOverlayController: ObservableObject {
         self.init(
             appStore: appStore,
             audioLevelPublisher: audioLevelPublisher,
+            toastPublisher: toastPublisher,
             defaults: nil,
             legacyVisibilityModeBridge: visibilityModeBridge,
             onTap: onTap,
@@ -86,6 +90,7 @@ public final class PillOverlayController: ObservableObject {
     convenience init(
         appStore: AppStore,
         audioLevelPublisher: AnyPublisher<Double, Never>? = nil,
+        toastPublisher: AnyPublisher<ResponseCardMessage, Never>? = nil,
         defaults: UserDefaults = .standard,
         onTap: @escaping @MainActor () -> Void = {},
         panelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
@@ -95,6 +100,7 @@ public final class PillOverlayController: ObservableObject {
         self.init(
             appStore: appStore,
             audioLevelPublisher: audioLevelPublisher,
+            toastPublisher: toastPublisher,
             defaults: defaults,
             legacyVisibilityModeBridge: nil,
             onTap: onTap,
@@ -107,6 +113,7 @@ public final class PillOverlayController: ObservableObject {
     private init(
         appStore: AppStore,
         audioLevelPublisher: AnyPublisher<Double, Never>? = nil,
+        toastPublisher: AnyPublisher<ResponseCardMessage, Never>? = nil,
         defaults: UserDefaults?,
         legacyVisibilityModeBridge: LegacyVisibilityModeBridge?,
         onTap: @escaping @MainActor () -> Void = {},
@@ -145,6 +152,22 @@ public final class PillOverlayController: ObservableObject {
             }
         }
         .store(in: &cancellables)
+
+        if let toastPublisher {
+            toastPublisher
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] message in
+                    MainActor.assumeIsolated {
+                        self?.presenter.showRecordingStatusCard(
+                            text: message.text,
+                            link: nil,
+                            autoDismissAfter: message.autoDismissAfter,
+                            onLinkTap: nil
+                        )
+                    }
+                }
+                .store(in: &cancellables)
+        }
 
         if let audioLevelPublisher {
             audioLevelPublisher

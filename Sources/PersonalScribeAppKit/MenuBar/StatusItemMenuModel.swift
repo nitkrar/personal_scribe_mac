@@ -101,6 +101,7 @@ struct StatusItemMenuModel: Equatable {
         case openTranscriptions
         case openSettings
         case copyLastTranscript
+        case retranscribeLastRecording
         case openMicrophoneSystemSettings
         case openInputMonitoringSystemSettings
         case quit
@@ -137,6 +138,7 @@ struct StatusItemMenuModel: Equatable {
     ///                                         <chord> is the live global
     ///                                         recording hotkey, e.g. ⌥/)
     /// Copy Last Transcript                    (writes most-recent transcript to clipboard)
+    /// Retranscribe Last Recording             (queues offline retranscription of the most recent recording)
     /// ---
     /// Quit <AppBrand.displayName>
     /// ```
@@ -158,6 +160,7 @@ struct StatusItemMenuModel: Equatable {
         currentInputDeviceID: String? = nil,
         modes: [WorkflowMode] = [],
         currentModeID: String? = nil,
+        canRetranscribeLastRecording: Bool = false,
         recordingHotkey: HotkeyPreference = HotkeyPreference.resolve()
     ) -> StatusItemMenuModel {
         _ = isOnboardingComplete
@@ -245,6 +248,14 @@ struct StatusItemMenuModel: Equatable {
             keyEquivalent: "",
             isEnabled: true,
             iconName: "doc.on.clipboard"
+        )))
+
+        items.append(.action(ActionItem(
+            id: .retranscribeLastRecording,
+            title: "Retranscribe Last Recording",
+            keyEquivalent: "",
+            isEnabled: canRetranscribeLastRecording,
+            iconName: "arrow.clockwise"
         )))
 
         // The final separator is always present; the optional Mode

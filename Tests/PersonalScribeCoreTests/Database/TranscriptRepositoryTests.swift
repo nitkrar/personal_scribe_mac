@@ -56,6 +56,34 @@ final class TranscriptRepositoryTests: XCTestCase {
         }
     }
 
+    func test_append_postsTranscriptCommitNotificationOnce() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        let notificationCenter = NotificationCenter()
+        let repository = TranscriptRepository(
+            database: harness.database,
+            notificationCenter: notificationCenter,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
+        let expectation = expectation(description: "append posts metrics refresh notification")
+        expectation.assertForOverFulfill = true
+        let token = notificationCenter.addObserver(
+            forName: MetricsNotification.transcriptCommit,
+            object: nil,
+            queue: nil
+        ) { _ in
+            expectation.fulfill()
+        }
+        defer { notificationCenter.removeObserver(token) }
+
+        try await repository.append(
+            makeEntry(timestamp: Date(timeIntervalSince1970: 100), text: "append me")
+        )
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+    }
+
     // MARK: - delete
 
     func test_delete_removesEntryAndFreshRepositoryReadDoesNotResurrectIt() async throws {
@@ -255,6 +283,65 @@ final class TranscriptRepositoryTests: XCTestCase {
         let result = await harness.repository.recent(limit: -5)
 
         XCTAssertEqual(result, [])
+    }
+
+    func testMostRecentEntryWithAudioReturnsNilWhenNoRowsHaveAudio() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        try await harness.repository.append(
+            makeEntry(timestamp: Date(timeIntervalSince1970: 100), text: "first")
+        )
+        try await harness.repository.append(
+            makeEntry(timestamp: Date(timeIntervalSince1970: 200), text: "second")
+        )
+
+        let result = await harness.repository.mostRecentEntryWithAudio()
+
+        XCTAssertNil(result)
+    }
+
+    func testMostRecentEntryWithAudioReturnsLatestRowWithAudio() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        let withAudio = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 100),
+            text: "with-audio",
+            audioFilename: "one.wav"
+        )
+        let newerWithoutAudio = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 200),
+            text: "without-audio"
+        )
+        try await harness.repository.append(withAudio)
+        try await harness.repository.append(newerWithoutAudio)
+
+        let result = await harness.repository.mostRecentEntryWithAudio()
+
+        XCTAssertEqual(result?.id, withAudio.id)
+    }
+
+    func testMostRecentEntryWithAudioOrdersByTimestampDesc() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        let older = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 100),
+            text: "older",
+            audioFilename: "older.wav"
+        )
+        let newer = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 300),
+            text: "newer",
+            audioFilename: "newer.wav"
+        )
+        try await harness.repository.append(older)
+        try await harness.repository.append(newer)
+
+        let result = await harness.repository.mostRecentEntryWithAudio()
+
+        XCTAssertEqual(result?.id, newer.id)
     }
 
     // MARK: - count

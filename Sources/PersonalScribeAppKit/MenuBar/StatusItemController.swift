@@ -12,6 +12,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let openTranscriptions: @MainActor () -> Void
     private let openSettings: @MainActor () -> Void
     private let openCopyLastTranscript: @MainActor () -> Void
+    private let offlineRetranscriptionAction: OfflineRetranscriptionAction?
     private let isOnboardingCompleteProvider: @MainActor () -> Bool
     private let openURL: @MainActor (URL) -> Void
     private let inputDeviceProvider: any AudioInputDeviceProviding
@@ -24,6 +25,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let logger: PersonalScribeLogger
 
     private var snapshotCancellable: AnyCancellable?
+    private var retranscribeAvailabilityCancellable: AnyCancellable?
     private var lastSnapshot: AppStoreSnapshot?
 
     convenience init(
@@ -33,6 +35,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openTranscriptions: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
+        offlineRetranscriptionAction: OfflineRetranscriptionAction? = nil,
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
@@ -51,6 +54,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             openTranscriptions: openTranscriptions,
             openSettings: openSettings,
             openCopyLastTranscript: openCopyLastTranscript,
+            offlineRetranscriptionAction: offlineRetranscriptionAction,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             openURL: openURL,
             openMicrophoneSystemSettings: openMicrophoneSystemSettings,
@@ -71,6 +75,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openTranscriptions: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
+        offlineRetranscriptionAction: OfflineRetranscriptionAction? = nil,
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
@@ -88,6 +93,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.openTranscriptions = openTranscriptions
         self.openSettings = openSettings
         self.openCopyLastTranscript = openCopyLastTranscript
+        self.offlineRetranscriptionAction = offlineRetranscriptionAction
         self.isOnboardingCompleteProvider = isOnboardingCompleteProvider ?? {
             onboardingCompletionPreference.resolve()
         }
@@ -127,6 +133,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
         }
 
+        retranscribeAvailabilityCancellable = offlineRetranscriptionAction?.$isAvailable
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    MainActor.assumeIsolated {
+                        self.rebuildMenu()
+                    }
+                }
+            }
+
         updateStatusItemAppearance(for: appStore.snapshot.sessionState)
     }
 
@@ -135,6 +152,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        Task { @MainActor [weak self] in
+            await self?.offlineRetranscriptionAction?.refreshAvailability()
+        }
         rebuildMenu()
     }
 
@@ -160,6 +180,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             openSettings()
         case .copyLastTranscript:
             openCopyLastTranscript()
+        case .retranscribeLastRecording:
+            Task { @MainActor [weak self] in
+                await self?.offlineRetranscriptionAction?.performLatestRecordingRetranscription()
+            }
         case .openMicrophoneSystemSettings:
             openURL(PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .microphone))
         case .openInputMonitoringSystemSettings:
@@ -277,7 +301,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             inputDevices: inputDevices,
             currentInputDeviceID: currentInputDeviceID,
             modes: modesProvider(),
-            currentModeID: snapshot.activeMode?.id
+            currentModeID: snapshot.activeMode?.id,
+            canRetranscribeLastRecording: offlineRetranscriptionAction?.isAvailable ?? false
         )
 
         menu.removeAllItems()

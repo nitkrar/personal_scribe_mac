@@ -33,6 +33,8 @@ public struct TranscriptRow: View {
     public let preview: String
     public let isSelected: Bool
     public let displayStyle: DisplayStyle
+    public let onRetranscribe: (() -> Void)?
+    public let isRetranscribing: Bool
     public let onDelete: (() -> Void)?
 
     /// Reference `now` used for relative-timestamp formatting. Injected
@@ -48,6 +50,8 @@ public struct TranscriptRow: View {
         timestamp: Date,
         preview: String,
         isSelected: Bool = false,
+        onRetranscribe: (() -> Void)? = nil,
+        isRetranscribing: Bool = false,
         onDelete: (() -> Void)? = nil,
         referenceDate: Date = Date()
     ) {
@@ -55,6 +59,8 @@ public struct TranscriptRow: View {
         self.timestamp = timestamp
         self.preview = preview
         self.isSelected = isSelected
+        self.onRetranscribe = onRetranscribe
+        self.isRetranscribing = isRetranscribing
         self.onDelete = onDelete
         self.referenceDate = referenceDate
         self.displayStyle = .summary
@@ -66,6 +72,8 @@ public struct TranscriptRow: View {
         timestamp: Date,
         preview: String,
         isSelected: Bool = false,
+        onRetranscribe: (() -> Void)? = nil,
+        isRetranscribing: Bool = false,
         onDelete: (() -> Void)? = nil,
         referenceDate: Date = Date()
     ) {
@@ -73,6 +81,8 @@ public struct TranscriptRow: View {
         self.timestamp = timestamp
         self.preview = preview
         self.isSelected = isSelected
+        self.onRetranscribe = onRetranscribe
+        self.isRetranscribing = isRetranscribing
         self.onDelete = onDelete
         self.referenceDate = referenceDate
         self.displayStyle = .detail
@@ -116,6 +126,12 @@ public struct TranscriptRow: View {
 
     public var body: some View {
         let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+        let showsRetranscribeControl = Self.showsRetranscribeControl(
+            displayStyle: displayStyle,
+            isHovered: isHovered,
+            isRetranscribing: isRetranscribing,
+            hasRetranscribeAction: onRetranscribe != nil
+        )
         let showsDeleteControl = Self.showsDeleteControl(
             displayStyle: displayStyle,
             isHovered: isHovered,
@@ -150,16 +166,38 @@ public struct TranscriptRow: View {
 
                     Spacer(minLength: 0)
 
-                    if showsDeleteControl {
-                        Button(action: { onDelete?() }) {
-                            Image(systemName: "trash")
-                                .font(.system(size: Layout.deleteIconSize, weight: .medium))
-                                .frame(width: Layout.deleteButtonSize, height: Layout.deleteButtonSize)
+                    if showsRetranscribeControl || showsDeleteControl {
+                        HStack(spacing: Layout.actionButtonSpacing) {
+                            if showsRetranscribeControl {
+                                if isRetranscribing {
+                                    TranscriptRowActionChrome {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                            .tint(palette.primaryText)
+                                    }
+                                    .help("Re-transcribing recording")
+                                    .accessibilityLabel("Re-transcribing recording")
+                                } else {
+                                    Button(action: { onRetranscribe?() }) {
+                                        Image(systemName: "arrow.clockwise")
+                                            .font(.system(size: Layout.actionIconSize, weight: .semibold))
+                                    }
+                                    .buttonStyle(TranscriptRowActionButtonStyle())
+                                    .help("Re-transcribe recording")
+                                    .accessibilityLabel("Re-transcribe recording")
+                                }
+                            }
+
+                            if showsDeleteControl {
+                                Button(action: { onDelete?() }) {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: Layout.actionIconSize, weight: .semibold))
+                                }
+                                .buttonStyle(TranscriptRowActionButtonStyle())
+                                .help("Delete transcription")
+                                .accessibilityLabel("Delete transcription")
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(palette.secondaryText)
-                        .help("Delete transcription")
-                        .accessibilityLabel("Delete transcription")
                     }
                 }
             }
@@ -209,8 +247,9 @@ public struct TranscriptRow: View {
         static let titleTimestampSpacing: CGFloat = 8
         static let borderWidth: CGFloat = 0.5
         static let borderOpacity: Double = 0.12
-        static let deleteButtonSize: CGFloat = 18
-        static let deleteIconSize: CGFloat = 10
+        static let actionButtonSpacing: CGFloat = 6
+        static let actionButtonSize: CGFloat = 26
+        static let actionIconSize: CGFloat = 12
         /// Detail-style (Transcriptions-tab) minimum row height — pinned
         /// to `PersonalScribeTheme.RowHeight.tall` (56pt) per the mockup
         /// (`plans/App UI design/screen_transcriptions.png`).
@@ -223,6 +262,15 @@ public struct TranscriptRow: View {
         hasDeleteAction: Bool
     ) -> Bool {
         displayStyle == .detail && isHovered && hasDeleteAction
+    }
+
+    internal static func showsRetranscribeControl(
+        displayStyle: DisplayStyle,
+        isHovered: Bool,
+        isRetranscribing: Bool,
+        hasRetranscribeAction: Bool
+    ) -> Bool {
+        displayStyle == .detail && hasRetranscribeAction && (isHovered || isRetranscribing)
     }
 
     // MARK: - Pure formatting helpers (tested)
@@ -311,6 +359,53 @@ public struct TranscriptRow: View {
             formatter.dateStyle = .none
             return formatter.string(from: timestamp)
         }
+    }
+}
+
+private struct TranscriptRowActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        TranscriptRowActionChrome(isPressed: configuration.isPressed) {
+            configuration.label
+        }
+    }
+}
+
+private struct TranscriptRowActionChrome<Content: View>: View {
+    var isPressed: Bool = false
+    @ViewBuilder let content: () -> Content
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+
+        content()
+            .foregroundStyle(palette.primaryText)
+            .frame(
+                width: TranscriptRow.Layout.actionButtonSize,
+                height: TranscriptRow.Layout.actionButtonSize
+            )
+            .background(
+                RoundedRectangle(
+                    cornerRadius: PersonalScribeTheme.Radius.row,
+                    style: .continuous
+                )
+                .fill(isPressed ? palette.hoverState : palette.elevatedSurface)
+            )
+            .overlay(
+                RoundedRectangle(
+                    cornerRadius: PersonalScribeTheme.Radius.row,
+                    style: .continuous
+                )
+                .strokeBorder(
+                    palette.brandChampagne.opacity(
+                        PersonalScribeTheme.Components.ActionButton.secondaryBorderOpacity
+                    ),
+                    lineWidth: PersonalScribeTheme.Components.ActionButton.borderWidth
+                )
+            )
+            .scaleEffect(isPressed ? 0.94 : 1.0)
+            .animation(.easeOut(duration: 0.12), value: isPressed)
     }
 }
 

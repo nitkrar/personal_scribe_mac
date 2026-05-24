@@ -56,6 +56,7 @@ final class UnifiedWindowController: NSWindowController {
     private let hostingController: NSHostingController<UnifiedWindowView>
     private let homeViewModel: HomeTabViewModel
     private let transcriptionsViewModel: TranscriptionsTabViewModel
+    private let offlineTranscriptionViewModel: OfflineTranscriptionTabViewModel
     private let modesViewModel: ModesListViewModel
     private let microphoneFooterViewModel: MicrophoneFooterViewModel
     private let permissionService: any PermissionService
@@ -79,6 +80,8 @@ final class UnifiedWindowController: NSWindowController {
         inputDeviceProvider: any AudioInputDeviceProviding,
         modes: [WorkflowMode] = WorkflowModeRegistry.builtInModes,
         modelService: ActiveModelService,
+        offlineTranscriptionCoordinator: (any OfflineTranscriptionJobManaging)? = nil,
+        offlineRetranscriptionAction: OfflineRetranscriptionAction? = nil,
         setActiveMode: (@MainActor (WorkflowMode) async -> Void)? = nil,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
@@ -93,7 +96,16 @@ final class UnifiedWindowController: NSWindowController {
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.openDiagnosticsWindow = openDiagnosticsWindow
         self.homeViewModel = HomeTabViewModel(reader: metricsReader)
-        self.transcriptionsViewModel = TranscriptionsTabViewModel(reader: transcriptReader)
+        self.transcriptionsViewModel = TranscriptionsTabViewModel(
+            reader: transcriptReader,
+            offlineRetranscriptionAction: offlineRetranscriptionAction
+        )
+        self.offlineTranscriptionViewModel = OfflineTranscriptionTabViewModel(
+            transcriptReader: transcriptReader,
+            coordinator: offlineTranscriptionCoordinator,
+            modelService: modelService,
+            defaults: defaults
+        )
         self.modesViewModel = ModesListViewModel(
             registry: AppComposition.workflowModeRegistry,
             modelService: modelService
@@ -109,6 +121,7 @@ final class UnifiedWindowController: NSWindowController {
             windowTint: initialTint,
             homeViewModel: homeViewModel,
             transcriptionsViewModel: transcriptionsViewModel,
+            offlineTranscriptionViewModel: offlineTranscriptionViewModel,
             modesViewModel: modesViewModel,
             microphoneFooterViewModel: microphoneFooterViewModel,
             permissionService: permissionService,
@@ -338,6 +351,7 @@ final class UnifiedWindowController: NSWindowController {
             windowTint: tint,
             homeViewModel: homeViewModel,
             transcriptionsViewModel: transcriptionsViewModel,
+            offlineTranscriptionViewModel: offlineTranscriptionViewModel,
             modesViewModel: modesViewModel,
             microphoneFooterViewModel: microphoneFooterViewModel,
             permissionService: permissionService,

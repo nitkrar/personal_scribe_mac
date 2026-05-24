@@ -10,6 +10,7 @@ import PersonalScribeVAD
 @MainActor
 public enum AppComposition {
     public static let diagnosticsStore = DiagnosticsStore(capacity: 200)
+    public static let toastBroadcaster = ToastBroadcaster()
     private static let diagnosticsMaintenanceController = DiagnosticsLogMaintenanceController(
         service: DiagnosticsLogMaintenanceService()
     )
@@ -265,6 +266,20 @@ public enum AppComposition {
     public static func makeSessionCoordinator() -> SessionCoordinator {
         sessionCoordinator
     }
+
+    public static let offlineTranscriptionCoordinator: OfflineTranscriptionCoordinator? = {
+        guard let transcriptRepository else {
+            return nil
+        }
+
+        return OfflineTranscriptionCoordinator(
+            modelService: modelService,
+            processorProvider: processorProvider,
+            transcriptRepository: transcriptRepository,
+            sessionGate: sessionCoordinator.offlineTranscriptionSessionGate(),
+            logger: makeLogger(PersonalScribeLogCategory.transcription)
+        )
+    }()
 
     public static func makeGlobalHotkeyMonitor() -> GlobalHotkeyMonitor {
         makeGlobalHotkeyMonitor(

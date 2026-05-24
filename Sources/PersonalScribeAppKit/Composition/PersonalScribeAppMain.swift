@@ -116,6 +116,7 @@ struct PersonalScribeAppMain: App {
         let pillController = PillOverlayController(
             appStore: appStore,
             audioLevelPublisher: audioLevelSubject.eraseToAnyPublisher(),
+            toastPublisher: AppComposition.toastBroadcaster.publisher,
             defaults: defaults,
             onTap: {
                 Task { await coordinator.toggle() }
@@ -201,6 +202,14 @@ struct PersonalScribeAppMain: App {
         // so sharing is safe and keeps both surfaces in sync.
         let inputDeviceProvider: any AudioInputDeviceProviding =
             AVFoundationInputDeviceProvider(defaults: defaults)
+        let offlineRetranscriptionAction = AppComposition.offlineTranscriptionCoordinator.map { coordinator in
+            OfflineRetranscriptionAction(
+                transcriptReader: unifiedTranscriptReader,
+                coordinator: coordinator,
+                toastBroadcaster: AppComposition.toastBroadcaster,
+                clipboardWriter: clipboardWriter
+            )
+        }
         // Forward-declared reference so the UnifiedWindowController's
         // factory closure can read `statusItemControllerHost` after
         // the latter is constructed below. Captured-by-reference via
@@ -217,6 +226,8 @@ struct PersonalScribeAppMain: App {
                     inputDeviceProvider: inputDeviceProvider,
                     modes: WorkflowModeRegistry.builtInModes,
                     modelService: modelService,
+                    offlineTranscriptionCoordinator: AppComposition.offlineTranscriptionCoordinator,
+                    offlineRetranscriptionAction: offlineRetranscriptionAction,
                     setActiveMode: { mode in
                         // #089: menu-bar / pill switcher set the runtime
                         // *current* mode, not the persisted default.
@@ -290,6 +301,7 @@ struct PersonalScribeAppMain: App {
             openCopyLastTranscript: {
                 Task { await copyLastTranscriptAction.perform() }
             },
+            offlineRetranscriptionAction: offlineRetranscriptionAction,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider,
             modesProvider: {
@@ -473,6 +485,7 @@ final class StatusItemControllerHost: ObservableObject {
         openTranscriptions: @escaping @MainActor () -> Void = {},
         openSettings: @escaping @MainActor () -> Void = {},
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
+        offlineRetranscriptionAction: OfflineRetranscriptionAction? = nil,
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
             PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
         },
@@ -489,6 +502,7 @@ final class StatusItemControllerHost: ObservableObject {
             openTranscriptions: openTranscriptions,
             openSettings: openSettings,
             openCopyLastTranscript: openCopyLastTranscript,
+            offlineRetranscriptionAction: offlineRetranscriptionAction,
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider,
             modesProvider: modesProvider,

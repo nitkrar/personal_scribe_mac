@@ -31,8 +31,9 @@ final class StatusItemMenuModelTests: XCTestCase {
     ///                                           global recording hotkey,
     ///                                           e.g. `⌥/`)
     /// [6] Copy Last Transcript      doc.on.clipboard
-    /// [7] ---
-    /// [8] Quit <displayName>        xmark.circle
+    /// [7] Retranscribe Last Recording arrow.clockwise
+    /// [8] ---
+    /// [9] Quit <displayName>        xmark.circle
     /// ```
     func testIdleGrantedMenuHasExpectedItemsInOrder() {
         let model = StatusItemMenuModel.makeUnified(
@@ -43,7 +44,7 @@ final class StatusItemMenuModelTests: XCTestCase {
             recordingHotkey: Self.testRecordingHotkey
         )
 
-        XCTAssertEqual(model.items.count, 9)
+        XCTAssertEqual(model.items.count, 10)
         assertHeader(model.items[0], "\(AppBrand.displayName) — \(WorkflowMode.dictation.name)")
         assertAction(model.items[1], id: .openHome, title: "Home", iconName: "house.fill")
         assertAction(model.items[2], id: .openTranscriptions, title: "History", iconName: "waveform")
@@ -61,9 +62,16 @@ final class StatusItemMenuModelTests: XCTestCase {
             title: "Copy Last Transcript",
             iconName: "doc.on.clipboard"
         )
-        XCTAssertEqual(model.items[7], .separator)
         assertAction(
-            model.items[8],
+            model.items[7],
+            id: .retranscribeLastRecording,
+            title: "Retranscribe Last Recording",
+            iconName: "arrow.clockwise",
+            isEnabled: false
+        )
+        XCTAssertEqual(model.items[8], .separator)
+        assertAction(
+            model.items[9],
             id: .quit,
             title: "Quit \(AppBrand.displayName)",
             iconName: "xmark.circle"
@@ -212,7 +220,43 @@ final class StatusItemMenuModelTests: XCTestCase {
         )
         // First item is the combined brand — mode header, not a warning.
         assertHeader(model.items[0], "\(AppBrand.displayName) — \(WorkflowMode.dictation.name)")
-        XCTAssertEqual(model.items.count, 9, "No warning items expected")
+        XCTAssertEqual(model.items.count, 10, "No warning items expected")
+    }
+
+    func testRetranscribeMenuItemDisabledWhenNoAudioRows() {
+        let model = StatusItemMenuModel.makeUnified(
+            sessionState: .idle,
+            micPermission: .granted,
+            inputMonitoringPermission: .granted,
+            activeModeName: WorkflowMode.dictation.name,
+            canRetranscribeLastRecording: false
+        )
+
+        assertAction(
+            model.items[7],
+            id: .retranscribeLastRecording,
+            title: "Retranscribe Last Recording",
+            iconName: "arrow.clockwise",
+            isEnabled: false
+        )
+    }
+
+    func testRetranscribeMenuItemEnabledWhenAudioRowExists() {
+        let model = StatusItemMenuModel.makeUnified(
+            sessionState: .idle,
+            micPermission: .granted,
+            inputMonitoringPermission: .granted,
+            activeModeName: WorkflowMode.dictation.name,
+            canRetranscribeLastRecording: true
+        )
+
+        assertAction(
+            model.items[7],
+            id: .retranscribeLastRecording,
+            title: "Retranscribe Last Recording",
+            iconName: "arrow.clockwise",
+            isEnabled: true
+        )
     }
 
     // MARK: - Action identifiers
@@ -381,6 +425,10 @@ final class StatusItemMenuModelTests: XCTestCase {
         assertIcon(actionID: .copyLastTranscript, expectedIcon: "doc.on.clipboard")
     }
 
+    func testRetranscribeLastRecordingItemHasArrowClockwiseIcon() {
+        assertIcon(actionID: .retranscribeLastRecording, expectedIcon: "arrow.clockwise")
+    }
+
     func testQuitItemHasXMarkCircleIcon() {
         assertIcon(actionID: .quit, expectedIcon: "xmark.circle")
     }
@@ -405,6 +453,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         id: StatusItemMenuModel.ActionID,
         title: String,
         iconName: String? = nil,
+        isEnabled: Bool? = nil,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
@@ -416,6 +465,9 @@ final class StatusItemMenuModelTests: XCTestCase {
         XCTAssertEqual(action.title, title, file: file, line: line)
         if let iconName {
             XCTAssertEqual(action.iconName, iconName, file: file, line: line)
+        }
+        if let isEnabled {
+            XCTAssertEqual(action.isEnabled, isEnabled, file: file, line: line)
         }
     }
 

@@ -18,24 +18,32 @@ final class TranscriptionsTabViewModel: ObservableObject {
     private let reader: any TranscriptReading
     private let deleter: (any TranscriptDeleting)?
     private let updater: (any TranscriptUpdating)?
+    private let offlineRetranscriptionAction: OfflineRetranscriptionAction?
     private let clock: @MainActor () -> Date
     private let calendar: Calendar
     private let explicitDateFormatter: DateFormatter
+    private let notificationCenter: NotificationCenter
     private var activeLimit: Int = 100
+    private var transcriptCommitObservation: NSObjectProtocol?
+    private var retranscriptionObservation: AnyCancellable?
 
     init(
         reader: any TranscriptReading,
         deleter: (any TranscriptDeleting)? = nil,
         updater: (any TranscriptUpdating)? = nil,
+        offlineRetranscriptionAction: OfflineRetranscriptionAction? = nil,
         clock: @escaping @MainActor () -> Date = { Date() },
         calendar: Calendar = .autoupdatingCurrent,
-        locale: Locale = Locale(identifier: "en_US_POSIX")
+        locale: Locale = Locale(identifier: "en_US_POSIX"),
+        notificationCenter: NotificationCenter = .default
     ) {
         self.reader = reader
         self.deleter = deleter ?? (reader as? any TranscriptDeleting)
         self.updater = updater ?? (reader as? any TranscriptUpdating)
+        self.offlineRetranscriptionAction = offlineRetranscriptionAction
         self.clock = clock
         self.calendar = calendar
+        self.notificationCenter = notificationCenter
 
         let formatter = DateFormatter()
         formatter.calendar = calendar
@@ -45,13 +53,32 @@ final class TranscriptionsTabViewModel: ObservableObject {
         // bucket is uppercased downstream, producing "APR 17".
         formatter.setLocalizedDateFormatFromTemplate("MMMd")
         self.explicitDateFormatter = formatter
+
+        transcriptCommitObservation = notificationCenter.addObserver(
+            forName: MetricsNotification.transcriptCommit,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                await self?.reloadEntries()
+            }
+        }
+
+        retranscriptionObservation = offlineRetranscriptionAction?.objectWillChange.sink { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                MainActor.assumeIsolated {
+                    self.objectWillChange.send()
+                }
+            }
+        }
     }
 
     /// Load the most-recent `limit` entries from the reader. Default 100
     /// matches §3B guidance for the Transcriptions tab surface.
     func load(limit: Int = 100) async {
         activeLimit = limit
-        entries = await reader.recent(limit: limit)
+        await reloadEntries()
     }
 
     /// Delete the persisted transcript for `id`, then reload the current
@@ -63,7 +90,7 @@ final class TranscriptionsTabViewModel: ObservableObject {
         }
 
         try await deleter.delete(id: id)
-        entries = await reader.recent(limit: activeLimit)
+        await reloadEntries()
     }
 
     var canDelete: Bool {
@@ -78,11 +105,37 @@ final class TranscriptionsTabViewModel: ObservableObject {
         }
 
         try await updater.update(id: id, text: text)
-        entries = await reader.recent(limit: activeLimit)
+        await reloadEntries()
     }
 
     var canEdit: Bool {
         updater != nil
+    }
+
+    func showsRetranscribeIcon(for entry: TranscriptEntry) -> Bool {
+        guard offlineRetranscriptionAction != nil,
+              let audioFilename = entry.audioFilename,
+              !audioFilename.isEmpty else {
+            return false
+        }
+        return true
+    }
+
+    func isRetranscribing(_ entry: TranscriptEntry) -> Bool {
+        guard let sourceFilename = entry.audioFilename,
+              !sourceFilename.isEmpty else {
+            return false
+        }
+        return offlineRetranscriptionAction?.busySourceFilenames.contains(sourceFilename) ?? false
+    }
+
+    func reTranscribe(_ entry: TranscriptEntry) async {
+        guard let sourceFilename = entry.audioFilename,
+              !sourceFilename.isEmpty else {
+            return
+        }
+
+        await offlineRetranscriptionAction?.performRetranscription(sourceFilename: sourceFilename)
     }
 
     /// Case-insensitive contains-match against `entry.text`. An empty or
@@ -156,5 +209,15 @@ final class TranscriptionsTabViewModel: ObservableObject {
         }
 
         return result
+    }
+
+    isolated deinit {
+        if let transcriptCommitObservation {
+            notificationCenter.removeObserver(transcriptCommitObservation)
+        }
+    }
+
+    private func reloadEntries() async {
+        entries = await reader.recent(limit: activeLimit)
     }
 }

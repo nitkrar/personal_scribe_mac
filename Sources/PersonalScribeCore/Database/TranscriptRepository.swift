@@ -81,6 +81,7 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
             try await database.write { db in
                 try entry.insert(db)
             }
+            notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
             operationObserver.record(.writeSucceeded)
         } catch let error as TranscriptStorageError {
             // Already the right envelope (e.g. propagated from a future layer).
@@ -316,6 +317,40 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
             logger.error("TranscriptRepository.all failed", error: error)
             operationObserver.record(.readFailed)
             return []
+        }
+    }
+
+    /// Most recent transcript row that still references persisted audio.
+    /// Non-throwing by repository policy — returns nil on read failure.
+    public func mostRecentEntryWithAudio() async -> TranscriptEntry? {
+        do {
+            let entry = try await database.read { db in
+                try TranscriptEntry.fetchOne(
+                    db,
+                    sql: """
+                    SELECT
+                        id,
+                        timestamp,
+                        text,
+                        audio_duration,
+                        processing_duration,
+                        mode_id,
+                        audio_filename
+                    FROM transcripts
+                    WHERE audio_filename IS NOT NULL
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                    """
+                )
+            }
+            operationObserver.record(.readSucceeded)
+            return entry
+        } catch is CancellationError {
+            return nil
+        } catch {
+            logger.error("TranscriptRepository.mostRecentEntryWithAudio failed", error: error)
+            operationObserver.record(.readFailed)
+            return nil
         }
     }
 
