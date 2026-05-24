@@ -343,4 +343,64 @@ final class ModeDetailViewModelTests: XCTestCase {
             registry.customModes.first { $0.id == "lang-realtime-clear" }?.language
         )
     }
+
+    func testLiveCursorStreamingSuppressedWhenPinnedDescriptorIsWhisperCpp() throws {
+        let custom = WorkflowMode(
+            id: "stream-whispercpp",
+            name: "Stream WhisperCpp",
+            pipelineShape: .streaming,
+            processors: [
+                .streamingTranscriber(
+                    kind: .streamingASR,
+                    descriptorID: BuiltInModelCatalog.whisperCppTiny.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(
+                initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+            ),
+            availableKindsProvider: { [.streamingASR] }
+        )
+        let viewModel = ModeDetailViewModel(
+            mode: custom,
+            registry: registry,
+            registeredDescriptors: [BuiltInModelCatalog.whisperCppTiny]
+        )
+
+        XCTAssertTrue(viewModel.liveCursorStreamingSuppressed)
+        XCTAssertNotNil(viewModel.liveCursorStreamingSuppressedReason)
+    }
+
+    func testLiveCursorStreamingNotSuppressedWhenPinnedDescriptorIsParakeet() throws {
+        let custom = WorkflowMode(
+            id: "stream-parakeet",
+            name: "Stream Parakeet",
+            pipelineShape: .streaming,
+            processors: [
+                .streamingTranscriber(
+                    kind: .streamingASR,
+                    descriptorID: BuiltInModelCatalog.parakeetEou160ms.id
+                )
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(
+                initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+            ),
+            availableKindsProvider: { [.streamingASR] }
+        )
+        let viewModel = ModeDetailViewModel(
+            mode: custom,
+            registry: registry,
+            registeredDescriptors: [BuiltInModelCatalog.parakeetEou160ms]
+        )
+
+        XCTAssertFalse(viewModel.liveCursorStreamingSuppressed)
+        XCTAssertNil(viewModel.liveCursorStreamingSuppressedReason)
+    }
 }

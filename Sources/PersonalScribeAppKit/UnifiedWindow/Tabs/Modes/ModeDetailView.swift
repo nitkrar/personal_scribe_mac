@@ -131,10 +131,19 @@ struct ModeDetailView: View {
                         parameter: viewModel.liveCursorStreamingParameter,
                         onChange: { viewModel.setLiveCursorStreaming($0) }
                     )
-                    Text("Appends each end-of-utterance chunk into the focused text field while recording. Requires Accessibility access.")
-                        .font(PersonalScribeTheme.Typography.caption.font)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    .disabled(viewModel.liveCursorStreamingSuppressed)
+                    .help(viewModel.liveCursorStreamingSuppressedReason ?? "")
+                    if let reason = viewModel.liveCursorStreamingSuppressedReason {
+                        Text(reason)
+                            .font(PersonalScribeTheme.Typography.caption.font)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Text("Appends each end-of-utterance chunk into the focused text field while recording. Requires Accessibility access.")
+                            .font(PersonalScribeTheme.Typography.caption.font)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     Divider()
                     ParameterPickerView(
                         title: "Authoritative second pass",

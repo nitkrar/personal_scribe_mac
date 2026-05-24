@@ -74,6 +74,33 @@ final class ModeDetailViewModel: ObservableObject {
             ?? .setting(PreferenceKeys.streamingLiveCursorEnabled)
     }
 
+    /// True when the mode's pinned streaming transcriber is whisper.cpp.
+    /// `RecipeBuilder` forces `liveCursorEnabled = false` for whisper.cpp
+    /// at session bind time regardless of this toggle's value, so the UI
+    /// disables the picker and surfaces a tooltip to avoid suggesting
+    /// the user has a choice that will be honored.
+    var liveCursorStreamingSuppressed: Bool {
+        liveCursorStreamingSuppressedReason != nil
+    }
+
+    var liveCursorStreamingSuppressedReason: String? {
+        guard pinnedStreamingDescriptor?.engine == .whisperCpp else {
+            return nil
+        }
+        return "Live cursor streaming is disabled when the streaming model is whisper.cpp. Duplicate end-of-utterance pastes cannot be undone. The live card visualization still updates."
+    }
+
+    private var pinnedStreamingDescriptor: ModelDescriptor? {
+        for spec in mode.processors {
+            if case .streamingTranscriber(_, let descriptorID) = spec,
+               let descriptorID,
+               let descriptor = registeredDescriptors.first(where: { $0.id == descriptorID }) {
+                return descriptor
+            }
+        }
+        return nil
+    }
+
     var authoritativeSecondPassParameter: Parameter<Bool> {
         mode.streamingBehavior?.secondPassEnabled
             ?? .setting(PreferenceKeys.streamingSecondPassEnabled)

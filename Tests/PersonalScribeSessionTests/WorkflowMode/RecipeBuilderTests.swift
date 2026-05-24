@@ -449,9 +449,58 @@ final class RecipeBuilderTests: XCTestCase {
         )
     }
 
+    func testBuilderForcesLiveCursorOffForWhisperCppStreaming() throws {
+        let service = makeServiceWithActive(
+            asr: BuiltInModelCatalog.whisperCppTiny.id,
+            streamingAsr: BuiltInModelCatalog.whisperCppTiny.id
+        )
+        let provider = StubProcessorProvider()
+        let builder = RecipeBuilder(
+            modelService: service,
+            processorProvider: provider,
+            defaults: defaults
+        )
+        // Mode asks for liveCursorEnabled=true; whisper.cpp gate should
+        // force it off because re-decode jitter produces duplicate EoU
+        // chunks that paste irrevocably.
+        let mode = makePinnedStreamingMode(
+            descriptorID: BuiltInModelCatalog.whisperCppTiny.id,
+            secondPassEnabled: false,
+            liveCursorEnabled: true
+        )
+
+        let bound = try builder.build(mode)
+
+        XCTAssertEqual(bound.streamingBehavior?.liveCursorEnabled, false)
+        XCTAssertEqual(bound.streamingBehavior?.liveCardEnabled, true)
+    }
+
+    func testBuilderPreservesLiveCursorForNonWhisperCppStreaming() throws {
+        let service = makeServiceWithActive(
+            asr: BuiltInModelCatalog.parakeetTDT06Bv2.id,
+            streamingAsr: BuiltInModelCatalog.parakeetEou160ms.id
+        )
+        let provider = StubProcessorProvider()
+        let builder = RecipeBuilder(
+            modelService: service,
+            processorProvider: provider,
+            defaults: defaults
+        )
+        let mode = makePinnedStreamingMode(
+            descriptorID: BuiltInModelCatalog.parakeetEou160ms.id,
+            secondPassEnabled: false,
+            liveCursorEnabled: true
+        )
+
+        let bound = try builder.build(mode)
+
+        XCTAssertEqual(bound.streamingBehavior?.liveCursorEnabled, true)
+    }
+
     private func makePinnedStreamingMode(
         descriptorID: String,
-        secondPassEnabled: Bool
+        secondPassEnabled: Bool,
+        liveCursorEnabled: Bool = false
     ) -> WorkflowMode {
         WorkflowMode(
             id: "streaming-pinned-\(descriptorID)",
@@ -462,7 +511,7 @@ final class RecipeBuilderTests: XCTestCase {
             outputSinks: [.transcriptHistorySQLite],
             streamingBehavior: StreamingBehaviorSpec(
                 liveCardEnabled: .override(true),
-                liveCursorEnabled: .override(false),
+                liveCursorEnabled: .override(liveCursorEnabled),
                 secondPassEnabled: .override(secondPassEnabled)
             )
         )

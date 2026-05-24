@@ -39,7 +39,10 @@ public final class RecipeBuilder {
         let streamingDescriptor = try resolveStreamingDescriptor(in: mode)
         let captureControllers = mode.captureControllers.map { buildCaptureController($0) }
         let outputSinks = mode.outputSinks.map { buildOutputSink($0) }
-        let streamingBehavior = buildStreamingBehavior(mode.streamingBehavior)
+        let streamingBehavior = buildStreamingBehavior(
+            mode.streamingBehavior,
+            streamingDescriptor: streamingDescriptor
+        )
         // #098 (2026-05-24): streaming mode's auto-paste setting now
         // flows through unchanged. Pre-#098 behavior filtered out
         // `.frontmostPaste` whenever `liveCursorEnabled == true` to
@@ -133,15 +136,32 @@ public final class RecipeBuilder {
     }
 
     private func buildStreamingBehavior(
-        _ spec: StreamingBehaviorSpec?
+        _ spec: StreamingBehaviorSpec?,
+        streamingDescriptor: ModelDescriptor?
     ) -> BoundStreamingBehavior? {
         guard let spec else {
             return nil
         }
 
+        let resolvedLiveCursor = ParameterResolver.resolve(spec.liveCursorEnabled, from: defaults)
+        // Whisper.cpp's streaming path re-decodes overlapping audio
+        // windows; its segment text/timings jitter across re-decodes,
+        // which produces duplicated EoU chunks that the cursor would
+        // paste irrevocably (CGEventPost is fire-and-forget). Force
+        // live cursor off for whisper.cpp; users still get the live
+        // card visualization and the stop-time authoritative paste via
+        // ClipboardBatchOutput. Parakeet's dedicated EoU streaming
+        // model does not have this issue.
+        let liveCursorEnabled: Bool
+        if let streamingDescriptor, streamingDescriptor.engine == .whisperCpp {
+            liveCursorEnabled = false
+        } else {
+            liveCursorEnabled = resolvedLiveCursor
+        }
+
         return BoundStreamingBehavior(
             liveCardEnabled: ParameterResolver.resolve(spec.liveCardEnabled, from: defaults),
-            liveCursorEnabled: ParameterResolver.resolve(spec.liveCursorEnabled, from: defaults),
+            liveCursorEnabled: liveCursorEnabled,
             secondPassEnabled: ParameterResolver.resolve(spec.secondPassEnabled, from: defaults)
         )
     }

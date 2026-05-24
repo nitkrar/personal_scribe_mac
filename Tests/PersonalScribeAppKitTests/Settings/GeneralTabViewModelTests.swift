@@ -1,5 +1,6 @@
 import XCTest
 import PersonalScribeCore
+import PersonalScribeSession
 @testable import PersonalScribeAppKit
 
 @MainActor
@@ -115,5 +116,50 @@ final class GeneralTabViewModelTests: XCTestCase {
         XCTAssertFalse(StreamingLiveCardEnabledPreference.resolve(from: defaults))
         XCTAssertTrue(StreamingLiveCursorEnabledPreference.resolve(from: defaults))
         XCTAssertFalse(StreamingSecondPassEnabledPreference.resolve(from: defaults))
+    }
+
+    func testLiveCursorStreamingSuppressedWhenActiveStreamingIsWhisperCpp() {
+        let defaults = isolatedDefaults()
+        let service = makeModelService(
+            defaults: defaults,
+            activeStreamingDescriptor: BuiltInModelCatalog.whisperCppTiny
+        )
+
+        let viewModel = GeneralTabViewModel(defaults: defaults, modelService: service)
+
+        XCTAssertTrue(viewModel.liveCursorStreamingSuppressed)
+        XCTAssertNotNil(viewModel.liveCursorStreamingSuppressedReason)
+    }
+
+    func testLiveCursorStreamingNotSuppressedWhenActiveStreamingIsParakeet() {
+        let defaults = isolatedDefaults()
+        let service = makeModelService(
+            defaults: defaults,
+            activeStreamingDescriptor: BuiltInModelCatalog.parakeetEou160ms
+        )
+
+        let viewModel = GeneralTabViewModel(defaults: defaults, modelService: service)
+
+        XCTAssertFalse(viewModel.liveCursorStreamingSuppressed)
+        XCTAssertNil(viewModel.liveCursorStreamingSuppressedReason)
+    }
+
+    private func makeModelService(
+        defaults: UserDefaults,
+        activeStreamingDescriptor: ModelDescriptor
+    ) -> ActiveModelService {
+        let preference = Preference<[ModelKind: String]>(
+            key: "GeneralTabViewModelTests-ActiveIDs",
+            default: [:],
+            defaults: defaults
+        )
+        preference.persist([.streamingASR: activeStreamingDescriptor.id])
+        return ActiveModelService(
+            activeIDsPreference: preference,
+            registeredModels: [activeStreamingDescriptor],
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
     }
 }

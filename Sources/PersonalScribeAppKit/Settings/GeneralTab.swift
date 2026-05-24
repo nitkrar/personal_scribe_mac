@@ -1,6 +1,8 @@
 import AppKit
+import Combine
 import SwiftUI
 import PersonalScribeCore
+import PersonalScribeSession
 import PersonalScribeVAD
 
 @MainActor
@@ -19,7 +21,8 @@ public struct GeneralTab: View {
         onHotkeyUpdate: @escaping @MainActor (HotkeyPreference) -> Void = { preference in
             AppComposition.hotkeyMonitor.updateRecordingHotkey(preference)
         },
-        workflowModeRegistry: WorkflowModeRegistry = AppComposition.workflowModeRegistry
+        workflowModeRegistry: WorkflowModeRegistry = AppComposition.workflowModeRegistry,
+        modelService: ActiveModelService = AppComposition.modelService
     ) {
         _viewModel = StateObject(
             wrappedValue: GeneralTabViewModel(
@@ -27,7 +30,8 @@ public struct GeneralTab: View {
                 menuBarVisibilityProvider: menuBarVisibilityProvider,
                 menuBarVisibilitySetter: menuBarVisibilitySetter,
                 launchAtLoginService: launchAtLoginService,
-                workflowModeRegistry: workflowModeRegistry
+                workflowModeRegistry: workflowModeRegistry,
+                modelService: modelService
             )
         )
         _shortcutsViewModel = StateObject(
@@ -337,8 +341,11 @@ public struct GeneralTab: View {
                     set: { viewModel.setStreamingLiveCursorEnabled($0) }
                 )
             )
+            .disabled(viewModel.liveCursorStreamingSuppressed)
+            .help(viewModel.liveCursorStreamingSuppressedReason ?? "")
 
-            Text("Appends each end-of-utterance chunk into the focused text field while recording. Requires Accessibility access.")
+            Text(viewModel.liveCursorStreamingSuppressedReason
+                 ?? "Appends each end-of-utterance chunk into the focused text field while recording. Requires Accessibility access.")
                 .font(PersonalScribeTheme.Typography.caption.font)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -688,6 +695,17 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var streamingLiveCursorEnabled: Bool
     @Published private(set) var streamingSecondPassEnabled: Bool
     @Published private(set) var streamingCardOverflowMode: StreamingCardOverflowMode
+    /// True when the currently active streaming model is whisper.cpp.
+    /// `RecipeBuilder` forces `liveCursorEnabled = false` for whisper.cpp
+    /// at session bind time; the UI disables the toggle and surfaces a
+    /// tooltip so the user understands the setting will have no effect
+    /// while whisper.cpp is the active streaming model.
+    @Published private(set) var liveCursorStreamingSuppressed: Bool = false
+    var liveCursorStreamingSuppressedReason: String? {
+        liveCursorStreamingSuppressed
+            ? "Live cursor streaming is disabled when the active streaming model is whisper.cpp. Duplicate end-of-utterance pastes cannot be undone. The live card visualization still updates."
+            : nil
+    }
     /// Master theme (Light / Dark / System). Drives
     /// `showsTintPicker` — tint is hidden when the effective scheme
     /// is dark (mockup-gaps G, 2026-04-21).
@@ -720,6 +738,11 @@ final class GeneralTabViewModel: ObservableObject {
     /// (`AppComposition`) always supplies it. When `nil`, setters
     /// degrade to the pre-bridge UserDefaults-only behavior.
     private let workflowModeRegistry: WorkflowModeRegistry?
+    /// Source of truth for the currently active streaming model. Used to
+    /// derive `liveCursorStreamingSuppressed`. Optional so tests that
+    /// don't exercise the model-aware UI can omit it.
+    private let modelService: ActiveModelService?
+    private var modelServiceCancellable: AnyCancellable?
 
     init(
         defaults: UserDefaults = .standard,
@@ -731,7 +754,8 @@ final class GeneralTabViewModel: ObservableObject {
             ) == .darkAqua
         },
         launchAtLoginService: any LaunchAtLoginServicing = SystemLaunchAtLoginService(),
-        workflowModeRegistry: WorkflowModeRegistry? = nil
+        workflowModeRegistry: WorkflowModeRegistry? = nil,
+        modelService: ActiveModelService? = nil
     ) {
         self.defaults = defaults
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
@@ -770,6 +794,8 @@ final class GeneralTabViewModel: ObservableObject {
         self.appTheme = AppTheme.resolve(from: defaults)
         self.speakerSeparationSensitivity = SpeakerSeparationSensitivityPreference.resolve(from: defaults)
         self.currentSystemIsDark = systemIsDarkProvider()
+        self.modelService = modelService
+        self.liveCursorStreamingSuppressed = Self.isWhisperCppStreamingActive(modelService)
 
         // KVO on `NSApplication.effectiveAppearance` so that when the
         // user flips the system theme while Settings is open and
@@ -787,6 +813,20 @@ final class GeneralTabViewModel: ObservableObject {
                 self.currentSystemIsDark = self.systemIsDarkProvider()
             }
         }
+
+        if let modelService {
+            modelServiceCancellable = modelService.$activeModelIDs
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    guard let self else { return }
+                    self.liveCursorStreamingSuppressed = Self.isWhisperCppStreamingActive(modelService)
+                }
+        }
+    }
+
+    private static func isWhisperCppStreamingActive(_ modelService: ActiveModelService?) -> Bool {
+        guard let modelService else { return false }
+        return modelService.activeDescriptor(for: .streamingASR)?.engine == .whisperCpp
     }
 
     deinit {
