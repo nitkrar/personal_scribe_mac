@@ -205,6 +205,8 @@ private actor RecordingTranscriber: Transcriber {
         prepareCallCount += 1
     }
 
+    func releaseIdleResources() async {}
+
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { continuation in
             continuation.yield(

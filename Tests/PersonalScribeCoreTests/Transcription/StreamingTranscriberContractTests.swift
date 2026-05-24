@@ -19,6 +19,8 @@ final class StreamingTranscriberContractTests: XCTestCase {
             }
         }
 
+        func releaseIdleResources() async {}
+
         func transcribe(
             stream: AsyncThrowingStream<PCMBuffer, Error>
         ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {

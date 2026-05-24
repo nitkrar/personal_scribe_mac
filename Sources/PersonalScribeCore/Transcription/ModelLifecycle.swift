@@ -78,8 +78,4 @@ public extension ModelLifecycle {
     /// Default backstop for lightweight or pure-value conformers that
     /// have no retained runtime state to release on eviction.
     func cleanup() async {}
-
-    /// Default no-op for conformers that don't retain heavyweight
-    /// runtime state between sessions.
-    func releaseIdleResources() async {}
 }

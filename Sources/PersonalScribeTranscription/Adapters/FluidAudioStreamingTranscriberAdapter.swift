@@ -3,6 +3,8 @@ import FluidAudio
 import Foundation
 import PersonalScribeCore
 
+typealias FluidAudioStreamingSleep = @Sendable (Duration) async throws -> Void
+
 public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
     public nonisolated let capabilities = TranscriberCapabilities()
 
@@ -10,9 +12,13 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
     private let storageLocator: any StorageLocator
     private let managerResult: Result<any FluidAudioStreamingEouManaging, Error>
     private let logger: PersonalScribeLogger?
+    private let idleUnloadDelay: Duration
+    private let sleep: FluidAudioStreamingSleep
     private nonisolated let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
+    private var idleReleaseTask: Task<Void, Never>?
+    private var idleReleaseGeneration: UInt64 = 0
 
     public init(
         descriptor: ModelDescriptor,
@@ -26,7 +32,8 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
                     chunkSize: try StreamingChunkSize(descriptor: descriptor)
                 )
             },
-            logger: nil
+            logger: nil,
+            idleUnloadDelay: .seconds(30)
         )
     }
 
@@ -43,7 +50,8 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
                     chunkSize: try StreamingChunkSize(descriptor: descriptor)
                 )
             },
-            logger: logger
+            logger: logger,
+            idleUnloadDelay: .seconds(30)
         )
     }
 
@@ -51,13 +59,17 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
         descriptor: ModelDescriptor,
         storageLocator: any StorageLocator,
         manager: any FluidAudioStreamingEouManaging,
-        logger: PersonalScribeLogger? = nil
+        logger: PersonalScribeLogger? = nil,
+        idleUnloadDelay: Duration = .seconds(30),
+        sleep: @escaping FluidAudioStreamingSleep = { try await Task.sleep(for: $0) }
     ) {
         self.init(
             descriptor: descriptor,
             storageLocator: storageLocator,
             managerResult: .success(manager),
-            logger: logger
+            logger: logger,
+            idleUnloadDelay: idleUnloadDelay,
+            sleep: sleep
         )
     }
 
@@ -65,15 +77,21 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
         descriptor: ModelDescriptor,
         storageLocator: any StorageLocator,
         managerResult: Result<any FluidAudioStreamingEouManaging, Error>,
-        logger: PersonalScribeLogger?
+        logger: PersonalScribeLogger?,
+        idleUnloadDelay: Duration,
+        sleep: @escaping FluidAudioStreamingSleep = { try await Task.sleep(for: $0) }
     ) {
         self.descriptor = descriptor
         self.storageLocator = storageLocator
         self.managerResult = managerResult
         self.logger = logger
+        self.idleUnloadDelay = idleUnloadDelay
+        self.sleep = sleep
     }
 
     public func prepare() async throws {
+        invalidateIdleRelease()
+
         if hasPreparedModel {
             return
         }
@@ -130,18 +148,32 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
     }
 
     public func cleanup() async {
-        let inFlightPrepare = prepareTask
-        prepareTask = nil
-        hasPreparedModel = false
-        inFlightPrepare?.cancel()
+        invalidateIdleRelease()
+        await cleanupRuntime()
+    }
 
-        if let manager = try? resolvedManager() {
-            await manager.setPartialCallback { _ in }
-            await manager.setEouCallback { _ in }
-            await manager.cleanup()
+    public func releaseIdleResources() async {
+        guard hasPreparedModel || prepareTask != nil else {
+            return
         }
 
-        progressBroadcaster.emit(.idle)
+        invalidateIdleRelease()
+        let generation = idleReleaseGeneration
+        let delay = idleUnloadDelay
+        let sleep = sleep
+        idleReleaseTask = Task {
+            do {
+                try await sleep(delay)
+            } catch {
+                return
+            }
+
+            if Task.isCancelled {
+                return
+            }
+
+            await self.finishIdleRelease(generation: generation)
+        }
     }
 
     public nonisolated func transcribe(
@@ -316,6 +348,45 @@ private extension FluidAudioStreamingTranscriberAdapter {
         await manager.setPartialCallback { _ in }
         await manager.setEouCallback { _ in }
         await manager.reset()
+    }
+
+    func invalidateIdleRelease() {
+        idleReleaseGeneration &+= 1
+        idleReleaseTask?.cancel()
+        idleReleaseTask = nil
+    }
+
+    func finishIdleRelease(generation: UInt64) async {
+        guard generation == idleReleaseGeneration else {
+            return
+        }
+
+        idleReleaseTask = nil
+        let hadPrepared = hasPreparedModel
+        let hadInFlightPrepare = prepareTask != nil
+        guard hadPrepared || hadInFlightPrepare else {
+            return
+        }
+
+        await cleanupRuntime()
+        logger?.info(
+            "adapter_idle_release — descriptorID=\(descriptor.id) adapter=\(String(describing: type(of: self))) releasedAfterMs=\(Self.milliseconds(from: idleUnloadDelay)) hadPrepared=\(hadPrepared) hadInFlightPrepare=\(hadInFlightPrepare)"
+        )
+    }
+
+    func cleanupRuntime() async {
+        let inFlightPrepare = prepareTask
+        prepareTask = nil
+        hasPreparedModel = false
+        inFlightPrepare?.cancel()
+
+        if let manager = try? resolvedManager() {
+            await manager.setPartialCallback { _ in }
+            await manager.setEouCallback { _ in }
+            await manager.cleanup()
+        }
+
+        progressBroadcaster.emit(.idle)
     }
 
     static func milliseconds(from duration: Duration) -> Int {

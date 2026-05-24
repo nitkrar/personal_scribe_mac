@@ -20,6 +20,8 @@ final class SpeakerDiarizerContractTests: XCTestCase {
             }
         }
 
+        func releaseIdleResources() async {}
+
         func diarize(
             stream: AsyncThrowingStream<PCMBuffer, Error>
         ) -> AsyncStream<SpeakerDiarizationEvent> {

@@ -423,6 +423,7 @@ private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchec
 private actor StubTranscriber: Transcriber {
     nonisolated let capabilities = TranscriberCapabilities()
     func prepare() async throws {}
+    func releaseIdleResources() async {}
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { $0.finish() }
     }
@@ -449,6 +450,7 @@ private actor StubTranscriber: Transcriber {
 private actor StubStreamingTranscriber: StreamingTranscriber {
     nonisolated let capabilities = TranscriberCapabilities()
     func prepare() async throws {}
+    func releaseIdleResources() async {}
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { $0.finish() }
     }
@@ -461,6 +463,7 @@ private actor StubStreamingTranscriber: StreamingTranscriber {
 
 private actor StubDiarizer: SpeakerDiarizer {
     func prepare() async throws {}
+    func releaseIdleResources() async {}
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { $0.finish() }
     }

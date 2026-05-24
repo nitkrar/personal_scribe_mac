@@ -557,6 +557,8 @@ private actor StubBoundTranscriber: Transcriber {
 
     func prepare() async throws {}
 
+    func releaseIdleResources() async {}
+
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { $0.finish() }
     }
@@ -587,6 +589,8 @@ private actor StubBoundDiarizer: SpeakerDiarizer {
     }
 
     func prepare() async throws {}
+
+    func releaseIdleResources() async {}
 
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { $0.finish() }

@@ -321,6 +321,96 @@ final class WhisperKitTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(loadCallCount, 2)
     }
 
+    func testReleaseIdleResourcesEvictsWhisperKitManagerAfterDelay() async throws {
+        let descriptor = BuiltInModelCatalog.whisperKitTiny
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let diagnosticsSink = InMemoryTestSink()
+        let manager = StubWhisperKitManager()
+        let adapter = WhisperKitTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            logger: makeTranscriptionLogger(sink: diagnosticsSink),
+            idleUnloadDelay: .milliseconds(20)
+        )
+
+        try await adapter.prepare()
+        await adapter.releaseIdleResources()
+        try? await Task.sleep(for: .milliseconds(60))
+        try await adapter.prepare()
+
+        let cleanupCount = await manager.cleanupCallCount()
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(cleanupCount, 1)
+        XCTAssertEqual(loadCount, 2)
+
+        let releaseLog = try await waitForTranscriptionLogMessage(
+            in: diagnosticsSink,
+            containing: "adapter_idle_release"
+        )
+        XCTAssertTrue(releaseLog.message.contains("descriptorID=\(descriptor.id)"))
+        XCTAssertTrue(releaseLog.message.contains("adapter=WhisperKitTranscriberAdapter"))
+        XCTAssertTrue(releaseLog.message.contains("releasedAfterMs=20"))
+        XCTAssertTrue(releaseLog.message.contains("hadPrepared=true"))
+        XCTAssertTrue(releaseLog.message.contains("hadInFlightPrepare=false"))
+    }
+
+    func testReleaseIdleResourcesCancelsIfNewSessionStartsBeforeDelay() async throws {
+        let descriptor = BuiltInModelCatalog.whisperKitTiny
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let diagnosticsSink = InMemoryTestSink()
+        let manager = StubWhisperKitManager()
+        let adapter = WhisperKitTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            logger: makeTranscriptionLogger(sink: diagnosticsSink),
+            idleUnloadDelay: .milliseconds(20)
+        )
+
+        try await adapter.prepare()
+        await adapter.releaseIdleResources()
+        try? await Task.sleep(for: .milliseconds(5))
+        try await adapter.prepare()
+        try? await Task.sleep(for: .milliseconds(60))
+        try await adapter.prepare()
+
+        let cleanupCount = await manager.cleanupCallCount()
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(cleanupCount, 0)
+        XCTAssertEqual(loadCount, 1)
+        let releaseLogs = await diagnosticsSink.snapshot().filter {
+            $0.message.contains("adapter_idle_release")
+        }
+        XCTAssertTrue(releaseLogs.isEmpty)
+    }
+
+    func testReleaseIdleResourcesIsNoOpWhenNothingPrepared() async throws {
+        let descriptor = BuiltInModelCatalog.whisperKitTiny
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let diagnosticsSink = InMemoryTestSink()
+        let manager = StubWhisperKitManager()
+        let adapter = WhisperKitTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            logger: makeTranscriptionLogger(sink: diagnosticsSink),
+            idleUnloadDelay: .milliseconds(20)
+        )
+
+        await adapter.releaseIdleResources()
+        try? await Task.sleep(for: .milliseconds(60))
+
+        let cleanupCount = await manager.cleanupCallCount()
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(cleanupCount, 0)
+        XCTAssertEqual(loadCount, 0)
+        let releaseLogs = await diagnosticsSink.snapshot().filter {
+            $0.message.contains("adapter_idle_release")
+        }
+        XCTAssertTrue(releaseLogs.isEmpty)
+    }
+
     func testLiveManagerDownloadAndStageMovesBundleLeafIntoDestinationAndCleansStaging() async throws {
         let root = try temporaryRootDirectory()
         let stagingDirectory = root.appendingPathComponent("staging", isDirectory: true)

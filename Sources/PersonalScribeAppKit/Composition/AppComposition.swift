@@ -120,8 +120,9 @@ public enum AppComposition {
     /// `SessionState.error` per design lock.
     public static let vadProvider: (any VadProviding)? = {
         let logger = makeLogger(PersonalScribeLogCategory.session)
+        let transcriptionLogger = makeLogger(PersonalScribeLogCategory.transcription)
         do {
-            return try FluidAudioVadProvider()
+            return try FluidAudioVadProvider(logger: transcriptionLogger)
         } catch {
             logger.error(
                 "Bundled VAD model not found; auto-stop silently disabled",

@@ -52,6 +52,8 @@ public actor FakeTranscriber: Transcriber {
         return result
     }
 
+    public func releaseIdleResources() async {}
+
     private func maybeDelay() async throws {
         if let delay {
             try await Task.sleep(for: delay)

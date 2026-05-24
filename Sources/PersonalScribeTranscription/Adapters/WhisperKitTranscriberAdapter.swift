@@ -2,6 +2,8 @@
 import Foundation
 import PersonalScribeCore
 
+typealias WhisperKitSleep = @Sendable (Duration) async throws -> Void
+
 protocol WhisperKitManaging: Sendable {
     func downloadAndStage(
         repoID: String,
@@ -60,10 +62,15 @@ public actor WhisperKitTranscriberAdapter: Transcriber {
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
     private let manager: any WhisperKitManaging
+    private let logger: PersonalScribeLogger?
+    private let idleUnloadDelay: Duration
+    private let sleep: WhisperKitSleep
     private nonisolated let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private let fileManager: FileManager
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
+    private var idleReleaseTask: Task<Void, Never>?
+    private var idleReleaseGeneration: UInt64 = 0
 
     public init(
         descriptor: ModelDescriptor,
@@ -72,7 +79,23 @@ public actor WhisperKitTranscriberAdapter: Transcriber {
         self.init(
             descriptor: descriptor,
             storageLocator: storageLocator,
-            manager: LiveWhisperKitManager()
+            manager: LiveWhisperKitManager(),
+            logger: nil,
+            idleUnloadDelay: .seconds(30)
+        )
+    }
+
+    package init(
+        descriptor: ModelDescriptor,
+        storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
+        logger: PersonalScribeLogger
+    ) {
+        self.init(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: LiveWhisperKitManager(),
+            logger: logger,
+            idleUnloadDelay: .seconds(30)
         )
     }
 
@@ -80,15 +103,23 @@ public actor WhisperKitTranscriberAdapter: Transcriber {
         descriptor: ModelDescriptor,
         storageLocator: any StorageLocator,
         manager: any WhisperKitManaging,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        logger: PersonalScribeLogger? = nil,
+        idleUnloadDelay: Duration = .seconds(30),
+        sleep: @escaping WhisperKitSleep = { try await Task.sleep(for: $0) }
     ) {
         self.descriptor = descriptor
         self.storageLocator = storageLocator
         self.manager = manager
+        self.logger = logger
+        self.idleUnloadDelay = idleUnloadDelay
+        self.sleep = sleep
         self.fileManager = fileManager
     }
 
     public func prepare() async throws {
+        invalidateIdleRelease()
+
         if hasPreparedModel {
             return
         }
@@ -127,12 +158,32 @@ public actor WhisperKitTranscriberAdapter: Transcriber {
     }
 
     public func cleanup() async {
-        let inFlightPrepare = prepareTask
-        prepareTask = nil
-        hasPreparedModel = false
-        inFlightPrepare?.cancel()
-        await manager.cleanup()
-        progressBroadcaster.emit(.idle)
+        invalidateIdleRelease()
+        await cleanupRuntime()
+    }
+
+    public func releaseIdleResources() async {
+        guard hasPreparedModel || prepareTask != nil else {
+            return
+        }
+
+        invalidateIdleRelease()
+        let generation = idleReleaseGeneration
+        let delay = idleUnloadDelay
+        let sleep = sleep
+        idleReleaseTask = Task {
+            do {
+                try await sleep(delay)
+            } catch {
+                return
+            }
+
+            if Task.isCancelled {
+                return
+            }
+
+            await self.finishIdleRelease(generation: generation)
+        }
     }
 
     public func transcribe(
@@ -183,6 +234,39 @@ private extension WhisperKitTranscriberAdapter {
             await manager.cleanup()
             throw PersonalScribeError.modelLoadFailure
         }
+    }
+
+    func invalidateIdleRelease() {
+        idleReleaseGeneration &+= 1
+        idleReleaseTask?.cancel()
+        idleReleaseTask = nil
+    }
+
+    func finishIdleRelease(generation: UInt64) async {
+        guard generation == idleReleaseGeneration else {
+            return
+        }
+
+        idleReleaseTask = nil
+        let hadPrepared = hasPreparedModel
+        let hadInFlightPrepare = prepareTask != nil
+        guard hadPrepared || hadInFlightPrepare else {
+            return
+        }
+
+        await cleanupRuntime()
+        logger?.info(
+            "adapter_idle_release — descriptorID=\(descriptor.id) adapter=\(String(describing: type(of: self))) releasedAfterMs=\(Self.milliseconds(from: idleUnloadDelay)) hadPrepared=\(hadPrepared) hadInFlightPrepare=\(hadInFlightPrepare)"
+        )
+    }
+
+    func cleanupRuntime() async {
+        let inFlightPrepare = prepareTask
+        prepareTask = nil
+        hasPreparedModel = false
+        inFlightPrepare?.cancel()
+        await manager.cleanup()
+        progressBroadcaster.emit(.idle)
     }
 
     func performDownloadIfNeeded(emitFinished: Bool) async throws {
@@ -351,6 +435,13 @@ private extension WhisperKitTranscriberAdapter {
             audioDuration: audioDuration,
             processingDuration: processingDuration
         )
+    }
+
+    static func milliseconds(from duration: Duration) -> Int {
+        let components = duration.components
+        let attosecondsPerSecond = 1_000_000_000_000_000_000.0
+        let seconds = Double(components.seconds) + (Double(components.attoseconds) / attosecondsPerSecond)
+        return Int((seconds * 1000).rounded())
     }
 }
 

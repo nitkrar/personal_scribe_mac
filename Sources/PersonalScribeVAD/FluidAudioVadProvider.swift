@@ -1,6 +1,7 @@
 @preconcurrency import CoreML
 import FluidAudio
 import Foundation
+import PersonalScribeCore
 
 typealias VadSessionFactory = @Sendable (Double) -> VadSessionHandle
 
@@ -41,6 +42,7 @@ public actor FluidAudioVadProvider: VadProviding {
 
     private let modelURL: URL
     private let idleUnloadDelay: Duration
+    private let logger: PersonalScribeLogger?
     private let sleep: VadProviderSleep
     private let sessionFactoryLoader: VadSessionFactoryLoader
     private var loadState: LoadState = .notLoaded
@@ -53,7 +55,7 @@ public actor FluidAudioVadProvider: VadProviding {
     /// NOT a user-facing failure mode. Debug builds also assert so a dev
     /// build with a mis-configured bundle crashes early rather than silently
     /// proceeding to the production fallback path.
-    public init() throws {
+    public init(logger: PersonalScribeLogger? = nil) throws {
         guard let url = Bundle.module.url(
             forResource: "silero-vad",
             withExtension: "mlmodelc"
@@ -63,15 +65,16 @@ public actor FluidAudioVadProvider: VadProviding {
             )
             throw BundledModelError.resourceNotFound
         }
-        self.init(modelURL: url)
+        self.init(modelURL: url, logger: logger)
     }
 
     /// Explicit-URL init for tests and future callers that want to point at
     /// a non-bundled copy of a compiled Silero `.mlmodelc`.
-    public init(modelURL: URL) {
+    public init(modelURL: URL, logger: PersonalScribeLogger? = nil) {
         self.init(
             modelURL: modelURL,
             idleUnloadDelay: .seconds(30),
+            logger: logger,
             sleep: { try await Task.sleep(for: $0) },
             sessionFactoryLoader: Self.liveSessionFactoryLoader
         )
@@ -80,11 +83,13 @@ public actor FluidAudioVadProvider: VadProviding {
     init(
         modelURL: URL,
         idleUnloadDelay: Duration = .seconds(30),
+        logger: PersonalScribeLogger? = nil,
         sleep: @escaping VadProviderSleep = { try await Task.sleep(for: $0) },
         sessionFactoryLoader: @escaping VadSessionFactoryLoader = FluidAudioVadProvider.liveSessionFactoryLoader
     ) {
         self.modelURL = modelURL
         self.idleUnloadDelay = idleUnloadDelay
+        self.logger = logger
         self.sleep = sleep
         self.sessionFactoryLoader = sessionFactoryLoader
     }
@@ -154,7 +159,17 @@ public actor FluidAudioVadProvider: VadProviding {
         idleReleaseTask = nil
         if case .loaded = loadState {
             loadState = .notLoaded
+            logger?.info(
+                "adapter_idle_release — descriptorID=\(modelURL.deletingPathExtension().lastPathComponent) adapter=\(String(describing: type(of: self))) releasedAfterMs=\(Self.milliseconds(from: idleUnloadDelay)) hadPrepared=true hadInFlightPrepare=false"
+            )
         }
+    }
+
+    private static func milliseconds(from duration: Duration) -> Int {
+        let components = duration.components
+        let attosecondsPerSecond = 1_000_000_000_000_000_000.0
+        let seconds = Double(components.seconds) + (Double(components.attoseconds) / attosecondsPerSecond)
+        return Int((seconds * 1000).rounded())
     }
 }
 

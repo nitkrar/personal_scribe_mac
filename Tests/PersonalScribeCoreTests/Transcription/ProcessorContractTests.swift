@@ -26,6 +26,8 @@ final class ProcessorContractTests: XCTestCase {
             }
         }
 
+        func releaseIdleResources() async {}
+
         func process(
             audio: PCMBuffer,
             priors: [ProcessorOutput]

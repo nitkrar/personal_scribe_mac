@@ -166,6 +166,99 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
         )
     }
 
+    func testReleaseIdleResourcesEvictsStreamingManagerAfterDelay() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetEou160ms
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let diagnosticsSink = InMemoryTestSink()
+        let manager = StubFluidAudioStreamingManager()
+        let adapter = FluidAudioStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            logger: makeLogger(sink: diagnosticsSink),
+            idleUnloadDelay: .milliseconds(20)
+        )
+
+        try await adapter.prepare()
+        await adapter.releaseIdleResources()
+        try? await Task.sleep(for: .milliseconds(60))
+        try await adapter.prepare()
+
+        let cleanupCount = await manager.cleanupCallCount()
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(cleanupCount, 1)
+        XCTAssertEqual(loadCount, 2)
+
+        let releaseLog = try await waitForLogMessage(
+            in: diagnosticsSink,
+            containing: "adapter_idle_release"
+        )
+        XCTAssertTrue(releaseLog.message.contains("descriptorID=\(descriptor.id)"))
+        XCTAssertTrue(releaseLog.message.contains("adapter=FluidAudioStreamingTranscriberAdapter"))
+        XCTAssertTrue(releaseLog.message.contains("releasedAfterMs=20"))
+        XCTAssertTrue(releaseLog.message.contains("hadPrepared=true"))
+        XCTAssertTrue(releaseLog.message.contains("hadInFlightPrepare=false"))
+    }
+
+    func testReleaseIdleResourcesCancelsIfNewSessionStartsBeforeDelay() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetEou160ms
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let diagnosticsSink = InMemoryTestSink()
+        let manager = StubFluidAudioStreamingManager()
+        let adapter = FluidAudioStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            logger: makeLogger(sink: diagnosticsSink),
+            idleUnloadDelay: .milliseconds(20)
+        )
+
+        try await adapter.prepare()
+        await adapter.releaseIdleResources()
+        try? await Task.sleep(for: .milliseconds(5))
+        try await adapter.prepare()
+        try? await Task.sleep(for: .milliseconds(60))
+        try await adapter.prepare()
+
+        let cleanupCount = await manager.cleanupCallCount()
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(cleanupCount, 0)
+        XCTAssertEqual(loadCount, 1)
+        let releaseLogs = await diagnosticsSink.snapshot().filter {
+            $0.message.contains("adapter_idle_release")
+        }
+        XCTAssertTrue(releaseLogs.isEmpty)
+    }
+
+    func testReleaseIdleResourcesIsNoOpWhenNothingPrepared() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetEou160ms
+        let rootDirectory = try temporaryRootDirectory()
+        let storageLocator = TestStorageLocator(baseDirectory: rootDirectory)
+        let diagnosticsSink = InMemoryTestSink()
+        let manager = StubFluidAudioStreamingManager()
+        let adapter = FluidAudioStreamingTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            logger: makeLogger(sink: diagnosticsSink),
+            idleUnloadDelay: .milliseconds(20)
+        )
+
+        await adapter.releaseIdleResources()
+        try? await Task.sleep(for: .milliseconds(60))
+
+        let cleanupCount = await manager.cleanupCallCount()
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(cleanupCount, 0)
+        XCTAssertEqual(loadCount, 0)
+        let releaseLogs = await diagnosticsSink.snapshot().filter {
+            $0.message.contains("adapter_idle_release")
+        }
+        XCTAssertTrue(releaseLogs.isEmpty)
+    }
+
     func testTranscribeLogsStreamingAdapterSummary() async throws {
         let descriptor = BuiltInModelCatalog.parakeetEou160ms
         let rootDirectory = try temporaryRootDirectory()

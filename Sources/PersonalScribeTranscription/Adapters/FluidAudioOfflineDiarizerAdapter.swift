@@ -2,17 +2,23 @@ import FluidAudio
 import Foundation
 import PersonalScribeCore
 
+typealias OfflineDiarizerSleep = @Sendable (Duration) async throws -> Void
+
 public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, SpeakerDiarizer {
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
     private let manager: any FluidAudioOfflineDiarizerManaging
     private let logger: PersonalScribeLogger
+    private let idleUnloadDelay: Duration
+    private let sleep: OfflineDiarizerSleep
     private let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private let lock = NSLock()
 
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
     private var lastAppliedSensitivity: SpeakerSeparationSensitivity?
+    private var idleReleaseTask: Task<Void, Never>?
+    private var idleReleaseGeneration: UInt64 = 0
 
     public func applySensitivity(_ sensitivity: SpeakerSeparationSensitivity) async {
         let needsReload = lock.withLock { () -> Bool in
@@ -42,7 +48,8 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: PrivateFluidAudioOfflineDiarizerManager(),
-            logger: logger
+            logger: logger,
+            idleUnloadDelay: .seconds(30)
         )
     }
 
@@ -50,15 +57,21 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
         descriptor: ModelDescriptor,
         storageLocator: any StorageLocator,
         manager: any FluidAudioOfflineDiarizerManaging,
-        logger: PersonalScribeLogger
+        logger: PersonalScribeLogger,
+        idleUnloadDelay: Duration = .seconds(30),
+        sleep: @escaping OfflineDiarizerSleep = { try await Task.sleep(for: $0) }
     ) {
         self.descriptor = descriptor
         self.storageLocator = storageLocator
         self.manager = manager
         self.logger = logger
+        self.idleUnloadDelay = idleUnloadDelay
+        self.sleep = sleep
     }
 
     public func prepare() async throws {
+        invalidateIdleRelease()
+
         let task = lock.withLock { () -> Task<Void, Error>? in
             if hasPreparedModel {
                 return nil
@@ -122,15 +135,41 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
     }
 
     public func cleanup() async {
-        let inFlightPrepare = lock.withLock { () -> Task<Void, Error>? in
-            let task = prepareTask
-            prepareTask = nil
-            hasPreparedModel = false
-            return task
+        invalidateIdleRelease()
+        await cleanupRuntime()
+    }
+
+    public func releaseIdleResources() async {
+        let generation = lock.withLock { () -> UInt64? in
+            guard hasPreparedModel || prepareTask != nil else {
+                return nil
+            }
+
+            invalidateIdleReleaseLocked()
+            return idleReleaseGeneration
         }
-        inFlightPrepare?.cancel()
-        await manager.cleanup()
-        progressBroadcaster.emit(.idle)
+        guard let generation else {
+            return
+        }
+
+        let delay = idleUnloadDelay
+        let sleep = sleep
+        let task = Task {
+            do {
+                try await sleep(delay)
+            } catch {
+                return
+            }
+
+            if Task.isCancelled {
+                return
+            }
+
+            await self.finishIdleRelease(generation: generation)
+        }
+        lock.withLock {
+            idleReleaseTask = task
+        }
     }
 
     public func diarize(
@@ -227,6 +266,67 @@ private extension FluidAudioOfflineDiarizerAdapter {
                 end: .seconds(Double(segment.endTimeSeconds))
             )
         }
+    }
+
+    func invalidateIdleRelease() {
+        lock.withLock {
+            invalidateIdleReleaseLocked()
+        }
+    }
+
+    func invalidateIdleReleaseLocked() {
+        idleReleaseGeneration &+= 1
+        idleReleaseTask?.cancel()
+        idleReleaseTask = nil
+    }
+
+    func finishIdleRelease(generation: UInt64) async {
+        let releaseContext = lock.withLock {
+            guard generation == idleReleaseGeneration else {
+                return (false, false, nil as Task<Void, Error>?)
+            }
+
+            idleReleaseTask = nil
+            let hadPrepared = hasPreparedModel
+            let inFlightPrepare = prepareTask
+            guard hadPrepared || inFlightPrepare != nil else {
+                return (false, false, nil as Task<Void, Error>?)
+            }
+
+            prepareTask = nil
+            hasPreparedModel = false
+            return (hadPrepared, inFlightPrepare != nil, inFlightPrepare)
+        }
+
+        guard releaseContext.0 || releaseContext.1 else {
+            return
+        }
+
+        releaseContext.2?.cancel()
+        await manager.cleanup()
+        progressBroadcaster.emit(.idle)
+        logger.info(
+            "adapter_idle_release — descriptorID=\(descriptor.id) adapter=\(String(describing: type(of: self))) releasedAfterMs=\(Self.milliseconds(from: idleUnloadDelay)) hadPrepared=\(releaseContext.0) hadInFlightPrepare=\(releaseContext.1)"
+        )
+    }
+
+    func cleanupRuntime() async {
+        let inFlightPrepare = lock.withLock { () -> Task<Void, Error>? in
+            let task = prepareTask
+            prepareTask = nil
+            hasPreparedModel = false
+            return task
+        }
+        inFlightPrepare?.cancel()
+        await manager.cleanup()
+        progressBroadcaster.emit(.idle)
+    }
+
+    static func milliseconds(from duration: Duration) -> Int {
+        let components = duration.components
+        let attosecondsPerSecond = 1_000_000_000_000_000_000.0
+        let seconds = Double(components.seconds) + (Double(components.attoseconds) / attosecondsPerSecond)
+        return Int((seconds * 1000).rounded())
     }
 }
 

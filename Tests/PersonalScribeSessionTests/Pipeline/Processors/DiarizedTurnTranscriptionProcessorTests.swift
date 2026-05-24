@@ -427,6 +427,8 @@ private final class StubSpeakerDiarizer: @unchecked Sendable, SpeakerDiarizer {
         }
     }
 
+    func releaseIdleResources() async {}
+
     func applySensitivity(_ sensitivity: SpeakerSeparationSensitivity) async {
         lock.withLock {
             appliedSensitivityHistory.append(sensitivity)
@@ -499,6 +501,8 @@ private final class RecordingTranscriber: @unchecked Sendable, Transcriber {
             prepareCalls += 1
         }
     }
+
+    func releaseIdleResources() async {}
 
     func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         let progressSnapshots = self.progressSnapshots

@@ -5,17 +5,18 @@ import XCTest
 /// output protocols (`Transcriber`, `StreamingTranscriber`,
 /// `SpeakerDiarizer`) compose. These tests pin the surface so the
 /// composition contract stays minimal for conformers (they only need
-/// `prepare()` + progress; the other hooks have defaults) and stays
+/// `prepare()` + progress; `downloadIfNeeded` + `cleanup` keep defaults
+/// while `releaseIdleResources` is explicit) and stays
 /// Sendable for the strict-concurrency boundary the provider crosses.
 final class ModelLifecycleTests: XCTestCase {
 
     // MARK: - Test fixtures
 
     /// Minimal conformer used to assert that satisfying `prepare()`
-    /// and `modelDownloadProgress()` is sufficient — the other hooks
-    /// remain covered by protocol defaults. If a new required member
-    /// is ever added without a default, this fixture stops compiling
-    /// and the test fails the build.
+    /// and `modelDownloadProgress()` plus an explicit idle-release
+    /// stub is sufficient. If a new required member is ever added
+    /// without a default, this fixture stops compiling and the test
+    /// fails the build.
     private struct MinimalLifecycle: ModelLifecycle {
         let prepareCount: AsyncCounter
 
@@ -36,6 +37,8 @@ final class ModelLifecycleTests: XCTestCase {
                 continuation.finish()
             }
         }
+
+        func releaseIdleResources() async {}
     }
 
     private actor AsyncCounter {
@@ -47,9 +50,10 @@ final class ModelLifecycleTests: XCTestCase {
 
     func testModelLifecycleDefaultHooksKeepMinimalConformerViable() async throws {
         // The `MinimalLifecycle` fixture only implements `prepare()`
-        // and `modelDownloadProgress()`. `downloadIfNeeded`, `cleanup`,
-        // and `releaseIdleResources` must stay defaultable so simple
-        // conformers remain legal.
+        // and `modelDownloadProgress()` plus an explicit
+        // `releaseIdleResources()` stub. `downloadIfNeeded` and
+        // `cleanup` stay defaultable so simple conformers remain
+        // legal even after idle release became explicit.
         let counter = AsyncCounter()
         let lifecycle = MinimalLifecycle(prepareCount: counter)
 

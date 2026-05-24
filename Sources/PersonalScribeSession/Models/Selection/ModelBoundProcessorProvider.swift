@@ -25,7 +25,8 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                     descriptorID: descriptor.id,
                     transcriber: FluidAudioParakeetTranscriberAdapter(
                         descriptor: descriptor,
-                        storageLocator: storageLocator
+                        storageLocator: storageLocator,
+                        logger: logger
                     )
                 )
             case .qwen3ASR:
@@ -33,7 +34,8 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                     descriptorID: descriptor.id,
                     transcriber: FluidAudioQwenTranscriberAdapter(
                         descriptor: descriptor,
-                        storageLocator: storageLocator
+                        storageLocator: storageLocator,
+                        logger: logger
                     )
                 )
             case .whisperKit:
@@ -41,7 +43,8 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                     descriptorID: descriptor.id,
                     transcriber: WhisperKitTranscriberAdapter(
                         descriptor: descriptor,
-                        storageLocator: storageLocator
+                        storageLocator: storageLocator,
+                        logger: logger
                     )
                 )
             case .whisperCpp:
@@ -49,7 +52,8 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                     descriptorID: descriptor.id,
                     transcriber: WhisperCppTranscriberAdapter(
                         descriptor: descriptor,
-                        storageLocator: storageLocator
+                        storageLocator: storageLocator,
+                        logger: logger
                     )
                 )
             case .parakeetEOU:

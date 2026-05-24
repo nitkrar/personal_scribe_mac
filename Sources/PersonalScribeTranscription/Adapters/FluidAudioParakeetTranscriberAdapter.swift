@@ -2,6 +2,8 @@ import FluidAudio
 import Foundation
 import PersonalScribeCore
 
+typealias FluidAudioParakeetSleep = @Sendable (Duration) async throws -> Void
+
 public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
     public nonisolated let capabilities = TranscriberCapabilities(
         providesTokenTimings: true,
@@ -14,10 +16,15 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
     private let storageLocator: any StorageLocator
     private let manager: any FluidAudioParakeetManaging
     private let runtimeVariantResult: Result<RuntimeVariant, ModelSelectionError>
+    private let logger: PersonalScribeLogger?
+    private let idleUnloadDelay: Duration
+    private let sleep: FluidAudioParakeetSleep
     private let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private var hasPreparedModel = false
     private var prepareTask: Task<Void, Error>?
     private var loadDuration: Duration?
+    private var idleReleaseTask: Task<Void, Never>?
+    private var idleReleaseGeneration: UInt64 = 0
 
     public init(
         descriptor: ModelDescriptor,
@@ -26,22 +33,46 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
         self.init(
             descriptor: descriptor,
             storageLocator: storageLocator,
-            manager: LiveFluidAudioParakeetManager()
+            manager: LiveFluidAudioParakeetManager(),
+            logger: nil,
+            idleUnloadDelay: .seconds(30)
+        )
+    }
+
+    package init(
+        descriptor: ModelDescriptor,
+        storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
+        logger: PersonalScribeLogger
+    ) {
+        self.init(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: LiveFluidAudioParakeetManager(),
+            logger: logger,
+            idleUnloadDelay: .seconds(30)
         )
     }
 
     init(
         descriptor: ModelDescriptor,
         storageLocator: any StorageLocator,
-        manager: any FluidAudioParakeetManaging
+        manager: any FluidAudioParakeetManaging,
+        logger: PersonalScribeLogger? = nil,
+        idleUnloadDelay: Duration = .seconds(30),
+        sleep: @escaping FluidAudioParakeetSleep = { try await Task.sleep(for: $0) }
     ) {
         self.descriptor = descriptor
         self.storageLocator = storageLocator
         self.manager = manager
         self.runtimeVariantResult = Self.resolveRuntimeVariant(for: descriptor)
+        self.logger = logger
+        self.idleUnloadDelay = idleUnloadDelay
+        self.sleep = sleep
     }
 
     public func prepare() async throws {
+        invalidateIdleRelease()
+
         if hasPreparedModel {
             return
         }
@@ -106,13 +137,32 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
     }
 
     public func cleanup() async {
-        let inFlightPrepare = prepareTask
-        prepareTask = nil
-        hasPreparedModel = false
-        loadDuration = nil
-        inFlightPrepare?.cancel()
-        await manager.cleanup()
-        progressBroadcaster.emit(.idle)
+        invalidateIdleRelease()
+        await cleanupRuntime()
+    }
+
+    public func releaseIdleResources() async {
+        guard hasPreparedModel || prepareTask != nil else {
+            return
+        }
+
+        invalidateIdleRelease()
+        let generation = idleReleaseGeneration
+        let delay = idleUnloadDelay
+        let sleep = sleep
+        idleReleaseTask = Task {
+            do {
+                try await sleep(delay)
+            } catch {
+                return
+            }
+
+            if Task.isCancelled {
+                return
+            }
+
+            await self.finishIdleRelease(generation: generation)
+        }
     }
 
     public func transcribe(
@@ -183,6 +233,40 @@ extension FluidAudioParakeetTranscriberAdapter {
 
     private func resolvedRuntimeVariant() throws -> RuntimeVariant {
         try runtimeVariantResult.get()
+    }
+
+    func invalidateIdleRelease() {
+        idleReleaseGeneration &+= 1
+        idleReleaseTask?.cancel()
+        idleReleaseTask = nil
+    }
+
+    func finishIdleRelease(generation: UInt64) async {
+        guard generation == idleReleaseGeneration else {
+            return
+        }
+
+        idleReleaseTask = nil
+        let hadPrepared = hasPreparedModel
+        let hadInFlightPrepare = prepareTask != nil
+        guard hadPrepared || hadInFlightPrepare else {
+            return
+        }
+
+        await cleanupRuntime()
+        logger?.info(
+            "adapter_idle_release — descriptorID=\(descriptor.id) adapter=\(String(describing: type(of: self))) releasedAfterMs=\(Self.milliseconds(from: idleUnloadDelay)) hadPrepared=\(hadPrepared) hadInFlightPrepare=\(hadInFlightPrepare)"
+        )
+    }
+
+    func cleanupRuntime() async {
+        let inFlightPrepare = prepareTask
+        prepareTask = nil
+        hasPreparedModel = false
+        loadDuration = nil
+        inFlightPrepare?.cancel()
+        await manager.cleanup()
+        progressBroadcaster.emit(.idle)
     }
 
     private func performPrepare(runtimeVariant: RuntimeVariant) async throws {
@@ -275,6 +359,13 @@ extension FluidAudioParakeetTranscriberAdapter {
         }
 
         return confidences.reduce(0, +) / Float(confidences.count)
+    }
+
+    static func milliseconds(from duration: Duration) -> Int {
+        let components = duration.components
+        let attosecondsPerSecond = 1_000_000_000_000_000_000.0
+        let seconds = Double(components.seconds) + (Double(components.attoseconds) / attosecondsPerSecond)
+        return Int((seconds * 1000).rounded())
     }
 
 }

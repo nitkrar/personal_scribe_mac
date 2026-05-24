@@ -337,6 +337,8 @@ private final class MarkerTranscriber: @unchecked Sendable, Transcriber {
 
     func prepare() async throws {}
 
+    func releaseIdleResources() async {}
+
     func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { continuation in
             continuation.finish()
@@ -361,6 +363,8 @@ private final class MarkerStreamingTranscriber: @unchecked Sendable, StreamingTr
 
     func prepare() async throws {}
 
+    func releaseIdleResources() async {}
+
     func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { continuation in
             continuation.finish()
@@ -378,6 +382,8 @@ private final class MarkerStreamingTranscriber: @unchecked Sendable, StreamingTr
 
 private final class MarkerSpeakerDiarizer: @unchecked Sendable, SpeakerDiarizer {
     func prepare() async throws {}
+
+    func releaseIdleResources() async {}
 
     func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { continuation in

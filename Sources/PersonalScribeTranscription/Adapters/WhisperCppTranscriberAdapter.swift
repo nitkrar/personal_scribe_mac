@@ -43,6 +43,7 @@ public actor WhisperCppTranscriberAdapter: Transcriber {
     private let storageLocator: any StorageLocator
     private let manager: any WhisperCppManaging
     private let downloader: any WhisperCppDownloading
+    private let logger: PersonalScribeLogger?
     private nonisolated let progressBroadcaster = FluidAudioDownloadProgressBroadcaster()
     private let fileManager: FileManager
     private let idleUnloadDelay: Duration
@@ -61,6 +62,22 @@ public actor WhisperCppTranscriberAdapter: Transcriber {
             storageLocator: storageLocator,
             manager: LiveWhisperCppManager(),
             downloader: LiveWhisperCppDownloader(),
+            logger: nil,
+            idleUnloadDelay: .seconds(30)
+        )
+    }
+
+    package init(
+        descriptor: ModelDescriptor,
+        storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
+        logger: PersonalScribeLogger
+    ) {
+        self.init(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: LiveWhisperCppManager(),
+            downloader: LiveWhisperCppDownloader(),
+            logger: logger,
             idleUnloadDelay: .seconds(30)
         )
     }
@@ -70,6 +87,7 @@ public actor WhisperCppTranscriberAdapter: Transcriber {
         storageLocator: any StorageLocator,
         manager: any WhisperCppManaging,
         downloader: any WhisperCppDownloading,
+        logger: PersonalScribeLogger? = nil,
         fileManager: FileManager = .default,
         idleUnloadDelay: Duration = .seconds(30),
         sleep: @escaping WhisperCppSleep = { try await Task.sleep(for: $0) }
@@ -78,6 +96,7 @@ public actor WhisperCppTranscriberAdapter: Transcriber {
         self.storageLocator = storageLocator
         self.manager = manager
         self.downloader = downloader
+        self.logger = logger
         self.fileManager = fileManager
         self.idleUnloadDelay = idleUnloadDelay
         self.sleep = sleep
@@ -355,7 +374,16 @@ private extension WhisperCppTranscriberAdapter {
         }
 
         idleReleaseTask = nil
+        let hadPrepared = hasPreparedModel
+        let hadInFlightPrepare = prepareTask != nil
+        guard hadPrepared || hadInFlightPrepare else {
+            return
+        }
+
         await cleanupRuntime()
+        logger?.info(
+            "adapter_idle_release — descriptorID=\(descriptor.id) adapter=\(String(describing: type(of: self))) releasedAfterMs=\(Self.milliseconds(from: idleUnloadDelay)) hadPrepared=\(hadPrepared) hadInFlightPrepare=\(hadInFlightPrepare)"
+        )
     }
 
     func cleanupRuntime() async {
@@ -365,6 +393,13 @@ private extension WhisperCppTranscriberAdapter {
         inFlightPrepare?.cancel()
         await manager.cleanup()
         progressBroadcaster.emit(.idle)
+    }
+
+    static func milliseconds(from duration: Duration) -> Int {
+        let components = duration.components
+        let attosecondsPerSecond = 1_000_000_000_000_000_000.0
+        let seconds = Double(components.seconds) + (Double(components.attoseconds) / attosecondsPerSecond)
+        return Int((seconds * 1000).rounded())
     }
 }
 

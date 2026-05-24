@@ -2471,6 +2471,8 @@ private actor CountingTranscriber: Transcriber {
 
     func prepare() async throws {}
 
+    func releaseIdleResources() async {}
+
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { continuation in
             continuation.yield(
@@ -2528,6 +2530,8 @@ private actor SlowPrepareTranscriber: Transcriber {
         }
     }
 
+    func releaseIdleResources() async {}
+
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { continuation in
             continuation.yield(
@@ -2580,6 +2584,8 @@ private actor ReturningTranscriber: Transcriber {
     }
 
     func prepare() async throws {}
+
+    func releaseIdleResources() async {}
 
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { $0.finish() }
@@ -2656,6 +2662,8 @@ private actor InspectingTranscriber: Transcriber {
 
     func prepare() async throws {}
 
+    func releaseIdleResources() async {}
+
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { $0.finish() }
     }
@@ -2693,6 +2701,8 @@ private actor ScriptedStreamingTranscriber: StreamingTranscriber {
     }
 
     func prepare() async throws {}
+
+    func releaseIdleResources() async {}
 
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { $0.finish() }
@@ -2747,6 +2757,8 @@ private actor FailingStreamingTranscriber: StreamingTranscriber {
 
     func prepare() async throws {}
 
+    func releaseIdleResources() async {}
+
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { $0.finish() }
     }
@@ -2797,6 +2809,8 @@ private actor HangingStreamingTranscriber: StreamingTranscriber {
     }
 
     func prepare() async throws {}
+
+    func releaseIdleResources() async {}
 
     nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         AsyncStream { $0.finish() }
@@ -2903,6 +2917,8 @@ private struct TrackedTranscriber: Transcriber {
     func prepare() async throws {
         await tracker.recordPrepare()
     }
+
+    func releaseIdleResources() async {}
 
     func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
         let events = progressEvents

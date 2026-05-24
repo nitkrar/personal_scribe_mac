@@ -20,6 +20,8 @@ final class TranscriberContractTests: XCTestCase {
             }
         }
 
+        func releaseIdleResources() async {}
+
         func transcribe(
             _ audio: PCMBuffer,
             languageHint: String?

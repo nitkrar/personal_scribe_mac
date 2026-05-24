@@ -672,6 +672,8 @@ private final class ProgressReportingTranscriber: @unchecked Sendable, Transcrib
         relay.stream()
     }
 
+    func releaseIdleResources() async {}
+
     func transcribe(
         _ audio: PCMBuffer,
         languageHint: String?

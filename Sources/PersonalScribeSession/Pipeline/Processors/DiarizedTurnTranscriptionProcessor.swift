@@ -111,6 +111,8 @@ public final class DiarizedTurnTranscriptionProcessor: @unchecked Sendable, Proc
         }
     }
 
+    public func releaseIdleResources() async {}
+
     public func process(
         audio: PCMBuffer,
         priors: [ProcessorOutput]

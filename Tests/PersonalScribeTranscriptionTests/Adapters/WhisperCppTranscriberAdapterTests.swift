@@ -295,12 +295,14 @@ final class WhisperCppTranscriberAdapterTests: XCTestCase {
     func testReleaseIdleResourcesCleansUpManagerAfterDelayAndNextPrepareReloads() async throws {
         let descriptor = BuiltInModelCatalog.whisperCppTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let diagnosticsSink = InMemoryTestSink()
         let manager = StubWhisperCppManager()
         let adapter = WhisperCppTranscriberAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager,
             downloader: StubWhisperCppDownloader(),
+            logger: makeTranscriptionLogger(sink: diagnosticsSink),
             idleUnloadDelay: .milliseconds(20)
         )
 
@@ -313,17 +315,29 @@ final class WhisperCppTranscriberAdapterTests: XCTestCase {
 
         XCTAssertEqual(cleanupCallCount, 1)
         XCTAssertEqual(loadCallCount, 2)
+
+        let releaseLog = try await waitForTranscriptionLogMessage(
+            in: diagnosticsSink,
+            containing: "adapter_idle_release"
+        )
+        XCTAssertTrue(releaseLog.message.contains("descriptorID=\(descriptor.id)"))
+        XCTAssertTrue(releaseLog.message.contains("adapter=WhisperCppTranscriberAdapter"))
+        XCTAssertTrue(releaseLog.message.contains("releasedAfterMs=20"))
+        XCTAssertTrue(releaseLog.message.contains("hadPrepared=true"))
+        XCTAssertTrue(releaseLog.message.contains("hadInFlightPrepare=false"))
     }
 
     func testPrepareCancelsPendingIdleRelease() async throws {
         let descriptor = BuiltInModelCatalog.whisperCppTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let diagnosticsSink = InMemoryTestSink()
         let manager = StubWhisperCppManager()
         let adapter = WhisperCppTranscriberAdapter(
             descriptor: descriptor,
             storageLocator: storageLocator,
             manager: manager,
             downloader: StubWhisperCppDownloader(),
+            logger: makeTranscriptionLogger(sink: diagnosticsSink),
             idleUnloadDelay: .milliseconds(20)
         )
 
@@ -338,6 +352,37 @@ final class WhisperCppTranscriberAdapterTests: XCTestCase {
 
         XCTAssertEqual(cleanupCallCount, 0)
         XCTAssertEqual(loadCallCount, 1)
+        let releaseLogs = await diagnosticsSink.snapshot().filter {
+            $0.message.contains("adapter_idle_release")
+        }
+        XCTAssertTrue(releaseLogs.isEmpty)
+    }
+
+    func testReleaseIdleResourcesIsNoOpWhenNothingPrepared() async throws {
+        let descriptor = BuiltInModelCatalog.whisperCppTiny
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let diagnosticsSink = InMemoryTestSink()
+        let manager = StubWhisperCppManager()
+        let adapter = WhisperCppTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager,
+            downloader: StubWhisperCppDownloader(),
+            logger: makeTranscriptionLogger(sink: diagnosticsSink),
+            idleUnloadDelay: .milliseconds(20)
+        )
+
+        await adapter.releaseIdleResources()
+        try? await Task.sleep(for: .milliseconds(60))
+
+        let cleanupCallCount = await manager.cleanupCallCount()
+        let loadCallCount = await manager.loadCallCount()
+        XCTAssertEqual(cleanupCallCount, 0)
+        XCTAssertEqual(loadCallCount, 0)
+        let releaseLogs = await diagnosticsSink.snapshot().filter {
+            $0.message.contains("adapter_idle_release")
+        }
+        XCTAssertTrue(releaseLogs.isEmpty)
     }
 
     func testLiveManagerLoadModelPassesModelFilePathToLibrary() async throws {
