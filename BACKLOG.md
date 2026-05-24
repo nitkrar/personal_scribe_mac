@@ -737,7 +737,50 @@ paste_failed — stage=<live|final> reason=<noTargetCursor|pidProbeRejected|even
 
 ---
 
-### #091 — Per-mode language hint
+### #098 — Streaming paste fixes (drop double-paste filter + chunk spacing + final-paste newline)
+
+`bug` · `P2` · `open` · `area: paste, streaming, recipes`
+*Filed 2026-05-24*
+
+Surfaced 2026-05-24 dogfood, confirmed via #097 logs:
+
+1. **Streaming mode's auto-paste setting is silently filtered out.** When `streamingBehavior.liveCursorEnabled == true`, `RecipeBuilder.swift:48-52` drops the `.frontmostPaste` sink from the bound recipe under the rationale "live cursor already pastes per-EOU; stop-time would double-paste." But Parakeet streaming reality: live cursor only pastes EoU chunks (which fire sparsely or not at all per session), and the second-pass authoritative final is *different text* than what was live-pasted (different model, cleaner punctuation). User wants BOTH pasted and to choose which they keep — not one silently dropped.
+
+2. **Live cursor chunks concatenate without spacing.** Consecutive `.endOfUtterance` chunks pasted via `LiveCursorOutput.deliverPartial(_:)` overwrite the clipboard with raw chunk text. When `Cmd+V` lands them sequentially the last word of chunk N runs into the first word of chunk N+1 (`"hello world" + "how are you"` → `"hello worldhow are you"`).
+
+3. **No separator between live-pasted chunks and the final authoritative paste.** Once (1) is fixed and `.frontmostPaste` flows through, the final paste lands immediately after the last live-pasted chunk — same concatenation problem at a larger scale.
+
+**Locked design (user decisions 2026-05-24):**
+
+- **(A)** Drop the `RecipeBuilder.swift:48-52` filter entirely. Streaming mode's auto-paste setting drives `.frontmostPaste(enabled:)` like every other mode. If the user enables both `liveCursor` AND `autoPaste`, both fire — user picks which output they prefer.
+- **(B)** `LiveCursorOutput.deliverPartial(_:)`: first chunk pastes unchanged. Subsequent chunks prepend a single space (`" \(chunk)"`) before writing to clipboard. Track "did we already paste a chunk this session?" via the existing `didWriteChunkThisSession` flag (already used for restore semantics) — when true, prepend space.
+- **(C)** `ClipboardBatchOutput.deliverBatch(...)`: when live cursor actually pasted ≥1 chunk in the same session AND `.frontmostPaste(enabled: true)` is in the sinks, prepend `"\n"` to the text before clipboard write. Use #097's `livePasteAttempts > 0` signal as the "actually pasted" gate (avoids stray newline when zero EoU chunks fired in a short streaming session).
+
+**Out of scope:**
+- Per-mode separator picker (space vs newline vs custom). Single-space hard-coded for now; can revisit if dogfood shows it's wrong.
+- Restructuring the orchestrator's sink ownership / dispatch. Minimal plumbing.
+- Anything in `LiveCursorOutput` beyond the chunk separator.
+
+**Scope:**
+- `Sources/PersonalScribeSession/WorkflowMode/RecipeBuilder.swift:48-52`: remove the filter.
+- `Sources/PersonalScribeAppKit/Output/LiveCursorOutput.swift`: chunk separator logic; reuse `didWriteChunkThisSession`.
+- `Sources/PersonalScribeAppKit/Output/ClipboardBatchOutput.swift`: accept a `liveCursorDidPaste: Bool` signal (parameter on `deliverBatch` OR shared accessor on a session-context type), prepend `"\n"` when true + paste enabled.
+- Plumbing: wherever `deliverBatch` is called by the orchestrator, pass through the live sink's `livePasteAttempts > 0` snapshot. Likely via a `PasteSessionContext` value type held by the orchestrator (small struct, not a refactor).
+
+**Tests:**
+- `RecipeBuilderTests`: expect 1-2 tests asserting the old filter behavior — update to assert `.frontmostPaste` survives when `liveCursorEnabled=true`.
+- `LiveCursorOutputTests` (new): `testFirstChunkPastesUnchanged`, `testSecondChunkPrependsSpace`, `testResetForNewSessionResetsChunkCounter`.
+- `ClipboardBatchOutputTests` (new): `testFinalPastePrependsNewlineWhenLiveCursorDidPaste`, `testFinalPasteDoesNotPrependNewlineWhenLiveCursorDidNotPaste`, `testFinalPasteDoesNotPrependNewlineWhenPasteDisabled`.
+
+**Depends on**: #097 (#097's accumulator provides the `livePasteAttempts > 0` signal needed for (C)).
+
+**Unblocks**: usable Parakeet streaming dictation — without #098, streaming-mode output is broken in two visible ways (no live paste of authoritative final, runtogether words).
+
+**Legacy:** none — net-new bug fix.
+
+---
+
+
 
 `refactor` · `P2` · `open` · `area: transcription, models, modes, recipes`
 *Filed 2026-04-29 (carved out of #090)*
