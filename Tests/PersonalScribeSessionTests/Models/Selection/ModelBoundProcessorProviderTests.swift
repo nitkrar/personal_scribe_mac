@@ -96,38 +96,32 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
         let transcriberTypeName = String(reflecting: type(of: transcriber))
 
         XCTAssertTrue(
-            transcriberTypeName == "WhisperCppTranscriberAdapter"
-                || transcriberTypeName.hasSuffix(".WhisperCppTranscriberAdapter"),
-            "Stage B whisper.cpp descriptors should route to the real adapter"
+            transcriberTypeName == "WhisperCppAdapter"
+                || transcriberTypeName.hasSuffix(".WhisperCppAdapter"),
+            "whisper.cpp descriptors should route to the unified adapter"
         )
     }
 
-    func testWhisperCppStreamingDescriptorResolvesStreamingTranscriber() throws {
+    func testWhisperCppDescriptorResolvesSameInstanceAsBothBatchAndStreaming() throws {
         let provider = ModelBoundProcessorProvider(
             storageLocator: TestStorageLocator.make(),
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
-        let transcriber = try provider.streamingTranscriber(
-            for: BuiltInModelCatalog.whisperCppStreamingTiny
-        )
-        let transcriberTypeName = String(reflecting: type(of: transcriber))
+        let batch = try provider.transcriber(for: BuiltInModelCatalog.whisperCppTiny)
+        let streaming = try provider.streamingTranscriber(for: BuiltInModelCatalog.whisperCppTiny)
+        let batchTypeName = String(reflecting: type(of: batch))
+        let streamingTypeName = String(reflecting: type(of: streaming))
 
         XCTAssertTrue(
-            transcriberTypeName == "WhisperCppStreamingTranscriberAdapter"
-                || transcriberTypeName.hasSuffix(".WhisperCppStreamingTranscriberAdapter"),
-            "whisper.cpp streaming descriptors should route to the real streaming adapter"
+            batchTypeName == "WhisperCppAdapter"
+                || batchTypeName.hasSuffix(".WhisperCppAdapter")
         )
-    }
-
-    func testWhisperCppBatchAndStreamingDescriptorsAreDistinctAndShareArtifacts() {
-        let batch = BuiltInModelCatalog.whisperCppTiny
-        let streaming = BuiltInModelCatalog.whisperCppStreamingTiny
-
-        XCTAssertNotEqual(batch.id, streaming.id)
-        XCTAssertEqual(batch.repoFolderName, streaming.repoFolderName)
-        XCTAssertEqual(batch.requiredRelativePaths, streaming.requiredRelativePaths)
-        XCTAssertEqual(batch.approximateSizeBytes, streaming.approximateSizeBytes)
+        XCTAssertTrue(
+            streamingTypeName == "WhisperCppAdapter"
+                || streamingTypeName.hasSuffix(".WhisperCppAdapter")
+        )
+        XCTAssertTrue((batch as AnyObject) === (streaming as AnyObject))
     }
 
     func testSameDescriptorReturnsSharedCacheRecord() throws {

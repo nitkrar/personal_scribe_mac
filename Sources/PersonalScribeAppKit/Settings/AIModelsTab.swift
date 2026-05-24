@@ -51,8 +51,8 @@ public struct AIModelsTab: View {
                                 ModelRow(
                                     descriptor: row.descriptor,
                                     state: service.downloadStates[row.descriptor.id],
-                                    isActive: service.activeDescriptor(for: row.descriptor.kind)?.id == row.descriptor.id,
-                                    onActivate: { activate(row.descriptor) },
+                                    isActive: service.activeDescriptor(for: kind)?.id == row.descriptor.id,
+                                    onActivate: { activate(row.descriptor, forKind: kind) },
                                     onDownload: { download(row.descriptor) },
                                     onDelete: { delete(row.descriptor) }
                                 )
@@ -122,8 +122,8 @@ public struct AIModelsTab: View {
         }
     }
 
-    private func activate(_ descriptor: ModelDescriptor) {
-        service.setActive(descriptor)
+    private func activate(_ descriptor: ModelDescriptor, forKind kind: ModelKind) {
+        service.setActive(descriptor, forKind: kind)
     }
 
     private func delete(_ descriptor: ModelDescriptor) {

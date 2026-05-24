@@ -189,20 +189,20 @@ final class RecipeBuilderTests: XCTestCase {
         let bound = try builder.build(.dictation)
 
         // Now switch the active descriptor.
-        service.setActive(BuiltInModelCatalog.parakeetTDTCTC110M)
+        service.setActive(BuiltInModelCatalog.parakeetTDTCTC110M, forKind: .asr)
 
         // The bound recipe still references the original descriptor.
         XCTAssertEqual(provider.transcriberRequests.map(\.id), [BuiltInModelCatalog.parakeetTDT06Bv2.id])
         XCTAssertEqual(bound.processors.count, 1)
     }
 
-    func testBuilderResolvesStreamingBehaviorAndSecondPassSnapshot() throws {
+    func testStreamingSecondPassUsesActiveASRWhenStreamingIsParakeetEOU() throws {
         defaults.set(false, forKey: PreferenceKeys.streamingLiveCardEnabled.key)
         defaults.set(true, forKey: PreferenceKeys.streamingLiveCursorEnabled.key)
         defaults.set(true, forKey: PreferenceKeys.streamingSecondPassEnabled.key)
 
         let service = makeServiceWithActive(
-            asr: BuiltInModelCatalog.parakeetTDT06Bv2.id,
+            asr: BuiltInModelCatalog.whisperCppTiny.id,
             streamingAsr: BuiltInModelCatalog.parakeetEou160ms.id
         )
         let provider = StubProcessorProvider()
@@ -227,12 +227,59 @@ final class RecipeBuilderTests: XCTestCase {
         XCTAssertNotNil(bound.streamingSecondPassTranscriber)
         XCTAssertEqual(
             provider.transcriberRequests.map(\.id),
-            [BuiltInModelCatalog.parakeetTDT06Bv2.id]
+            [BuiltInModelCatalog.whisperCppTiny.id]
         )
         XCTAssertEqual(
             provider.streamingTranscriberRequests.map(\.id),
             [BuiltInModelCatalog.parakeetEou160ms.id]
         )
+    }
+
+    func testStreamingSecondPassForcesWhisperCppWhenStreamingIsWhisperCpp() throws {
+        let service = makeServiceWithActive(
+            asr: BuiltInModelCatalog.parakeetTDT06Bv2.id,
+            streamingAsr: BuiltInModelCatalog.parakeetEou160ms.id
+        )
+        let provider = StubProcessorProvider()
+        let builder = RecipeBuilder(
+            modelService: service,
+            processorProvider: provider,
+            defaults: defaults
+        )
+        let mode = makePinnedStreamingMode(
+            descriptorID: BuiltInModelCatalog.whisperCppTiny.id,
+            secondPassEnabled: true
+        )
+
+        let bound = try builder.build(mode)
+        let streamingProcessor = try XCTUnwrap(
+            bound.processors.compactMap { processor in
+                if case .streamingTranscriber(let transcriber) = processor {
+                    return transcriber
+                }
+                return nil
+            }.first
+        )
+        let secondPass = try XCTUnwrap(bound.streamingSecondPassTranscriber)
+
+        XCTAssertEqual(
+            provider.streamingTranscriberRequests.map(\.id),
+            [BuiltInModelCatalog.whisperCppTiny.id]
+        )
+        XCTAssertEqual(
+            provider.transcriberRequests.map(\.id),
+            [BuiltInModelCatalog.whisperCppTiny.id]
+        )
+        // #100 C4: lock the second half of the contract — when streaming
+        // is whisper.cpp, the active .asr descriptor (parakeet TDT here)
+        // MUST be ignored entirely. Without this assertion the test
+        // passes silently if the force-rule degraded to "prefer
+        // whisper.cpp but also request parakeet on the side."
+        XCTAssertFalse(
+            provider.transcriberRequests.contains { $0.id == BuiltInModelCatalog.parakeetTDT06Bv2.id },
+            "Active .asr descriptor must NOT be requested when streaming is whisper.cpp"
+        )
+        XCTAssertTrue((streamingProcessor as AnyObject) === (secondPass as AnyObject))
     }
 
     func testBuilderPreservesFrontmostPasteWhenLiveCursorEnabled() throws {
@@ -315,7 +362,33 @@ final class RecipeBuilderTests: XCTestCase {
         )
     }
 
-    func testBuilderAllowsStreamingSecondPassWhenNoActiveAsrDescriptorExists() throws {
+    func testStreamingSecondPassReturnsNilWhenSecondPassDisabled() throws {
+        let service = makeServiceWithActive(
+            asr: BuiltInModelCatalog.whisperCppTiny.id,
+            streamingAsr: BuiltInModelCatalog.parakeetEou160ms.id
+        )
+        let provider = StubProcessorProvider()
+        let builder = RecipeBuilder(
+            modelService: service,
+            processorProvider: provider,
+            defaults: defaults
+        )
+        let mode = makePinnedStreamingMode(
+            descriptorID: BuiltInModelCatalog.parakeetEou160ms.id,
+            secondPassEnabled: false
+        )
+
+        let bound = try builder.build(mode)
+
+        XCTAssertNil(bound.streamingSecondPassTranscriber)
+        XCTAssertEqual(provider.transcriberRequests.count, 0)
+        XCTAssertEqual(
+            provider.streamingTranscriberRequests.map(\.id),
+            [BuiltInModelCatalog.parakeetEou160ms.id]
+        )
+    }
+
+    func testStreamingSecondPassReturnsNilWhenNoActiveASRAvailableForNonWhisperCppStreaming() throws {
         defaults.set(true, forKey: PreferenceKeys.streamingSecondPassEnabled.key)
 
         let service = makeServiceWithActive(
@@ -375,6 +448,25 @@ final class RecipeBuilderTests: XCTestCase {
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
     }
+
+    private func makePinnedStreamingMode(
+        descriptorID: String,
+        secondPassEnabled: Bool
+    ) -> WorkflowMode {
+        WorkflowMode(
+            id: "streaming-pinned-\(descriptorID)",
+            name: "Streaming Pinned",
+            pipelineShape: .streaming,
+            processors: [.streamingTranscriber(kind: .streamingASR, descriptorID: descriptorID)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite],
+            streamingBehavior: StreamingBehaviorSpec(
+                liveCardEnabled: .override(true),
+                liveCursorEnabled: .override(false),
+                secondPassEnabled: .override(secondPassEnabled)
+            )
+        )
+    }
 }
 
 /// In-memory stub of `ModelBoundProcessorProviding` that records the
@@ -382,12 +474,22 @@ final class RecipeBuilderTests: XCTestCase {
 private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchecked Sendable {
     private let lock = NSLock()
     private var transcribers: [String: any Transcriber] = [:]
+    private var streamingTranscribers: [String: any StreamingTranscriber] = [:]
+    private var sharedWhisperCppAdapters: [String: SharedWhisperCppAdapter] = [:]
     private(set) var transcriberRequests: [ModelDescriptor] = []
     private(set) var streamingTranscriberRequests: [ModelDescriptor] = []
 
     func transcriber(for descriptor: ModelDescriptor) throws -> any Transcriber {
         lock.withLock {
             transcriberRequests.append(descriptor)
+            if descriptor.engine == .whisperCpp {
+                if let existing = sharedWhisperCppAdapters[descriptor.id] {
+                    return existing
+                }
+                let new = SharedWhisperCppAdapter()
+                sharedWhisperCppAdapters[descriptor.id] = new
+                return new
+            }
             if let existing = transcribers[descriptor.id] {
                 return existing
             }
@@ -400,8 +502,21 @@ private final class StubProcessorProvider: ModelBoundProcessorProviding, @unchec
     func streamingTranscriber(for descriptor: ModelDescriptor) throws -> any StreamingTranscriber {
         lock.withLock {
             streamingTranscriberRequests.append(descriptor)
+            if descriptor.engine == .whisperCpp {
+                if let existing = sharedWhisperCppAdapters[descriptor.id] {
+                    return existing
+                }
+                let new = SharedWhisperCppAdapter()
+                sharedWhisperCppAdapters[descriptor.id] = new
+                return new
+            }
+            if let existing = streamingTranscribers[descriptor.id] {
+                return existing
+            }
+            let new = StubStreamingTranscriber()
+            streamingTranscribers[descriptor.id] = new
+            return new
         }
-        return StubStreamingTranscriber()
     }
 
     func diarizer(for descriptor: ModelDescriptor) throws -> any SpeakerDiarizer {
@@ -460,6 +575,47 @@ private actor StubStreamingTranscriber: StreamingTranscriber {
         stream: AsyncThrowingStream<PCMBuffer, Error>
     ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
         AsyncThrowingStream { $0.finish() }
+    }
+}
+
+private actor SharedWhisperCppAdapter: Transcriber, StreamingTranscriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+
+    func prepare() async throws {}
+    func releaseIdleResources() async {}
+
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+
+    func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        _ = languageHint
+        return TranscriptionResult(
+            text: "",
+            audioDuration: .zero,
+            processingDuration: .zero
+        )
+    }
+
+    func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>
+    ) async throws -> TranscriptionResult {
+        _ = stream
+        return TranscriptionResult(
+            text: "",
+            audioDuration: .zero,
+            processingDuration: .zero
+        )
+    }
+
+    nonisolated func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>
+    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
+        _ = stream
+        return AsyncThrowingStream { $0.finish() }
     }
 }
 

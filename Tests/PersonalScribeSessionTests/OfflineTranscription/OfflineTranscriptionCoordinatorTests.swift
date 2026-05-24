@@ -617,7 +617,10 @@ private struct TestProcessorProvider: ModelBoundProcessorProviding, @unchecked S
     }
 
     func streamingTranscriber(for descriptor: ModelDescriptor) throws -> any StreamingTranscriber {
-        throw ModelSelectionError.unsupportedKind(expected: .streamingASR, actual: descriptor.kind)
+        throw ModelSelectionError.unsupportedKind(
+            expected: .streamingASR,
+            actual: representativeCapability(for: descriptor, expected: .streamingASR)
+        )
     }
 
     func diarizer(for descriptor: ModelDescriptor) throws -> any SpeakerDiarizer {
@@ -639,6 +642,13 @@ private struct TestProcessorProvider: ModelBoundProcessorProviding, @unchecked S
     func evict(_ descriptor: ModelDescriptor) {}
 
     func preparedDescriptors() -> [ModelDescriptor] { [] }
+}
+
+private func representativeCapability(
+    for descriptor: ModelDescriptor,
+    expected: ModelKind
+) -> ModelKind {
+    ModelKind.allCases.first(where: descriptor.engine.capabilities.contains) ?? expected
 }
 
 private actor RecordingTranscriber: Transcriber {

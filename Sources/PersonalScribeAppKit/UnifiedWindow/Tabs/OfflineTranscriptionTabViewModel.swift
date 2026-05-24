@@ -148,7 +148,7 @@ private extension OfflineTranscriptionTabViewModel {
             ordered = modelService.enabledModels(kind: .asr)
         }
         if let selected = modelService.registeredModels.first(where: {
-            $0.kind == .asr && $0.id == selectionID
+            $0.engine.capabilities.contains(.asr) && $0.id == selectionID
         }) {
             ordered.insert(selected, at: 0)
         }

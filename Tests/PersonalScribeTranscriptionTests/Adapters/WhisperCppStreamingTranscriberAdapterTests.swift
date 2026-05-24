@@ -3,7 +3,9 @@ import XCTest
 @testable import PersonalScribeCore
 @testable import PersonalScribeTranscription
 
-final class WhisperCppStreamingTranscriberAdapterTests: XCTestCase {
+private typealias WhisperCppStreamingTranscriberAdapter = WhisperCppAdapter
+
+final class WhisperCppAdapterTestsStreaming: XCTestCase {
     func testPrepareDownloadsAndLoadsModelOnce() async throws {
         let descriptor = BuiltInModelCatalog.whisperCppTiny
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
@@ -274,7 +276,7 @@ final class WhisperCppStreamingTranscriberAdapterTests: XCTestCase {
             containing: "adapter_idle_release"
         )
         XCTAssertTrue(releaseLog.message.contains("descriptorID=\(descriptor.id)"))
-        XCTAssertTrue(releaseLog.message.contains("adapter=WhisperCppStreamingTranscriberAdapter"))
+        XCTAssertTrue(releaseLog.message.contains("adapter=WhisperCppAdapter"))
         XCTAssertTrue(releaseLog.message.contains("releasedAfterMs=20"))
         XCTAssertTrue(releaseLog.message.contains("hadPrepared=true"))
         XCTAssertTrue(releaseLog.message.contains("hadInFlightPrepare=false"))
@@ -384,7 +386,7 @@ final class WhisperCppStreamingTranscriberAdapterTests: XCTestCase {
     }
 }
 
-private extension WhisperCppStreamingTranscriberAdapterTests {
+private extension WhisperCppAdapterTestsStreaming {
     func makeAdapter(
         descriptor: ModelDescriptor = BuiltInModelCatalog.whisperCppTiny,
         manager: StubWhisperCppStreamingManager,
@@ -544,8 +546,9 @@ private actor StubWhisperCppDownloader: WhisperCppDownloading {
     }
 }
 
-private actor StubWhisperCppStreamingManager: WhisperCppStreamingManaging {
+private actor StubWhisperCppStreamingManager: WhisperCppManaging {
     private let decodeResults: [Result<[WhisperCppDecodedSegment], Error>]
+    private let transcribedText: String
     private let loadDelay: Duration
     private var decodeIndex = 0
     private var loadCallCountStorage = 0
@@ -555,9 +558,11 @@ private actor StubWhisperCppStreamingManager: WhisperCppStreamingManaging {
 
     init(
         decodeResults: [Result<[WhisperCppDecodedSegment], Error>] = [],
+        transcribedText: String = "",
         loadDelay: Duration = .zero
     ) {
         self.decodeResults = decodeResults
+        self.transcribedText = transcribedText
         self.loadDelay = loadDelay
     }
 
@@ -585,6 +590,15 @@ private actor StubWhisperCppStreamingManager: WhisperCppStreamingManaging {
         let result = decodeResults[decodeIndex]
         decodeIndex += 1
         return try result.get()
+    }
+
+    func transcribe(
+        audioSamples: [Float],
+        languageHint: String?
+    ) async throws -> WhisperCppManagerResult {
+        _ = audioSamples
+        _ = languageHint
+        return WhisperCppManagerResult(text: transcribedText)
     }
 
     func cleanup() async {

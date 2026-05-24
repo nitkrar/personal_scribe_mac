@@ -1,34 +1,23 @@
 import Foundation
 
-/// Computed `kind` mapping per #078 L2: engine is canonical, kind is
-/// derived. This file lives in isolation so Phase H.6's delete +
-/// rename pass (`ModelDescriptor.kind` field removal) is a clean
-/// touchpoint.
-///
-/// During the parallel-build phase the stored `ModelDescriptor.kind`
-/// field continues to exist alongside this accessor — catalog
-/// descriptors keep passing `kind:` and `BuiltInModelCatalogTests`
-/// passes unchanged. Tests in
-/// `Tests/PersonalScribeCoreTests/Models/TranscriptionEngineKindTests.swift`
-/// pin the four hardcoded mappings and a convention-consistency check
-/// against the catalog.
+/// Engine capabilities are derived from the engine enum; callers use
+/// membership checks rather than a fictional single "kind" for
+/// engines that satisfy multiple routes.
 extension TranscriptionEngine {
-    public var kind: ModelKind {
+    public var capabilities: Set<ModelKind> {
         switch self {
         case .parakeetTDT:
-            return .asr
+            return [.asr]
         case .qwen3ASR:
-            return .asr
+            return [.asr]
         case .whisperKit:
-            return .asr
+            return [.asr]
         case .whisperCpp:
-            return .asr
-        case .whisperCppStreaming:
-            return .streamingASR
+            return [.asr, .streamingASR]
         case .parakeetEOU:
-            return .streamingASR
+            return [.streamingASR]
         case .diarization:
-            return .diarization
+            return [.diarization]
         }
     }
 }

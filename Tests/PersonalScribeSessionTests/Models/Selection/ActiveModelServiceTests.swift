@@ -83,7 +83,7 @@ final class ActiveModelServiceTests: XCTestCase {
         }
         await Task.yield()
 
-        service.setActive(target)
+        service.setActive(target, forKind: .asr)
 
         let published = await publications.value
         let recordedDescriptors = await recorder.recordedDescriptors()
@@ -396,7 +396,7 @@ final class ActiveModelServiceTests: XCTestCase {
             firedExpectation.fulfill()
         }
 
-        service.setActive(target)
+        service.setActive(target, forKind: .asr)
 
         await fulfillment(of: [firedExpectation], timeout: 1)
         XCTAssertEqual(counter.value, 1)
@@ -404,68 +404,80 @@ final class ActiveModelServiceTests: XCTestCase {
 
     // MARK: - #024.10 — per-kind active state
 
-    /// Pin the per-kind invariant: setting two `.asr` descriptors back-
-    /// to-back evicts the first; setting a `.streamingASR` descriptor
-    /// leaves `.asr` untouched and adds a separate slot.
-    func testSetActiveStoresPerKindAndEvictsSameKind() {
-        let v2 = BuiltInModelCatalog.parakeetTDT06Bv2
-        let v3 = BuiltInModelCatalog.parakeetTDT06Bv3
-        let streamingDescriptor = ModelDescriptor(
-            id: "test-streaming-descriptor",
-            displayName: "Streaming Test",
-            shortDescription: "Synthetic streaming descriptor for the per-kind eviction test.",
-            architecture: "Test",
-            repository: "FluidInference/test-streaming",
-            revision: "test",
-            requiredRelativePaths: [],
-            approximateSizeBytes: 0,
-            engine: .parakeetEOU,
-            tokenizerSource: nil,
-            requiredChipFamily: nil
+    func testSetActiveWritesOnlyTheRequestedKindSlot() {
+        let batchDescriptor = BuiltInModelCatalog.parakeetTDT06Bv2
+        let streamingDescriptor = BuiltInModelCatalog.whisperCppTiny
+        let defaults = isolatedDefaults()
+        let preference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [:],
+            defaults: defaults
         )
+        preference.persist([.asr: batchDescriptor.id])
         let service = ActiveModelService(
-            activeIDsPreference: Preference<[ModelKind: String]>(
-                key: ActiveModelService.preferenceKey,
-                default: [:],
-                defaults: isolatedDefaults()
-            ),
-            registeredModels: BuiltInModelCatalog.registeredModels + [streamingDescriptor],
+            activeIDsPreference: preference,
             isDownloaded: { _ in true },
             download: { _, _ in },
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
-        service.setActive(v2)
-        XCTAssertEqual(service.activeDescriptor(for: ModelKind.asr)?.id, v2.id)
+        service.setActive(streamingDescriptor, forKind: .streamingASR)
 
-        service.setActive(v3)
         XCTAssertEqual(
             service.activeDescriptor(for: ModelKind.asr)?.id,
-            v3.id,
-            "Setting another .asr descriptor must evict the prior .asr entry"
-        )
-
-        service.setActive(streamingDescriptor)
-        XCTAssertEqual(
-            service.activeDescriptor(for: ModelKind.asr)?.id,
-            v3.id,
-            "Setting a .streamingASR descriptor must NOT touch the .asr slot"
+            batchDescriptor.id,
+            "setActive(forKind:) must leave unrelated kind slots unchanged"
         )
         XCTAssertEqual(
             service.activeDescriptor(for: ModelKind.streamingASR)?.id,
             streamingDescriptor.id
         )
+        XCTAssertEqual(
+            preference.resolve(),
+            [.asr: batchDescriptor.id, .streamingASR: streamingDescriptor.id]
+        )
     }
 
-    /// Phase 3 of the download/load split. When the user activates a
-    /// new descriptor for a kind, the previously-active descriptor's
-    /// adapter must be evicted from the provider's cache so its
-    /// loaded CoreML weights are released. Without this, switching
-    /// between models leaks RAM (the prior model's manager stays
-    /// resident for the rest of the app session).
-    func testSetActiveEvictsPreviouslyActiveDescriptorOfSameKind() {
-        let v2 = BuiltInModelCatalog.parakeetTDT06Bv2
-        let v3 = BuiltInModelCatalog.parakeetTDT06Bv3
+    func testSetActiveRejectsKindNotInDescriptorCapabilities() {
+        let existingStreamingDescriptor = BuiltInModelCatalog.parakeetEou160ms
+        let invalidDescriptor = BuiltInModelCatalog.parakeetTDT06Bv2
+        let defaults = isolatedDefaults()
+        let preference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [:],
+            defaults: defaults
+        )
+        preference.persist([.streamingASR: existingStreamingDescriptor.id])
+        // #100 C2: assert rejection path emits NO eviction (no displacement
+        // happened, so the spy must stay empty).
+        let evictRecorder = LockedDescriptorRecorder()
+        let service = ActiveModelService(
+            activeIDsPreference: preference,
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            evict: { descriptor in evictRecorder.record(descriptor) },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        service.setActive(invalidDescriptor, forKind: .streamingASR)
+
+        XCTAssertEqual(
+            service.activeDescriptor(for: .streamingASR)?.id,
+            existingStreamingDescriptor.id
+        )
+        XCTAssertTrue(
+            evictRecorder.descriptors.isEmpty,
+            "Rejected setActive must not call the eviction handler; got: \(evictRecorder.descriptors.map(\.id))"
+        )
+        XCTAssertEqual(
+            preference.resolve(),
+            [.streamingASR: existingStreamingDescriptor.id]
+        )
+    }
+
+    func testSetActiveDoesNotEvictDisplacedPredecessorIfStillActiveForAnotherKind() {
+        let streamingDescriptor = BuiltInModelCatalog.parakeetEou160ms
+        let dualCapabilityDescriptor = BuiltInModelCatalog.whisperCppTiny
         let evictRecorder = LockedDescriptorRecorder()
         let service = ActiveModelService(
             activeIDsPreference: Preference<[ModelKind: String]>(
@@ -479,23 +491,46 @@ final class ActiveModelServiceTests: XCTestCase {
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
-        // First activation has no previous — must NOT call evict.
-        service.setActive(v2)
+        service.setActive(dualCapabilityDescriptor, forKind: .asr)
+        service.setActive(dualCapabilityDescriptor, forKind: .streamingASR)
+        service.setActive(streamingDescriptor, forKind: .streamingASR)
+
         XCTAssertTrue(
             evictRecorder.descriptors.isEmpty,
-            "First setActive (no prior) must not evict spuriously"
+            "A displaced descriptor must not be evicted if it remains active for another kind"
+        )
+        XCTAssertEqual(
+            service.activeDescriptor(for: .asr)?.id,
+            dualCapabilityDescriptor.id
+        )
+        XCTAssertEqual(
+            service.activeDescriptor(for: .streamingASR)?.id,
+            streamingDescriptor.id
+        )
+    }
+
+    func testSetActiveEvictsDisplacedPredecessorWhenNoLongerActiveAnywhere() {
+        let previousDescriptor = BuiltInModelCatalog.whisperCppTiny
+        let replacementDescriptor = BuiltInModelCatalog.parakeetTDT06Bv2
+        let evictRecorder = LockedDescriptorRecorder()
+        let service = ActiveModelService(
+            activeIDsPreference: Preference<[ModelKind: String]>(
+                key: ActiveModelService.preferenceKey,
+                default: [:],
+                defaults: isolatedDefaults()
+            ),
+            isDownloaded: { _ in true },
+            download: { _, _ in },
+            evict: { descriptor in evictRecorder.record(descriptor) },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
-        // Switch — must evict v2.
-        service.setActive(v3)
-        XCTAssertEqual(evictRecorder.descriptors, [v2])
+        service.setActive(previousDescriptor, forKind: .asr)
+        service.setActive(replacementDescriptor, forKind: .asr)
 
-        // Re-set same descriptor — must NOT evict (no actual switch).
-        service.setActive(v3)
         XCTAssertEqual(
             evictRecorder.descriptors,
-            [v2],
-            "Re-setActive with the same descriptor must not call evict"
+            [previousDescriptor]
         )
     }
 
@@ -504,19 +539,7 @@ final class ActiveModelServiceTests: XCTestCase {
     /// descriptor — those are separate slots in the per-kind map.
     func testSetActiveOfDifferentKindDoesNotEvictOtherKindActive() {
         let v3 = BuiltInModelCatalog.parakeetTDT06Bv3
-        let streamingDescriptor = ModelDescriptor(
-            id: "test-streaming-evict",
-            displayName: "Streaming Evict Test",
-            shortDescription: "Synthetic descriptor pinning the cross-kind no-evict invariant.",
-            architecture: "Test",
-            repository: "FluidInference/test-streaming-evict",
-            revision: "test",
-            requiredRelativePaths: [],
-            approximateSizeBytes: 0,
-            engine: .parakeetEOU,
-            tokenizerSource: nil,
-            requiredChipFamily: nil
-        )
+        let streamingDescriptor = BuiltInModelCatalog.parakeetEou160ms
         let evictRecorder = LockedDescriptorRecorder()
         let service = ActiveModelService(
             activeIDsPreference: Preference<[ModelKind: String]>(
@@ -524,15 +547,14 @@ final class ActiveModelServiceTests: XCTestCase {
                 default: [:],
                 defaults: isolatedDefaults()
             ),
-            registeredModels: BuiltInModelCatalog.registeredModels + [streamingDescriptor],
             isDownloaded: { _ in true },
             download: { _, _ in },
             evict: { descriptor in evictRecorder.record(descriptor) },
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
-        service.setActive(v3)
-        service.setActive(streamingDescriptor)
+        service.setActive(v3, forKind: .asr)
+        service.setActive(streamingDescriptor, forKind: .streamingASR)
 
         XCTAssertTrue(
             evictRecorder.descriptors.isEmpty,
@@ -613,7 +635,7 @@ final class ActiveModelServiceTests: XCTestCase {
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
-        service.setActive(unsupported)
+        service.setActive(unsupported, forKind: .asr)
 
         XCTAssertEqual(service.activeDescriptor(for: .asr)?.id, supported.id)
         XCTAssertEqual(preference.resolve()[.asr], supported.id)

@@ -6,8 +6,9 @@ import PersonalScribeCore
 /// Per L25 (eager descriptor binding):
 /// - `ActiveModelService.activeDescriptor(for: kind)` resolves once
 ///   when this builder runs. The resulting `BoundRecipe` is immutable.
-/// - Mid-session `ActiveModelService.setActive(...)` does NOT mutate an
-///   in-flight `BoundRecipe`; it takes effect on the next session start.
+/// - Mid-session `ActiveModelService.setActive(_:forKind:)` does NOT
+///   mutate an in-flight `BoundRecipe`; it takes effect on the next
+///   session start.
 ///
 /// Per L19 (parameter cascade): each `Parameter<T>` is resolved eagerly
 /// via `ParameterResolver.resolve(_:from:)` against the supplied
@@ -35,6 +36,7 @@ public final class RecipeBuilder {
 
     public func build(_ mode: WorkflowMode) throws -> BoundRecipe {
         let processors = try mode.processors.map { try buildProcessor($0) }
+        let streamingDescriptor = try resolveStreamingDescriptor(in: mode)
         let captureControllers = mode.captureControllers.map { buildCaptureController($0) }
         let outputSinks = mode.outputSinks.map { buildOutputSink($0) }
         let streamingBehavior = buildStreamingBehavior(mode.streamingBehavior)
@@ -50,7 +52,8 @@ public final class RecipeBuilder {
         // owned by `ClipboardBatchOutput` using #097's accumulator
         // signal.
         let streamingSecondPassTranscriber = try buildStreamingSecondPassTranscriber(
-            streamingBehavior: streamingBehavior
+            streamingBehavior: streamingBehavior,
+            streamingDescriptor: streamingDescriptor
         )
         return BoundRecipe(
             recipeID: mode.id,
@@ -144,12 +147,18 @@ public final class RecipeBuilder {
     }
 
     private func buildStreamingSecondPassTranscriber(
-        streamingBehavior: BoundStreamingBehavior?
+        streamingBehavior: BoundStreamingBehavior?,
+        streamingDescriptor: ModelDescriptor?
     ) throws -> (any Transcriber)? {
-        guard let streamingBehavior,
-              streamingBehavior.secondPassEnabled,
-              let descriptor = modelService.activeDescriptor(for: .asr)
-        else {
+        guard let streamingBehavior, streamingBehavior.secondPassEnabled else {
+            return nil
+        }
+
+        if let streamingDescriptor, streamingDescriptor.engine == .whisperCpp {
+            return try processorProvider.transcriber(for: streamingDescriptor)
+        }
+
+        guard let descriptor = modelService.activeDescriptor(for: .asr) else {
             return nil
         }
         return try processorProvider.transcriber(for: descriptor)
@@ -158,8 +167,9 @@ public final class RecipeBuilder {
     /// Resolve the descriptor for a processor spec.
     ///
     /// - When `pinnedID` is non-nil (#090): look up the descriptor in
-    ///   `modelService.registeredModels` and verify its `kind` matches.
-    ///   The pin wins regardless of the global active selection.
+    ///   `modelService.registeredModels` and verify its capabilities
+    ///   include the requested kind. The pin wins regardless of the
+    ///   global active selection.
     /// - When `pinnedID` is nil: fall back to
     ///   `modelService.activeDescriptor(for:)` (pre-#090 behavior).
     ///
@@ -175,11 +185,11 @@ public final class RecipeBuilder {
             guard let pinned = modelService.registeredModels.first(where: { $0.id == pinnedID }) else {
                 throw RecipeBuildError.pinnedDescriptorNotRegistered(id: pinnedID)
             }
-            guard pinned.kind == kind else {
+            guard pinned.engine.capabilities.contains(kind) else {
                 throw RecipeBuildError.pinnedDescriptorKindMismatch(
                     id: pinnedID,
                     expected: kind,
-                    actual: pinned.kind
+                    actual: representativeCapability(for: pinned, expected: kind)
                 )
             }
             return pinned
@@ -188,6 +198,15 @@ public final class RecipeBuilder {
             throw RecipeBuildError.kindHasNoActiveDescriptor(kind)
         }
         return descriptor
+    }
+
+    private func resolveStreamingDescriptor(in mode: WorkflowMode) throws -> ModelDescriptor? {
+        for processor in mode.processors {
+            if case .streamingTranscriber(let kind, let descriptorID) = processor {
+                return try resolveDescriptor(for: kind, pinnedID: descriptorID)
+            }
+        }
+        return nil
     }
 }
 
@@ -198,7 +217,15 @@ public enum RecipeBuildError: Error, Equatable {
     /// validator first; defensive error if reached at build time.
     case pinnedDescriptorNotRegistered(id: String)
     /// #090: a pinned `descriptorID` references a descriptor whose
-    /// `kind` differs from the spec's `kind`. Should be caught by the
-    /// validator first; defensive error if reached at build time.
+    /// capabilities do not include the spec's kind. Should be caught
+    /// by the validator first; defensive error if reached at build
+    /// time.
     case pinnedDescriptorKindMismatch(id: String, expected: ModelKind, actual: ModelKind)
+}
+
+private func representativeCapability(
+    for descriptor: ModelDescriptor,
+    expected: ModelKind
+) -> ModelKind {
+    ModelKind.allCases.first(where: descriptor.engine.capabilities.contains) ?? expected
 }

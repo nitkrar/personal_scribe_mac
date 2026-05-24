@@ -201,12 +201,23 @@ struct ModelInfoPopoverPresenter {
     }
 
     private var modelTypeLabel: String {
-        switch descriptor.kind {
-        case .asr:         return "Voice · Offline"
-        case .streamingASR: return "Voice · Streaming"
-        case .diarization:  return "Diarization · Offline"
-        case .vad:          return "Voice activity detection"
-        case .tts:          return "Text-to-speech"
+        let capabilities = descriptor.engine.capabilities
+        if capabilities == [.asr, .streamingASR] {
+            return "Voice · Offline + Streaming"
+        }
+        switch ModelKind.allCases.first(where: capabilities.contains) {
+        case .asr:
+            return "Voice · Offline"
+        case .streamingASR:
+            return "Voice · Streaming"
+        case .diarization:
+            return "Diarization · Offline"
+        case .vad:
+            return "Voice activity detection"
+        case .tts:
+            return "Text-to-speech"
+        case nil:
+            return "Model"
         }
     }
 }

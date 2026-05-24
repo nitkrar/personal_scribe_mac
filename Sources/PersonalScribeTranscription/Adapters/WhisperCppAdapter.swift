@@ -3,6 +3,50 @@ import Foundation
 import PersonalScribeCore
 import PersonalScribeVAD
 
+typealias WhisperCppSleep = @Sendable (Duration) async throws -> Void
+
+protocol WhisperCppManaging: Sendable {
+    func loadModel(from modelFileURL: URL) async throws
+    func transcribe(
+        audioSamples: [Float],
+        languageHint: String?
+    ) async throws -> WhisperCppManagerResult
+    func decodeSegments(
+        audioSamples: [Float],
+        languageHint: String?
+    ) async throws -> [WhisperCppDecodedSegment]
+    func cleanup() async
+}
+
+protocol WhisperCppDownloading: Sendable {
+    func download(
+        from remoteURL: URL,
+        to temporaryURL: URL,
+        progressHandler: @escaping @Sendable (ModelDownloadProgress) -> Void
+    ) async throws
+}
+
+protocol WhisperCppLibrary: Sendable {
+    func createContext(modelPath: String) throws -> OpaquePointer
+    func freeContext(_ context: OpaquePointer)
+    func transcribe(
+        context: OpaquePointer,
+        audioSamples: [Float],
+        nThreads: Int32,
+        languageHint: String?
+    ) throws -> String
+    func decodeSegments(
+        context: OpaquePointer,
+        audioSamples: [Float],
+        nThreads: Int32,
+        languageHint: String?
+    ) throws -> [WhisperCppDecodedSegment]
+}
+
+struct WhisperCppManagerResult: Sendable, Equatable {
+    let text: String
+}
+
 package enum WhisperCppStreamingVadEvent: Sendable, Equatable {
     case speechEnded
     case speechResumed
@@ -21,27 +65,7 @@ package struct WhisperCppStreamingVadSessionHandle: Sendable {
 package typealias WhisperCppStreamingVadSessionFactory =
     @Sendable (_ silenceThresholdSeconds: Double) async -> WhisperCppStreamingVadSessionHandle?
 
-protocol WhisperCppStreamingManaging: Sendable {
-    func loadModel(from modelFileURL: URL) async throws
-    func decodeSegments(
-        audioSamples: [Float],
-        languageHint: String?
-    ) async throws -> [WhisperCppDecodedSegment]
-    func cleanup() async
-}
-
-protocol WhisperCppStreamingLibrary: Sendable {
-    func createContext(modelPath: String) throws -> OpaquePointer
-    func freeContext(_ context: OpaquePointer)
-    func decodeSegments(
-        context: OpaquePointer,
-        audioSamples: [Float],
-        nThreads: Int32,
-        languageHint: String?
-    ) throws -> [WhisperCppDecodedSegment]
-}
-
-public actor WhisperCppStreamingTranscriberAdapter: StreamingTranscriber {
+public actor WhisperCppAdapter: Transcriber, StreamingTranscriber {
     public nonisolated let capabilities = TranscriberCapabilities()
 
     static let decodeCadence: Duration = .milliseconds(500)
@@ -50,7 +74,7 @@ public actor WhisperCppStreamingTranscriberAdapter: StreamingTranscriber {
 
     private let descriptor: ModelDescriptor
     private let storageLocator: any StorageLocator
-    private let manager: any WhisperCppStreamingManaging
+    private let manager: any WhisperCppManaging
     private let downloader: any WhisperCppDownloading
     private let vadSessionFactory: WhisperCppStreamingVadSessionFactory?
     private let eouSilenceThresholdMsResolver: @Sendable () -> Int
@@ -71,7 +95,7 @@ public actor WhisperCppStreamingTranscriberAdapter: StreamingTranscriber {
         self.init(
             descriptor: descriptor,
             storageLocator: storageLocator,
-            manager: LiveWhisperCppStreamingManager(),
+            manager: LiveWhisperCppManager(),
             downloader: LiveWhisperCppDownloader(),
             vadSessionFactory: Self.liveVadSessionFactory(logger: nil),
             eouSilenceThresholdMsResolver: {
@@ -90,7 +114,7 @@ public actor WhisperCppStreamingTranscriberAdapter: StreamingTranscriber {
         self.init(
             descriptor: descriptor,
             storageLocator: storageLocator,
-            manager: LiveWhisperCppStreamingManager(),
+            manager: LiveWhisperCppManager(),
             downloader: LiveWhisperCppDownloader(),
             vadSessionFactory: Self.liveVadSessionFactory(logger: logger),
             eouSilenceThresholdMsResolver: {
@@ -113,7 +137,7 @@ public actor WhisperCppStreamingTranscriberAdapter: StreamingTranscriber {
         self.init(
             descriptor: descriptor,
             storageLocator: storageLocator,
-            manager: LiveWhisperCppStreamingManager(),
+            manager: LiveWhisperCppManager(),
             downloader: LiveWhisperCppDownloader(),
             vadSessionFactory: vadSessionFactory,
             eouSilenceThresholdMsResolver: eouSilenceThresholdMsResolver,
@@ -125,7 +149,7 @@ public actor WhisperCppStreamingTranscriberAdapter: StreamingTranscriber {
     init(
         descriptor: ModelDescriptor,
         storageLocator: any StorageLocator,
-        manager: any WhisperCppStreamingManaging,
+        manager: any WhisperCppManaging,
         downloader: any WhisperCppDownloading,
         vadSessionFactory: WhisperCppStreamingVadSessionFactory? = nil,
         eouSilenceThresholdMsResolver: @escaping @Sendable () -> Int = {
@@ -217,6 +241,30 @@ public actor WhisperCppStreamingTranscriberAdapter: StreamingTranscriber {
         }
     }
 
+    public func transcribe(
+        _ audio: PCMBuffer,
+        languageHint: String?
+    ) async throws -> TranscriptionResult {
+        try await prepare()
+
+        let startedAt = ContinuousClock.now
+
+        do {
+            let result = try await manager.transcribe(
+                audioSamples: audio.samples,
+                languageHint: languageHint
+            )
+            let measuredTotalDuration = startedAt.duration(to: ContinuousClock.now)
+            return makeTranscriptionResult(
+                from: result,
+                audioDuration: audio.duration,
+                processingDuration: measuredTotalDuration
+            )
+        } catch {
+            throw PersonalScribeError.transcriptionFailure
+        }
+    }
+
     public nonisolated func transcribe(
         stream: AsyncThrowingStream<PCMBuffer, Error>
     ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
@@ -235,7 +283,7 @@ public actor WhisperCppStreamingTranscriberAdapter: StreamingTranscriber {
     }
 }
 
-private extension WhisperCppStreamingTranscriberAdapter {
+private extension WhisperCppAdapter {
     enum DecodeAttempt {
         case skipped
         case succeeded
@@ -306,6 +354,18 @@ private extension WhisperCppStreamingTranscriberAdapter {
             downloader: downloader,
             progressBroadcaster: progressBroadcaster,
             emitFinished: emitFinished
+        )
+    }
+
+    func makeTranscriptionResult(
+        from result: WhisperCppManagerResult,
+        audioDuration: Duration,
+        processingDuration: Duration
+    ) -> TranscriptionResult {
+        TranscriptionResult(
+            text: result.text,
+            audioDuration: audioDuration,
+            processingDuration: processingDuration
         )
     }
 
@@ -634,17 +694,203 @@ private extension WhisperCppStreamingTranscriberAdapter {
     }
 }
 
-internal final class LiveWhisperCppStreamingManager: WhisperCppStreamingManaging, @unchecked Sendable {
+internal final class LiveWhisperCppDownloader: WhisperCppDownloading, @unchecked Sendable {
+    private let fileManager: FileManager
+
+    init(fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+    }
+
+    func download(
+        from remoteURL: URL,
+        to temporaryURL: URL,
+        progressHandler: @escaping @Sendable (ModelDownloadProgress) -> Void
+    ) async throws {
+        try fileManager.createDirectory(
+            at: temporaryURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if fileManager.fileExists(atPath: temporaryURL.path) {
+            try fileManager.removeItem(at: temporaryURL)
+        }
+        guard fileManager.createFile(atPath: temporaryURL.path, contents: nil) else {
+            throw URLError(.cannotCreateFile)
+        }
+
+        let fileHandle = try FileHandle(forWritingTo: temporaryURL)
+        let delegate = WhisperCppStreamingDownloadDelegate(
+            fileHandle: fileHandle,
+            progressHandler: progressHandler
+        )
+        let delegateQueue = OperationQueue()
+        delegateQueue.maxConcurrentOperationCount = 1
+        let session = URLSession(
+            configuration: .ephemeral,
+            delegate: delegate,
+            delegateQueue: delegateQueue
+        )
+        defer {
+            session.finishTasksAndInvalidate()
+        }
+
+        do {
+            try await delegate.download(with: session, from: remoteURL)
+        } catch {
+            try? fileHandle.close()
+            throw error
+        }
+    }
+}
+
+private final class WhisperCppStreamingDownloadDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let fileHandle: FileHandle
+    private let progressHandler: @Sendable (ModelDownloadProgress) -> Void
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var hasCompleted = false
+    private var bytesReceived: Int64 = 0
+    private var expectedBytes: Int64?
+
+    init(
+        fileHandle: FileHandle,
+        progressHandler: @escaping @Sendable (ModelDownloadProgress) -> Void
+    ) {
+        self.fileHandle = fileHandle
+        self.progressHandler = progressHandler
+    }
+
+    func download(with session: URLSession, from remoteURL: URL) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.withLock {
+                self.continuation = continuation
+            }
+
+            let task = session.dataTask(with: remoteURL)
+            task.resume()
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        if let httpResponse = response as? HTTPURLResponse,
+           !(200...299).contains(httpResponse.statusCode) {
+            complete(with: URLError(.badServerResponse))
+            completionHandler(.cancel)
+            return
+        }
+
+        let responseLength = response.expectedContentLength
+        expectedBytes = responseLength > 0 ? responseLength : nil
+        progressHandler(ModelDownloadProgress(
+            phase: .downloading,
+            fractionCompleted: 0,
+            receivedBytes: 0,
+            expectedBytes: expectedBytes
+        ))
+        completionHandler(.allow)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive data: Data
+    ) {
+        guard !isCompleted else {
+            return
+        }
+
+        do {
+            try fileHandle.write(contentsOf: data)
+            bytesReceived += Int64(data.count)
+            let fractionCompleted: Double
+            if let expectedBytes, expectedBytes > 0 {
+                fractionCompleted = min(max(Double(bytesReceived) / Double(expectedBytes), 0), 1)
+            } else {
+                fractionCompleted = 0
+            }
+
+            progressHandler(ModelDownloadProgress(
+                phase: .downloading,
+                fractionCompleted: fractionCompleted,
+                receivedBytes: bytesReceived,
+                expectedBytes: expectedBytes
+            ))
+        } catch {
+            complete(with: error)
+            dataTask.cancel()
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        try? fileHandle.close()
+
+        if let error {
+            complete(with: error)
+            return
+        }
+
+        progressHandler(ModelDownloadProgress(
+            phase: .downloading,
+            fractionCompleted: 1,
+            receivedBytes: bytesReceived,
+            expectedBytes: expectedBytes
+        ))
+        complete()
+    }
+
+    private var isCompleted: Bool {
+        lock.withLock {
+            hasCompleted
+        }
+    }
+
+    private func complete() {
+        complete(with: nil)
+    }
+
+    private func complete(with error: Error?) {
+        let continuation = lock.withLock { () -> CheckedContinuation<Void, Error>? in
+            guard !hasCompleted else {
+                return nil
+            }
+
+            hasCompleted = true
+            let continuation = self.continuation
+            self.continuation = nil
+            return continuation
+        }
+
+        guard let continuation else {
+            return
+        }
+
+        if let error {
+            continuation.resume(throwing: error)
+        } else {
+            continuation.resume()
+        }
+    }
+}
+
+internal final class LiveWhisperCppManager: WhisperCppManaging, @unchecked Sendable {
     private enum RuntimeError: Error {
         case modelNotLoaded
     }
 
-    private let queue = DispatchQueue(label: "personal_scribe.whispercpp.streaming.runtime")
-    private let library: any WhisperCppStreamingLibrary
+    private let queue = DispatchQueue(label: "personal_scribe.whispercpp.runtime")
+    private let library: any WhisperCppLibrary
     private var context: OpaquePointer?
     private var loadedModelPath: String?
 
-    init(library: any WhisperCppStreamingLibrary = LiveWhisperCppStreamingLibrary()) {
+    init(library: any WhisperCppLibrary = LiveWhisperCppLibrary()) {
         self.library = library
     }
 
@@ -664,6 +910,26 @@ internal final class LiveWhisperCppStreamingManager: WhisperCppStreamingManaging
             let context = try self.library.createContext(modelPath: standardizedPath)
             self.context = context
             self.loadedModelPath = standardizedPath
+        }
+    }
+
+    func transcribe(
+        audioSamples: [Float],
+        languageHint: String?
+    ) async throws -> WhisperCppManagerResult {
+        let nThreads = Self.defaultThreadCount()
+        return try await enqueue {
+            guard let context = self.context else {
+                throw RuntimeError.modelNotLoaded
+            }
+
+            let text = try self.library.transcribe(
+                context: context,
+                audioSamples: audioSamples,
+                nThreads: nThreads,
+                languageHint: languageHint
+            )
+            return WhisperCppManagerResult(text: text)
         }
     }
 
@@ -716,7 +982,7 @@ internal final class LiveWhisperCppStreamingManager: WhisperCppStreamingManaging
     }
 }
 
-private struct LiveWhisperCppStreamingLibrary: WhisperCppStreamingLibrary {
+private struct LiveWhisperCppLibrary: WhisperCppLibrary {
     private enum LibraryError: Error {
         case contextInitFailed
         case transcriptionFailed
@@ -736,6 +1002,56 @@ private struct LiveWhisperCppStreamingLibrary: WhisperCppStreamingLibrary {
 
     func freeContext(_ context: OpaquePointer) {
         whisper_free(context)
+    }
+
+    func transcribe(
+        context: OpaquePointer,
+        audioSamples: [Float],
+        nThreads: Int32,
+        languageHint: String?
+    ) throws -> String {
+        var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
+        params.print_special = false
+        params.print_progress = false
+        params.print_realtime = false
+        params.print_timestamps = false
+        params.translate = false
+        params.no_context = true
+        params.single_segment = false
+        // Do NOT set params.detect_language = true. Upstream semantics
+        // are "exit after automatically detecting language" (per
+        // whisper.cpp's CLI --detect-language help). With language="auto"
+        // below, that short-circuits the decoder and returns zero
+        // segments — symptom: empty transcripts with ~80ms processing
+        // time on multi-second audio.
+        params.suppress_blank = true
+        params.suppress_nst = true
+        params.n_threads = nThreads
+        params.offset_ms = 0
+        params.duration_ms = 0
+
+        let resolvedLanguage = languageHint ?? "auto"
+        let resultCode = resolvedLanguage.withCString { languageCString -> Int32 in
+            params.language = languageCString
+            whisper_reset_timings(context)
+            return audioSamples.withUnsafeBufferPointer { samples in
+                whisper_full(context, params, samples.baseAddress, Int32(samples.count))
+            }
+        }
+
+        guard resultCode == 0 else {
+            throw LibraryError.transcriptionFailed
+        }
+
+        var text = ""
+        let segmentCount = Int(whisper_full_n_segments(context))
+        for index in 0..<segmentCount {
+            if let segmentText = whisper_full_get_segment_text(context, Int32(index)) {
+                text += String(cString: segmentText)
+            }
+        }
+
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func decodeSegments(

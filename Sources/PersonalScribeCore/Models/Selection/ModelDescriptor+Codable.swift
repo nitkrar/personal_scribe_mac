@@ -7,8 +7,8 @@ extension ModelDescriptor: Codable {
         case repoFolderName
         // `kind` removed from stored fields per #078.37 (L2). Decoder
         // ignores it on read for back-compat with persisted blobs;
-        // encoder never emits it. The computed `kind: engine.kind`
-        // accessor on `ModelDescriptor` is the single source of truth.
+        // encoder never emits it. Callers derive routing capabilities
+        // from `engine.capabilities`.
         case shortDescription
         case architecture
         case repository

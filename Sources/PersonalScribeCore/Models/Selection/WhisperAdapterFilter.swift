@@ -30,7 +30,7 @@ public enum WhisperAdapterFilter: String, Codable, CaseIterable, Sendable, Equat
 
     public func includes(_ engine: TranscriptionEngine) -> Bool {
         switch (self, engine) {
-        case (.native, .whisperCpp), (.native, .whisperCppStreaming):
+        case (.native, .whisperCpp):
             return false
         case (.bridge, .whisperKit):
             return false
@@ -43,7 +43,7 @@ public enum WhisperAdapterFilter: String, Codable, CaseIterable, Sendable, Equat
 public extension TranscriptionEngine {
     var isWhisperFamily: Bool {
         switch self {
-        case .whisperKit, .whisperCpp, .whisperCppStreaming:
+        case .whisperKit, .whisperCpp:
             return true
         case .parakeetTDT, .parakeetEOU, .qwen3ASR, .diarization:
             return false

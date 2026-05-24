@@ -195,7 +195,7 @@ final class BuiltInModelCatalogTests: XCTestCase {
 
         for item in expected {
             XCTAssertEqual(item.descriptor.engine, .whisperKit)
-            XCTAssertEqual(item.descriptor.kind, .asr)
+            XCTAssertEqual(item.descriptor.engine.capabilities, [.asr])
             XCTAssertEqual(item.descriptor.repository, "argmaxinc/whisperkit-coreml")
             XCTAssertEqual(item.descriptor.revision, "main")
             XCTAssertFalse(item.descriptor.shortDescription.isEmpty)
@@ -273,7 +273,7 @@ final class BuiltInModelCatalogTests: XCTestCase {
 
         for item in expected {
             XCTAssertEqual(item.descriptor.engine, .whisperCpp)
-            XCTAssertEqual(item.descriptor.kind, .asr)
+            XCTAssertEqual(item.descriptor.engine.capabilities, [.asr, .streamingASR])
             XCTAssertEqual(item.descriptor.repository, "ggerganov/whisper.cpp")
             XCTAssertEqual(
                 item.descriptor.revision,
@@ -293,43 +293,6 @@ final class BuiltInModelCatalogTests: XCTestCase {
         }
     }
 
-    func testWhisperCppStreamingDescriptorsAreRegisteredAndEnabled() {
-        let whisperCppStreamingDescriptors = BuiltInModelCatalog.registeredModels
-            .filter { $0.engine == .whisperCppStreaming }
-        let expectedIDs: Set<String> = [
-            BuiltInModelCatalog.whisperCppStreamingTiny.id,
-            BuiltInModelCatalog.whisperCppStreamingSmallQ51.id,
-            BuiltInModelCatalog.whisperCppStreamingLargeV3TurboQ50.id,
-        ]
-
-        XCTAssertEqual(Set(whisperCppStreamingDescriptors.map(\.id)), expectedIDs)
-        for descriptor in whisperCppStreamingDescriptors {
-            XCTAssertTrue(descriptor.isEnabled, "\(descriptor.id) should be live after #099")
-        }
-    }
-
-    func testWhisperCppStreamingDescriptorsShareArtifactLeavesWithBatchSiblings() {
-        let expectedPairs: [(batch: ModelDescriptor, streaming: ModelDescriptor)] = [
-            (BuiltInModelCatalog.whisperCppTiny, BuiltInModelCatalog.whisperCppStreamingTiny),
-            (BuiltInModelCatalog.whisperCppSmallQ51, BuiltInModelCatalog.whisperCppStreamingSmallQ51),
-            (
-                BuiltInModelCatalog.whisperCppLargeV3TurboQ50,
-                BuiltInModelCatalog.whisperCppStreamingLargeV3TurboQ50
-            ),
-        ]
-
-        for pair in expectedPairs {
-            XCTAssertEqual(pair.streaming.engine, .whisperCppStreaming)
-            XCTAssertEqual(pair.streaming.kind, .streamingASR)
-            XCTAssertNotEqual(pair.batch.id, pair.streaming.id)
-            XCTAssertEqual(pair.streaming.repoFolderName, pair.batch.repoFolderName)
-            XCTAssertEqual(pair.streaming.requiredRelativePaths, pair.batch.requiredRelativePaths)
-            XCTAssertEqual(pair.streaming.approximateSizeBytes, pair.batch.approximateSizeBytes)
-            XCTAssertEqual(pair.streaming.repository, pair.batch.repository)
-            XCTAssertEqual(pair.streaming.revision, pair.batch.revision)
-        }
-    }
-
     func testWhisperFamilyLanguageCodesStayStable() {
         XCTAssertEqual(WhisperFamilyLanguages.codes.count, 100)
         XCTAssertEqual(Set(WhisperFamilyLanguages.codes).count, WhisperFamilyLanguages.codes.count)
@@ -345,9 +308,6 @@ final class BuiltInModelCatalogTests: XCTestCase {
             BuiltInModelCatalog.whisperCppTiny.id,
             BuiltInModelCatalog.whisperCppSmallQ51.id,
             BuiltInModelCatalog.whisperCppLargeV3TurboQ50.id,
-            BuiltInModelCatalog.whisperCppStreamingTiny.id,
-            BuiltInModelCatalog.whisperCppStreamingSmallQ51.id,
-            BuiltInModelCatalog.whisperCppStreamingLargeV3TurboQ50.id,
         ]
         let qwen3DescriptorIDs: Set<String> = [
             BuiltInModelCatalog.qwen3AsrF32.id,

@@ -23,7 +23,7 @@ import Foundation
 ///    independent of the global active descriptor.
 /// 6. Every pinned `descriptorID` must reference a descriptor in the
 ///    supplied `registeredDescriptors` list, AND that descriptor's
-///    `kind` must match the spec's kind.
+///    capabilities must include the spec's kind.
 /// 7. `mode.language` may only be set when the mode pins a descriptor
 ///    whose `supportedLanguages` is non-nil.
 ///
@@ -162,11 +162,11 @@ public enum WorkflowModeValidator {
             guard let descriptor = registeredDescriptors.first(where: { $0.id == descriptorID }) else {
                 throw WorkflowModeValidationError.pinnedDescriptorNotRegistered(id: descriptorID)
             }
-            guard descriptor.kind == kind else {
+            guard descriptor.engine.capabilities.contains(kind) else {
                 throw WorkflowModeValidationError.pinnedDescriptorKindMismatch(
                     id: descriptorID,
                     expected: kind,
-                    actual: descriptor.kind
+                    actual: representativeCapability(for: descriptor, expected: kind)
                 )
             }
             return
@@ -218,5 +218,12 @@ public enum WorkflowModeValidator {
         }
 
         return nil
+    }
+
+    private static func representativeCapability(
+        for descriptor: ModelDescriptor,
+        expected: ModelKind
+    ) -> ModelKind {
+        ModelKind.allCases.first(where: descriptor.engine.capabilities.contains) ?? expected
     }
 }

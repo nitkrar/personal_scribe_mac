@@ -75,7 +75,7 @@ final class SessionCoordinatorModelSelectionTests: XCTestCase {
 
         await coordinator.toggle()
         await MainActor.run {
-            modelService.setActive(secondDescriptor)
+            modelService.setActive(secondDescriptor, forKind: .asr)
         }
         await coordinator.toggle()
 
@@ -169,11 +169,17 @@ private struct FakeModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
     }
 
     func streamingTranscriber(for descriptor: ModelDescriptor) throws -> any StreamingTranscriber {
-        throw ModelSelectionError.unsupportedKind(expected: .streamingASR, actual: descriptor.engine.kind)
+        throw ModelSelectionError.unsupportedKind(
+            expected: .streamingASR,
+            actual: representativeCapability(for: descriptor, expected: .streamingASR)
+        )
     }
 
     func diarizer(for descriptor: ModelDescriptor) throws -> any SpeakerDiarizer {
-        throw ModelSelectionError.unsupportedKind(expected: .diarization, actual: descriptor.engine.kind)
+        throw ModelSelectionError.unsupportedKind(
+            expected: .diarization,
+            actual: representativeCapability(for: descriptor, expected: .diarization)
+        )
     }
 
     func isDownloaded(_ descriptor: ModelDescriptor) -> Bool { true }
@@ -188,6 +194,13 @@ private struct FakeModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
     func evict(_ descriptor: ModelDescriptor) {}
 
     func preparedDescriptors() -> [ModelDescriptor] { [] }
+}
+
+private func representativeCapability(
+    for descriptor: ModelDescriptor,
+    expected: ModelKind
+) -> ModelKind {
+    ModelKind.allCases.first(where: descriptor.engine.capabilities.contains) ?? expected
 }
 
 private actor RecordingTranscriber: Transcriber {

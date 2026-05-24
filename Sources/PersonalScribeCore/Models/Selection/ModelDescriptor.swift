@@ -16,18 +16,14 @@ public enum TranscriptionEngine: Sendable, Equatable {
     case whisperKit
     /// Whisper via whisper.cpp. Single-file ggml model artifacts are
     /// staged into Ninimma's models directory and loaded by
-    /// `WhisperCppTranscriberAdapter`.
+    /// `WhisperCppAdapter` for both batch and streaming transcription.
     case whisperCpp
-    /// Streaming Whisper via whisper.cpp. Reuses the same ggml model
-    /// artifacts as the batch whisper.cpp rows, but binds the
-    /// streaming adapter/runtime.
-    case whisperCppStreaming
     /// Speaker diarization (pyannote segmentation + WeSpeaker
     /// embedding). Different manager class
     /// (`OfflineDiarizerManager`).
     case diarization
-    // The batch, streaming, and diarization engines below their
-    // shipped adapters today.
+    // The batch, streaming, and diarization engines above all ship
+    // working adapters today.
 }
 
 /// Broad capability category for a registered model. Used by the
@@ -113,9 +109,6 @@ public struct ModelDescriptor: Sendable, Equatable {
     /// matches what we wrote. Drift here causes silent re-downloads.
     /// Source: `FluidAudio/Sources/FluidAudio/ModelNames.swift` `folderName` switch.
     public let repoFolderName: String
-    /// Broad capability category — derived from `engine` per L2 of #078.
-    /// Single source of truth: change the engine, the kind follows.
-    public var kind: ModelKind { engine.kind }
     /// Descriptor-level rollout flag. Keeps a model in the registry for
     /// metadata/tests while hiding it from live selectors.
     public let isEnabled: Bool

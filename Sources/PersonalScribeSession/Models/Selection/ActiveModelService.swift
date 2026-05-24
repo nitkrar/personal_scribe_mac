@@ -175,34 +175,47 @@ public final class ActiveModelService: ObservableObject {
         guard let descriptor = registeredModels.first(where: { $0.id == id }) else {
             return nil
         }
+        guard descriptor.engine.capabilities.contains(kind) else {
+            return nil
+        }
         guard canActivate(descriptor) else {
             return nil
         }
         return descriptor
     }
 
-    /// Activate `descriptor` for its `kind`. Evicts any previously
-    /// active descriptor of the same kind from the provider's adapter
-    /// cache so its loaded CoreML weights are released. Persists.
-    /// Fires `onSetActive` so the composition root can prepare/warm
-    /// the new active descriptor's adapter (load weights at activate
-    /// time rather than at download time — see #078 follow-up).
-    public func setActive(_ descriptor: ModelDescriptor) {
+    /// Activate `descriptor` for the specific section `kind`.
+    /// Evicts the displaced predecessor only when it is no longer
+    /// active for any other kind. Persists. Fires `onSetActive` so the
+    /// composition root can prepare/warm the new active descriptor's
+    /// adapter (load weights at activate time rather than at download
+    /// time — see #078 follow-up).
+    public func setActive(_ descriptor: ModelDescriptor, forKind kind: ModelKind) {
         guard canActivate(descriptor) else {
             logger.error(
                 "Rejected active-model selection unsupported on this Mac: \(descriptor.id)"
             )
             return
         }
-        let previousID = activeModelIDs[descriptor.kind]
+        guard descriptor.engine.capabilities.contains(kind) else {
+            logger.error(
+                "Rejected setActive: descriptor \(descriptor.id) does not satisfy kind \(kind.rawValue)"
+            )
+            return
+        }
+
+        let previousID = activeModelIDs[kind]
         var updated = activeModelIDs
-        updated[descriptor.kind] = descriptor.id
+        updated[kind] = descriptor.id
         activeModelIDs = updated
         activeIDsPreference.persist(updated)
-        if let previousID, previousID != descriptor.id,
-           let previous = registeredModels.first(where: { $0.id == previousID })
-        {
-            evictHandler(previous)
+
+        if let previousID, previousID != descriptor.id {
+            let stillActiveSomewhere = updated.values.contains(previousID)
+            if !stillActiveSomewhere,
+               let previous = registeredModels.first(where: { $0.id == previousID }) {
+                evictHandler(previous)
+            }
         }
         Task { @MainActor [weak self] in
             await self?.onSetActive?()
@@ -213,7 +226,14 @@ public final class ActiveModelService: ObservableObject {
     /// kind is enabled today. Optional `kind:` narrows further.
     public func enabledModels(kind: ModelKind? = nil) -> [ModelDescriptor] {
         registeredModels.filter { d in
-            d.kind.isEnabled && canActivate(d) && (kind == nil || d.kind == kind)
+            let capabilities = d.engine.capabilities
+            guard capabilities.contains(where: \.isEnabled), canActivate(d) else {
+                return false
+            }
+            guard let kind else {
+                return true
+            }
+            return capabilities.contains(kind)
         }
     }
 
@@ -225,7 +245,7 @@ public final class ActiveModelService: ObservableObject {
     }
 
     public func isVisibleModel(_ descriptor: ModelDescriptor) -> Bool {
-        descriptor.kind.isEnabled
+        descriptor.engine.capabilities.contains(where: \.isEnabled)
             && canActivate(descriptor)
             && whisperAdapterFilter.includes(descriptor)
     }
@@ -535,7 +555,6 @@ private extension ActiveModelService {
         if cleaned != stored {
             activeIDsPreference.persist(cleaned)
         }
-
         return cleaned
     }
 

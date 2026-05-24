@@ -201,7 +201,10 @@ public actor OfflineTranscriptionCoordinator {
             return id
         }
 
-        guard let descriptor = await activeASRDescriptor(), descriptor.kind == .asr else {
+        guard
+            let descriptor = await activeASRDescriptor(),
+            descriptor.engine.capabilities.contains(.asr)
+        else {
             return enqueueImmediatelyFailedJob(
                 url: resolvedURL,
                 sourceFilename: sourceFilename,
@@ -391,7 +394,7 @@ private extension OfflineTranscriptionCoordinator {
             descriptor = await descriptorByID(job.descriptorID)
         }
 
-        guard let descriptor, descriptor.kind == .asr else {
+        guard let descriptor, descriptor.engine.capabilities.contains(.asr) else {
             throw CoordinatorError.descriptorUnavailable
         }
         return descriptor

@@ -48,22 +48,15 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                     )
                 )
             case .whisperCpp:
-                return AdapterRecord(
-                    descriptorID: descriptor.id,
-                    transcriber: WhisperCppTranscriberAdapter(
-                        descriptor: descriptor,
-                        storageLocator: storageLocator,
-                        logger: logger
-                    )
+                let adapter = WhisperCppAdapter(
+                    descriptor: descriptor,
+                    storageLocator: storageLocator,
+                    logger: logger
                 )
-            case .whisperCppStreaming:
                 return AdapterRecord(
                     descriptorID: descriptor.id,
-                    streamingTranscriber: WhisperCppStreamingTranscriberAdapter(
-                        descriptor: descriptor,
-                        storageLocator: storageLocator,
-                        logger: logger
-                    )
+                    transcriber: adapter,
+                    streamingTranscriber: adapter
                 )
             case .parakeetEOU:
                 return AdapterRecord(
@@ -106,7 +99,7 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
         guard let transcriber = record.transcriber else {
             throw ModelSelectionError.unsupportedKind(
                 expected: .asr,
-                actual: canonical.engine.kind
+                actual: representativeCapability(for: canonical, expected: .asr)
             )
         }
         return transcriber
@@ -120,7 +113,7 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
         guard let streamingTranscriber = record.streamingTranscriber else {
             throw ModelSelectionError.unsupportedKind(
                 expected: .streamingASR,
-                actual: canonical.engine.kind
+                actual: representativeCapability(for: canonical, expected: .streamingASR)
             )
         }
         return streamingTranscriber
@@ -132,7 +125,7 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
         guard let diarizer = record.diarizer else {
             throw ModelSelectionError.unsupportedKind(
                 expected: .diarization,
-                actual: canonical.engine.kind
+                actual: representativeCapability(for: canonical, expected: .diarization)
             )
         }
         return diarizer
@@ -235,6 +228,13 @@ private extension ModelBoundProcessorProvider {
             throw ModelSelectionError.descriptorNotRegistered(id: descriptor.id)
         }
         return canonical
+    }
+
+    func representativeCapability(
+        for descriptor: ModelDescriptor,
+        expected: ModelKind
+    ) -> ModelKind {
+        ModelKind.allCases.first(where: descriptor.engine.capabilities.contains) ?? expected
     }
 
     func resolvedRecord(for descriptor: ModelDescriptor) throws -> AdapterRecord {
