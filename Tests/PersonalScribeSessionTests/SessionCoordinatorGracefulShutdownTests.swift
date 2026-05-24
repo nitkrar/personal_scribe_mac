@@ -165,6 +165,33 @@ final class SessionCoordinatorGracefulShutdownTests: XCTestCase {
         XCTAssertEqual(provider.evictionRequests, [activeDescriptor.id])
     }
 
+    func testShutdownAlsoEvictsStreamingWhisperCppDescriptors() async throws {
+        let activeDescriptor = BuiltInModelCatalog.whisperCppStreamingTiny
+        let extraPreparedWhisper = BuiltInModelCatalog.whisperCppStreamingSmallQ51
+        let provider = TrackingModelBoundProcessorProvider(
+            transcribersByID: [:],
+            cachedDescriptorIDs: [extraPreparedWhisper.id]
+        )
+        let coordinator = try await makeCoordinator(
+            activeDescriptor: activeDescriptor,
+            registeredModels: [
+                activeDescriptor,
+                extraPreparedWhisper,
+                BuiltInModelCatalog.whisperKitTiny,
+            ],
+            provider: provider
+        )
+
+        await coordinator.shutdownPreparedWhisperCppAdaptersForApplicationTermination(
+            waitTimeout: .milliseconds(50)
+        )
+
+        XCTAssertEqual(
+            Set(provider.evictionRequests),
+            Set([activeDescriptor.id, extraPreparedWhisper.id])
+        )
+    }
+
     func testShutdownHonorsCancellationBeforeEvictingPreparedWhisperCppAdapters() async throws {
         let activeDescriptor = BuiltInModelCatalog.whisperCppTiny
         let extraPreparedWhisper = BuiltInModelCatalog.whisperCppSmallQ51

@@ -56,6 +56,15 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                         logger: logger
                     )
                 )
+            case .whisperCppStreaming:
+                return AdapterRecord(
+                    descriptorID: descriptor.id,
+                    streamingTranscriber: WhisperCppStreamingTranscriberAdapter(
+                        descriptor: descriptor,
+                        storageLocator: storageLocator,
+                        logger: logger
+                    )
+                )
             case .parakeetEOU:
                 return AdapterRecord(
                     descriptorID: descriptor.id,
@@ -198,14 +207,16 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
         guard let canonical = registeredDescriptorsByID[descriptor.id] else {
             return
         }
-        let lifecycle = lock.withLock { () -> (any ModelLifecycle)? in
-            records.removeValue(forKey: canonical.id)?.lifecycle
+        let lifecycles = lock.withLock { () -> [any ModelLifecycle] in
+            records.removeValue(forKey: canonical.id)?.lifecycles ?? []
         }
-        guard let lifecycle else {
+        guard !lifecycles.isEmpty else {
             return
         }
         Task {
-            await lifecycle.cleanup()
+            for lifecycle in lifecycles {
+                await lifecycle.cleanup()
+            }
         }
     }
 

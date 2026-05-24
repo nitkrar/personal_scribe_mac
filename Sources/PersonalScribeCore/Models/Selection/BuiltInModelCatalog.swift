@@ -272,6 +272,33 @@ public enum BuiltInModelCatalog {
     // model leaf stays unambiguous beside WhisperKit bundles.
     private static let whisperCppModelRevision = "5359861c739e955e79d9a303bcbc70fb988958b1"
 
+    private static func whisperCppStreamingDescriptor(
+        id: String,
+        displayName: String,
+        shortDescription: String,
+        goodFor: String,
+        pairedWith batchDescriptor: ModelDescriptor
+    ) -> ModelDescriptor {
+        ModelDescriptor(
+            id: id,
+            displayName: displayName,
+            repoFolderName: batchDescriptor.repoFolderName,
+            shortDescription: shortDescription,
+            architecture: "Whisper (whisper.cpp streaming runtime)",
+            repository: batchDescriptor.repository,
+            revision: batchDescriptor.revision,
+            requiredRelativePaths: batchDescriptor.requiredRelativePaths,
+            approximateSizeBytes: batchDescriptor.approximateSizeBytes,
+            isEnabled: true,
+            engine: .whisperCppStreaming,
+            madeBy: batchDescriptor.madeBy,
+            worksWith: batchDescriptor.worksWith,
+            goodFor: goodFor,
+            license: batchDescriptor.license,
+            supportedLanguages: batchDescriptor.supportedLanguages
+        )
+    }
+
     public static let whisperCppTiny = ModelDescriptor(
         id: "whispercpp-tiny",
         displayName: "Whisper Tiny (whisper.cpp)",
@@ -327,6 +354,30 @@ public enum BuiltInModelCatalog {
         goodFor: "Higher-accuracy multilingual dictation with reduced large-v3 disk cost",
         license: "MIT",
         supportedLanguages: WhisperFamilyLanguages.codes
+    )
+
+    public static let whisperCppStreamingTiny = whisperCppStreamingDescriptor(
+        id: "whispercpp-streaming-tiny",
+        displayName: "Whisper Tiny Streaming (whisper.cpp)",
+        shortDescription: "Streaming whisper.cpp - tiny multilingual model, lowest accuracy.",
+        goodFor: "Realtime multilingual dictation, smoke tests, lowest disk footprint",
+        pairedWith: whisperCppTiny
+    )
+
+    public static let whisperCppStreamingSmallQ51 = whisperCppStreamingDescriptor(
+        id: "whispercpp-streaming-small-q5_1",
+        displayName: "Whisper Small q5_1 Streaming (whisper.cpp)",
+        shortDescription: "Streaming whisper.cpp - balanced multilingual model for live dictation.",
+        goodFor: "Realtime multilingual dictation with moderate disk and RAM",
+        pairedWith: whisperCppSmallQ51
+    )
+
+    public static let whisperCppStreamingLargeV3TurboQ50 = whisperCppStreamingDescriptor(
+        id: "whispercpp-streaming-large-v3-turbo-q5_0",
+        displayName: "Whisper Large v3 Turbo q5_0 Streaming (whisper.cpp)",
+        shortDescription: "Streaming whisper.cpp - higher-accuracy multilingual live dictation.",
+        goodFor: "Higher-accuracy realtime multilingual dictation at lower disk cost",
+        pairedWith: whisperCppLargeV3TurboQ50
     )
 
     // MARK: - Streaming ASR (parakeet realtime EOU)
@@ -494,6 +545,9 @@ public enum BuiltInModelCatalog {
         whisperCppTiny,
         whisperCppSmallQ51,
         whisperCppLargeV3TurboQ50,
+        whisperCppStreamingTiny,
+        whisperCppStreamingSmallQ51,
+        whisperCppStreamingLargeV3TurboQ50,
         parakeetEou160ms,
         parakeetEou320ms,
         parakeetEou1280ms,

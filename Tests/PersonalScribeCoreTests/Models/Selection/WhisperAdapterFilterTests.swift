@@ -21,6 +21,7 @@ final class WhisperAdapterFilterTests: XCTestCase {
         let descriptors = [
             BuiltInModelCatalog.whisperKitSmall216MB,
             BuiltInModelCatalog.whisperCppSmallQ51,
+            BuiltInModelCatalog.whisperCppStreamingSmallQ51,
             BuiltInModelCatalog.parakeetTDTCTC110M,
         ]
 
@@ -35,6 +36,7 @@ final class WhisperAdapterFilterTests: XCTestCase {
             WhisperAdapterFilter.bridge.filter(descriptors).map(\.id),
             [
                 BuiltInModelCatalog.whisperCppSmallQ51.id,
+                BuiltInModelCatalog.whisperCppStreamingSmallQ51.id,
                 BuiltInModelCatalog.parakeetTDTCTC110M.id,
             ]
         )

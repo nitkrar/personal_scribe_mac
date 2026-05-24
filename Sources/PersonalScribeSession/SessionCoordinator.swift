@@ -419,7 +419,7 @@ public actor SessionCoordinator {
 
     private func whisperCppDescriptorsForApplicationTermination() async -> [ModelDescriptor] {
         let preparedWhisperDescriptors = processorProvider?.preparedDescriptors().filter {
-            $0.engine == .whisperCpp
+            $0.engine == .whisperCpp || $0.engine == .whisperCppStreaming
         } ?? []
         let modelService = self.modelService
         return await MainActor.run {
@@ -427,15 +427,22 @@ public actor SessionCoordinator {
                 return preparedWhisperDescriptors
             }
 
-            guard
-                let activeDescriptor = modelService.activeDescriptor(for: .asr),
-                activeDescriptor.engine == .whisperCpp
-            else {
+            // #099 — query BOTH .asr (batch whisper.cpp) AND
+            // .streamingASR (streaming whisper.cpp) active descriptors.
+            // Querying only .asr would miss a streaming-whisper user's
+            // active descriptor at shutdown, leaving its context
+            // un-evicted if it was downloaded but never prepared.
+            let activeWhisperDescriptors: [ModelDescriptor] = [.asr, .streamingASR]
+                .compactMap { modelService.activeDescriptor(for: $0) }
+                .filter { $0.engine == .whisperCpp || $0.engine == .whisperCppStreaming }
+
+            guard !activeWhisperDescriptors.isEmpty else {
                 return preparedWhisperDescriptors
             }
 
-            return [activeDescriptor] + preparedWhisperDescriptors.filter {
-                $0.id != activeDescriptor.id
+            let activeIDs = Set(activeWhisperDescriptors.map(\.id))
+            return activeWhisperDescriptors + preparedWhisperDescriptors.filter {
+                !activeIDs.contains($0.id)
             }
         }
     }

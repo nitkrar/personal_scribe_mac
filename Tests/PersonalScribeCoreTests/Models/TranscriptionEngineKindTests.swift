@@ -26,6 +26,10 @@ final class TranscriptionEngineKindTests: XCTestCase {
         XCTAssertEqual(TranscriptionEngine.whisperCpp.kind, .asr)
     }
 
+    func testWhisperCppStreamingMapsToStreamingASR() {
+        XCTAssertEqual(TranscriptionEngine.whisperCppStreaming.kind, .streamingASR)
+    }
+
     func testDiarizationMapsToDiarization() {
         XCTAssertEqual(TranscriptionEngine.diarization.kind, .diarization)
     }
@@ -37,6 +41,16 @@ final class TranscriptionEngineKindTests: XCTestCase {
         XCTAssertEqual(
             try JSONDecoder().decode(TranscriptionEngine.self, from: data),
             .whisperCpp
+        )
+    }
+
+    func testWhisperCppStreamingCodableRoundTrips() throws {
+        let data = try JSONEncoder().encode(TranscriptionEngine.whisperCppStreaming)
+
+        XCTAssertEqual(String(data: data, encoding: .utf8), "\"whisperCppStreaming\"")
+        XCTAssertEqual(
+            try JSONDecoder().decode(TranscriptionEngine.self, from: data),
+            .whisperCppStreaming
         )
     }
 }

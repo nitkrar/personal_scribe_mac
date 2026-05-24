@@ -86,7 +86,7 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
         )
     }
 
-    func testWhisperCppDescriptorResolvesToWhisperCppTranscriberAdapter() throws {
+    func testWhisperCppDescriptorResolvesBatchTranscriber() throws {
         let provider = ModelBoundProcessorProvider(
             storageLocator: TestStorageLocator.make(),
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
@@ -100,6 +100,34 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
                 || transcriberTypeName.hasSuffix(".WhisperCppTranscriberAdapter"),
             "Stage B whisper.cpp descriptors should route to the real adapter"
         )
+    }
+
+    func testWhisperCppStreamingDescriptorResolvesStreamingTranscriber() throws {
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: TestStorageLocator.make(),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        let transcriber = try provider.streamingTranscriber(
+            for: BuiltInModelCatalog.whisperCppStreamingTiny
+        )
+        let transcriberTypeName = String(reflecting: type(of: transcriber))
+
+        XCTAssertTrue(
+            transcriberTypeName == "WhisperCppStreamingTranscriberAdapter"
+                || transcriberTypeName.hasSuffix(".WhisperCppStreamingTranscriberAdapter"),
+            "whisper.cpp streaming descriptors should route to the real streaming adapter"
+        )
+    }
+
+    func testWhisperCppBatchAndStreamingDescriptorsAreDistinctAndShareArtifacts() {
+        let batch = BuiltInModelCatalog.whisperCppTiny
+        let streaming = BuiltInModelCatalog.whisperCppStreamingTiny
+
+        XCTAssertNotEqual(batch.id, streaming.id)
+        XCTAssertEqual(batch.repoFolderName, streaming.repoFolderName)
+        XCTAssertEqual(batch.requiredRelativePaths, streaming.requiredRelativePaths)
+        XCTAssertEqual(batch.approximateSizeBytes, streaming.approximateSizeBytes)
     }
 
     func testSameDescriptorReturnsSharedCacheRecord() throws {

@@ -75,6 +75,7 @@ let package = Package(
             name: "PersonalScribeTranscription",
             dependencies: [
                 "PersonalScribeCore",
+                "PersonalScribeVAD",
                 "WhisperFramework",
                 .product(name: "FluidAudio", package: "FluidAudio"),
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),

@@ -84,4 +84,15 @@ final class SettingKeyTests: XCTestCase {
             true
         )
     }
+
+    func testRegistryIncludesStreamingEouSilenceThresholdKey() {
+        XCTAssertEqual(
+            PreferenceKeys.streamingEouSilenceThresholdMs.key,
+            "StreamingEouSilenceThresholdMs"
+        )
+        XCTAssertEqual(
+            PreferenceKeys.streamingEouSilenceThresholdMs.default,
+            1000
+        )
+    }
 }

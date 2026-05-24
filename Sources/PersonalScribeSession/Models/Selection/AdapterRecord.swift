@@ -21,6 +21,17 @@ struct AdapterRecord: Sendable {
         self.diarizer = nil
     }
 
+    init(
+        descriptorID: String,
+        transcriber: any Transcriber,
+        streamingTranscriber: any StreamingTranscriber
+    ) {
+        self.descriptorID = descriptorID
+        self.transcriber = transcriber
+        self.streamingTranscriber = streamingTranscriber
+        self.diarizer = nil
+    }
+
     init(descriptorID: String, diarizer: any SpeakerDiarizer) {
         self.descriptorID = descriptorID
         self.transcriber = nil
@@ -42,5 +53,19 @@ struct AdapterRecord: Sendable {
         }
 
         preconditionFailure("AdapterRecord requires one bound adapter")
+    }
+
+    var lifecycles: [any ModelLifecycle] {
+        var values: [any ModelLifecycle] = []
+        if let transcriber {
+            values.append(transcriber)
+        }
+        if let streamingTranscriber {
+            values.append(streamingTranscriber)
+        }
+        if let diarizer {
+            values.append(diarizer)
+        }
+        return values
     }
 }

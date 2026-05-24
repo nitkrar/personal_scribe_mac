@@ -77,6 +77,14 @@ public enum PreferenceKeys {
         default: true
     )
 
+    /// Streaming dictation end-of-utterance silence threshold in
+    /// milliseconds. Shared global default for streaming adapters
+    /// that use VAD to segment utterances inside an active session.
+    public static let streamingEouSilenceThresholdMs = SettingKey<Int>(
+        key: "StreamingEouSilenceThresholdMs",
+        default: 1000
+    )
+
     /// Speaker separation sensitivity preset for the offline diarizer.
     /// Matches `SpeakerSeparationSensitivityPreference.userDefaultsKey`
     /// + `default`. The FluidAudio adapter reads this at session start
