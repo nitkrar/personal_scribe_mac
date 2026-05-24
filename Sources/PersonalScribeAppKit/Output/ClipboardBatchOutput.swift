@@ -69,6 +69,13 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
             return .ignoredEmptyInput
         }
 
+        let sessionID = UUID().uuidString
+        var pasteAccumulator = PasteSessionAccumulator()
+        pasteAccumulator.startedSession()
+        defer {
+            logger.info(pasteAccumulator.summary(sink: .batch, sessionID: sessionID).formatLogLine())
+        }
+
         // #089 L-24: sink presence is the feature gate. No `.clipboard`
         // entry → skip clipboard write + restore + paste entirely. No
         // `.frontmostPaste` entry → skip Cmd+V even when clipboard
@@ -100,14 +107,26 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
             return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
         }
 
+        pasteAccumulator.recordFinalAttempted(chars: text.count)
+
         let restoreDelay = ClipboardRestoreDelay.resolve(from: defaults).seconds
         let handle = snapshotService.captureTransientSnapshot()
 
         guard let writeToken = snapshotService.replaceContents(with: text) else {
-            logger.info("ClipboardBatchOutput: failed to write transcript to pasteboard; restoring previous clipboard contents")
+            pasteAccumulator.recordFinalFailed(reason: .pasteboardWriteFailed)
+            logger.error(
+                pasteFailedLogLine(
+                    sink: .batch,
+                    stage: "final",
+                    reason: .pasteboardWriteFailed,
+                    attemptedChars: text.count,
+                    sessionID: sessionID
+                )
+            )
             snapshotService.restoreSnapshot(handle)
             return .failed(.clipboardWriteFailed)
         }
+        pasteAccumulator.recordFinalClipboardWrite(chars: text.count)
 
         // Schedules the user's pre-transcript clipboard to be restored after
         // `restoreDelay` seconds, but only if nothing has written to the
@@ -124,6 +143,7 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         }
 
         if !pasteEnabled {
+            pasteAccumulator.recordFinalClipboardOnlyDelivery(chars: text.count)
             logger.info("ClipboardBatchOutput: paste sink absent or disabled; leaving transcript on clipboard for manual paste")
             maybeScheduleRestore()
             return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
@@ -140,6 +160,16 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         //   (Sublime, VS Code, Electron). PID check trusts the focus owner.
 
         guard isAccessibilityTrusted() else {
+            pasteAccumulator.recordFinalFailed(reason: .accessibilityNotTrusted)
+            logger.error(
+                pasteFailedLogLine(
+                    sink: .batch,
+                    stage: "final",
+                    reason: .accessibilityNotTrusted,
+                    attemptedChars: text.count,
+                    sessionID: sessionID
+                )
+            )
             logger.info("ClipboardBatchOutput: Accessibility permission not granted; triggering system prompt and leaving transcript on clipboard for manual Cmd+V")
             requestAccessibilityPrompt()
             maybeScheduleRestore()
@@ -147,16 +177,39 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         }
 
         guard focusedElementIsInAnotherApp() else {
+            pasteAccumulator.recordFinalFailed(reason: .noTargetCursor)
+            logger.error(
+                pasteFailedLogLine(
+                    sink: .batch,
+                    stage: "final",
+                    reason: .noTargetCursor,
+                    attemptedChars: text.count,
+                    sessionID: sessionID
+                )
+            )
             logger.info("ClipboardBatchOutput: AX focused element is owned by Ninimma (or not readable); leaving transcript on clipboard")
             maybeScheduleRestore()
             return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
         }
 
+        recordObservedTargetIfAvailable(into: &pasteAccumulator)
+
         guard pasteShortcutPoster() else {
+            pasteAccumulator.recordFinalFailed(reason: .eventPostFailed)
+            logger.error(
+                pasteFailedLogLine(
+                    sink: .batch,
+                    stage: "final",
+                    reason: .eventPostFailed,
+                    attemptedChars: text.count,
+                    sessionID: sessionID
+                )
+            )
             maybeScheduleRestore()
             return .delivered(target: .frontmostApp, delivery: .clipboardOnly)
         }
 
+        pasteAccumulator.recordFinalSucceeded(chars: text.count)
         maybeScheduleRestore()
         return .delivered(target: .frontmostApp, delivery: .paste)
     }
@@ -205,6 +258,28 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         focusedElementIsInAnotherApp(
             systemWideFocusedPID: liveSystemWideFocusedPID
         )
+    }
+
+    private func recordObservedTargetIfAvailable(into accumulator: inout PasteSessionAccumulator) {
+        guard let focusedPID = Self.liveSystemWideFocusedPID(),
+              focusedPID != ProcessInfo.processInfo.processIdentifier else {
+            return
+        }
+
+        accumulator.recordTarget(
+            pid: focusedPID,
+            bundleID: NSRunningApplication(processIdentifier: focusedPID)?.bundleIdentifier
+        )
+    }
+
+    private func pasteFailedLogLine(
+        sink: PasteSessionAccumulator.SinkKind,
+        stage: String,
+        reason: PasteFailureReason,
+        attemptedChars: Int,
+        sessionID: String
+    ) -> String {
+        "paste_failed — sink=\(sink.rawValue) stage=\(stage) reason=\(reason.rawValue) attemptedChars=\(attemptedChars) sessionID=\(sessionID)"
     }
 
     private static func liveSystemWideFocusedPID() -> pid_t? {

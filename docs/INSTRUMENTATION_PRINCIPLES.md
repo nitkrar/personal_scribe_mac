@@ -118,6 +118,27 @@ Don't log clipboard contents, transcript text, audio buffer values, dictation ut
 - Log enum tags (`event=speechStart`) not the data feeding the decision
 - The `PIIRedactor` exists for defense-in-depth, but the first line of defense is "don't put PII in the log in the first place"
 
+### 13. Paste observability uses boundary summaries + structured failures
+
+Paste instrumentation follows principle 1 strictly:
+- `paste_session_summary` is one `.info` line per sink invocation/session boundary
+- `paste_failed` is one `.error` line per existing failure branch
+- Never add per-attempt info logs for paste paths
+
+Locked shapes:
+
+```text
+paste_session_summary — sink=<live|batch> sessionID=<uuid> livePasteAttempts=<int> livePasteSucceeded=<int> livePasteFailed=<int> livePasteSkipped=<int> livePasteCumulativeCharsWritten=<int> finalPasteAttempted=<bool> finalPasteSucceeded=<bool> finalPasteCharsWritten=<int> finalPasteFailureReason=<enum|nil> finalPasteSkipped=<bool> targetAppPID=<pid|nil> targetAppBundleID=<bundle|nil> totalDurationMs=<int>
+```
+
+```text
+paste_failed — sink=<live|batch> stage=<live|final> reason=<enum> attemptedChars=<int> sessionID=<uuid>
+```
+
+Privacy reminder for paste logs:
+- Log counts, enum reasons, PID, and bundle ID only
+- Never log chunk text, final transcript text, or clipboard contents
+
 ---
 
 ## How to enforce

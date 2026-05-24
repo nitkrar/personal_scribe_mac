@@ -59,6 +59,40 @@ final class ClipboardBatchOutputTests: XCTestCase {
         )
     }
 
+    private func makeLogger(sink: InMemoryTestSink) -> PersonalScribeLogger {
+        PersonalScribeLogger(
+            category: PersonalScribeLogCategory.ui,
+            reporter: DiagnosticsReporter(
+                sinks: [sink],
+                now: { Date(timeIntervalSince1970: 0) }
+            )
+        )
+    }
+
+    private func waitForLogMessages(
+        in sink: InMemoryTestSink,
+        containing fragment: String,
+        expectedCount: Int
+    ) async -> [RedactedDiagnosticsEvent] {
+        for _ in 0..<100 {
+            let messages = await logMessages(in: sink, containing: fragment)
+            if messages.count >= expectedCount {
+                return messages
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTFail("Timed out waiting for \(expectedCount) diagnostics messages containing '\(fragment)'")
+        return await logMessages(in: sink, containing: fragment)
+    }
+
+    private func logMessages(
+        in sink: InMemoryTestSink,
+        containing fragment: String
+    ) async -> [RedactedDiagnosticsEvent] {
+        await sink.snapshot().filter { $0.message.contains(fragment) }
+    }
+
     func testPromptsAccessibilityWhenNotTrustedAndLeavesTranscriptOnClipboard() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
@@ -116,6 +150,162 @@ final class ClipboardBatchOutputTests: XCTestCase {
         XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
         XCTAssertEqual(promptCount, 0)
         XCTAssertEqual(shortcutPostCount, 1)
+    }
+
+    func testDeliverBatchEmitsPasteSessionSummaryOnSuccessPath() async throws {
+        let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        let service = ClipboardBatchOutput(
+            logger: logger,
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            snapshotService: makeSnapshotService(for: pasteboard),
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in true },
+            focusedElementIsInAnotherApp: { true }
+        )
+
+        let result = await service.deliverBatch(text: "already trusted", sinks: Self.sinks())
+
+        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        let summaryMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_session_summary",
+            expectedCount: 1
+        )
+        let summary = try XCTUnwrap(summaryMessages.last)
+        XCTAssertEqual(summary.level, .info)
+        XCTAssertTrue(summary.message.contains("sink=batch"))
+        XCTAssertTrue(summary.message.contains("finalPasteAttempted=true"))
+        XCTAssertTrue(summary.message.contains("finalPasteSucceeded=true"))
+        XCTAssertTrue(summary.message.contains("finalPasteCharsWritten=15"))
+        XCTAssertTrue(summary.message.contains("finalPasteFailureReason=nil"))
+        XCTAssertTrue(summary.message.contains("finalPasteSkipped=false"))
+    }
+
+    func testDeliverBatchWithAutoPasteDisabledRecordsClipboardOnlyNotSucceeded() async throws {
+        let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        let service = ClipboardBatchOutput(
+            logger: logger,
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            snapshotService: makeSnapshotService(for: pasteboard),
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in true },
+            focusedElementIsInAnotherApp: { true }
+        )
+
+        let result = await service.deliverBatch(text: "clipboard only", sinks: Self.sinks(autoPaste: false))
+
+        XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
+        let summaryMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_session_summary",
+            expectedCount: 1
+        )
+        let summary = try XCTUnwrap(summaryMessages.last)
+        XCTAssertTrue(summary.message.contains("finalPasteSucceeded=false"))
+        XCTAssertTrue(summary.message.contains("finalPasteSkipped=true"))
+        XCTAssertTrue(summary.message.contains("finalPasteCharsWritten=14"))
+    }
+
+    func testDeliverBatchEmitsPasteFailedErrorAndSetsFinalFailureReasonWhenPasteboardWriteFails() async throws {
+        let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        let service = ClipboardBatchOutput(
+            logger: logger,
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            snapshotService: makeSnapshotService(for: pasteboard, failStringWrite: true),
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in true },
+            focusedElementIsInAnotherApp: { true }
+        )
+
+        let result = await service.deliverBatch(text: "new value", sinks: Self.sinks(autoPaste: false))
+
+        XCTAssertEqual(result, .failed(.clipboardWriteFailed))
+        let failureMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_failed — sink=batch stage=final reason=pasteboardWriteFailed attemptedChars=9",
+            expectedCount: 1
+        )
+        let failure = try XCTUnwrap(failureMessages.last)
+        XCTAssertEqual(failure.level, .error)
+
+        let summaryMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_session_summary",
+            expectedCount: 1
+        )
+        let summary = try XCTUnwrap(summaryMessages.last)
+        XCTAssertTrue(summary.message.contains("finalPasteSucceeded=false"))
+        XCTAssertTrue(summary.message.contains("finalPasteCharsWritten=0"))
+        XCTAssertTrue(summary.message.contains("finalPasteFailureReason=pasteboardWriteFailed"))
+        XCTAssertTrue(summary.message.contains("finalPasteSkipped=false"))
+    }
+
+    func testDeliverBatchEmitsPasteFailedErrorAndSetsFinalFailureReasonWhenAccessibilityNotTrusted() async throws {
+        let pasteboard = makePasteboard()
+        let defaults = isolatedDefaults()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        var promptCount = 0
+        let service = ClipboardBatchOutput(
+            logger: logger,
+            defaults: defaults,
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            snapshotService: makeSnapshotService(for: pasteboard),
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { false },
+            requestAccessibilityPrompt: { promptCount += 1 },
+            pasteShortcutPoster: { _ in true },
+            focusedElementIsInAnotherApp: { true }
+        )
+
+        let result = await service.deliverBatch(text: "hello world", sinks: Self.sinks())
+
+        XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
+        XCTAssertEqual(promptCount, 1)
+        let failureMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_failed — sink=batch stage=final reason=accessibilityNotTrusted attemptedChars=11",
+            expectedCount: 1
+        )
+        let failure = try XCTUnwrap(failureMessages.last)
+        XCTAssertEqual(failure.level, .error)
+
+        let summaryMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_session_summary",
+            expectedCount: 1
+        )
+        let summary = try XCTUnwrap(summaryMessages.last)
+        XCTAssertTrue(summary.message.contains("finalPasteSucceeded=false"))
+        XCTAssertTrue(summary.message.contains("finalPasteCharsWritten=11"))
+        XCTAssertTrue(summary.message.contains("finalPasteFailureReason=accessibilityNotTrusted"))
+        XCTAssertTrue(summary.message.contains("finalPasteSkipped=false"))
     }
 
     func testDeliverBatchReturnsClipboardOnlyWhenAutoPasteDisabled() async {

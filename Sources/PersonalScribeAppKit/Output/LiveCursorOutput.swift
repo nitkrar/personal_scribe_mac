@@ -50,6 +50,8 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
     private var sessionSnapshotHandle: PasteboardSnapshotService.Handle?
     private var didWriteChunkThisSession = false
     private var didLogAccessibilityTrustSkipThisCycle = false
+    private var pasteSessionID: String?
+    private var pasteAccumulator = PasteSessionAccumulator()
 
     init(
         logger: PersonalScribeLogger,
@@ -70,27 +72,35 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         let chunk = revision.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !chunk.isEmpty else { return }
 
-        if sessionSnapshotHandle == nil {
-            // Defensive fallback for direct unit tests or future callers
-            // that invoke `deliverPartial` without a preceding
-            // `resetForNewSession()`. Production flow snapshots at
-            // session start.
-            sessionSnapshotHandle = snapshotService.captureTransientSnapshot()
-        }
+        let sessionID = ensurePasteSessionStarted()
+        pasteAccumulator.recordLiveAttempt(chars: chunk.count)
 
         guard snapshotService.replaceContents(with: chunk) != nil else {
-            logger.error("LiveCursorOutput: failed to write chunk to clipboard; skipping paste for this EOU")
+            pasteAccumulator.recordLiveFailed(reason: .pasteboardWriteFailed)
+            logger.error(
+                pasteFailedLogLine(
+                    sink: .live,
+                    stage: "live",
+                    reason: .pasteboardWriteFailed,
+                    attemptedChars: chunk.count,
+                    sessionID: sessionID
+                )
+            )
             return
         }
         didWriteChunkThisSession = true
 
         guard isAccessibilityTrusted() else {
+            pasteAccumulator.recordLiveClipboardWrite(chars: chunk.count)
+            pasteAccumulator.recordLiveSkipped()
             logAccessibilityTrustSkipIfNeeded()
             return
         }
         didLogAccessibilityTrustSkipThisCycle = false
 
         guard focusedElementIsInAnotherApp() else {
+            pasteAccumulator.recordLiveClipboardWrite(chars: chunk.count)
+            pasteAccumulator.recordLiveSkipped()
             logger.info("LiveCursorOutput: focused element is in self; chunk left on clipboard, skipping ⌘V")
             return
         }
@@ -100,8 +110,22 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         // path: the chunk landed on the clipboard but no ⌘V actually
         // posted, and the user sees nothing in the target app.
         if !pasteShortcutPoster() {
-            logger.error("LiveCursorOutput: paste shortcut poster reported failure; chunk on clipboard but ⌘V was not posted")
+            pasteAccumulator.recordLiveClipboardWrite(chars: chunk.count)
+            pasteAccumulator.recordLiveFailed(reason: .eventPostFailed)
+            logger.error(
+                pasteFailedLogLine(
+                    sink: .live,
+                    stage: "live",
+                    reason: .eventPostFailed,
+                    attemptedChars: chunk.count,
+                    sessionID: sessionID
+                )
+            )
+            return
         }
+
+        pasteAccumulator.recordLiveSucceeded(chars: chunk.count)
+        recordObservedTargetIfAvailable()
     }
 
     public func deliverFinal(_ result: TranscriptionResult) async throws {
@@ -121,15 +145,22 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         }
         didWriteChunkThisSession = false
         didLogAccessibilityTrustSkipThisCycle = false
+        pasteSessionID = UUID().uuidString
+        pasteAccumulator = PasteSessionAccumulator()
+        pasteAccumulator.startedSession()
         sessionSnapshotHandle = snapshotService.captureTransientSnapshot()
     }
 
     public func endSession() async {
         guard let handle = sessionSnapshotHandle else { return }
+        let sessionID = pasteSessionID ?? UUID().uuidString
+        logger.info(pasteAccumulator.summary(sink: .live, sessionID: sessionID).formatLogLine())
         sessionSnapshotHandle = nil
         let shouldRestore = didWriteChunkThisSession
         didWriteChunkThisSession = false
         didLogAccessibilityTrustSkipThisCycle = false
+        pasteSessionID = nil
+        pasteAccumulator = PasteSessionAccumulator()
         if shouldRestore {
             snapshotService.restoreSnapshot(handle)
         } else {
@@ -144,6 +175,48 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
 
         didLogAccessibilityTrustSkipThisCycle = true
         logger.info("LiveCursorOutput: Accessibility not trusted; chunk left on clipboard, skipping ⌘V")
+    }
+
+    private func ensurePasteSessionStarted() -> String {
+        if sessionSnapshotHandle == nil {
+            // Defensive fallback for direct unit tests or future callers
+            // that invoke `deliverPartial` without a preceding
+            // `resetForNewSession()`. Production flow snapshots at
+            // session start.
+            sessionSnapshotHandle = snapshotService.captureTransientSnapshot()
+        }
+
+        if pasteSessionID == nil {
+            pasteSessionID = UUID().uuidString
+        }
+
+        if pasteAccumulator.startedAt == nil {
+            pasteAccumulator.startedSession()
+        }
+
+        return pasteSessionID ?? "unknown"
+    }
+
+    private func recordObservedTargetIfAvailable() {
+        guard let focusedPID = Self.liveSystemWideFocusedPID(),
+              focusedPID != ProcessInfo.processInfo.processIdentifier else {
+            return
+        }
+
+        pasteAccumulator.recordTarget(
+            pid: focusedPID,
+            bundleID: NSRunningApplication(processIdentifier: focusedPID)?.bundleIdentifier
+        )
+    }
+
+    private func pasteFailedLogLine(
+        sink: PasteSessionAccumulator.SinkKind,
+        stage: String,
+        reason: PasteFailureReason,
+        attemptedChars: Int,
+        sessionID: String
+    ) -> String {
+        "paste_failed — sink=\(sink.rawValue) stage=\(stage) reason=\(reason.rawValue) attemptedChars=\(attemptedChars) sessionID=\(sessionID)"
     }
 
     // MARK: - Live AX probe + paste poster

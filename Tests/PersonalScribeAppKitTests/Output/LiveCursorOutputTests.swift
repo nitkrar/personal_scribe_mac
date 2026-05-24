@@ -18,7 +18,10 @@ final class LiveCursorOutputTests: XCTestCase {
         NSPasteboard(name: NSPasteboard.Name(rawValue: "personal_scribe.test.\(UUID().uuidString)"))
     }
 
-    private func makeSnapshotService(for pasteboard: NSPasteboard) -> PasteboardSnapshotService {
+    private func makeSnapshotService(
+        for pasteboard: NSPasteboard,
+        stringWriter: ((String) -> Bool)? = nil
+    ) -> PasteboardSnapshotService {
         PasteboardSnapshotService(
             itemsReader: { pasteboard.pasteboardItems ?? [] },
             itemsWriter: { items in
@@ -28,6 +31,9 @@ final class LiveCursorOutputTests: XCTestCase {
                 }
             },
             stringWriter: { string in
+                if let stringWriter {
+                    return stringWriter(string)
+                }
                 pasteboard.clearContents()
                 return pasteboard.setString(string, forType: .string)
             },
@@ -40,13 +46,14 @@ final class LiveCursorOutputTests: XCTestCase {
         logger: PersonalScribeLogger = PersonalScribeLogger.testing(
             category: PersonalScribeLogCategory.ui
         ),
+        snapshotService: PasteboardSnapshotService? = nil,
         isAccessibilityTrusted: @escaping @MainActor () -> Bool = { true },
         pasteShortcutPoster: @escaping @MainActor () -> Bool = { true },
         focusedElementIsInAnotherApp: @escaping @MainActor () -> Bool = { true }
     ) -> LiveCursorOutput {
         LiveCursorOutput(
             logger: logger,
-            snapshotService: makeSnapshotService(for: pasteboard),
+            snapshotService: snapshotService ?? makeSnapshotService(for: pasteboard),
             isAccessibilityTrusted: isAccessibilityTrusted,
             pasteShortcutPoster: pasteShortcutPoster,
             focusedElementIsInAnotherApp: focusedElementIsInAnotherApp
@@ -107,6 +114,168 @@ final class LiveCursorOutputTests: XCTestCase {
 
         XCTAssertEqual(pasteboard.string(forType: .string), "hello")
         XCTAssertEqual(pasteCount, 0)
+    }
+
+    func testEndSessionEmitsPasteSessionSummaryWithCorrectCounts() async throws {
+        let pasteboard = makePasteboard()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        var writeAttempts = 0
+        let snapshotService = makeSnapshotService(
+            for: pasteboard,
+            stringWriter: { string in
+                writeAttempts += 1
+                guard writeAttempts < 4 else { return false }
+                pasteboard.clearContents()
+                return pasteboard.setString(string, forType: .string)
+            }
+        )
+        let output = makeOutput(
+            pasteboard: pasteboard,
+            logger: logger,
+            snapshotService: snapshotService
+        )
+
+        await output.resetForNewSession()
+        try await output.deliverPartial(makeProgress("one", revision: 1))
+        try await output.deliverPartial(makeProgress("two", revision: 2))
+        try await output.deliverPartial(makeProgress("three", revision: 3))
+        try await output.deliverPartial(makeProgress("four", revision: 4))
+        await output.endSession()
+
+        let summaryMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_session_summary",
+            expectedCount: 1
+        )
+        let summary = try XCTUnwrap(summaryMessages.last)
+        XCTAssertEqual(summary.level, .info)
+        XCTAssertTrue(summary.message.contains("sink=live"))
+        XCTAssertTrue(summary.message.contains("livePasteAttempts=4"))
+        XCTAssertTrue(summary.message.contains("livePasteSucceeded=3"))
+        XCTAssertTrue(summary.message.contains("livePasteFailed=1"))
+        XCTAssertTrue(summary.message.contains("livePasteSkipped=0"))
+        XCTAssertTrue(summary.message.contains("livePasteCumulativeCharsWritten=11"))
+        XCTAssertTrue(summary.message.contains("finalPasteAttempted=false"))
+        XCTAssertTrue(summary.message.contains("finalPasteSucceeded=false"))
+    }
+
+    func testReplaceContentsFailureEmitsPasteFailedErrorAndIncrementsFailedCount() async throws {
+        let pasteboard = makePasteboard()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        let snapshotService = makeSnapshotService(
+            for: pasteboard,
+            stringWriter: { _ in false }
+        )
+        let output = makeOutput(
+            pasteboard: pasteboard,
+            logger: logger,
+            snapshotService: snapshotService
+        )
+
+        await output.resetForNewSession()
+        try await output.deliverPartial(makeProgress("hello"))
+        await output.endSession()
+
+        let failureMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_failed — sink=live stage=live reason=pasteboardWriteFailed attemptedChars=5",
+            expectedCount: 1
+        )
+        let failure = try XCTUnwrap(failureMessages.last)
+        XCTAssertEqual(failure.level, .error)
+
+        let summaryMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_session_summary",
+            expectedCount: 1
+        )
+        let summary = try XCTUnwrap(summaryMessages.last)
+        XCTAssertTrue(summary.message.contains("livePasteFailed=1"))
+        XCTAssertTrue(summary.message.contains("livePasteSucceeded=0"))
+    }
+
+    func testPasteShortcutPosterFailureEmitsPasteFailedErrorAndIncrementsFailedCount() async throws {
+        let pasteboard = makePasteboard()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        let output = makeOutput(
+            pasteboard: pasteboard,
+            logger: logger,
+            pasteShortcutPoster: { false }
+        )
+
+        await output.resetForNewSession()
+        try await output.deliverPartial(makeProgress("hello"))
+        await output.endSession()
+
+        let failureMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_failed — sink=live stage=live reason=eventPostFailed attemptedChars=5",
+            expectedCount: 1
+        )
+        let failure = try XCTUnwrap(failureMessages.last)
+        XCTAssertEqual(failure.level, .error)
+
+        let summaryMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_session_summary",
+            expectedCount: 1
+        )
+        let summary = try XCTUnwrap(summaryMessages.last)
+        XCTAssertTrue(summary.message.contains("livePasteFailed=1"))
+        XCTAssertTrue(summary.message.contains("livePasteCumulativeCharsWritten=5"))
+    }
+
+    func testAccessibilityNotTrustedIncrementsSkippedNotFailed() async throws {
+        let pasteboard = makePasteboard()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        let output = makeOutput(
+            pasteboard: pasteboard,
+            logger: logger,
+            isAccessibilityTrusted: { false }
+        )
+
+        await output.resetForNewSession()
+        try await output.deliverPartial(makeProgress("hello"))
+        await output.endSession()
+
+        let summaryMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_session_summary",
+            expectedCount: 1
+        )
+        let summary = try XCTUnwrap(summaryMessages.last)
+        XCTAssertTrue(summary.message.contains("livePasteSkipped=1"))
+        XCTAssertTrue(summary.message.contains("livePasteFailed=0"))
+        XCTAssertTrue(summary.message.contains("livePasteCumulativeCharsWritten=5"))
+    }
+
+    func testFocusedSelfIncrementsSkippedNotFailed() async throws {
+        let pasteboard = makePasteboard()
+        let sink = InMemoryTestSink()
+        let logger = makeLogger(sink: sink)
+        let output = makeOutput(
+            pasteboard: pasteboard,
+            logger: logger,
+            focusedElementIsInAnotherApp: { false }
+        )
+
+        await output.resetForNewSession()
+        try await output.deliverPartial(makeProgress("hello"))
+        await output.endSession()
+
+        let summaryMessages = await waitForLogMessages(
+            in: sink,
+            containing: "paste_session_summary",
+            expectedCount: 1
+        )
+        let summary = try XCTUnwrap(summaryMessages.last)
+        XCTAssertTrue(summary.message.contains("livePasteSkipped=1"))
+        XCTAssertTrue(summary.message.contains("livePasteFailed=0"))
+        XCTAssertTrue(summary.message.contains("livePasteCumulativeCharsWritten=5"))
     }
 
     func testDeliverPartialLogsAccessibilityTrustSkipOncePerClearCycle() async throws {
