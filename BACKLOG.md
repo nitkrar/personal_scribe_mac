@@ -667,7 +667,70 @@ That split is workable for the immediate error-display fix but is the wrong long
 
 ---
 
-## Refactors
+### #097 — Paste pipeline observability (summary-shape)
+
+`infra` · `P2` · `open` · `area: paste, diagnostics, observability`
+*Filed 2026-05-24*
+
+The paste pipeline has **zero structured logging today**. Symptom that surfaced this gap (2026-05-24 dogfood):
+
+> "Live cursor pastes during streaming, but the final post-EoU output is not pasted at all. Can you confirm from logs?"
+
+Atlas grepped `diagnostics.log` for `live_paste`, `paste_attempt`, `paste_succeeded`, `paste_failed`, `live_cursor`, `writeAndPaste`, `pasteText` — **all zero hits**. The user observation is plausible (terminal text was 39 chars post-EoU on the affected session, consistent with "first paste landed, final didn't"), but log-unverifiable. Every future paste-adjacent bug hits the same wall.
+
+Add diagnostics so we can answer "did the paste land?" from logs alone. Follow `INSTRUMENTATION_PRINCIPLES.md`:
+- Summary-at-boundary shape, not per-event (per-event would spam during live-cursor replace).
+- Counts and shapes, not paste content (privacy + `principle #3`).
+- Reuses precedent of `stream_card_state_changed` collapse → summary (`0771c07`) and `streaming_adapter_summary` / `streaming_orchestrator_summary` shapes.
+
+**Locked logging shape:**
+
+One summary log per paste session boundary (session end / pipeline teardown), carrying aggregate counts:
+
+```
+paste_session_summary — sessionID=<id>
+  livePasteAttempts=<int> livePasteSucceeded=<int> livePasteFailed=<int>
+  livePasteReplaceOps=<int> livePasteCumulativeCharsWritten=<int>
+  finalPasteAttempted=<bool> finalPasteSucceeded=<bool> finalPasteCharsWritten=<int>
+  finalPasteFailureReason=<enum?>
+  targetAppPID=<pid?> targetAppBundleID=<bundle?>
+  totalDurationMs=<int>
+```
+
+**Error-level logs (always-on, errors.log)**: paste failures that abort with no fallback. One log per failure, not per attempt:
+
+```
+paste_failed — stage=<live|final> reason=<noTargetCursor|pidProbeRejected|eventPostFailed|other> attemptedChars=<int>
+```
+
+**Explicitly out of scope:**
+- Per-paste-event info logs (would spam ~1/sec during live replace — violates frequency budget #1).
+- Logging paste content (violates principle #3).
+- Per-keystroke / per-CGEventPost debug events (those belong in `debug.log` only, behind a Verbose toggle that #096 introduces).
+
+**Scope:**
+- Identify the paste-pipeline boundary that owns the session lifecycle (likely `LiveCursorWriter` or its caller in the pipeline orchestrator — grep for `CGEventPost` / `NSPasteboard.general.setString`).
+- Thread a per-session accumulator through the paste path, emit the summary at teardown.
+- Add `paste_failed` error-level log at the existing failure branches (no new failure detection — just instrument what's already a `return` / `throw` site).
+- Document the events + frequency budget in `docs/INSTRUMENTATION_PRINCIPLES.md`.
+
+**Tests:**
+- Unit-test the accumulator's count math (`livePasteAttempts` increments on each attempt, `livePasteSucceeded` only on success, etc.).
+- Integration-test that a paste pipeline mock fires the summary at teardown with the right counts.
+- No test asserting the literal log string — test the accumulator's exposed `Summary` value.
+
+**Depends on**: nothing. #096 (Diagnostics consolidation) would make the sink wiring cleaner but is not a blocker — current `PersonalScribeLogger.info(...)` is sufficient for Stage A.
+
+**Unblocks**:
+- Verifying / refuting the "final paste doesn't land after Parakeet EoU" bug surfaced 2026-05-24.
+- Future paste-pipeline bug triage without re-instrumenting from scratch each time.
+- Quantifying paste reliability (success rate, failure-reason histogram) before deciding whether an overlay-edit mode is needed as a workaround for live-paste fragility.
+
+**Connected work — Parakeet EoU degraded-output bug (separate ticket TBD)**: the same session that surfaced this gap also showed Parakeet streaming going into a near-mute mode after one EoU fires (9 partials in 37.5s vs 88 partials in a comparable session without EoU). Paste observability is a prerequisite for diagnosing whether the EoU bug's "no final paste" symptom is upstream (no final text emitted) or downstream (text emitted but paste fails). File the Parakeet EoU ticket separately once we have logs to disambiguate.
+
+**Legacy:** none — net-new.
+
+---
 
 ### #091 — Per-mode language hint
 
