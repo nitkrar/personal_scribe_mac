@@ -13,6 +13,10 @@ public final class PillOverlayController: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var recordingStatusCardContent: StatusCardContent?
     private var streamCardText: String?
+    /// Counts text updates since the most recent `show` so the eventual
+    /// `hide` can emit one summary line instead of per-tick spam.
+    private var streamCardUpdateCount: Int = 0
+    private var streamCardMaxTextLength: Int = 0
     /// Stage B (#046) consumer-side cache of the last VAD fire-token
     /// this controller rendered a notification for. Compared against
     /// `SessionSnapshot.vadAutoStopFireToken` by the driver to guarantee
@@ -320,26 +324,21 @@ public final class PillOverlayController: ObservableObject {
         switch streamCardText {
         case nil:
             presenter.showStreamCard(text: nextText)
-            presenter.logStreamCardStateChanged(
-                action: "show",
-                reason: "new_text",
+            presenter.logStreamCardShown(
                 textLength: nextText.count,
                 sessionState: session.sessionState,
                 isStreamingSession: session.isStreamingSession
             )
             streamCardText = nextText
+            streamCardUpdateCount = 0
+            streamCardMaxTextLength = nextText.count
         case nextText:
             break
         case .some:
             presenter.updateStreamCard(text: nextText)
-            presenter.logStreamCardStateChanged(
-                action: "update",
-                reason: "text_changed",
-                textLength: nextText.count,
-                sessionState: session.sessionState,
-                isStreamingSession: session.isStreamingSession
-            )
             streamCardText = nextText
+            streamCardUpdateCount += 1
+            streamCardMaxTextLength = max(streamCardMaxTextLength, nextText.count)
         }
     }
 
@@ -349,14 +348,17 @@ public final class PillOverlayController: ObservableObject {
         }
 
         presenter.hideStreamCard()
-        presenter.logStreamCardStateChanged(
-            action: "hide",
+        presenter.logStreamCardHidden(
             reason: reason,
-            textLength: 0,
+            updatesSinceShow: streamCardUpdateCount,
+            finalTextLength: streamCardText?.count ?? 0,
+            maxTextLength: streamCardMaxTextLength,
             sessionState: session.sessionState,
             isStreamingSession: session.isStreamingSession
         )
         streamCardText = nil
+        streamCardUpdateCount = 0
+        streamCardMaxTextLength = 0
     }
 
     /// Builds a link-tap callback that invokes `openVadSettingsAction`

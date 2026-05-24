@@ -6,7 +6,7 @@ import PersonalScribeCore
 
 @MainActor
 final class PillOverlayControllerTests: XCTestCase {
-    func testStreamCardStateChangesEmitObservabilityLogs() async throws {
+    func testStreamCardShownAndHiddenEmitObservabilityLogs() async throws {
         let appStore = try makeAppStore()
         let diagnosticsSink = InMemoryTestSink()
         let controller = PillOverlayController(
@@ -62,32 +62,34 @@ final class PillOverlayControllerTests: XCTestCase {
             )
         )
 
+        // Expect exactly 2 log lines: one `stream_card_shown` at first
+        // visibility, one `stream_card_hidden` with an updates summary at
+        // teardown. Per-update text changes do NOT log (used to spam at
+        // ~30/session; now aggregated into the hidden line's
+        // updatesSinceShow + maxTextLength fields).
         let messages = try await waitForStreamCardLogMessages(
             in: diagnosticsSink,
-            expectedCount: 3
+            expectedCount: 2
         )
 
+        XCTAssertEqual(messages.count, 2, "Expected exactly 2 stream-card log lines, got: \(messages.map(\.message))")
+
         XCTAssertTrue(messages.contains { message in
-            message.message.contains("action=show") &&
-            message.message.contains("reason=new_text") &&
-            message.message.contains("textLength=5") &&
+            message.message.contains("stream_card_shown") &&
+            message.message.contains("initialTextLength=5") &&
             message.message.contains("sessionState=capturing") &&
             message.message.contains("isStreamingSession=true")
-        })
+        }, "Expected stream_card_shown with initialTextLength=5; saw: \(messages.map(\.message))")
+
         XCTAssertTrue(messages.contains { message in
-            message.message.contains("action=update") &&
-            message.message.contains("reason=text_changed") &&
-            message.message.contains("textLength=11") &&
-            message.message.contains("sessionState=capturing") &&
-            message.message.contains("isStreamingSession=true")
-        })
-        XCTAssertTrue(messages.contains { message in
-            message.message.contains("action=hide") &&
+            message.message.contains("stream_card_hidden") &&
             message.message.contains("reason=recording_status_card_visible") &&
-            message.message.contains("textLength=0") &&
+            message.message.contains("updatesSinceShow=1") &&
+            message.message.contains("finalTextLength=11") &&
+            message.message.contains("maxTextLength=11") &&
             message.message.contains("sessionState=transcribing") &&
             message.message.contains("isStreamingSession=true")
-        })
+        }, "Expected stream_card_hidden with updates summary; saw: \(messages.map(\.message))")
     }
 }
 
@@ -142,7 +144,7 @@ private extension PillOverlayControllerTests {
 
     func streamCardLogMessages(in sink: InMemoryTestSink) async -> [RedactedDiagnosticsEvent] {
         await sink.snapshot().filter {
-            $0.message.contains("stream_card_state_changed")
+            $0.message.contains("stream_card_shown") || $0.message.contains("stream_card_hidden")
         }
     }
 
