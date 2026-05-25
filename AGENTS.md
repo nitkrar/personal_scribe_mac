@@ -112,7 +112,6 @@ When implementing rebuild work or cherry-picking reference commits:
 
 Always-untracked-don't-stage:
 - `BACKLOG.md` — atlas owns
-- `plans/REBUILD_BACKLOG.md` — atlas owns
 - `plans/*BRIEF*.md` — atlas owns
 - `~/Library/Application Support/personal_scribe/**` — runtime state
 

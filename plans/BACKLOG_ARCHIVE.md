@@ -74,3 +74,44 @@ This archive was seeded by consolidating:
 - `plans/central/PROGRESS.md` *(stale; deleted — `INDEX.md` is authoritative)*
 
 Original source docs moved to `plans/_legacy/` for reconciliation reference (can be deleted a few weeks after this migration once no ticket lookup ambiguity surfaces).
+
+---
+
+## From `REBUILD_BACKLOG.md` (post-reset rebuild, 19 closed)
+
+**Context:** Trunk was hard-reset to `b6699b2` on 2026-05-20 to escape a Parakeet streaming regression introduced by the VAD-boundary architecture (`9d1945b` + descendants). Bisect concluded the architecture itself was broken, not any single commit. Pre-reset trunk (44 commits) preserved on `origin/trunk` and via tag `bookmark-before-reset-2026-05-20`. Local trunk rebuilt by re-doing 7 feature buckets from scratch with clean commits + TDD. Backlog drained 2026-05-25 with bucket #6 (WhisperKit streaming). All buckets landed; local trunk unpushed.
+
+| # | Feature | Commit | How |
+|---|---|---|---|
+| 0a | Diagnostics infra: log spam dedupe, log retention (14d default), on-demand diagnostics window, session lifecycle logs (`session_started_intent`/`_bound`/`streaming_session_started`) | `63bdc58` | hermes (req-0042) |
+| 0b | CancellationError noise fix: `TranscriptRepository` 5 read methods stop logging Swift.CancellationError as failures | `cf4d184` | atlas direct |
+| 0c | Graceful whisper.cpp adapter shutdown before `NSApplication.terminate` (fixes ggml_metal_rsets_free quit crash) | `1fcb5a1` | hermes (req-0043) |
+| 0d | Fast-exit after graceful shutdown (skip whisper.cpp C++ atexit crash) | `36194c1` | hermes (req-0045) |
+| 0e | Route all quit paths through fast-exit handler (NSApplicationDelegateAdaptor; covers status-item Quit + Cmd+Q + Cmd+Q-while-modal) | `de40fae` | hermes (req-0047) |
+| 0f | Fix NSApplicationDelegateAdaptor crash-on-launch (override init() for FastExitApplicationTerminationDelegate) | `20058f2` | atlas direct |
+| obs | Pipeline observability — 8 lifecycle logs (streaming input forwarded, adapter summary, orchestrator summary, stop resolution, stream card state, batch processing started/result, diarized processor summary) | `b465aea` | hermes (req-0046) |
+| qwen+gates | Fix stale qwen3 hint test + add `AGENTS.md` delivery discipline (full-suite gate before DONE, launch-verification gate, canonical DONE format) | `f58cfe6` | atlas direct |
+| debug-sink | Split debug.log sink + 3-day retention separate from errors/diagnostics 14-day retention | `f3ca7e1` | hermes (req-0049) |
+| 1a | Mode-editor picker labels: drop Force/Live prefixes (`ParameterPickerView`, `SensitivityParameterPickerView`) | `cb99c59` | atlas direct |
+| 1b+2+3 | Bundled: Whisper adapter filter (default `.both`) + per-mode language hint #091 + idle resource release for whispercpp/VAD lifecycles | `3bfaccb` | hermes (req-0048) |
+| idle-all | Enforce `releaseIdleResources()` at protocol (drop default no-op) + add real implementations for Parakeet streaming/batch + Qwen3 + WhisperKit + diarizer + `adapter_idle_release` observability log | `1c23cfa` | hermes (req-0050) |
+| logs-ui | Advanced settings: buttons to open errors.log / diagnostics.log / debug.log (falls back to logs/ dir when file not yet written) | `65011c8` | atlas direct |
+| 4 | Audio recording persistence #069 Stage A (8 sub-features: DB relocation, v6 audio_filename column, RecordingFileWriter, pref-gated persist, cascade delete, Recordings UI card, RecordingRetentionSweeper, MV docs) | `2288e8b` | hermes (req-0044) |
+| 5 | Offline file transcription #094 Stage A (FileSourceAudioStream, OfflineTranscriptionCoordinator, OfflineTranscriptionTab, menu-bar Retranscribe last recording, Transcriptions row Re-transcribe icon with press feedback + busy state, ToastBroadcaster, per-source dedup, list refresh on transcript-commit). 10x-engineer + pool-codex-1 reviews clean. | `bef41f7` | hermes (req-0051) |
+| 7 | Whisper.cpp streaming adapter #099 (initial: `.whisperCppStreaming` engine + 3 paired catalog descriptors + tracker + VAD-as-EoU + merged-prefix dedup; +31 tests). **Partially reverted by #100** which consolidated to one descriptor + merged adapter. Streaming-side logic preserved in the merged actor. | `0c74b4d` | hermes (req-0054) |
+| 8 | Engine capabilities + unified WhisperCpp adapter #100 — `TranscriptionEngine.capabilities: Set<ModelKind>`, one descriptor per artifact, ONE merged `WhisperCppAdapter` actor conforming to `Transcriber` + `StreamingTranscriber`, per-section `setActive(_:forKind:)`, `RecipeBuilder.buildStreamingSecondPassTranscriber` force-rule for `.whisperCpp`. Locked the shared-adapter design pattern. | `bc27776` | hermes |
+| 9 | Live cursor EoU paste gated off for whisper.cpp streaming. `RecipeBuilder` forces `liveCursorEnabled=false` when streaming engine is `.whisperCpp` (CGEventPost is fire-and-forget; tracker produces duplicate EoU chunks from re-decode jitter and they paste irrevocably). UI surfaces the gate in Settings → General + Mode detail with disabled toggle + tooltip. Live card visualization + stop-time second-pass paste unaffected. | `11c0f99` | atlas direct |
+| 6 | WhisperKit streaming adapter #101. Extended `TranscriptionEngine.whisperKit.capabilities = [.asr, .streamingASR]`; new `WhisperKitStreamingLedger` (confirmed-delta-only `.endOfUtterance` + unconfirmed-tail `.partial`); new `BufferFedWhisperKitAudioProcessor` (drives WhisperKit's `AudioStreamTranscriber` from our `PCMBuffer` stream); merged `WhisperKitAdapter` actor (renamed from `WhisperKitTranscriberAdapter`) conforming to both `Transcriber` + `StreamingTranscriber`; `ModelBoundProcessorProvider.whisperKit` factory wires same adapter to both batch + streaming slots; `RecipeBuilder` second-pass force-rule extends to `.whisperKit`. Live cursor stays user-controllable for WhisperKit (whisper.cpp gate does NOT extend — WhisperKit's internal `lastConfirmedSegmentEndSeconds` clipping prevents the duplicate-lane bug class). Codex audit (req-0069) corrected the original brief's "watermark = EoU" framing. +17 tests. | `dd100ee` + `322a4da` | hermes (req-0071) |
+
+### Permanently deferred — DO NOT rebuild
+
+| Feature | Why |
+|---|---|
+| VAD-boundary Parakeet rewrite (`9d1945b` + `c167155` + `497a4cf` + `9eba15e`) | Known bad — caused the streaming regression that prompted the reset. Re-design required if revisited. |
+
+### Recovery anchors
+
+- Tag `bookmark-before-reset-2026-05-20` (on origin) — pre-reset broken trunk, 44 commits ahead of `b6699b2`. Cherry-pick source for any reference commits.
+- `origin/trunk` still has the old 44-commit history until force-pushed. Local trunk is canonical.
+
+Active follow-ups split off as tickets: **#039** (whisper.cpp dedup tracker — deferred), **#040** (#101 WhisperKit dogfood verification — pending DMG rebuild), **#041** (delete `AppEntryPointTests.testPersonalScribeAppMainBuildsSceneModelFromComposition` skip), **#042** (memory idle-release note — informational, no action).
