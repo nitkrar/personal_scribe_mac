@@ -1,0 +1,1978 @@
+==COMMIT== dda1c83 2026-04-25 01:22:23 +0100 phase-3 step #024.9: wire "Show menu bar item" toggle to NSStatusItem
+ 4 files changed, 61 insertions(+), 7 deletions(-)
+
+==COMMIT== bf8cec3 2026-04-25 01:19:18 +0100 phase-3 step #024.8: VAD re-arms after speechResumed cancels grace
+ 2 files changed, 73 insertions(+), 2 deletions(-)
+
+==COMMIT== e8cb597 2026-04-25 01:07:35 +0100 phase-3 step #024.7: prewarm new model on setActive + tab-switch refresh
+ 4 files changed, 103 insertions(+), 1 deletion(-)
+
+==COMMIT== 0c55b16 2026-04-25 00:40:48 +0100 phase-3 step #024.6: expand catalog with FluidAudio's other ASR + diarization variants
+ 3 files changed, 161 insertions(+), 2 deletions(-)
+
+==COMMIT== 376f2ed 2026-04-25 00:27:21 +0100 phase-3 step #024.5: align disk layout to FluidAudio's source of truth
+ 5 files changed, 87 insertions(+), 16 deletions(-)
+
+==COMMIT== 64c89bf 2026-04-24 23:56:39 +0100 #068 step 1 close: BACKLOG entry — Stage A done, Stage B pending
+ 1 file changed, 18 insertions(+), 15 deletions(-)
+
+==COMMIT== bf28dd3 2026-04-24 23:55:15 +0100 #068 step 1: menu-bar Mode submenu
+ 4 files changed, 186 insertions(+), 5 deletions(-)
+
+==COMMIT== d7da8f9 2026-04-24 22:53:21 +0100 phase-3 step #024.4: wire Retry to download, tighten setActive test
+ 3 files changed, 31 insertions(+), 4 deletions(-)
+
+==COMMIT== 98cf401 2026-04-24 22:41:40 +0100 phase-3 step #024.3: separate activate from download
+ 8 files changed, 118 insertions(+), 170 deletions(-)
+
+==COMMIT== 829b776 2026-04-24 22:08:03 +0100 phase-3 step #024.2: DefaultModelService.removeDownloaded + ModelRow delete/activate redesign
+ 3 files changed, 149 insertions(+), 22 deletions(-)
+
+==COMMIT== 73c0ba9 2026-04-24 22:06:00 +0100 phase-3 step #024.1: ModelBoundTranscriberProvider.removeDownloadedFiles
+ 2 files changed, 69 insertions(+)
+
+==COMMIT== e3410da 2026-04-24 21:17:10 +0100 #076 close: mute system audio while recording shipped in 89ab9de
+ 1 file changed, 408 insertions(+)
+
+==COMMIT== d3b2904 2026-04-24 21:13:27 +0100 #075: mark done — changelog + root-cause summary
+ 1 file changed, 46 insertions(+), 4 deletions(-)
+
+==COMMIT== 89ab9de 2026-04-24 21:11:37 +0100 mute system audio while recording toggle
+ 11 files changed, 441 insertions(+), 11 deletions(-)
+
+==COMMIT== 82eade2 2026-04-24 21:05:13 +0100 #075 step 1.7: drop the too-short chip; pill goes straight to idle
+ 2 files changed, 11 insertions(+), 39 deletions(-)
+
+==COMMIT== c8ac42d 2026-04-24 20:46:58 +0100 #075 step 1.6: manual verification runbook MV-SHORT-1..6
+ 1 file changed, 30 insertions(+)
+
+==COMMIT== 6ebbc31 2026-04-24 20:46:19 +0100 #075 step 1.5: delete PersonalScribeError.recordingTooShort
+ 7 files changed, 9 insertions(+), 20 deletions(-)
+
+==COMMIT== 13b6b0f 2026-04-24 20:32:47 +0100 #075 step 1.4: assert card renders nothing for .shortExit
+ 1 file changed, 17 insertions(+)
+
+==COMMIT== 6d89cd5 2026-04-24 20:32:07 +0100 #075 step 1.3: pill renders short-exit chip for 1.5s via AppStore
+ 2 files changed, 64 insertions(+)
+
+==COMMIT== c89a6d8 2026-04-24 20:29:27 +0100 #075 step 1.2: orchestrator publishes .shortExit instead of .error(.recordingTooShort)
+ 4 files changed, 94 insertions(+), 16 deletions(-)
+
+==COMMIT== 597055e 2026-04-24 20:24:28 +0100 #075 step 1.1: SessionState.shortExit case + displayState mapping
+ 9 files changed, 33 insertions(+), 16 deletions(-)
+
+==COMMIT== 9d01f84 2026-04-24 19:01:26 +0100 #017 stage A: live-apply hotkey customization + plist collision + restore-default
+ 11 files changed, 723 insertions(+), 33 deletions(-)
+
+==COMMIT== 8d06afc 2026-04-24 18:32:11 +0100 #072: consolidate clipboard snapshot + orthogonal auto-paste/restore toggles
+ 28 files changed, 2868 insertions(+), 829 deletions(-)
+
+==COMMIT== b682a26 2026-04-24 14:55:40 +0100 #046 post-ship: version-agnostic VAD bundle + direct MLModel load
+ 7 files changed, 34 insertions(+), 21 deletions(-)
+
+==COMMIT== 10bcc6a 2026-04-24 12:17:39 +0100 #073: Launch at Login info icon is now a clickable deep-link to System Settings
+ 1 file changed, 14 insertions(+), 4 deletions(-)
+
+==COMMIT== 6c6505f 2026-04-24 12:15:03 +0100 settings: Background mode replaces Show in Dock; shared relaunch-required pattern
+ 11 files changed, 212 insertions(+), 219 deletions(-)
+
+==COMMIT== 5519113 2026-04-24 11:39:58 +0100 #046 stage b tuning + runbook reorg: 3s grace, 1-10s slider, notification sticks, Manual*Verification → Tests/ManualVerifications/
+ 22 files changed, 49 insertions(+), 59 deletions(-)
+
+==COMMIT== ef023e4 2026-04-24 01:17:58 +0100 #046 stage b chunk e: composition link-wiring + bundle-model safety + runbook
+ 6 files changed, 95 insertions(+), 10 deletions(-)
+
+==COMMIT== a126b17 2026-04-24 01:06:31 +0100 #046 stage b chunk d: settings auto-stop collapsed section + warn/notify toggles
+ 1 file changed, 65 insertions(+), 22 deletions(-)
+
+==COMMIT== 017d933 2026-04-24 01:12:26 +0100 #046 stage b chunk c: response-card driver + view link support
+ 6 files changed, 502 insertions(+), 33 deletions(-)
+
+==COMMIT== c689560 2026-04-24 01:02:33 +0100 #046 stage b phase 1+2: grace-window core types + orchestrator state machine
+ 9 files changed, 776 insertions(+), 33 deletions(-)
+
+==COMMIT== 99cee6a 2026-04-24 00:52:33 +0100 cleanup: prune dead tests in PersonalScribeCoreTests
+ 12 files changed, 286 deletions(-)
+
+==COMMIT== a372e34 2026-04-24 00:45:00 +0100 cleanup: prune dead tests in PersonalScribeAppKitTests
+ 12 files changed, 189 deletions(-)
+
+==COMMIT== 78c3ba3 2026-04-24 00:11:23 +0100 cleanup: prune dead + redundant tests across audio / transcription / session
+ 21 files changed, 885 deletions(-)
+
+==COMMIT== 15e2496 2026-04-24 00:04:30 +0100 #046: VAD auto-stop Stage A — bundled Silero + detached-Task stop + Settings card
+ 20 files changed, 2015 insertions(+), 11 deletions(-)
+
+==COMMIT== 00d836a 2026-04-23 18:20:59 +0100 trunk: collapse session state through single pipeline snapshot stream
+ 22 files changed, 323 insertions(+), 365 deletions(-)
+
+==COMMIT== d3696ed 2026-04-23 01:50:52 +0100 trunk: bump pill sine-wave amplitude + drop tautological size tests
+ 2 files changed, 13 insertions(+), 53 deletions(-)
+
+==COMMIT== 9302f8f 2026-04-23 00:22:31 +0100 cleanup: exclude Manual*Verification.md runbooks from SPM + gitignore py bytecode
+ 2 files changed, 33 insertions(+), 4 deletions(-)
+
+==COMMIT== d7f8f49 2026-04-23 00:17:18 +0100 trunk: pill dimension bands — Height/Width enums prevent drift
+ 4 files changed, 138 insertions(+), 26 deletions(-)
+
+==COMMIT== 9415e15 2026-04-22 23:56:25 +0100 cleanup: silence Swift 6 source-side warnings + port package script to Python
+ 8 files changed, 567 insertions(+), 389 deletions(-)
+
+==COMMIT== ed1f612 2026-04-22 23:11:01 +0100 #013 step 1.3: add transcript row editing sheet
+ 2 files changed, 149 insertions(+), 18 deletions(-)
+
+==COMMIT== aef1a74 2026-04-22 23:07:04 +0100 #013 step 1.2: reload transcript edits in the tab
+ 2 files changed, 65 insertions(+), 4 deletions(-)
+
+==COMMIT== 8affe56 2026-04-22 23:05:19 +0100 #013 step 1.1: persist transcript row edits
+ 4 files changed, 65 insertions(+), 1 deletion(-)
+
+==COMMIT== db791b0 2026-04-22 21:15:10 +0100 #016 step 1.3: simplify policy + tests — drop premature abstraction
+ 3 files changed, 22 insertions(+), 171 deletions(-)
+
+==COMMIT== da96525 2026-04-22 21:01:46 +0100 #016 step 1.2: DefaultModelService consults RAM policy on first launch
+ 3 files changed, 108 insertions(+), 1 deletion(-)
+
+==COMMIT== 930330e 2026-04-22 20:49:10 +0100 #016 step 1.1: DefaultModelSelectionPolicy for RAM-aware default
+ 2 files changed, 196 insertions(+)
+
+==COMMIT== 15c2f2e 2026-04-22 20:32:33 +0100 #015 step 1.1: observer flips OnboardingCompleted on required-perms grant
+ 6 files changed, 437 insertions(+)
+
+==COMMIT== b3f3278 2026-04-22 20:16:52 +0100 bug-007 step 1.4: AIModelsTab row shows description + ⓘ popover
+ 5 files changed, 233 insertions(+), 36 deletions(-)
+
+==COMMIT== 33d25a1 2026-04-22 20:13:14 +0100 bug-007 step 1.3: ModelInfoPopoverPresenter with computed-relative ranks
+ 2 files changed, 400 insertions(+)
+
+==COMMIT== 0df02cd 2026-04-22 20:10:56 +0100 bug-007 step 1.2: pivot ModelDescriptor to published benchmarks
+ 8 files changed, 127 insertions(+), 72 deletions(-)
+
+==COMMIT== 68ece00 2026-04-22 20:04:48 +0100 #011 step 1.3: add transcriptions row delete affordance
+ 5 files changed, 103 insertions(+)
+
+==COMMIT== 30b13f3 2026-04-22 20:02:12 +0100 #011 step 1.2: reload transcriptions after delete
+ 2 files changed, 84 insertions(+), 7 deletions(-)
+
+==COMMIT== bd5ceff 2026-04-22 19:59:48 +0100 #011 step 1.1: persist transcript row deletion
+ 3 files changed, 96 insertions(+), 2 deletions(-)
+
+==COMMIT== 457ca81 2026-04-22 19:57:23 +0100 bug-007 step 1.1: ModelDescriptor gains shortDescription + RelativeRating
+ 8 files changed, 140 insertions(+), 5 deletions(-)
+
+==COMMIT== 0e1f284 2026-04-22 19:44:06 +0100 bug-039 step 1.2: AIModelsTab onAppear refresh + MV-SETT-STALE runbook
+ 2 files changed, 45 insertions(+)
+
+==COMMIT== 48423e0 2026-04-22 19:42:58 +0100 bug-039 step 1.1: DefaultModelService.refresh() re-syncs states to disk
+ 2 files changed, 210 insertions(+)
+
+==COMMIT== 9d1dfb1 2026-04-22 19:36:33 +0100 trunk: #042 — AX probe gate swaps to PID inequality
+ 9 files changed, 707 insertions(+), 134 deletions(-)
+
+==COMMIT== 90af8c6 2026-04-22 19:12:33 +0100 bug-002 step 2.4: MV-PUX runbook updated for Esc true-discard
+ 1 file changed, 27 insertions(+), 20 deletions(-)
+
+==COMMIT== 5e1f7fe 2026-04-22 18:29:02 +0100 bug-002 step 2.3: Esc handler wired to cancelIfActive (true-discard)
+ 1 file changed, 9 insertions(+), 13 deletions(-)
+
+==COMMIT== d2c57b7 2026-04-22 18:28:08 +0100 bug-002 step 2.2: coordinator cancelIfActive (true-discard)
+ 2 files changed, 67 insertions(+), 4 deletions(-)
+
+==COMMIT== 1c2f37f 2026-04-22 18:27:05 +0100 bug-002 step 2.1: pipeline cancelCapture (true-discard)
+ 4 files changed, 183 insertions(+)
+
+==COMMIT== a786db1 2026-04-22 17:39:21 +0100 bug-071 step 1.5: MV-HOLD runbook + investigation artifacts
+ 5 files changed, 184 insertions(+), 5 deletions(-)
+
+==COMMIT== e55d8f7 2026-04-22 17:36:49 +0100 bug-071 step 1.4: rewire hold hotkey to coordinator hold API + delete sticky-hold guard
+ 5 files changed, 25 insertions(+), 58 deletions(-)
+
+==COMMIT== 0facbba 2026-04-22 17:28:31 +0100 bug-071 step 1.3: coordinator gains startHoldIfIdle + stopIfActive (Option A)
+ 2 files changed, 116 insertions(+)
+
+==COMMIT== b545753 2026-04-22 17:26:54 +0100 bug-071 step 1.2: pipeline startHoldCapture publishes .holdRecording eagerly
+ 4 files changed, 182 insertions(+)
+
+==COMMIT== 26122a6 2026-04-22 17:21:00 +0100 bug-071 step 1.1: add SessionState.holdRecording + pill mapping
+ 10 files changed, 67 insertions(+), 8 deletions(-)
+
+==COMMIT== de7e4ae 2026-04-21 23:57:31 +0100 trunk: #008 followup — test init compat with new inputDeviceProvider param
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+==COMMIT== 4cf5a9b 2026-04-21 23:54:37 +0100 trunk: #008 — sidebar mic footer shows current input device name
+ 6 files changed, 407 insertions(+), 7 deletions(-)
+
+==COMMIT== a97e575 2026-04-21 23:52:03 +0100 trunk: #006 — compact base-directory row + Finder opens folder itself
+ 3 files changed, 198 insertions(+), 26 deletions(-)
+
+==COMMIT== 3a15cb3 2026-04-21 23:51:31 +0100 trunk: #041 — unified window follows active space instead of pinning
+ 3 files changed, 265 insertions(+), 1 deletion(-)
+
+==COMMIT== 91ea8fa 2026-04-21 23:45:57 +0100 #043 followup: mark DatabaseOperationStatusTests @MainActor
+ 1 file changed, 8 insertions(+), 12 deletions(-)
+
+==COMMIT== a5a841a 2026-04-21 23:26:21 +0100 #043: DatabaseOperationStatus observable plumbing
+ 4 files changed, 308 insertions(+), 9 deletions(-)
+
+==COMMIT== 45ed17f 2026-04-21 23:25:35 +0100 trunk: #040 + #044 followup — dark-shell helpers + pill test spy compat
+ 7 files changed, 321 insertions(+), 16 deletions(-)
+
+==COMMIT== 2048b66 2026-04-21 23:15:53 +0100 trunk: #005 — Launch-at-Login status feedback
+ 4 files changed, 300 insertions(+), 19 deletions(-)
+
+==COMMIT== 5e560a4 2026-04-21 23:13:28 +0100 trunk: #044 pill panel resize per state — kill the click-halo
+ 6 files changed, 475 insertions(+), 16 deletions(-)
+
+==COMMIT== ab0ed95 2026-04-21 22:38:52 +0100 storage-layer step 3.1: delete shim + SQLiteMetricsReader + legacy readers
+ 10 files changed, 92 insertions(+), 742 deletions(-)
+
+==COMMIT== cbcfaf3 2026-04-21 22:16:28 +0100 storage-layer step 2.4: wire AppComposition + NotesWindow to shared AppDatabase
+ 3 files changed, 42 insertions(+), 42 deletions(-)
+
+==COMMIT== 69ed74f 2026-04-21 22:12:23 +0100 storage-layer step 2.2: rewire metrics readers to AppDatabase + delete MetricsSnapshotStore.init(databaseURL:)
+ 6 files changed, 191 insertions(+), 30 deletions(-)
+
+==COMMIT== 1d6446d 2026-04-21 22:12:10 +0100 storage-layer step 2.1: swap SessionCoordinator + pipeline to TranscriptRepository
+ 4 files changed, 62 insertions(+), 40 deletions(-)
+
+==COMMIT== 3b1aaf5 2026-04-21 22:12:19 +0100 storage-layer step 2.3: collapse SQLiteTranscriptStore to shim + nuke TranscriptStoreJSONL
+ 4 files changed, 21 insertions(+), 987 deletions(-)
+
+==COMMIT== 903ffd0 2026-04-21 21:58:00 +0100 storage-layer step 1.4: introduce TranscriptRepository CRUD surface
+ 3 files changed, 491 insertions(+)
+
+==COMMIT== 6f06488 2026-04-21 21:50:51 +0100 storage-layer step 1.3: add GRDB conformance to TranscriptEntry
+ 2 files changed, 156 insertions(+)
+
+==COMMIT== db4ccde 2026-04-21 21:52:17 +0100 storage-layer step 1.2: scaffold AppDatabase + migrator + error envelope
+ 7 files changed, 610 insertions(+)
+
+==COMMIT== 5145cf7 2026-04-21 21:43:31 +0100 storage-layer step 1.1: pin transcripts.sqlite DDL + absorb Phase 3.D
+ 6 files changed, 313 insertions(+), 265 deletions(-)
+
+==COMMIT== ca95584 2026-04-21 17:25:30 +0100 trunk: backlog migration — consolidate plans/backlog + PLAN_PHASES into BACKLOG.md + ROADMAP.md
+ 18 files changed, 645 insertions(+), 91 deletions(-)
+
+==COMMIT== 608e7fb 2026-04-21 14:34:14 +0100 trunk: backlog — fix ui-mockup-gaps.md SHA citations (D, F, G series)
+ 1 file changed, 13 insertions(+), 13 deletions(-)
+
+==COMMIT== a67a2c8 2026-04-21 14:18:16 +0100 trunk: backlog — sanity-check pass; mark #1 + #5 with current FIXED status
+ 1 file changed, 12 insertions(+), 7 deletions(-)
+
+==COMMIT== 47a25d2 2026-04-21 14:14:50 +0100 trunk: housekeeping — move agents_status.py to scripts/; ignore WIP plans/ paths
+ 2 files changed, 454 insertions(+)
+
+==COMMIT== a77724b 2026-04-21 13:51:55 +0100 trunk: bugs #6 + #16 — compact menu-bar header + History/Settings entries
+ 8 files changed, 150 insertions(+), 74 deletions(-)
+
+==COMMIT== 0b70f1d 2026-04-21 13:39:32 +0100 trunk: mockup-gaps G.3 test fix — drop WindowTint.dark assertion in TranscriptionsTabTests
+ 1 file changed, 6 deletions(-)
+
+==COMMIT== 37f9384 2026-04-21 13:33:47 +0100 trunk: mockup-gaps G — backlog check-offs + resolution paragraph
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+==COMMIT== 35adcd8 2026-04-21 13:33:03 +0100 trunk: mockup-gaps G.4 — Theme picker + conditional tint visibility
+ 3 files changed, 277 insertions(+), 6 deletions(-)
+
+==COMMIT== 76969af 2026-04-21 13:29:31 +0100 trunk: mockup-gaps G.3 — reroute former WindowTint.dark call sites
+ 5 files changed, 41 insertions(+), 21 deletions(-)
+
+==COMMIT== f04ad4c 2026-04-21 13:26:46 +0100 trunk: mockup-gaps G.2 — drop WindowTint.dark case
+ 2 files changed, 34 insertions(+), 58 deletions(-)
+
+==COMMIT== 8e45f33 2026-04-21 13:25:11 +0100 trunk: mockup-gaps G.1 — AppTheme enum (Light/Dark/System, default Light)
+ 2 files changed, 196 insertions(+)
+
+==COMMIT== a21e7b6 2026-04-21 13:11:17 +0100 trunk: bug #14 — demote Shortcuts from standalone sub-tab to                 General subsection
+ 8 files changed, 115 insertions(+), 566 deletions(-)
+
+==COMMIT== 8b829a3 2026-04-21 13:20:39 +0100 trunk: CLAUDE.md — SeshatTheme is informational + theme types live in AppKit/Theme
+ 1 file changed, 5 insertions(+)
+
+==COMMIT== 6af1eaf 2026-04-21 13:09:57 +0100 trunk: mockup-gaps F — backlog check-offs with trunk SHAs
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+==COMMIT== fca6e6f 2026-04-21 13:08:50 +0100 trunk: mockup-gaps F.5 — merge Typography.display into Typography.title
+ 4 files changed, 5 insertions(+), 16 deletions(-)
+
+==COMMIT== bcab59b 2026-04-21 13:07:41 +0100 trunk: mockup-gaps F.4 — doc-comment the palette-vs-Status split
+ 1 file changed, 21 insertions(+), 1 deletion(-)
+
+==COMMIT== b8f0068 2026-04-21 13:06:44 +0100 trunk: mockup-gaps F.3 — drop dead Accent enum (CCB990/B89961)
+ 2 files changed, 22 deletions(-)
+
+==COMMIT== c23c9d9 2026-04-21 13:05:59 +0100 trunk: mockup-gaps F.2 — drop dead Palette.pillStopRed (#EF5350)
+ 1 file changed, 3 insertions(+), 12 deletions(-)
+
+==COMMIT== afd925d 2026-04-21 13:04:36 +0100 trunk: mockup-gaps F.1 — drop dead Radius.pill (12pt)
+ 2 files changed, 8 deletions(-)
+
+==COMMIT== bbc8537 2026-04-21 13:02:23 +0100 trunk: backlog — correct #14 wording (demote Shortcuts tab into General subsection)
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+==COMMIT== eace2d2 2026-04-21 13:00:39 +0100 trunk: mockup-gaps E — waveform glyph for Transcriptions sidebar row
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+
+==COMMIT== ce6ba19 2026-04-21 12:57:40 +0100 trunk: bug #5a-v1 commit 2 — CGEventTap wiring stops ÷÷÷÷ leak
+ 7 files changed, 445 insertions(+), 39 deletions(-)
+
+==COMMIT== bfc5502 2026-04-21 12:57:06 +0100 trunk: mockup-gaps A/B/C — backlog check-offs with trunk SHAs
+ 1 file changed, 15 insertions(+), 15 deletions(-)
+
+==COMMIT== f0bfcd5 2026-04-21 12:37:49 +0100 trunk: mockup-gaps D — backlog check-offs + deferral list
+ 1 file changed, 85 insertions(+)
+
+==COMMIT== 41c3f6c 2026-04-21 12:37:07 +0100 trunk: mockup-gaps D.3 — TEXT INPUT section + paste master toggle
+ 5 files changed, 298 insertions(+), 11 deletions(-)
+
+==COMMIT== 6108a19 2026-04-21 12:33:40 +0100 trunk: mockup-gaps D.2 — APPLICATION section + Show in Dock toggle
+ 4 files changed, 224 insertions(+), 3 deletions(-)
+
+==COMMIT== ee4d7ca 2026-04-21 12:31:30 +0100 trunk: mockup-gaps D.1 — RECORDING WINDOW Style picker + PillStyle pref
+ 4 files changed, 352 insertions(+), 2 deletions(-)
+
+==COMMIT== 4114614 2026-04-21 12:44:33 +0100 trunk: bug #5b.A fixup — extract await coordinator.state() into locals to satisfy XCTAssertEqual autoclosure isolation
+ 1 file changed, 10 insertions(+), 5 deletions(-)
+
+==COMMIT== 231df70 2026-04-21 12:28:55 +0100 trunk: bug #5b.C — pill overlay visible across full-screen-app spaces
+ 1 file changed, 12 insertions(+)
+
+==COMMIT== 4d5bf7f 2026-04-21 12:31:58 +0100 trunk: bug #5b.A — explicit startIfIdle/stopIfRecording replacing                    symmetric toggle() on the hold path
+ 3 files changed, 215 insertions(+), 12 deletions(-)
+
+==COMMIT== fd9d47a 2026-04-21 12:42:54 +0100 trunk: bug #5a-v1 commit 1 — HotkeyEvent adapter (no-op refactor)
+ 4 files changed, 148 insertions(+), 7 deletions(-)
+
+==COMMIT== d5b6379 2026-04-21 12:21:55 +0100 trunk: mockup-gaps C.7 — Input Monitoring subtitle sourced from HotkeyPreference
+ 3 files changed, 88 insertions(+), 2 deletions(-)
+
+==COMMIT== 24cc9f8 2026-04-21 12:20:04 +0100 trunk: mockup-gaps C.6 — subtitle copy matches mockup
+ 3 files changed, 55 insertions(+), 3 deletions(-)
+
+==COMMIT== 69566d1 2026-04-21 12:19:16 +0100 trunk: mockup-gaps C.5 — "Granted" label beside green dot
+ 2 files changed, 33 insertions(+), 5 deletions(-)
+
+==COMMIT== e6fc482 2026-04-21 12:18:37 +0100 trunk: mockup-gaps C.4 — "Required" label beside orange dot
+ 3 files changed, 64 insertions(+), 1 deletion(-)
+
+==COMMIT== 6ddd612 2026-04-21 12:17:33 +0100 trunk: mockup-gaps C.3 — Grant Access as filled blue pill button
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+==COMMIT== 529d399 2026-04-21 12:17:09 +0100 trunk: mockup-gaps C.2 — wrap PermissionRow in rounded card surface
+ 1 file changed, 19 insertions(+), 1 deletion(-)
+
+==COMMIT== 2bbf57b 2026-04-21 12:16:35 +0100 trunk: mockup-gaps C.1 — "REQUIRED PERMISSIONS" section header
+ 2 files changed, 64 insertions(+)
+
+==COMMIT== 6948874 2026-04-21 12:20:53 +0100 trunk: backlog — add #19 central KeyEventRouter (follow-up to #5a)
+ 1 file changed, 6 insertions(+)
+
+==COMMIT== 081bc4f 2026-04-21 12:17:21 +0100 trunk: cleanup — stage PasteLastTranscriptActionTests.swift removal missed in d0dfa68
+ 1 file changed, 169 deletions(-)
+
+==COMMIT== 4eba614 2026-04-21 12:16:15 +0100 trunk: bug #2 — remove Check for Updates stub from menu bar
+ 6 files changed, 31 insertions(+), 69 deletions(-)
+
+==COMMIT== c75b633 2026-04-21 12:15:01 +0100 trunk: bug #8 — remove redundant "Settings" largeTitle above sub-tab picker
+ 3 files changed, 2 insertions(+), 4 deletions(-)
+
+==COMMIT== e9c9481 2026-04-21 12:09:27 +0100 trunk: mockup-gaps A.4 test fix — normalize NBSP in wall-clock assertion
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+==COMMIT== 776aa7c 2026-04-21 12:03:58 +0100 trunk: mockup-gaps B.4 — WPM formatter renders 0 as integer
+ 2 files changed, 30 insertions(+), 1 deletion(-)
+
+==COMMIT== d3639b4 2026-04-21 12:03:23 +0100 trunk: mockup-gaps B.3 — stat card label "Mins saved"
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+==COMMIT== b05609e 2026-04-21 12:03:05 +0100 trunk: mockup-gaps B.2 — section header "RECENT TRANSCRIPTIONS"
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+==COMMIT== 1d4fcef 2026-04-21 12:02:40 +0100 trunk: mockup-gaps B.1 — Home tab empty state + hotkey-sourced hint
+ 4 files changed, 206 insertions(+), 7 deletions(-)
+
+==COMMIT== 7d460cf 2026-04-21 12:04:21 +0100 trunk: mockup-gaps A.5 — apply WindowTint.primaryBackground on tab root
+ 3 files changed, 196 insertions(+)
+
+==COMMIT== 0bb8084 2026-04-21 12:01:36 +0100 trunk: mockup-gaps A.4 — wall-clock timestamps for detail rows
+ 2 files changed, 86 insertions(+), 4 deletions(-)
+
+==COMMIT== 5d75d40 2026-04-21 12:00:35 +0100 trunk: mockup-gaps A.3 — pin detail row minHeight to RowHeight.tall (56pt)
+ 2 files changed, 29 insertions(+), 1 deletion(-)
+
+==COMMIT== 7f42970 2026-04-21 11:59:45 +0100 trunk: mockup-gaps A.2 — compact date buckets (APR 17 not APRIL 17, 2026)
+ 3 files changed, 16 insertions(+), 12 deletions(-)
+
+==COMMIT== 050d46b 2026-04-21 11:58:40 +0100 trunk: mockup-gaps A.1 — drop duplicate title in TranscriptRow detail style
+ 3 files changed, 125 insertions(+), 19 deletions(-)
+
+==COMMIT== d0dfa68 2026-04-21 11:52:37 +0100 trunk: bug #9 — rename menu item to Copy Last Transcript; strict copy-to-clipboard
+ 10 files changed, 266 insertions(+), 71 deletions(-)
+
+==COMMIT== f3773e6 2026-04-21 11:47:36 +0100 trunk: bug #4 followup — narrow keyUp swallow + rollback on global install failure
+ 2 files changed, 156 insertions(+), 14 deletions(-)
+
+==COMMIT== a12b7e2 2026-04-21 11:28:22 +0100 trunk: bug #4 — hotkey fires when Ninimma is frontmost
+ 4 files changed, 207 insertions(+), 11 deletions(-)
+
+==COMMIT== cd776df 2026-04-21 11:18:33 +0100 trunk: bug #1c — move About from Settings sub-tab to sidebar footer
+ 7 files changed, 91 insertions(+), 10 deletions(-)
+
+==COMMIT== 2962aca 2026-04-21 11:18:17 +0100 trunk: backlog — add #18 inert microphone footer
+ 1 file changed, 4 insertions(+)
+
+==COMMIT== 1196e73 2026-04-21 11:15:30 +0100 trunk: bug #1b — pin NavigationSplitView sidebar to always-visible
+ 2 files changed, 14 insertions(+), 1 deletion(-)
+
+==COMMIT== 5513c2a 2026-04-21 11:14:35 +0100 trunk: backlog — annotate bug #1 sub-items; add bugs #16, #17
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+==COMMIT== 726e538 2026-04-21 11:05:44 +0100 trunk: bug #1 — menu-bar Home routes to Home tab
+ 2 files changed, 15 insertions(+), 3 deletions(-)
+
+==COMMIT== 118cdc5 2026-04-21 11:05:32 +0100 trunk: backlog — dogfood UI bug list (2026-04-21)
+ 1 file changed, 50 insertions(+)
+
+==COMMIT== 42fee7c 2026-04-21 10:18:15 +0100 trunk: backlog — Phase 8 (true cancel-without-transcribe) deferred spec
+ 1 file changed, 57 insertions(+)
+
+==COMMIT== f788fb0 2026-04-21 02:53:27 +0100 trunk: pill UX phase 7 — manual verification runbook
+ 1 file changed, 91 insertions(+)
+
+==COMMIT== e412bf8 2026-04-21 02:51:54 +0100 trunk: pill UX phase 6 — global Esc cancels active recording
+ 3 files changed, 285 insertions(+)
+
+==COMMIT== a5d584c 2026-04-21 02:48:47 +0100 trunk: pill UX phase 5 — clipboard save/restore for Cancel Card Undo
+ 3 files changed, 279 insertions(+)
+
+==COMMIT== c600ea5 2026-04-21 02:44:46 +0100 trunk: pill UX phase 4 — opt+/ hotkey with hold / tap / double-tap model
+ 9 files changed, 529 insertions(+), 224 deletions(-)
+
+==COMMIT== 3d858d9 2026-04-21 02:36:24 +0100 trunk: pill UX phase 3 — CancelCardView + undo routing
+ 4 files changed, 249 insertions(+), 10 deletions(-)
+
+==COMMIT== a82c472 2026-04-21 02:31:56 +0100 trunk: pill UX phase 2 — hold-to-record visual + state-aware borders
+ 4 files changed, 428 insertions(+), 24 deletions(-)
+
+==COMMIT== 8095ed4 2026-04-21 02:23:45 +0100 trunk: pill UX phase 1 — add holdToRecord + cancelled state cases
+ 5 files changed, 88 insertions(+), 5 deletions(-)
+
+==COMMIT== 4c78ef8 2026-04-21 02:19:49 +0100 trunk: ⌘, fix — manual verification entries (MV-CMD-1..3)
+ 1 file changed, 8 insertions(+)
+
+==COMMIT== 558433a 2026-04-21 02:19:31 +0100 trunk: ⌘, opens Settings tab — replace empty Settings scene handler
+ 1 file changed, 13 insertions(+)
+
+==COMMIT== 447207e 2026-04-21 02:13:59 +0100 trunk: AIModels Stage B — disk-space precheck before download
+ 4 files changed, 232 insertions(+), 1 deletion(-)
+
+==COMMIT== 936b07a 2026-04-21 02:13:30 +0100 trunk: pill panel — non-activating contract (Issue 6)
+ 3 files changed, 103 insertions(+), 1 deletion(-)
+
+==COMMIT== 9b7e3d2 2026-04-21 02:03:39 +0100 trunk: backlog — track Issue 6 (pill panel steals focus on click)
+ 1 file changed, 38 insertions(+)
+
+==COMMIT== 528fdb2 2026-04-21 02:03:39 +0100 trunk: pill waveform — sqrt amplitude curve so typical speech shows
+ 2 files changed, 92 insertions(+), 8 deletions(-)
+
+==COMMIT== 3113d8a 2026-04-21 01:59:17 +0100 trunk: AIModels Stage A step 3.3 — research doc status update + Stage B backlog
+ 2 files changed, 13 insertions(+), 3 deletions(-)
+
+==COMMIT== ec538c0 2026-04-21 01:56:52 +0100 trunk: AIModels Stage A step 3.2 — per-model rows with live download state
+ 5 files changed, 279 insertions(+), 28 deletions(-)
+
+==COMMIT== a3a7e4a 2026-04-21 01:51:50 +0100 trunk: AIModels Stage A step 3.1 — service-owned download state + stream
+ 4 files changed, 334 insertions(+), 2 deletions(-)
+
+==COMMIT== edf09d1 2026-04-21 01:54:30 +0100 trunk: session-start race fix — prepare before publish, .userInitiated priority
+ 3 files changed, 69 insertions(+), 3 deletions(-)
+
+==COMMIT== 08ce3fc 2026-04-21 01:42:32 +0100 trunk: auto-paste — replace frontmost-bundle check with AX focused-element cursor probe
+ 2 files changed, 309 insertions(+), 34 deletions(-)
+
+==COMMIT== 548098f 2026-04-21 01:43:37 +0100 trunk: pill — default visibility flipped from .autoShow to .alwaysOn
+ 3 files changed, 33 insertions(+), 18 deletions(-)
+
+==COMMIT== fcfd10e 2026-04-21 01:32:34 +0100 trunk: drop triple-tap emergency quit — double-tap toggle fires immediately
+ 5 files changed, 45 insertions(+), 333 deletions(-)
+
+==COMMIT== 706ef2d 2026-04-21 01:14:04 +0100 trunk: record-without-transcribe step 2.4 — manual verification runbook
+ 1 file changed, 49 insertions(+)
+
+==COMMIT== 62199f8 2026-04-21 01:12:21 +0100 trunk: tests — catch SettingsSubTabTests up to 6-case enum (post 5b9434a)
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+==COMMIT== a63331c 2026-04-21 01:11:51 +0100 trunk: record-without-transcribe step 2.3 — driver + controller wiring
+ 3 files changed, 214 insertions(+)
+
+==COMMIT== dd5e504 2026-04-21 01:05:52 +0100 trunk: record-without-transcribe step 2.2 — presenter status-card API
+ 2 files changed, 79 insertions(+)
+
+==COMMIT== adb3b60 2026-04-21 01:00:36 +0100 trunk: record-without-transcribe step 2.1 — ResponseCard update(text:) + persistent show
+ 2 files changed, 76 insertions(+), 11 deletions(-)
+
+==COMMIT== 51ca571 2026-04-21 00:46:43 +0100 trunk: docs — model-download UX research synthesis + chunk reports
+ 6 files changed, 1262 insertions(+)
+
+==COMMIT== 7b2657c 2026-04-21 00:46:29 +0100 trunk: model-download fix step 1.5 — drop dead downloader code + ModelArtifactStaging trim
+ 8 files changed, 3 insertions(+), 226 deletions(-)
+
+==COMMIT== ca3da18 2026-04-21 00:44:34 +0100 trunk: model-download fix step 1.4 — delete downloader from ModelAwareFluidAudioTranscriber
+ 4 files changed, 58 insertions(+), 332 deletions(-)
+
+==COMMIT== ae2e306 2026-04-21 00:41:32 +0100 trunk: model-download fix step 1.3 — delete PrivateModelDownloader from FluidAudioTranscriber
+ 13 files changed, 34 insertions(+), 357 deletions(-)
+
+==COMMIT== 4d8db9a 2026-04-21 00:38:13 +0100 trunk: model-download fix step 1.2 — forward FluidAudio progress into ModelDownloadProgress stream
+ 3 files changed, 227 insertions(+), 8 deletions(-)
+
+==COMMIT== 3e4b3e9 2026-04-21 00:32:52 +0100 trunk: model-download fix step 1.1 — add progressHandler param to inference protocols
+ 4 files changed, 49 insertions(+), 9 deletions(-)
+
+==COMMIT== 1c38d20 2026-04-21 00:31:56 +0100 trunk: theme phase 1 — WindowTint env key public + Palette.for(scheme:tint:)
+ 4 files changed, 148 insertions(+), 24 deletions(-)
+
+==COMMIT== 3d85933 2026-04-20 19:13:05 -0400 ui: pill — replace double shadow with single clean shadow
+ 1 file changed, 4 insertions(+), 6 deletions(-)
+
+==COMMIT== 366bbc2 2026-04-21 00:08:12 +0100 trunk: Permissions sub-tab — refresh status on .onAppear
+ 4 files changed, 90 insertions(+), 2 deletions(-)
+
+==COMMIT== db35870 2026-04-20 23:49:03 +0100 trunk: fix build — em-dash in AppBrand.originStory
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+==COMMIT== 1e51153 2026-04-20 18:36:41 -0400 ui: add Launch at Login toggle to General settings
+ 1 file changed, 37 insertions(+)
+
+==COMMIT== 5b9434a 2026-04-20 18:35:49 -0400 ui: wire orphaned Settings sub-tabs (AI Models, Shortcuts, Advanced)
+ 2 files changed, 9 insertions(+)
+
+==COMMIT== d331ad0 2026-04-20 18:30:04 -0400 ui: response card compact layout + 2-line text limit
+ 2 files changed, 24 insertions(+), 14 deletions(-)
+
+==COMMIT== b62245a 2026-04-20 18:29:15 -0400 ui: pill foreground respects Dark/Light/System appearance setting
+ 1 file changed, 22 insertions(+), 5 deletions(-)
+
+==COMMIT== 4bb72cd 2026-04-20 18:21:24 -0400 ui: pill foreground tokens — decouple from window palette
+ 1 file changed, 31 insertions(+), 83 deletions(-)
+
+==COMMIT== fe38f33 2026-04-20 18:14:22 -0400 ui: ModeCard active-state differentiation
+ 1 file changed, 18 insertions(+), 2 deletions(-)
+
+==COMMIT== d7435fb 2026-04-20 18:13:45 -0400 ui: Transcriptions — custom search bar + title derivation fix
+ 1 file changed, 20 insertions(+), 2 deletions(-)
+
+==COMMIT== 17509a7 2026-04-20 18:13:10 -0400 ui: About tab redesign — origin story, tagline, mythlok link, no bundle ID
+ 2 files changed, 98 insertions(+), 51 deletions(-)
+
+==COMMIT== c06e95d 2026-04-20 18:11:58 -0400 ui: sidebar separation + active-item accent bar
+ 1 file changed, 25 insertions(+), 1 deletion(-)
+
+==COMMIT== 3fc0a8e 2026-04-20 18:10:44 -0400 ui: pill 3D depth — gradient fill + specular rim + dual shadow
+ 1 file changed, 39 insertions(+), 8 deletions(-)
+
+==COMMIT== 7decf7a 2026-04-20 23:06:13 +0100 trunk: BACKLOG — record M1–M5 closures + debts + open items
+ 1 file changed, 24 insertions(+), 1 deletion(-)
+
+==COMMIT== ce02bf1 2026-04-20 22:54:49 +0100 trunk: test suite — quarantine one flake with XCTSkip + explanatory note
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+==COMMIT== 67a6d95 2026-04-20 22:45:44 +0100 trunk: test suite — flake cleanup sweep
+ 5 files changed, 99 insertions(+), 30 deletions(-)
+
+==COMMIT== ac50bda 2026-04-20 22:40:17 +0100 trunk: package.sh — add --reset flag for fresh-install simulation
+ 1 file changed, 60 insertions(+)
+
+==COMMIT== 64710eb 2026-04-20 22:29:51 +0100 trunk: M5.3 followup — apply selected input device to AVAudioEngine
+ 7 files changed, 587 insertions(+), 5 deletions(-)
+
+==COMMIT== 561e157 2026-04-20 22:29:02 +0100 trunk: package — strip symbols on release builds (-11MB bundle)
+ 1 file changed, 10 insertions(+)
+
+==COMMIT== 09d7612 2026-04-20 22:27:15 +0100 trunk: M6 modes — Set Active write path + activeModeStream subscription
+ 6 files changed, 120 insertions(+), 10 deletions(-)
+
+==COMMIT== e3eec52 2026-04-20 22:18:05 +0100 trunk: startup — invoke startupCoordinator.start() in PersonalScribeAppMain.init()
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 158c00d 2026-04-20 22:16:02 +0100 trunk: M5.3 — menu-bar Microphone submenu
+ 8 files changed, 658 insertions(+), 9 deletions(-)
+
+==COMMIT== fadd6e7 2026-04-20 21:37:50 +0100 trunk: M5.2 — Paste Last Transcript handler
+ 3 files changed, 214 insertions(+)
+
+==COMMIT== 344cf55 2026-04-20 21:14:47 +0100 trunk: M5.1 — menu bar icons + brand header + Paste/Check-for-Updates stubs
+ 4 files changed, 242 insertions(+), 34 deletions(-)
+
+==COMMIT== c92171f 2026-04-20 20:56:29 +0100 trunk: M4.1 followup — wire SessionCoordinator audio levels into pill
+ 1 file changed, 15 insertions(+), 1 deletion(-)
+
+==COMMIT== 04d0616 2026-04-20 20:41:30 +0100 trunk: M4.4 coordinator — clean up orphans after legacy-window deletions
+ 8 files changed, 155 insertions(+), 197 deletions(-)
+
+==COMMIT== 56b15db 2026-04-20 20:33:59 +0100 trunk: M4.1 — voice-modulated pill SineWaveView
+ 4 files changed, 375 insertions(+), 36 deletions(-)
+
+==COMMIT== b2dc0ba 2026-04-20 20:32:53 +0100 trunk: M4.4a (retry) — delete legacy NotesWindow (replaced by unified Transcriptions tab)
+ 14 files changed, 1082 deletions(-)
+
+==COMMIT== a96089c 2026-04-20 20:31:58 +0100 trunk: M4.4c — delete legacy OnboardingWindow (replaced by unified Permissions sub-tab)
+ 4 files changed, 952 deletions(-)
+
+==COMMIT== ecea168 2026-04-20 20:31:32 +0100 trunk: M4.4a — delete legacy NotesWindow (replaced by unified Transcriptions tab)
+ 5 files changed, 440 deletions(-)
+
+==COMMIT== 1e440db 2026-04-20 20:16:47 +0100 trunk: M3 wiring — connect all tabs to UnifiedWindowView
+ 7 files changed, 132 insertions(+), 42 deletions(-)
+
+==COMMIT== a5ccae2 2026-04-20 20:07:34 +0100 trunk: M3.5 — Home tab (unified window)
+ 3 files changed, 523 insertions(+)
+
+==COMMIT== b9d43df 2026-04-20 20:05:40 +0100 trunk: M3.2 — Transcriptions tab (unified window)
+ 3 files changed, 408 insertions(+)
+
+==COMMIT== afccbec 2026-04-20 20:05:59 +0100 trunk: M3.4 — Modes tab (unified window)
+ 5 files changed, 244 insertions(+), 2 deletions(-)
+
+==COMMIT== 7108016 2026-04-20 20:04:48 +0100 trunk: M3.3b — Permissions sub-tab
+ 3 files changed, 371 insertions(+)
+
+==COMMIT== b54d639 2026-04-20 19:58:53 +0100 trunk: M3.3c — About sub-tab
+ 2 files changed, 131 insertions(+)
+
+==COMMIT== 73f0ffd 2026-04-20 19:58:24 +0100 trunk: M3.3a — Settings tab host + sub-tab picker
+ 3 files changed, 86 insertions(+)
+
+==COMMIT== 1ad54f7 2026-04-20 19:50:13 +0100 trunk: M3.1 — unified window shell scaffold
+ 10 files changed, 463 insertions(+), 11 deletions(-)
+
+==COMMIT== c4bf008 2026-04-20 19:31:03 +0100 trunk: brand — manual verification runbook entries for M2
+ 1 file changed, 57 insertions(+)
+
+==COMMIT== fa17f12 2026-04-20 19:30:08 +0100 trunk: brand — Swift 6 concurrency fixes for C-2/C-3 cherry-picks
+ 2 files changed, 4 insertions(+), 6 deletions(-)
+
+==COMMIT== 8120c8f 2026-04-20 19:26:25 +0100 trunk: brand — Pill NSPanel PillAppearance consumer
+ 2 files changed, 144 insertions(+), 1 deletion(-)
+
+==COMMIT== f6b1d0f 2026-04-20 19:25:07 +0100 trunk: brand — Settings NSWindow WindowTint consumer
+ 2 files changed, 97 insertions(+)
+
+==COMMIT== b2468fe 2026-04-20 19:21:57 +0100 trunk: brand — Settings General tab: Window tint + Pill theme pickers
+ 2 files changed, 118 insertions(+)
+
+==COMMIT== bfc3c5e 2026-04-20 19:27:02 +0100 trunk: pill overlay — replace "Warming up…" with "Loading model…" for .loading phase
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+==COMMIT== 980d6ad 2026-04-20 19:13:37 +0100 trunk: brand — WindowTint + PillAppearance enums
+ 4 files changed, 447 insertions(+)
+
+==COMMIT== aae802a 2026-04-20 19:08:05 +0100 trunk: brand — phase-2 residue + theme v2 design tokens
+ 8 files changed, 336 insertions(+), 8 deletions(-)
+
+==COMMIT== 86cbfeb 2026-04-20 19:05:38 +0100 trunk: fix FluidAudioTranscriberTests race on logSink detached Task
+ 1 file changed, 14 insertions(+), 2 deletions(-)
+
+==COMMIT== a9a8f66 2026-04-20 18:22:03 +0100 trunk: rename phase 5 followups — 2 residuals flagged by Phase 5 agent
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+==COMMIT== ab0ad5f 2026-04-20 18:20:58 +0100 trunk: rename phase 6 — docs sweep (BACKLOG + README + CLAUDE + manual verification runbooks)
+ 18 files changed, 99 insertions(+), 99 deletions(-)
+
+==COMMIT== 11fb91d 2026-04-20 18:18:59 +0100 trunk: rename phase 7 — active plans sweep + delete PHASE_0_rename.md
+ 9 files changed, 63 insertions(+), 443 deletions(-)
+
+==COMMIT== 24a4fdc 2026-04-20 18:14:31 +0100 trunk: rename phase 5 — env vars + NSNotification + test suites
+ 17 files changed, 20 insertions(+), 20 deletions(-)
+
+==COMMIT== b4e0795 2026-04-20 18:12:42 +0100 trunk: rename phase 8 — cleanup (stale Seshat.app snapshot + .gitignore + lingering filename)
+ 3 files changed, 2 insertions(+), 2 deletions(-)
+
+==COMMIT== 896cf13 2026-04-20 18:06:39 +0100 trunk: rename phase 3 — UserDefaults migration (SeshatOnboardingCompleted → OnboardingCompleted)
+ 8 files changed, 122 insertions(+), 7 deletions(-)
+
+==COMMIT== 2cc1e7e 2026-04-20 18:06:11 +0100 trunk: rename phase 4 — filesystem migration (~/Library/Application Support/Seshat → personal_scribe)
+ 6 files changed, 41 insertions(+), 10 deletions(-)
+
+==COMMIT== defb8fb 2026-04-20 18:05:09 +0100 trunk: rename phase 3 — UserDefaults migration (SeshatOnboardingCompleted → OnboardingCompleted)
+ 6 files changed, 25 insertions(+), 25 deletions(-)
+
+==COMMIT== 1862be8 2026-04-20 18:00:42 +0100 trunk: rename phase 1 fix — strip stale merge-conflict markers
+ 22 files changed, 195 deletions(-)
+
+==COMMIT== 5ce4984 2026-04-20 17:13:02 +0100 trunk: rename phase 1 — Swift modules + residual types (Seshat* → PersonalScribe*)
+ 323 files changed, 1210 insertions(+), 1015 deletions(-)
+
+==COMMIT== 695d4d7 2026-04-20 15:31:05 +0100 trunk: stage 3 — layer 1 delete PasteInjector
+ 7 files changed, 86 insertions(+), 608 deletions(-)
+
+==COMMIT== 584a031 2026-04-20 15:19:20 +0100 trunk: stage 3 — layer 1 delete MicrophonePermissionRequesting protocol
+ 3 files changed, 12 deletions(-)
+
+==COMMIT== 498d9e6 2026-04-20 15:13:07 +0100 trunk: stage 3 — layer 1 delete AppKitMicrophonePermissionRequester
+ 2 files changed, 128 deletions(-)
+
+==COMMIT== bf4e487 2026-04-20 13:45:33 +0100 trunk: BACKLOG — central-layers Stage 3 pending items (snapshot 2026-04-20)
+ 1 file changed, 13 insertions(+)
+
+==COMMIT== aa49763 2026-04-20 13:20:50 +0100 trunk: layer 6 — extract FluidAudio model-artifact statics to ModelArtifactStaging
+ 5 files changed, 87 insertions(+), 76 deletions(-)
+
+==COMMIT== b9f1c21 2026-04-20 11:55:38 +0100 trunk: stage 3 — layer 6 delete AppConfig.modelId shim
+ 2 files changed, 4 deletions(-)
+
+==COMMIT== 2191f09 2026-04-20 11:42:14 +0100 trunk: stage 3 — layer 6 delete ModelRegistry, migrate to BuiltInModelCatalog
+ 17 files changed, 49 insertions(+), 72 deletions(-)
+
+==COMMIT== 6f77130 2026-04-20 11:32:57 +0100 trunk: tests — extend TestBootstrap to all test targets (accessory policy)
+ 4 files changed, 108 insertions(+)
+
+==COMMIT== 620bb78 2026-04-20 11:13:48 +0100 trunk: stage 3 — layer 2 collapse SeshatConfig into AppConfig (full migration)
+ 20 files changed, 182 insertions(+), 208 deletions(-)
+
+==COMMIT== 8eec6eb 2026-04-20 10:37:36 +0100 trunk: stage 3 — layer 7 delete PostProcessor + inline cleaning into CoordinatorPostProcessingPipeline
+ 3 files changed, 64 insertions(+), 122 deletions(-)
+
+==COMMIT== 9a55bcd 2026-04-20 10:13:31 +0100 trunk: plans/central — mark Stage 3 executed + parallel-commit-race retrospective
+ 2 files changed, 28 insertions(+)
+
+==COMMIT== 45e94da 2026-04-20 03:29:25 +0100 trunk: stage 3 — layer 7 delete SessionCoordinator.seconds(from:) dead method
+ 1 file changed, 6 deletions(-)
+
+==COMMIT== dd9e2aa 2026-04-20 03:26:44 +0100 trunk: tests — add accessory-policy XCTestObservation so AppKit tests don't flash UI
+ 1 file changed, 27 insertions(+)
+
+==COMMIT== aed5406 2026-04-20 03:25:22 +0100 trunk: stage 3 — layer 2 delete SeshatConfigScaffoldingTests
+ 1 file changed, 2 deletions(-)
+
+==COMMIT== f0d258e 2026-04-20 03:25:17 +0100 trunk: stage 3 — layer 9 delete BuildInfo + BuildInfoTests
+ 4 files changed, 126 deletions(-)
+
+==COMMIT== e5dd2d1 2026-04-20 03:18:43 +0100 trunk: plans/central — fold L5 inventory into Stage 3 synthesis
+ 2 files changed, 19 insertions(+), 7 deletions(-)
+
+==COMMIT== 51672f9 2026-04-20 03:13:21 +0100 trunk: plans/central — INDEX + global Stage 3 deletion plan
+ 2 files changed, 220 insertions(+)
+
+==COMMIT== a651090 2026-04-20 03:05:54 +0100 trunk: plans — session notes for 2026-04-20
+ 1 file changed, 62 insertions(+)
+
+==COMMIT== 7cfbf86 2026-04-20 03:04:30 +0100 phase-2 step 1.retry: migrate hotkey cluster off legacy permission types
+ 2 files changed, 10 insertions(+), 11 deletions(-)
+
+==COMMIT== 65da9a5 2026-04-20 03:01:52 +0100 phase-2 step 1.retry: migrate menubar cluster off legacy permission types
+ 2 files changed, 17 insertions(+), 35 deletions(-)
+
+==COMMIT== 8f55cfd 2026-04-20 02:58:39 +0100 phase-2 step 1.retry: migrate hotkey cluster off legacy permission types
+ 2 files changed, 45 insertions(+), 51 deletions(-)
+
+==COMMIT== 07c8c67 2026-04-20 02:58:28 +0100 phase-2 step 1.retry: migrate composition cluster off legacy permission types
+ 7 files changed, 197 insertions(+), 154 deletions(-)
+
+==COMMIT== 299dad5 2026-04-20 02:58:14 +0100 phase-2 step 3.retry: migrate menu bar cluster off legacy permission types
+ 4 files changed, 179 insertions(+), 251 deletions(-)
+
+==COMMIT== 39847d1 2026-04-20 02:44:09 +0100 trunk: plans/PHASE_0_rename — PS prefix adoption + filename alignment
+ 1 file changed, 62 insertions(+), 46 deletions(-)
+
+==COMMIT== 18135db 2026-04-20 02:35:45 +0100 phase-2 step 1.retry: migrate onboarding cluster off legacy permission types
+ 8 files changed, 271 insertions(+), 305 deletions(-)
+
+==COMMIT== 2778d1f 2026-04-20 02:19:39 +0100 trunk: plans/central/reviews — Layer 1 Stage 2 code review
+ 1 file changed, 128 insertions(+), 75 deletions(-)
+
+==COMMIT== 117c35a 2026-04-20 02:12:53 +0100 phase-2 step 4.2: restore PillOverlayController legacy public inits as Stage 3 bridge
+ 1 file changed, 252 insertions(+), 4 deletions(-)
+
+==COMMIT== fc76847 2026-04-20 02:10:46 +0100 phase-2 step 4.1: wire AppKitActiveModeProvider to shared DefaultModelService
+ 4 files changed, 110 insertions(+), 10 deletions(-)
+
+==COMMIT== c782fc1 2026-04-20 02:10:27 +0100 phase-2 step 7.1 fix: deterministic audioLevelStream rebroadcast
+ 1 file changed, 35 insertions(+), 245 deletions(-)
+
+==COMMIT== 188ad17 2026-04-20 02:09:03 +0100 phase-2 step 5.2: narrow LegacyPasteInjectorOutputService to non-semantic callers
+ 1 file changed, 6 insertions(+)
+
+==COMMIT== a489d55 2026-04-20 02:07:13 +0100 phase-2 step 5.1: inject OutputService through SeshatAppMain + migrate entry/integration tests
+ 4 files changed, 83 insertions(+), 17 deletions(-)
+
+==COMMIT== 79dfdb6 2026-04-20 02:05:23 +0100 phase-2 step 2.1: fix test regression — testRecordingSessionStaysPinnedWhileNextRecordingUsesUpdatedActiveModel
+ 2 files changed, 39 insertions(+), 12 deletions(-)
+
+==COMMIT== c7df025 2026-04-20 02:01:10 +0100 phase-2 step 2.2: fix test regression — testHiddenModeHidesIdleButRecordingOverridesHidden
+ 2 files changed, 26 insertions(+), 10 deletions(-)
+
+==COMMIT== 809149b 2026-04-20 01:59:59 +0100 phase-2 step 2.1: fix test regression — testCaptureReportsManagedDirectoryUsageAndTotal
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+==COMMIT== 594310a 2026-04-20 01:56:32 +0100 trunk: plans/central/reviews — Layer 4 Stage 2 code review
+ 1 file changed, 68 insertions(+)
+
+==COMMIT== 5f8ce8f 2026-04-20 01:56:16 +0100 trunk: plans/central/reviews — Layer 7 Stage 2 Step 1 code review
+ 1 file changed, 68 insertions(+)
+
+==COMMIT== bd01a73 2026-04-20 01:55:31 +0100 trunk: plans/central/reviews — Layer 5 Stage 2 code review
+ 1 file changed, 53 insertions(+)
+
+==COMMIT== 7aba771 2026-04-20 01:51:34 +0100 trunk: plans/central/reviews — Layer 8 Stage 2 code review
+ 1 file changed, 16 insertions(+)
+
+==COMMIT== 550811b 2026-04-20 01:45:31 +0100 trunk: plans/central — GLOBAL_STAGE3_PROMPT.md commits to code-first methodology
+ 1 file changed, 28 insertions(+), 47 deletions(-)
+
+==COMMIT== c7689f5 2026-04-20 01:42:05 +0100 trunk: layer 7 stage 2 step 1 fix-forward — mark CoordinatorPipelineTranscriber.modelDownloadProgress nonisolated
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+==COMMIT== 5b3d9a2 2026-04-20 01:39:18 +0100 trunk: step pipeline.2 step 1 — SessionCoordinator delegates to SessionPipelineOrchestrator (old inline lifecycle kept as dead code for Step 2)
+ 1 file changed, 311 insertions(+), 13 deletions(-)
+
+==COMMIT== 1ac9f98 2026-04-20 01:38:42 +0100 trunk: plans/central — Layer 5 plan-doc cleanup (remove stale OutputService.copy / CopyOutputService references)
+ 1 file changed, 24 insertions(+), 67 deletions(-)
+
+==COMMIT== 939eb28 2026-04-20 01:38:40 +0100 trunk: plans/central — add global Stage 3 prompt (code-first vs plan-first choice)
+ 1 file changed, 217 insertions(+)
+
+==COMMIT== a824190 2026-04-20 01:35:56 +0100 trunk: tooling — add agents_status.py probe for multi-agent refactor status
+ 1 file changed, 446 insertions(+)
+
+==COMMIT== 3905fd4 2026-04-20 01:32:28 +0100 trunk: layer 2 stage 2 — address review findings (public StorageLocator inits, FluidAudioModelDownloader injection, migrator rollback order)
+ 8 files changed, 32 insertions(+), 37 deletions(-)
+
+==COMMIT== bc0cb9d 2026-04-20 01:26:10 +0100 trunk: step appstore.2 — Layer 4 Stage 2 consumer swap (MenuBar + Pill + StatusItem → AppStore)
+ 11 files changed, 457 insertions(+), 482 deletions(-)
+
+==COMMIT== 8906ce0 2026-04-20 01:15:31 +0100 trunk: plans/central/reviews — Layer 2 Stage 2 code review
+ 1 file changed, 49 insertions(+), 9 deletions(-)
+
+==COMMIT== 341cd6f 2026-04-20 01:14:55 +0100 trunk: layer 9 stage 2 — address review findings (AppBrand.logSubsystem, BuildInfo/AppBrand delegation, migrator display, runbook updates)
+ 8 files changed, 77 insertions(+), 17 deletions(-)
+
+==COMMIT== 2d560dc 2026-04-20 01:13:41 +0100 trunk: step output.2 — Layer 5 Stage 2 consumer swap (auto-paste → OutputService.deliverBatch)
+ 2 files changed, 44 insertions(+), 10 deletions(-)
+
+==COMMIT== b35f6ca 2026-04-20 01:12:54 +0100 trunk: step metrics.2 — Layer 8 Stage 2 composition factory (Home-tab consumer deferred)
+ 1 file changed, 16 insertions(+)
+
+==COMMIT== af34c36 2026-04-20 01:12:52 +0100 trunk: plans/central/reviews — Layer 2 Stage 2 code review
+ 1 file changed, 15 insertions(+)
+
+==COMMIT== 74087e3 2026-04-20 01:02:19 +0100 
+ 1 file changed, 45 insertions(+)
+
+==COMMIT== 3894139 2026-04-20 01:01:17 +0100 trunk: layer 4 stage 1 — await clock.advance calls in new regression test
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+==COMMIT== c4a1a00 2026-04-20 00:58:33 +0100 trunk: layer 4 stage 1 — guard handleVisibilityModeChange against no-op yields (pill-transient clobber fix)
+ 2 files changed, 81 insertions(+)
+
+==COMMIT== 078e528 2026-04-20 00:58:25 +0100 trunk: layer 4 stage 1 — cooperative ManualAppStoreClock.advance + AppStoreTests timing fixes
+ 2 files changed, 34 insertions(+), 9 deletions(-)
+
+==COMMIT== 9fa8d0b 2026-04-20 00:42:28 +0100 trunk: plans/central/reviews — Layer 5 Stage 1 re-review (worktree agent's more thorough version)
+ 1 file changed, 21 insertions(+), 35 deletions(-)
+
+==COMMIT== 1052e31 2026-04-20 00:40:19 +0100 trunk: plans/central/reviews — Layer 4 Stage 1 code review (main-session)
+ 1 file changed, 127 insertions(+)
+
+==COMMIT== 5047ee6 2026-04-20 00:39:01 +0100 trunk: layer 1 stage 2 fix-forward — drop Mirror-based publisher probe, use setAccessibilityLabel
+ 2 files changed, 4 insertions(+), 31 deletions(-)
+
+==COMMIT== 6508b3f 2026-04-20 00:36:32 +0100 trunk: layer 1 stage 2 — address review findings (protocol boundary, observable bind, paste-injector default)
+ 6 files changed, 145 insertions(+), 47 deletions(-)
+
+==COMMIT== 6f08ee2 2026-04-20 00:36:16 +0100 trunk: plans/central/reviews — Layer 5 Stage 1 re-review (after fix-forward 624f91f) (main-session)
+ 1 file changed, 49 insertions(+)
+
+==COMMIT== 73bb914 2026-04-20 00:33:26 +0100 trunk: plans/central/reviews — Layer 6 Stage 2 code review (main-session)
+ 1 file changed, 81 insertions(+)
+
+==COMMIT== 6aea982 2026-04-20 00:22:13 +0100 trunk: plans/central/reviews — Layer 1 Stage 2 code review
+ 1 file changed, 109 insertions(+)
+
+==COMMIT== 201cf9f 2026-04-20 00:24:25 +0100 trunk: layer 4 stage 1 — fix pill-transition clobber race (prod)
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+==COMMIT== 90b137f 2026-04-20 00:20:30 +0100 trunk: step storage.2 — Layer 2 Stage 2 consumer swap
+ 5 files changed, 188 insertions(+), 104 deletions(-)
+
+==COMMIT== 1c350be 2026-04-20 00:14:25 +0100 trunk: step brand.2 — Layer 9 Stage 2 consumer swap
+ 12 files changed, 43 insertions(+), 31 deletions(-)
+
+==COMMIT== 3d7e1cc 2026-04-20 00:11:04 +0100 trunk: layer 1 stage 2 — fix PasteInjector test for async permission request
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+==COMMIT== 07030d9 2026-04-20 00:04:14 +0100 trunk: PROGRESS update — 2026-04-20 00:05 BST
+ 1 file changed, 27 insertions(+), 13 deletions(-)
+
+==COMMIT== 05a2035 2026-04-20 00:02:23 +0100 trunk: layer 1 stage 2 fix-forward — publicity + arg-label compile fixes
+ 3 files changed, 11 insertions(+), 11 deletions(-)
+
+==COMMIT== e299b2e 2026-04-19 22:20:29 +0100 trunk: layer 6 stage 2 — fix MenuBarSceneModel preparation-progress test regression
+ 1 file changed, 68 insertions(+), 1 deletion(-)
+
+==COMMIT== d6d3171 2026-04-19 22:17:14 +0100 trunk: step permissions.2 — Layer 1 Stage 2 consumer swap
+ 11 files changed, 720 insertions(+), 110 deletions(-)
+
+==COMMIT== 47d314a 2026-04-19 22:17:09 +0100 trunk: layer 8 stage 1 — update SQLiteMetricsReader test expectations for .byWords tokenization
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+==COMMIT== fed131d 2026-04-19 22:18:50 +0100 trunk: layer 4 stage 1 fix-forward — make LiveAppStoreClock public; remove redundant guard let self
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+==COMMIT== 048d25e 2026-04-19 22:08:57 +0100 trunk: step appstore.1 — Layer 4 Stage 1 parallel-build (Candidate A facade)
+ 14 files changed, 1109 insertions(+)
+
+==COMMIT== 22fa02e 2026-04-19 22:15:15 +0100 trunk: PROGRESS update — L3 Stage 2 review landed APPROVED-W-FOLLOWUPS
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+==COMMIT== 7baeb9e 2026-04-19 22:13:20 +0100 trunk: plans/central/reviews — Layer 3 Stage 2 code review
+ 1 file changed, 73 insertions(+)
+
+==COMMIT== da3e088 2026-04-19 22:13:28 +0100 trunk: layer 7 stage 1 — inline collectSnapshots helper to dodge Swift 6 region-isolation-checker bug
+ 1 file changed, 21 insertions(+), 20 deletions(-)
+
+==COMMIT== 5038cc4 2026-04-19 22:09:29 +0100 trunk: layer 7 stage 1 — fix 3 orchestrator test regressions from 7c5f978
+ 1 file changed, 29 insertions(+), 13 deletions(-)
+
+==COMMIT== d13b7d0 2026-04-19 22:03:30 +0100 trunk: PROGRESS update — L2 fix landed + 4 new agents dispatched (L1 Stage 2, L7 regression fix, L3+L6 Stage 2 reviews)
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+==COMMIT== 367862b 2026-04-19 22:01:41 +0100 trunk: layer 2 stage 1 — address review findings (atomic-write permissions ordering, dead code cleanup)
+ 4 files changed, 119 insertions(+), 13 deletions(-)
+
+==COMMIT== 4956233 2026-04-19 21:59:17 +0100 trunk: plans/central/PROGRESS.md — refactor progress snapshot (2026-04-19 22:04 BST)
+ 1 file changed, 74 insertions(+)
+
+==COMMIT== 677f70b 2026-04-19 21:55:05 +0100 trunk: plans/central/reviews — Layer 2 Stage 1 code review
+ 1 file changed, 34 insertions(+)
+
+==COMMIT== 89512bd 2026-04-19 21:53:09 +0100 trunk: layer 8 stage 1 — address review findings (restore query contract, read-only SQLite)
+ 9 files changed, 431 insertions(+), 261 deletions(-)
+
+==COMMIT== 5b6e023 2026-04-19 21:43:48 +0100 trunk: step settings.2 — Layer 3 Stage 2 consumer swap (7 resolvers → Preference<Value>, drop Seshat prefix from keys)
+ 26 files changed, 155 insertions(+), 142 deletions(-)
+
+==COMMIT== a3a0ba8 2026-04-19 21:42:11 +0100 trunk: step model-selection.2 — Layer 6 Stage 2 consumer swap (descriptor-driven version selection)
+ 7 files changed, 404 insertions(+), 14 deletions(-)
+
+==COMMIT== 79ccd79 2026-04-19 21:34:17 +0100 trunk: test-import fix — ModelBoundTranscriberProviderTests needs @testable import SeshatCore
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+==COMMIT== 39e655e 2026-04-19 21:28:06 +0100 trunk: layer 1 stage 1 — address review findings (observable contract, activation sync, stage-1 notes, drop @unchecked)
+ 6 files changed, 116 insertions(+), 30 deletions(-)
+
+==COMMIT== 624f91f 2026-04-19 21:27:28 +0100 trunk: layer 5 stage 1 — address review findings (realign to master prompt, remove streaming surface)
+ 15 files changed, 221 insertions(+), 533 deletions(-)
+
+==COMMIT== 7c5f978 2026-04-19 21:24:52 +0100 trunk: layer 7 stage 1 — fix persistence invariant + live recordingDuration
+ 3 files changed, 62 insertions(+), 7 deletions(-)
+
+==COMMIT== d85e627 2026-04-19 21:23:11 +0100 trunk: layer 6 stage 1 — address review follow-ups (descriptor-error throw, wrapper tests)
+ 4 files changed, 218 insertions(+), 9 deletions(-)
+
+==COMMIT== ecd8c70 2026-04-19 21:16:14 +0100 trunk: plans/central/reviews — Layer 3 Stage 1 code review
+ 1 file changed, 84 insertions(+)
+
+==COMMIT== a7c024a 2026-04-19 21:16:03 +0100 trunk: plans/central/reviews — Layer 6 Stage 1 code review
+ 1 file changed, 59 insertions(+)
+
+==COMMIT== db3b15a 2026-04-19 21:12:10 +0100 trunk: plans/central/reviews — Layer 7 Stage 1 code review
+ 1 file changed, 141 insertions(+)
+
+==COMMIT== c12d2c7 2026-04-19 21:10:43 +0100 trunk: plans/central/reviews — Layer 1 Stage 1 code review
+ 1 file changed, 107 insertions(+)
+
+==COMMIT== 897cf3c 2026-04-19 21:10:28 +0100 trunk: plans/central/reviews — Layer 8 Stage 1 code review
+ 1 file changed, 44 insertions(+)
+
+==COMMIT== 7872a52 2026-04-19 21:09:45 +0100 trunk: plans/central/reviews — Layer 5 Stage 1 code review
+ 1 file changed, 40 insertions(+)
+
+==COMMIT== 71e4473 2026-04-19 21:08:59 +0100 trunk: plans/central/reviews — Layer 9 Stage 1 code review
+ 1 file changed, 28 insertions(+)
+
+==COMMIT== 5a2ea99 2026-04-19 20:59:50 +0100 trunk: wave-b fix-forward — unblock build + Swift 6 compile fixes
+ 13 files changed, 117 insertions(+), 77 deletions(-)
+
+==COMMIT== b80e343 2026-04-19 20:46:56 +0100 trunk: plans/central/reviews — Layer 7 review
+ 1 file changed, 46 insertions(+)
+
+==COMMIT== 748acc6 2026-04-19 20:45:12 +0100 trunk: plans/central/reviews — Layer 2 review
+ 1 file changed, 108 insertions(+)
+
+==COMMIT== 6c5483a 2026-04-19 20:44:25 +0100 trunk: plans/central/reviews — Layer 5 review
+ 1 file changed, 64 insertions(+)
+
+==COMMIT== 98bfc70 2026-04-19 20:44:20 +0100 trunk: plans/central/reviews — Layer 8 review
+ 1 file changed, 40 insertions(+)
+
+==COMMIT== e8ebdd8 2026-04-19 20:44:03 +0100 trunk: plans/central/reviews — Layer 9 review
+ 1 file changed, 57 insertions(+)
+
+==COMMIT== 020935d 2026-04-19 20:43:19 +0100 trunk: plans/central/reviews — Layer 3 review.
+ 1 file changed, 34 insertions(+)
+
+==COMMIT== 9c322d9 2026-04-19 20:41:17 +0100 trunk: plans/central/reviews — Layer 1 review
+ 1 file changed, 47 insertions(+)
+
+==COMMIT== 11244e2 2026-04-19 20:37:23 +0100 trunk: backlog — defer pipeline streaming output to stream build
+ 1 file changed, 29 insertions(+)
+
+==COMMIT== 23725ce 2026-04-19 20:24:39 +0100 trunk: step model-selection.1 — Layer 6 Stage 1 parallel-build
+ 18 files changed, 1638 insertions(+)
+
+==COMMIT== f395327 2026-04-19 20:22:50 +0100 trunk: step pipeline.1 — Layer 7 Stage 1 parallel-build
+ 18 files changed, 1803 insertions(+)
+
+==COMMIT== ab402c3 2026-04-19 20:18:09 +0100 trunk: step metrics.1 — Layer 8 Stage 1 parallel-build
+ 8 files changed, 1062 insertions(+)
+
+==COMMIT== 23247a6 2026-04-19 20:15:12 +0100 trunk: step output.1 — Layer 5 Stage 1 parallel-build
+ 16 files changed, 834 insertions(+)
+
+==COMMIT== 93ce06c 2026-04-19 20:05:50 +0100 trunk: wave-a fix-forward — unblock build + refresh stale tests
+ 7 files changed, 36 insertions(+), 13 deletions(-)
+
+==COMMIT== 64d7999 2026-04-19 19:35:45 +0100 trunk: step permissions.1 — Layer 1 Stage 1 parallel-build
+ 9 files changed, 783 insertions(+)
+
+==COMMIT== 8cfc844 2026-04-19 19:35:09 +0100 trunk: step storage.1 — Layer 2 Stage 1 parallel-build
+ 12 files changed, 713 insertions(+)
+
+==COMMIT== dd9a44c 2026-04-19 19:31:17 +0100 trunk: step settings.1 — Layer 3 Stage 1 parallel-build
+ 2 files changed, 270 insertions(+)
+
+==COMMIT== 8d866da 2026-04-19 19:30:00 +0100 trunk: step brand.1 — Layer 9 Stage 1 parallel-build
+ 2 files changed, 84 insertions(+)
+
+==COMMIT== 7c43e53 2026-04-19 19:15:10 +0100 trunk: plans/central — Layer 5 output plan
+ 1 file changed, 427 insertions(+)
+
+==COMMIT== e3852c9 2026-04-19 19:14:46 +0100 trunk: plans/central — Layer 6 model selection plan
+ 1 file changed, 254 insertions(+)
+
+==COMMIT== 9b527ec 2026-04-19 19:12:56 +0100 trunk: plans/central — Layer 7 pipeline plan
+ 1 file changed, 378 insertions(+)
+
+==COMMIT== f7ed814 2026-04-19 19:11:15 +0100 trunk: plans/central — Layer 4 appstore plan
+ 1 file changed, 459 insertions(+)
+
+==COMMIT== e3aba93 2026-04-19 19:11:02 +0100 trunk: plans/central — Layer 8 metrics plan
+ 1 file changed, 187 insertions(+)
+
+==COMMIT== 5457147 2026-04-19 19:09:46 +0100 trunk: phase plans: Phase 0/1/2 + sequencing master
+ 4 files changed, 1621 insertions(+)
+
+==COMMIT== 38ca52f 2026-04-19 19:07:45 +0100 trunk: plans/central — Layer 1 permissions plan
+ 1 file changed, 246 insertions(+)
+
+==COMMIT== f1518a7 2026-04-19 19:07:13 +0100 trunk: plans/central — Layer 2 storage / paths plan
+ 1 file changed, 211 insertions(+)
+
+==COMMIT== 3a93392 2026-04-19 19:07:07 +0100 trunk: plans/central — Layer 3 settings / Preference plan
+ 1 file changed, 145 insertions(+)
+
+==COMMIT== b1d407e 2026-04-19 19:06:33 +0100 trunk: plans/central — Layer 9 app brand / identity plan
+ 1 file changed, 261 insertions(+)
+
+==COMMIT== 6a51dbc 2026-04-19 18:51:41 +0100 trunk: commit central-layers planning prompt (prior write was uncommitted)
+ 1 file changed, 438 insertions(+)
+
+==COMMIT== 859db83 2026-04-19 18:16:11 +0100 trunk: add codex heartbeat contract + gitignore .codex-heartbeat/
+ 2 files changed, 77 insertions(+)
+
+==COMMIT== 1ea02e4 2026-04-19 16:40:11 +0100 trunk: remove menu-bar permission-gate routing to onboarding
+ 2 files changed, 25 insertions(+), 111 deletions(-)
+
+==COMMIT== ee77ddb 2026-04-19 16:09:01 +0100 trunk: always enable History + Settings menu items (remove onboarding gate)
+ 2 files changed, 15 insertions(+), 4 deletions(-)
+
+==COMMIT== f8ff9dd 2026-04-19 16:07:31 +0100 trunk: fix Swift 6 build — actor→struct migrator + test await lift + onboarding frame arg order
+ 5 files changed, 26 insertions(+), 8 deletions(-)
+
+==COMMIT== 14e8279 2026-04-19 13:01:05 +0100 trunk: step onboarding.3: rewrite single-screen onboarding runbook
+ 1 file changed, 15 insertions(+), 18 deletions(-)
+
+==COMMIT== ee5ea8f 2026-04-19 13:00:18 +0100 trunk: step onboarding.2: rewrite first-run checklist surface
+ 1 file changed, 338 insertions(+), 151 deletions(-)
+
+==COMMIT== f4267c4 2026-04-19 12:57:56 +0100 trunk: step onboarding.1: rewrite checklist state for testCanContinueRequiresMicrophoneAndInputMonitoringButNotAccessibility
+ 2 files changed, 109 insertions(+), 133 deletions(-)
+
+==COMMIT== 16b5055 2026-04-19 11:43:20 +0100 trunk: fix pill vanishing on transcription error (Bug 2)
+ 7 files changed, 177 insertions(+), 10 deletions(-)
+
+==COMMIT== e2c507a 2026-04-19 11:22:41 +0100 trunk: promote presentDirectoryPicker to public (default-arg visibility)
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+==COMMIT== 5dc337d 2026-04-19 11:19:25 +0100 trunk: fix Swift 6 Sendable-send errors in BaseDirectoryMigrator.init
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+==COMMIT== faf0ab2 2026-04-19 11:16:20 +0100 trunk: fix Swift 6 access-level + opaque-return errors from overnight push
+ 3 files changed, 7 insertions(+), 9 deletions(-)
+
+==COMMIT== 8769c4f 2026-04-19 11:02:32 +0100 trunk: overnight log — 11:33 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== a135e9c 2026-04-19 10:57:54 +0100 trunk: overnight log — 11:28 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== bcefd9b 2026-04-19 10:53:02 +0100 trunk: overnight log — 11:23 quiet, user back
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 5837982 2026-04-19 10:48:16 +0100 trunk: overnight log — 11:18 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== cd56d4a 2026-04-19 10:43:30 +0100 trunk: overnight log — 11:13 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== f59c237 2026-04-19 10:38:47 +0100 trunk: overnight log — 11:08 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 2223128 2026-04-19 10:34:03 +0100 trunk: overnight log — 11:03 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== fa9fdfd 2026-04-19 10:29:14 +0100 trunk: overnight log — 10:58 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== a614ff9 2026-04-19 10:24:29 +0100 trunk: overnight log — 10:53 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 73090c1 2026-04-19 10:19:46 +0100 trunk: overnight log — 10:48 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 81f071f 2026-04-19 10:14:58 +0100 trunk: overnight log — 10:43 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== b813e26 2026-04-19 10:10:14 +0100 trunk: overnight log — 10:38 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 6c11792 2026-04-19 10:05:28 +0100 trunk: overnight log — 10:33 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== e554b55 2026-04-19 10:00:43 +0100 trunk: overnight log — 10:28 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 3a586ed 2026-04-19 09:55:58 +0100 trunk: overnight log — 10:23 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== b498201 2026-04-19 09:51:14 +0100 trunk: overnight log — 10:18 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 7b6e78c 2026-04-19 09:46:27 +0100 trunk: overnight log — 10:13 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== d30a8e9 2026-04-19 09:41:42 +0100 trunk: overnight log — 10:08 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 6526b7b 2026-04-19 09:36:56 +0100 trunk: overnight log — 10:03 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== da7cec6 2026-04-19 09:32:13 +0100 trunk: overnight log — 09:58 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== bccf3fe 2026-04-19 09:27:26 +0100 trunk: overnight log — 09:53 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== fdb0bfa 2026-04-19 09:22:41 +0100 trunk: overnight log — 09:48 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 2b7d8ec 2026-04-19 09:17:56 +0100 trunk: overnight log — 09:43 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 138208c 2026-04-19 09:13:11 +0100 trunk: overnight log — 09:38 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 8a111b0 2026-04-19 09:08:25 +0100 trunk: overnight log — 09:33 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 2541171 2026-04-19 09:03:42 +0100 trunk: overnight log — 09:28 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 17140f4 2026-04-19 08:58:55 +0100 trunk: overnight log — 09:23 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 1759180 2026-04-19 08:54:10 +0100 trunk: overnight log — 09:18 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== b725442 2026-04-19 08:49:27 +0100 trunk: overnight log — 09:13 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 3b68a2f 2026-04-19 08:44:38 +0100 trunk: overnight log — 09:08 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== d52b33e 2026-04-19 08:39:53 +0100 trunk: overnight log — 09:03 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== fafd1fa 2026-04-19 08:35:10 +0100 trunk: overnight log — 08:58 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 5bd6ebf 2026-04-19 08:30:22 +0100 trunk: overnight log — 08:53 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== e63d7f5 2026-04-19 08:25:38 +0100 trunk: overnight log — 08:48 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 80e9f43 2026-04-19 08:20:52 +0100 trunk: overnight log — 08:43 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 21ece56 2026-04-19 08:16:06 +0100 trunk: overnight log — 08:38 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 4e5be67 2026-04-19 08:11:21 +0100 trunk: overnight log — 08:33 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 869a5e9 2026-04-19 08:06:37 +0100 trunk: overnight log — 08:28 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 8f09138 2026-04-19 08:01:51 +0100 trunk: overnight log — 08:23 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 2a07f2f 2026-04-19 07:57:06 +0100 trunk: overnight log — 08:18 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 2945de1 2026-04-19 07:52:21 +0100 trunk: overnight log — 08:13 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 15be26f 2026-04-19 07:47:36 +0100 trunk: overnight log — 08:08 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 3fbf09a 2026-04-19 07:42:50 +0100 trunk: overnight log — 08:03 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 9897bff 2026-04-19 07:38:04 +0100 trunk: overnight log — 07:58 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 89256c9 2026-04-19 07:33:20 +0100 trunk: overnight log — 07:53 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== ba00fb9 2026-04-19 07:28:41 +0100 trunk: overnight log — 07:48 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 509aba0 2026-04-19 07:23:49 +0100 trunk: overnight log — 07:43 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 74c4f4a 2026-04-19 07:19:05 +0100 trunk: overnight log — 07:38 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== fde2d51 2026-04-19 07:14:19 +0100 trunk: overnight log — 07:33 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 61b6c11 2026-04-19 07:09:33 +0100 trunk: overnight log — 07:28 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 01873a7 2026-04-19 07:04:48 +0100 trunk: overnight log — 07:23 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== b299315 2026-04-19 07:00:01 +0100 trunk: overnight log — 07:18 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 6163241 2026-04-19 06:55:16 +0100 trunk: overnight log — 07:13 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 14fff24 2026-04-19 06:50:31 +0100 trunk: overnight log — 07:08 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 546bc18 2026-04-19 06:45:46 +0100 trunk: overnight log — 07:03 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 36a459a 2026-04-19 06:41:01 +0100 trunk: overnight log — 06:58 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== ce53cf3 2026-04-19 06:36:16 +0100 trunk: overnight log — 06:53 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 4b103b8 2026-04-19 06:31:32 +0100 trunk: overnight log — 06:48 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 8844aa5 2026-04-19 06:26:45 +0100 trunk: overnight log — 06:43 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 4f7b1bf 2026-04-19 06:21:59 +0100 trunk: overnight log — 06:38 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 1af43e5 2026-04-19 06:17:15 +0100 trunk: overnight log — 06:33 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== e9029ee 2026-04-19 06:12:28 +0100 trunk: overnight log — 06:28 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 5f079d7 2026-04-19 06:07:43 +0100 trunk: overnight log — 06:23 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== ff3e020 2026-04-19 06:02:57 +0100 trunk: overnight log — 06:18 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 58e7f12 2026-04-19 05:58:11 +0100 trunk: overnight log — 06:13 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 8f45758 2026-04-19 05:53:25 +0100 trunk: overnight log — 06:08 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== cc4d813 2026-04-19 05:48:40 +0100 trunk: overnight log — 06:03 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 0a50f02 2026-04-19 05:43:54 +0100 trunk: overnight log — 05:58 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== b75ac54 2026-04-19 05:39:11 +0100 trunk: overnight log — 05:53 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== ca0fd73 2026-04-19 05:34:24 +0100 trunk: overnight log — 05:48 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 95c1d3b 2026-04-19 05:29:38 +0100 trunk: overnight log — 05:43 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 8f99b75 2026-04-19 05:24:53 +0100 trunk: overnight log — 05:38 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== bf6a245 2026-04-19 05:20:09 +0100 trunk: overnight log — 05:33 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 4781ccb 2026-04-19 05:15:23 +0100 trunk: overnight log — 05:28 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== b689130 2026-04-19 05:10:38 +0100 trunk: overnight log — 05:23 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 53e89d2 2026-04-19 05:05:52 +0100 trunk: overnight log — 05:18 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== e7e22d8 2026-04-19 05:01:09 +0100 trunk: overnight log — 05:13 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== e44171d 2026-04-19 04:56:22 +0100 trunk: overnight log — 05:08 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 575bafd 2026-04-19 04:51:37 +0100 trunk: overnight log — 05:03 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== a5f49f8 2026-04-19 04:46:55 +0100 trunk: overnight log — 04:58 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 406af39 2026-04-19 04:42:07 +0100 trunk: overnight log — 04:53 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 123e777 2026-04-19 04:37:19 +0100 trunk: overnight log — 04:48 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 247b00f 2026-04-19 04:32:36 +0100 trunk: overnight log — 04:43 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== e76a12a 2026-04-19 04:27:50 +0100 trunk: overnight log — 04:38 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 465bb24 2026-04-19 04:23:05 +0100 trunk: overnight log — 04:33 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 115862a 2026-04-19 04:18:22 +0100 trunk: overnight log — 04:28 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== c7b365c 2026-04-19 04:13:37 +0100 trunk: overnight log — 04:23 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== fb735e2 2026-04-19 04:08:49 +0100 trunk: overnight log — 04:18 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== ebf0dae 2026-04-19 04:04:03 +0100 trunk: overnight log — 04:13 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 1230f81 2026-04-19 03:59:17 +0100 trunk: overnight log — 04:08 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 16351f1 2026-04-19 03:54:31 +0100 trunk: overnight log — 04:03 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 3b3b663 2026-04-19 03:49:47 +0100 trunk: overnight log — 03:58 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 0133df1 2026-04-19 03:45:03 +0100 trunk: overnight log — 03:53 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 39573d6 2026-04-19 03:40:16 +0100 trunk: overnight log — 03:48 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 4044cdc 2026-04-19 03:35:31 +0100 trunk: overnight log — 03:43 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 4f321ef 2026-04-19 03:30:47 +0100 trunk: overnight log — 03:38 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== c9f50d7 2026-04-19 03:26:00 +0100 trunk: overnight log — 03:33 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== a631d66 2026-04-19 03:21:16 +0100 trunk: overnight log — 03:28 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 7069c74 2026-04-19 03:16:30 +0100 trunk: overnight log — 03:23 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 0ce5557 2026-04-19 03:11:50 +0100 trunk: overnight log — 03:18 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 6c9e5b9 2026-04-19 03:06:59 +0100 trunk: overnight log — 03:13 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 38c2126 2026-04-19 03:02:13 +0100 trunk: overnight log — 03:08 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== d4a6703 2026-04-19 02:57:30 +0100 trunk: overnight log — 03:03 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== bbdadee 2026-04-19 02:52:45 +0100 trunk: overnight log — 02:58 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 4820ed8 2026-04-19 02:48:01 +0100 trunk: overnight log — 02:53 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 1955d28 2026-04-19 02:43:21 +0100 trunk: overnight log — 02:48 quiet
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== c8c0119 2026-04-19 02:38:34 +0100 trunk: overnight log — 02:43 idle tick, Phase 3 done, awaiting user
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 77055ea 2026-04-19 02:37:03 +0100 trunk: overnight log — morning summary section
+ 1 file changed, 42 insertions(+)
+
+==COMMIT== 430b1a3 2026-04-19 02:36:17 +0100 trunk: overnight log — 3.H review PASS CLEAN, Phase 3 closes
+ 1 file changed, 18 insertions(+)
+
+==COMMIT== 81c0531 2026-04-19 02:34:30 +0100 trunk: overnight log — 3.H COMPLETE, Phase 3 scope fully shipped, last reviewer dispatched
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 4471f22 2026-04-19 02:31:26 +0100 trunk: step H.4: Extend clipboard delay manual verification
+ 1 file changed, 7 insertions(+)
+
+==COMMIT== 060e759 2026-04-19 02:30:48 +0100 trunk: step H.3: Surface clipboard delay for testSetPasteRestoreDelaySecondsPersistsAndUpdatesState
+ 2 files changed, 54 insertions(+)
+
+==COMMIT== f3704a7 2026-04-19 02:29:39 +0100 trunk: step H.2: Read restore delay per paste for testPasteReadsRestoreDelayPreferencePerCall
+ 2 files changed, 50 insertions(+), 31 deletions(-)
+
+==COMMIT== 7f164c9 2026-04-19 02:29:04 +0100 trunk: overnight log — 02:34 tick, 3.H H.1 done + H.2 in progress
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 443eb5b 2026-04-19 02:28:43 +0100 trunk: overnight log — 3.B review PASS, SHOULD-FIX #1 copy-select applied, 4 deferred
+ 1 file changed, 22 insertions(+)
+
+==COMMIT== eeb4c0e 2026-04-19 02:28:12 +0100 trunk: 3.B housekeeping — fix NotesEditor unable-to-select (reviewer SHOULD-FIX #1)
+ 1 file changed, 13 insertions(+), 7 deletions(-)
+
+==COMMIT== 121983a 2026-04-19 02:28:01 +0100 trunk: step H.1: Add PasteRestoreDelay for testResolveClampsOutOfRangeValuesToNearestBound
+ 2 files changed, 115 insertions(+)
+
+==COMMIT== 12a8128 2026-04-19 02:24:59 +0100 trunk: overnight log — Wave 3a fully closed, Wave 3b (3.H) fired
+ 1 file changed, 2 insertions(+)
+
+==COMMIT== bb00b69 2026-04-19 02:22:58 +0100 trunk: overnight log — elevate 3.G plain-letter footgun to parked items
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== ca08d90 2026-04-19 02:22:30 +0100 trunk: overnight log — 3.G review PASS, 5 SHOULD-FIX + #3 footgun escalated to parked
+ 1 file changed, 20 insertions(+)
+
+==COMMIT== dfda638 2026-04-19 02:18:32 +0100 trunk: overnight log — 02:24 tick, 3.G COMPLETE + reviewer, 3.B at B.7
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 57dcee8 2026-04-19 02:18:17 +0100 trunk: step B.9: add ManualNotesVerification for Search filters list
+ 1 file changed, 29 insertions(+)
+
+==COMMIT== 9ca6e61 2026-04-19 02:17:33 +0100 trunk: step B.8: wire History menu for testHistoryMenuActionRaisesOpenNotesRequestedSignal
+ 3 files changed, 94 insertions(+), 1 deletion(-)
+
+==COMMIT== deabd91 2026-04-19 02:16:02 +0100 trunk: step B.7: add NotesWindowController for testHostReusesSingleControllerInstance
+ 2 files changed, 121 insertions(+)
+
+==COMMIT== 42da69e 2026-04-19 02:15:51 +0100 trunk: overnight log — 3.E review PASS, 5 SHOULD-FIX deferred (no MUST-FIX)
+ 1 file changed, 21 insertions(+)
+
+==COMMIT== 3f911af 2026-04-19 02:15:40 +0100 trunk: step G.4: wire ShortcutsTab recorder flow and restart notice
+ 2 files changed, 106 insertions(+), 43 deletions(-)
+
+==COMMIT== e946a96 2026-04-19 02:15:01 +0100 trunk: step B.6: add NotesView for testSearchFieldBindingDelegatesToViewModel
+ 2 files changed, 153 insertions(+)
+
+==COMMIT== 1fd2a53 2026-04-19 02:14:02 +0100 trunk: step G.3: add HotkeyRecorder model for testCaptureKeypressEventAndUpdatesPreferenceOnConfirm
+ 2 files changed, 529 insertions(+)
+
+==COMMIT== 6fcc146 2026-04-19 02:13:53 +0100 trunk: step B.5: add NotesContextPanel for testShowsSelectedEntryMetadata
+ 2 files changed, 179 insertions(+)
+
+==COMMIT== fd21510 2026-04-19 02:13:27 +0100 trunk: overnight log — 02:19 tick, 3.E COMPLETE + reviewer dispatched, 3.B/3.G still coding
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== fb1a61c 2026-04-19 02:12:58 +0100 trunk: step B.4: add NotesEditor for testShowsSelectedEntryText
+ 2 files changed, 84 insertions(+)
+
+==COMMIT== 4ca5bb7 2026-04-19 02:12:37 +0100 trunk: step E.3: extend settings manual verification for base-directory migration
+ 1 file changed, 6 insertions(+)
+
+==COMMIT== a284f6a 2026-04-19 02:12:18 +0100 trunk: step E.2: add AdvancedTab migration UI testChangeBaseDirectory_reportsMovedSubdirsOnSuccess
+ 2 files changed, 237 insertions(+), 5 deletions(-)
+
+==COMMIT== d111933 2026-04-19 02:12:01 +0100 trunk: step B.3: add NotesSidebar for testRowsMapFromViewModelEntries
+ 3 files changed, 235 insertions(+)
+
+==COMMIT== 936a8bb 2026-04-19 02:10:03 +0100 trunk: step G.2: read HotkeyPreference in monitor for testMonitorReadsPreferenceForKeyCodeAndTapCount
+ 2 files changed, 222 insertions(+), 27 deletions(-)
+
+==COMMIT== 2dcf4d1 2026-04-19 02:09:33 +0100 trunk: step B.2: add NotesViewModel for testSearchWithEmptyQueryFallsBackToRecent
+ 2 files changed, 190 insertions(+)
+
+==COMMIT== 59becc5 2026-04-19 02:09:24 +0100 trunk: step E.1: add BaseDirectoryMigrator testMigrationMovesAllSubdirsAndUpdatesConfig
+ 3 files changed, 401 insertions(+), 5 deletions(-)
+
+==COMMIT== c878c20 2026-04-19 02:08:08 +0100 trunk: overnight log — 02:14 tick, Wave 3a G.1 + B.1 landed, E.1 imminent
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 82a0bca 2026-04-19 02:07:48 +0100 trunk: step B.1: add TranscriptReading for testSQLiteTranscriptReaderCallsThroughToSQLiteTranscriptStore
+ 2 files changed, 153 insertions(+)
+
+==COMMIT== ad17780 2026-04-19 02:06:44 +0100 trunk: step G.1: add HotkeyPreference resolver for testResolveReturnsDefaultDoubleTapRightOptionWhenKeyAbsent
+ 2 files changed, 119 insertions(+)
+
+==COMMIT== 087dac7 2026-04-19 02:05:43 +0100 trunk: overnight log — 3.A review PASS, SHOULD-FIX #2 applied, #1/#3/#4 deferred for collision avoidance
+ 1 file changed, 21 insertions(+)
+
+==COMMIT== 0a032f3 2026-04-19 02:05:17 +0100 trunk: 3.A housekeeping — document menu-bar snapshot assumption in GeneralTabViewModel
+ 1 file changed, 6 insertions(+)
+
+==COMMIT== 5cda6a6 2026-04-19 02:03:19 +0100 trunk: overnight log — 02:09 quiet tick, Wave 3a agents young
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== a099d79 2026-04-19 02:02:58 +0100 trunk: overnight log — Wave 2 closed, Wave 3a (3.B/3.E/3.G) fired
+ 1 file changed, 2 insertions(+)
+
+==COMMIT== db076e1 2026-04-19 01:53:58 +0100 trunk: step A.4: wire settings opener for testSettingsMenuActionRaisesOpenSettingsRequestedSignal
+ 5 files changed, 144 insertions(+), 26 deletions(-)
+
+==COMMIT== 551f9c3 2026-04-19 01:53:54 +0100 trunk: overnight log — 01:58 tick, 3.A menu-bar wire-up in progress
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== c0108b4 2026-04-19 01:49:10 +0100 trunk: overnight log — 01:53 tick, 3.A at A.3 (visibility invariant shipped)
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 2872ec1 2026-04-19 01:48:37 +0100 trunk: step A.3: enforce visibility invariant for test_applyVisibilityConfig_rejectsBothHidden
+ 2 files changed, 216 insertions(+), 54 deletions(-)
+
+==COMMIT== a03576c 2026-04-19 01:47:29 +0100 trunk: step A.2: add settings window shell for testShowWindowOpensControllerWindowOnceAndReusesIt
+ 9 files changed, 591 insertions(+)
+
+==COMMIT== 7e9eee1 2026-04-19 01:44:59 +0100 trunk: step A.1: add default mode registry for testDefaultRegistryContainsDictation
+ 2 files changed, 57 insertions(+)
+
+==COMMIT== f7fc821 2026-04-19 01:44:18 +0100 trunk: overnight log — 01:48 quiet tick, 3.A still coding
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== d8db47b 2026-04-19 01:41:58 +0100 trunk: overnight log — 3.I review PASS, bisect hazard + scope drift parked for morning
+ 1 file changed, 32 insertions(+)
+
+==COMMIT== 4e6a819 2026-04-19 01:40:59 +0100 trunk: 3.I housekeeping — expand ManualHotkeyVerification per reviewer SHOULD-FIX #2
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+==COMMIT== 16553f0 2026-04-19 01:39:39 +0100 trunk: overnight log — 01:43 quiet tick, 3.A + 3.I reviewer both young
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 559621f 2026-04-19 01:38:27 +0100 trunk: overnight log — Wave 1 closed, Wave 2 (3.A Settings) dispatched
+ 1 file changed, 5 insertions(+)
+
+==COMMIT== 5288b7e 2026-04-19 01:36:02 +0100 trunk: BACKLOG — flagged scope drift from 3.I codex (speaker verification entry for user review)
+ 1 file changed, 6 insertions(+)
+
+==COMMIT== cee52d8 2026-04-19 01:35:49 +0100 trunk: step I.1: triple-tap option emergency quit (GlobalHotkeyMonitorTests)
+ 3 files changed, 334 insertions(+), 43 deletions(-)
+
+==COMMIT== 947c7ca 2026-04-19 01:34:23 +0100 trunk: overnight log — Slice B review verdict PASS, should-fix #1 applied
+ 1 file changed, 24 insertions(+)
+
+==COMMIT== f3516b2 2026-04-19 01:33:58 +0100 trunk: Slice B housekeeping — drop tautological else-if in MenuBarSceneModel
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+==COMMIT== 432b991 2026-04-19 01:30:48 +0100 trunk: overnight log — 3.I resumed as task-mo514rly-u1h31v
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== b2a5473 2026-04-19 01:30:03 +0100 trunk: overnight log — 01:30 tick, 3.I uncommitted work inspected, dispatcher pinged
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== dc504af 2026-04-19 01:27:42 +0100 trunk: overnight log — 01:25 tick, Slice B complete (not stalled), reviewer dispatched
+ 1 file changed, 2 insertions(+)
+
+==COMMIT== efe2eb6 2026-04-19 01:20:38 +0100 trunk: overnight log — council decision on Slice B stall (wait one tick)
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 922c469 2026-04-19 01:19:53 +0100 trunk: overnight log — 01:20 tick, Slice B stall-pinged with skip-build-test
+ 1 file changed, 3 insertions(+)
+
+==COMMIT== 5980d98 2026-04-19 01:19:05 +0100 trunk: 3.D housekeeping — pin GRDB exact:7.10.0 + log reviewer findings
+ 2 files changed, 25 insertions(+), 1 deletion(-)
+
+==COMMIT== 38ed61f 2026-04-19 01:15:29 +0100 trunk: overnight log — 01:10 tick, 3.D complete, 3.I unblocked with skip-build-test
+ 1 file changed, 6 insertions(+)
+
+==COMMIT== e50170a 2026-04-19 01:08:52 +0100 trunk: step D.5: swap app persistence for testSuccessfulTranscriptionAppendsEntryToSQLiteStore
+ 7 files changed, 100 insertions(+), 61 deletions(-)
+
+==COMMIT== 0c47235 2026-04-19 01:05:01 +0100 trunk: scaffold overnight execution log for autonomous 2026-04-19 session
+ 1 file changed, 40 insertions(+)
+
+==COMMIT== 56bfbd0 2026-04-19 01:02:43 +0100 trunk: step D.4: add runtime guards for testRuntimeGuardsAndGoldenCorpusSmokeQueries
+ 2 files changed, 205 insertions(+)
+
+==COMMIT== a0f2cd3 2026-04-19 00:59:13 +0100 trunk: step D.3: migrate JSONL for testMigratesExistingJSONLAndSkipsCorruptLinesOnlyOnce
+ 2 files changed, 221 insertions(+), 3 deletions(-)
+
+==COMMIT== 7de2985 2026-04-19 00:57:15 +0100 trunk: step B.3: gate onboarding-first recording surfaces
+ 10 files changed, 553 insertions(+), 28 deletions(-)
+
+==COMMIT== 3da4e87 2026-04-19 00:55:12 +0100 trunk: step D.2: add FTS5 search for testSearchMatchesExactPrefixPhraseAndDiacritics
+ 2 files changed, 74 insertions(+), 2 deletions(-)
+
+==COMMIT== fecbf7d 2026-04-19 00:51:43 +0100 trunk: step D.1: add SQLiteTranscriptStore for testAppendAndRecentRoundTripPersistsRowsInSQLite
+ 4 files changed, 248 insertions(+)
+
+==COMMIT== 1beb4be 2026-04-19 00:19:52 +0100 trunk: step D.0: decision doc for 3.D SQLite transcript store
+ 1 file changed, 150 insertions(+)
+
+==COMMIT== 8927632 2026-04-19 00:19:32 +0100 trunk: step B.2: add onboarding state machine for OnboardingViewModelTests
+ 3 files changed, 306 insertions(+)
+
+==COMMIT== bfca9d4 2026-04-19 00:15:24 +0100 trunk: step B.1: add onboarding resolver for OnboardingStateTests
+ 2 files changed, 69 insertions(+)
+
+==COMMIT== d0b84ed 2026-04-19 00:07:58 +0100 trunk: manual-verification entry for sine-wave animation (MV-B1-9)
+ 1 file changed, 11 insertions(+)
+
+==COMMIT== d1e28fa 2026-04-19 00:03:05 +0100 trunk: fix hidden-mode pill snapping off during transcribing
+ 1 file changed, 9 insertions(+)
+
+==COMMIT== dfef893 2026-04-19 00:01:27 +0100 trunk: enforce 0600 on transcripts.jsonl (TranscriptStoreTests)
+ 2 files changed, 42 insertions(+), 1 deletion(-)
+
+==COMMIT== 9c4540a 2026-04-18 23:42:24 +0100 trunk: fix pill sine-wave stuck static — drive Canvas via TimelineView
+ 1 file changed, 25 insertions(+), 23 deletions(-)
+
+==COMMIT== 767d2e0 2026-04-18 23:42:00 +0100 trunk: step A.3: show clipboard fallback notice (MenuBarSceneModelTests, PillOverlayPresenterTests)
+ 9 files changed, 265 insertions(+), 42 deletions(-)
+
+==COMMIT== a12196d 2026-04-18 23:35:43 +0100 trunk: step A.2: route self-targeted paste to clipboard (PasteInjectorTests)
+ 5 files changed, 159 insertions(+), 10 deletions(-)
+
+==COMMIT== d94c3b3 2026-04-18 23:32:49 +0100 trunk: step A.1: add persisted paste mode (PasteModeTests)
+ 2 files changed, 69 insertions(+)
+
+==COMMIT== 91fe45b 2026-04-18 23:11:14 +0100 trunk: fix package.sh signing-identity detection — drop -v flag
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+==COMMIT== a4a5d05 2026-04-18 23:05:15 +0100 trunk: BACKLOG — mark dogfood fixes 4/6/7/8 closed, add #9 hotkey-silent-at-launch
+ 1 file changed, 11 insertions(+), 7 deletions(-)
+
+==COMMIT== 5c5d962 2026-04-18 22:57:18 +0100 trunk: SeshatLogoView — SVG-traced QuillShape replaces stylised path
+ 3 files changed, 149 insertions(+), 348 deletions(-)
+
+==COMMIT== 9483ffa 2026-04-18 22:51:04 +0100 trunk: fix fuzzy pill/ResponseCard border — NSPanel shadow off + SwiftUI clipShape
+ 5 files changed, 31 insertions(+), 3 deletions(-)
+
+==COMMIT== 853696d 2026-04-18 22:39:58 +0100 trunk: status-item frame-swap + Nitkrar Dev signing + BACKLOG catch-up
+ 8 files changed, 75 insertions(+), 27 deletions(-)
+
+==COMMIT== d87ad24 2026-04-18 22:28:06 +0100 phase-2 step 2.B3d-3: route safe app shell deps through AppKit tests
+ 6 files changed, 141 insertions(+), 32 deletions(-)
+
+==COMMIT== da776ac 2026-04-18 22:27:56 +0100 phase-2 step 2.B3d-2: add paste injector shortcut seam
+ 2 files changed, 78 insertions(+), 12 deletions(-)
+
+==COMMIT== d10dd4e 2026-04-18 22:27:44 +0100 phase-2 step 2.B3d-1: fake pill overlay panels in presenter tests
+ 3 files changed, 191 insertions(+), 70 deletions(-)
+
+==COMMIT== 6b9e798 2026-04-18 22:13:30 +0100 trunk: pill redesign — Claude Sprint 2 spec (idle/recording/transcribing/done)
+ 4 files changed, 292 insertions(+), 173 deletions(-)
+
+==COMMIT== ef685f7 2026-04-18 22:07:09 +0100 trunk: adopt Sprint-2-redesign infrastructure — ResponseCard NSPanel, SineWaveView, theme extensions
+ 7 files changed, 379 insertions(+), 155 deletions(-)
+
+==COMMIT== 9b97ee4 2026-04-18 22:02:25 +0100 trunk: fix pill invisibility — remove stale-state guard in show()
+ 1 file changed, 13 insertions(+), 6 deletions(-)
+
+==COMMIT== 86b6663 2026-04-18 21:20:48 +0100 trunk: invert StatusBarIcon alpha — quill silhouette, not block tile
+ 2 files changed, 0 insertions(+), 0 deletions(-)
+
+==COMMIT== 58997b0 2026-04-18 21:16:02 +0100 trunk: BACKLOG — log Phase 2 Sprint 2 dogfood fixes + close .icns TODO
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+==COMMIT== 5189370 2026-04-18 21:14:53 +0100 phase-2 BACKLOG: stage Personal dictionary / Auto-pause / Active-window-context
+ 1 file changed, 16 insertions(+), 3 deletions(-)
+
+==COMMIT== 41bb6eb 2026-04-18 21:12:37 +0100 phase-2 fix: ship hand-authored AppIcon.icns (RGBA) — drop sips/iconutil
+ 3 files changed, 13 insertions(+), 27 deletions(-)
+
+==COMMIT== 6b526bf 2026-04-18 21:04:29 +0100 phase-2 diagnostic: os_log around pill overlay state flow
+ 3 files changed, 20 insertions(+), 2 deletions(-)
+
+==COMMIT== 1d1e63b 2026-04-18 21:04:16 +0100 phase-2 fix: flatten StatusBarIcon resources for SwiftPM Bundle.module load
+ 5 files changed, 33 insertions(+), 48 deletions(-)
+
+==COMMIT== e628d31 2026-04-18 20:59:41 +0100 phase-2 fix: menu Start Recording surfaces actual hotkey (⌥⌥)
+ 2 files changed, 24 insertions(+), 12 deletions(-)
+
+==COMMIT== addb1ea 2026-04-18 20:56:24 +0100 phase-2 fix: generate + embed .icns app icon in package.sh
+ 2 files changed, 40 insertions(+), 5 deletions(-)
+
+==COMMIT== 60082ab 2026-04-18 20:56:26 +0100 phase-2 fix: StatusItemController — load StatusBarIcon from Bundle.module
+ 4 files changed, 107 insertions(+), 4 deletions(-)
+
+==COMMIT== 115960a 2026-04-18 20:39:38 +0100 phase-2 meta: rewrite Santa build-frequency rule (TA covers main repo)
+ 1 file changed, 9 insertions(+), 20 deletions(-)
+
+==COMMIT== a9c1b69 2026-04-18 20:39:37 +0100 phase-2 sprint-2 close: BACKLOG Sprint 2 closures + VAD staging
+ 1 file changed, 38 insertions(+), 9 deletions(-)
+
+==COMMIT== 70d8f6d 2026-04-18 20:32:37 +0100 phase-2 step 2.B3c-2: delete dead SwiftUI popover files + stale tests
+ 8 files changed, 426 deletions(-)
+
+==COMMIT== bb79fe8 2026-04-18 20:30:08 +0100 phase-2 step 2.B3c-1: wire StatusItemController into SeshatAppMain, replace MenuBarExtra
+ 2 files changed, 31 insertions(+), 14 deletions(-)
+
+==COMMIT== 3dd3180 2026-04-18 20:28:21 +0100 phase-2 step 2.B3b: StatusItemController — NSMenu owner + state-driven icon
+ 1 file changed, 229 insertions(+)
+
+==COMMIT== bbd492c 2026-04-18 20:25:53 +0100 phase-2 step 2.B3a: add StatusItemMenuModel pure model + tests
+ 2 files changed, 374 insertions(+)
+
+==COMMIT== a632c45 2026-04-18 20:25:40 +0100 phase-2 step 2.B2 review: @MainActor on composite test classes
+ 3 files changed, 3 insertions(+)
+
+==COMMIT== 4c8bee0 2026-04-18 20:17:09 +0100 phase-2 step 2.B fix: rename body→message/preview (SwiftUI View conformance)
+ 4 files changed, 43 insertions(+), 43 deletions(-)
+
+==COMMIT== 36b8d6f 2026-04-18 20:01:12 +0100 phase-2 step 2.B2c: add AudioPlayerThumbnail composite + manual runbook
+ 3 files changed, 351 insertions(+)
+
+==COMMIT== a6f8594 2026-04-18 20:00:59 +0100 phase-2 step 2.B2b: add ModeCard composite
+ 2 files changed, 227 insertions(+)
+
+==COMMIT== dc77f4d 2026-04-18 20:00:52 +0100 phase-2 step 2.B2a: add TranscriptRow composite
+ 2 files changed, 415 insertions(+)
+
+==COMMIT== ecd3fde 2026-04-18 20:11:09 +0100 phase-2 step 2.B1d: rewrite pill overlay for 3 visibility modes
+ 7 files changed, 596 insertions(+), 138 deletions(-)
+
+==COMMIT== 9d7b413 2026-04-18 20:01:36 +0100 phase-2 step 2.B1c: WaveformDecayMode + WaveformView decay coast-down
+ 4 files changed, 331 insertions(+), 8 deletions(-)
+
+==COMMIT== db806c5 2026-04-18 19:59:07 +0100 phase-2 step 2.B1b: add PillVisibilityMode enum
+ 2 files changed, 153 insertions(+)
+
+==COMMIT== 6f467dd 2026-04-18 19:58:26 +0100 phase-2 step 2.B1a: add ResponseCard component
+ 2 files changed, 155 insertions(+)
+
+==COMMIT== 26915c8 2026-04-18 20:08:16 +0100 phase-2 meta: consolidate packaging scripts into scripts/package.sh
+ 4 files changed, 259 insertions(+), 225 deletions(-)
+
+==COMMIT== 263b994 2026-04-18 19:39:11 +0100 phase-2 sprint-1 close: mark StatusBarIcon TODO done in BACKLOG
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+==COMMIT== 5250cca 2026-04-18 19:38:26 +0100 phase-2 step 2.7b: StatusBarIcon from Manus export
+ 2 files changed, 0 insertions(+), 0 deletions(-)
+
+==COMMIT== 53227b8 2026-04-18 19:37:00 +0100 phase-2 sprint-1 close: backlog closures table (254 tests green)
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+==COMMIT== 4192e7c 2026-04-18 19:31:39 +0100 phase-2 sprint-1 test-fix: @MainActor on ActionButtonTests
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 4b392d9 2026-04-18 19:29:59 +0100 phase-2 sprint-1 close: track StatusBarIcon swap + coast-down + logo-fidelity TODOs
+ 1 file changed, 42 insertions(+)
+
+==COMMIT== 2ffa8c6 2026-04-18 19:13:11 +0100 phase-2 setup: gitignore agent worktrees + document Santa-gated build cadence
+ 2 files changed, 24 insertions(+)
+
+==COMMIT== d800a05 2026-04-18 19:11:32 +0100 phase-2 step 2.M review: correct palette token and dedupe component metrics
+ 10 files changed, 379 insertions(+), 125 deletions(-)
+
+==COMMIT== b359d2c 2026-04-18 19:01:36 +0100 phase-2 step 2.9 review: align fake level stream teardown
+ 3 files changed, 22 insertions(+), 2 deletions(-)
+
+==COMMIT== 5a284eb 2026-04-18 18:55:38 +0100 phase-2 step 2.7: asset catalog, StatusBarIcon template, and Resources wiring
+ 6 files changed, 114 insertions(+), 1 deletion(-)
+
+==COMMIT== 446c94f 2026-04-18 18:55:24 +0100 phase-2 step 2.6: ActionButton with primary/secondary variants and disabled state
+ 2 files changed, 139 insertions(+)
+
+==COMMIT== 7035ecc 2026-04-18 18:55:17 +0100 phase-2 step 2.5: TagChip foundation component with neutral + accent variants
+ 2 files changed, 106 insertions(+)
+
+==COMMIT== 60df797 2026-04-18 18:55:11 +0100 phase-2 step 2.4: StatusPill with ready/recording/neutral variants
+ 2 files changed, 133 insertions(+)
+
+==COMMIT== 6ab7470 2026-04-18 18:55:01 +0100 phase-2 step 2.3: WaveformView audio-level meter with conditional TimelineView
+ 2 files changed, 281 insertions(+)
+
+==COMMIT== aab08a5 2026-04-18 18:54:51 +0100 phase-2 step 2.2: SeshatLogoView quill with idle/listening/transcribing/error states
+ 3 files changed, 382 insertions(+)
+
+==COMMIT== 5314e44 2026-04-18 18:53:08 +0100 phase-2 step 2.10: SessionCoordinator republishes audio level for SwiftUI
+ 3 files changed, 245 insertions(+), 1 deletion(-)
+
+==COMMIT== b5715bf 2026-04-18 18:52:54 +0100 phase-2 step 2.9: AVAudioCaptureService RMS level stream at 10 Hz
+ 4 files changed, 380 insertions(+), 2 deletions(-)
+
+==COMMIT== 04b12b1 2026-04-18 18:46:26 +0100 phase-2 step 2.1: SeshatTheme dark + light palettes + typography tokens
+ 2 files changed, 450 insertions(+)
+
+==COMMIT== bc65626 2026-04-18 18:43:26 +0100 phase-2 step 2.8: IntentClassifier protocol + NoOpIntentClassifier stub
+ 2 files changed, 92 insertions(+)
+
+==COMMIT== de0d798 2026-04-18 18:22:36 +0100 phase-1 step 1.14 + 1.15: reconcile backlog + dogfood log; gate met
+ 2 files changed, 54 insertions(+), 66 deletions(-)
+
+==COMMIT== 0969f59 2026-04-18 17:51:58 +0100 phase-1 round-out: steps 1.3 cleanup, 1.11, 1.12, 1.13
+ 12 files changed, 635 insertions(+), 25 deletions(-)
+
+==COMMIT== 80d4212 2026-04-18 17:21:05 +0100 phase-1 step 1.9: Input Monitoring detection + warn log (no UI)
+ 4 files changed, 187 insertions(+), 1 deletion(-)
+
+==COMMIT== 990d5c3 2026-04-18 17:19:31 +0100 phase-1 step 1.7: FluidAudio* take ModelDescriptor
+ 10 files changed, 92 insertions(+), 57 deletions(-)
+
+==COMMIT== e1581e0 2026-04-18 17:14:13 +0100 phase-1 step 1.6: configurable base directory (env var + UserDefaults)
+ 5 files changed, 144 insertions(+), 20 deletions(-)
+
+==COMMIT== e6c9576 2026-04-18 17:10:25 +0100 phase-1 step 1.5: ModelRegistry with Parakeet 0.6B v2 descriptor
+ 2 files changed, 76 insertions(+)
+
+==COMMIT== 649becd 2026-04-18 16:58:39 +0100 phase-1 step 1.4b: add drag-suppresses-tap end-to-end test
+ 1 file changed, 34 insertions(+)
+
+==COMMIT== 1a06c45 2026-04-18 16:58:39 +0100 phase-1 step 1.3b: MenuBarFlow ordering regression test
+ 1 file changed, 57 insertions(+)
+
+==COMMIT== cb6e385 2026-04-18 16:51:53 +0100 phase-1 step 1.1b: OSSignposter around prepare + loadModel for launch RCA
+ 3 files changed, 46 insertions(+), 1 deletion(-)
+
+==COMMIT== bf1f205 2026-04-18 16:49:13 +0100 chore: retire week1 plans, adopt phase-based PLAN_PHASES + agent bundle v3
+ 47 files changed, 1273 insertions(+), 9858 deletions(-)
+
+==COMMIT== 1cb665c 2026-04-18 14:18:53 +0100 Fix startup warmup responsiveness and interaction handling
+ 22 files changed, 1078 insertions(+), 85 deletions(-)
+
+==COMMIT== b004c5b 2026-04-18 04:58:13 +0100 week-2 end-of-session corrections: clicks truly broken (independent of launch freeze), idle pill needs drag + listening pill needs smaller
+ 1 file changed, 15 insertions(+), 10 deletions(-)
+
+==COMMIT== 1eb95c9 2026-04-18 04:54:59 +0100 week-2 end-of-session: reshape priorities after /Applications retest — launch freeze is per-launch, not first-run-only
+ 1 file changed, 14 insertions(+), 4 deletions(-)
+
+==COMMIT== 831f52b 2026-04-18 04:47:45 +0100 week-2 end-of-session: update backlog with known issues + next-session plan
+ 1 file changed, 24 insertions(+), 4 deletions(-)
+
+==COMMIT== aa73013 2026-04-18 04:37:29 +0100 week-2 fix: pill click handler — canBecomeKey=true
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+==COMMIT== 53e0807 2026-04-18 04:29:24 +0100 week-2 fix attempt: revert menu bar to .menu style, add idle pill dot
+ 7 files changed, 73 insertions(+), 66 deletions(-)
+
+==COMMIT== 0c2923d 2026-04-18 04:13:06 +0100 ship dev DMG + packaging scripts
+ 3 files changed, 80 insertions(+), 1 deletion(-)
+
+==COMMIT== b0408cd 2026-04-18 04:10:16 +0100 week-2 f6 follow-up: trigger Accessibility prompt on first untrusted paste
+ 2 files changed, 108 insertions(+), 5 deletions(-)
+
+==COMMIT== d9c7d8b 2026-04-18 04:08:38 +0100 week-2 fix: menu bar popover — force .window style
+ 1 file changed, 3 insertions(+)
+
+==COMMIT== efda4bf 2026-04-18 04:05:18 +0100 week-2 f6 complete
+ 1 file changed, 73 insertions(+)
+
+==COMMIT== 35a8a31 2026-04-18 04:05:15 +0100 week-2 f6 step 2: auto-paste completed transcript into frontmost app
+ 2 files changed, 17 insertions(+)
+
+==COMMIT== c35fedc 2026-04-18 04:05:08 +0100 week-2 f6 step 1: PasteInjector — save/write/Cmd+V/restore clipboard cycle
+ 1 file changed, 104 insertions(+)
+
+==COMMIT== 2b06bc3 2026-04-18 03:57:19 +0100 week-2 fix: pill click handler — NSHostingView frame + acceptsFirstMouse
+ 1 file changed, 14 insertions(+), 1 deletion(-)
+
+==COMMIT== db11689 2026-04-18 03:57:09 +0100 week-2 fix: pill draggable via NSPanel subclass
+ 1 file changed, 26 insertions(+), 7 deletions(-)
+
+==COMMIT== df6aa28 2026-04-18 03:56:56 +0100 week-2 fix: hide idle pill — revert always-on shortcut hint
+ 4 files changed, 8 insertions(+), 30 deletions(-)
+
+==COMMIT== 815fc10 2026-04-18 03:46:32 +0100 week-2 f5: surface model download progress in menu bar + pill
+ 9 files changed, 113 insertions(+), 19 deletions(-)
+
+==COMMIT== f18c4a5 2026-04-18 03:44:12 +0100 week-2 pill interactivity: click pill to toggle recording, idle pill with shortcut hint
+ 6 files changed, 70 insertions(+), 23 deletions(-)
+
+==COMMIT== d66ba59 2026-04-18 03:42:19 +0100 week-2 f2/f3 wiring: double-tap right-option, pill overlay controller, hotkey started on launch
+ 4 files changed, 94 insertions(+), 35 deletions(-)
+
+==COMMIT== 6136a7d 2026-04-18 03:25:57 +0100 week-2 pill-polish complete
+==COMMIT== 506aac3 2026-04-18 03:25:50 +0100 week-2 pill-polish step 3: update manual verification runbook
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+==COMMIT== 9509647 2026-04-18 03:25:40 +0100 week-2 pill-polish step 2: move pill to bottom-center position
+ 1 file changed, 4 insertions(+), 7 deletions(-)
+
+==COMMIT== a6d168a 2026-04-18 03:25:30 +0100 week-2 pill-polish step 1: upgrade PillOverlayView to glass capsule with pulsing dots
+ 1 file changed, 72 insertions(+), 45 deletions(-)
+
+==COMMIT== 4750c7a 2026-04-18 03:25:12 +0100 week-2 f4 complete: background prewarm ready
+==COMMIT== 656665e 2026-04-18 03:25:07 +0100 week-2 f4 step 3: prewarm transcription on SeshatAppMain launch
+ 1 file changed, 1 insertion(+)
+
+==COMMIT== 35a9f36 2026-04-18 03:25:04 +0100 week-2 f4 step 2: add AppComposition.prewarmTranscription helper
+ 1 file changed, 12 insertions(+)
+
+==COMMIT== 995bcd8 2026-04-18 03:25:00 +0100 week-2 f4 step 1: add SessionCoordinator.prepareTranscriber passthrough
+ 1 file changed, 5 insertions(+)
+
+==COMMIT== cb5b718 2026-04-18 03:22:40 +0100 week-2 f1/f2 fixes: update 3 tests for PostProcessor output; fix GlobalHotkeyMonitor let/var shadowing
+ 5 files changed, 9 insertions(+), 9 deletions(-)
+
+==COMMIT== 509dc70 2026-04-18 03:18:19 +0100 week-2 f3 complete: pill overlay ready for Wave 2 wiring
+==COMMIT== d62b39d 2026-04-18 03:18:14 +0100 week-2 f3 step 6: add manual verification runbook
+ 1 file changed, 5 insertions(+)
+
+==COMMIT== 19d116b 2026-04-18 03:18:06 +0100 week-2 f3 step 5: wire presenter to model via @Published subscription
+ 1 file changed, 16 insertions(+)
+
+==COMMIT== 5dc5ce7 2026-04-18 03:17:58 +0100 week-2 f1 complete: post-processing ready
+==COMMIT== 0af72c8 2026-04-18 03:17:56 +0100 week-2 f2 complete: global hotkey ready
+==COMMIT== 8333d11 2026-04-18 03:17:55 +0100 week-2 f3 step 4: add PillOverlayPresenter with NSPanel floating window
+ 1 file changed, 68 insertions(+)
+
+==COMMIT== 9d46fc6 2026-04-18 03:17:54 +0100 week-2 f1 step 4: plumb PostProcessor into SessionCoordinator idle transition
+ 2 files changed, 10 insertions(+), 3 deletions(-)
+
+==COMMIT== 0f18fc4 2026-04-18 03:17:42 +0100 week-2 f3 step 3: add PillOverlayView SwiftUI presentation
+ 1 file changed, 84 insertions(+)
+
+==COMMIT== 3201a31 2026-04-18 03:17:34 +0100 week-2 f2 step 4: add AppComposition.hotkeyMonitor factory
+ 1 file changed, 13 insertions(+)
+
+==COMMIT== bd59355 2026-04-18 03:17:31 +0100 week-2 f1 step 3: implement basic punctuation stage
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+==COMMIT== 10ab305 2026-04-18 03:17:28 +0100 week-2 f3 step 2: implement SessionState -> visibility mapping
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+==COMMIT== d1329ab 2026-04-18 03:17:20 +0100 week-2 f3 step 1: scaffold PillOverlayViewModel with tests
+ 2 files changed, 97 insertions(+)
+
+==COMMIT== 063d0e3 2026-04-18 03:17:17 +0100 week-2 f2 step 3: add debounce and handle-event test seam
+ 2 files changed, 82 insertions(+), 12 deletions(-)
+
+==COMMIT== bb9fa34 2026-04-18 03:17:07 +0100 week-2 f1 step 2: implement filler removal stage
+ 1 file changed, 49 insertions(+), 1 deletion(-)
+
+==COMMIT== 4efcf41 2026-04-18 03:16:52 +0100 week-2 f2 step 2: implement NSEvent global monitor for right-option key
+ 1 file changed, 24 insertions(+), 1 deletion(-)
+
+==COMMIT== 4e445bd 2026-04-18 03:16:41 +0100 week-2 f2 step 1: scaffold GlobalHotkeyMonitor with lifecycle tests
+ 2 files changed, 63 insertions(+)
+
+==COMMIT== bae3d1b 2026-04-18 03:16:38 +0100 week-2 f1 step 1: add PostProcessor scaffold and failing tests
+ 2 files changed, 55 insertions(+)
+
+==COMMIT== 52100af 2026-04-18 03:04:24 +0100 package-dev-app: add audio-input entitlement (tccd silently denies mic access under hardened runtime without it)
+ 1 file changed, 25 insertions(+), 8 deletions(-)

@@ -1,0 +1,67 @@
+Implement #056 in /Users/nitinkum/Projects/nitkrar/personal_scribe.
+
+Read first:
+- AGENTS.md
+- plans/056_streaming_dictation/DESIGN.md
+- plans/056_streaming_dictation/IMPLEMENTATION.md
+- BACKLOG.md entries #056 and #033 for context only
+
+Use DESIGN.md + IMPLEMENTATION.md as the source of truth. Do not reopen product questions unless you find a real code-level contradiction.
+
+Locked scope for this execution:
+- This is the pre-#033 UX-only slice.
+- Implement live on-screen streaming via StreamCard.
+- Do NOT implement live cursor transport.
+- Do NOT wire any production consumer to PipelineOutputSink.deliverPartial(...).
+- Add live-cursor schema/prefs/UI now, but leave runtime honor deferred to #033.
+- Keep stop-time clipboard/paste delivery on the existing OutputService/MenuBarSceneModel path.
+
+Locked semantics:
+- StreamCard = live transcript only, shows streaming-model partials (including sub-EOU), rolling session tail, single-line.
+- ResponseCard = operational/status/error messages only.
+- StreamCard and ResponseCard do not coexist; ResponseCard replaces StreamCard on stop/error/finalizing.
+- Optional second pass is authoritative for history + clipboard only.
+- If second pass is unavailable or fails, fall back to the streaming final.
+- Existing final auto-paste behavior still applies only at stop-time.
+- Live cursor transport remains deferred to #033, even though the mode/settings surfaces may already persist that flag.
+
+Execution requirements:
+- Follow the staged implementation in plans/056_streaming_dictation/IMPLEMENTATION.md.
+- Single cohesive implementation in one go. If you commit, use one commit only at the end.
+- Follow repo TDD rules: add failing tests first for logic/state-machine changes.
+- Update relevant manual verification runbooks for UI changes.
+- Do not revert unrelated worktree changes.
+
+Expected code areas:
+- Sources/PersonalScribeCore/WorkflowMode/WorkflowMode.swift
+- Sources/PersonalScribeCore/WorkflowMode/Preset.swift
+- Sources/PersonalScribeCore/WorkflowMode/WorkflowModeValidator.swift
+- Sources/PersonalScribeCore/Preferences/PreferenceKeys.swift
+- Sources/PersonalScribeCore/SessionSnapshot.swift
+- Sources/PersonalScribeSession/WorkflowMode/BoundRecipe.swift
+- Sources/PersonalScribeSession/WorkflowMode/RecipeBuilder.swift
+- Sources/PersonalScribeSession/Pipeline/Orchestrator/SessionPipelineOrchestrator.swift
+- Sources/PersonalScribeSession/SessionCoordinator.swift
+- Sources/PersonalScribeAppKit/Overlay/ResponseCard.swift
+- Sources/PersonalScribeAppKit/Overlay/PillOverlayPresenter.swift
+- Sources/PersonalScribeAppKit/Overlay/PillOverlayController.swift
+- Sources/PersonalScribeAppKit/Overlay/RecordingStatusCardDriver.swift
+- Sources/PersonalScribeAppKit/UnifiedWindow/Tabs/Modes/ModeRecipeMutators.swift
+- Sources/PersonalScribeAppKit/UnifiedWindow/Tabs/Modes/ModeDetailViewModel.swift
+- Sources/PersonalScribeAppKit/UnifiedWindow/Tabs/Modes/ModeDetailView.swift
+- Sources/PersonalScribeAppKit/Settings/GeneralTab.swift
+- relevant tests and manual verification docs
+
+Acceptance criteria:
+- Streaming recipes publish transcriptProgress during capture, not only after stop.
+- StreamCard appears live for streaming sessions and updates continuously.
+- On completion/error/finalizing, StreamCard hides and ResponseCard takes over.
+- Optional second pass chooses the authoritative final for history/clipboard, with fallback to streaming final.
+- liveCursorEnabled persists and surfaces in schema/settings/UI, but no production live-cursor behavior ships in this change.
+- swift test passes from the canonical repo path.
+
+At the end:
+- summarize what changed
+- list tests run
+- list manual verification docs updated
+- call out any remaining risks or explicit follow-ups for #033
