@@ -497,3 +497,67 @@ Second `SettingsSection` below Voice models; seeds once Phase 4 lands an LLM dow
 
 **Depends on:** #020
 **Legacy:** `backlog/model-download-ux-bug-research.md` Stage B
+
+---
+
+### #039 — Whisper.cpp streaming dedup tracker
+
+`bug` · `P3` · `open` · `stage: design` · `area: transcription, streaming`
+*Updated 2026-05-25*
+
+`WhisperCppStableSegmentTracker.merge()` produces parallel confirmation lanes when whisper.cpp re-decodes overlapping audio with jittered word boundaries. Same segment text appears under two slightly different normalized forms, both cross the `confirmationThreshold` independently, both flush. Manifests as duplicated phrases in the live card during whisper.cpp streaming dictation.
+
+**Cosmetic only:** live cursor EoU paste is gated off for whisper.cpp via `11c0f99` (RecipeBuilder force) and stop-time second-pass uses a batch decode that doesn't go through this tracker. So the bug never reaches the user's text field. The visible damage is confined to the live card visualization during recording.
+
+**Design options** (from codex audit req-0066, hermes verdict on file):
+1. Frozen prefix + canonical tail — split tracker into `frozenPrefix` (settled text) + `mutableTail` (latest decode wins). Easier mental model, risk on freeze-boundary heuristic.
+2. Overlap-run confirmations — keep confirmation model but use time-overlap as segment identity (instead of exact normalized text). Lowest runtime cost, highest algorithmic complexity.
+3. Decouple preview from authoritative per-EoU redraw — bypass tracker for preview entirely; on `.speechEnded`, run fresh whisper.cpp decode over post-boundary audio. Cleanest design, extra CPU + ~100-300ms EoU latency.
+
+Hermes recommendation: option 3 unless EoU latency is unacceptable.
+
+**Deferred:** revisit when product UX requires clean live card during whisper.cpp speech. Two earlier attempts at "replace-on-ingest" hit hermes review blockers (long-utterance truncation past 8.25s window; empty-decode wipes); those approaches are off the table.
+
+**Reference:** `Sources/PersonalScribeTranscription/Adapters/WhisperCppStableSegmentTracker.swift` (trunk version, post-revert).
+
+---
+
+### #040 — WhisperKit streaming dogfood verification
+
+`feature` · `P2` · `open` · `stage: verify` · `area: transcription, streaming, dogfood`
+*Updated 2026-05-25*
+
+#101 landed via `dd100ee` + `322a4da`. Source + tests green (1496/0/1) but no DMG-built dogfood exercise yet. Built app at `/Applications/Ninimma.app` is on `11c0f99` (one commit behind #101).
+
+**Verification checklist:**
+- Rebuild + sign + reinstall DMG.
+- Switch active streaming model to a WhisperKit descriptor in AI Models tab.
+- Run streaming dictation: confirm `.endOfUtterance` chunks paste cleanly via live cursor into focused app (confirmed-delta-only emission means no parallel-lane duplicates).
+- Confirm live card updates with unconfirmed-tail `.partial` events during speech, then committed segments on confirmation.
+- Run stop-time second pass: confirm force-rule reuses the same WhisperKit instance (no second download/load).
+- Regression: switch back to Parakeet streaming and confirm it still works as before the #100/#101 catalog changes.
+- Regression: switch back to whisper.cpp streaming and confirm the live-cursor gate still suppresses EoU paste.
+
+**Reference:** plans/101_whisperkit_streaming/HERMES_BRIEF.md; CODEX_RESEARCH.md.
+
+---
+
+### #041 — Delete `AppEntryPointTests.testPersonalScribeAppMainBuildsSceneModelFromComposition` skip
+
+`refactor` · `P3` · `open` · `stage: impl` · `area: tests`
+*Updated 2026-05-25*
+
+Test skipped since 2026-04-20 because `@StateObject` lifetime isn't retained in unit-test context. `MenuBarFlowIntegrationTests.testRecordStopTranscribeIdleFlowPublishesLatestResult` already covers the composition end-to-end without depending on `@StateObject` lifetime, so the skipped test is redundant.
+
+**Action:** delete the test (not unskip, not refactor). Full suite expected to drop from 1496 pass / 1 skip → 1495 pass / 0 skip.
+
+---
+
+### #042 — Memory idle-release verified (informational, no action)
+
+`feature` · `P3` · `done` · `area: lifecycle`
+*Updated 2026-05-25*
+
+Idle release working as designed (req-0050, `1c23cfa`). Verified empirically 2026-05-24 night: batch session 60→300→90 MB (93% reclaim), streaming session 90→723→333 MB (62% reclaim). Streaming residual is dominated by Parakeet TDT 0.6B used as second-pass batch (~600 MB peak). If lower streaming residual is needed, switching active batch ASR from Parakeet TDT 0.6B to Whisper Small WhisperKit (216 MB) cuts peak by ~400 MB. Current setting intentional per quality preference.
+
+**No action.** Keep as ticket so the empirical numbers don't get lost.
