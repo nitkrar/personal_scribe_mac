@@ -22,7 +22,8 @@ final class ApplicationTerminationHandlerTests: XCTestCase {
             },
             fastExit: {
                 recorder.append("exit")
-            }
+            },
+            scheduleDeadline: { _, _ in }
         )
 
         await handler()
@@ -38,6 +39,54 @@ final class ApplicationTerminationHandlerTests: XCTestCase {
                 "exit",
             ]
         )
+    }
+
+    func testFastExitPrequitHandlerForcesExitWhenShutdownStepExceedsDeadline() async {
+        let recorder = EventRecorder()
+        var scheduledDelay: Duration?
+        var fireDeadline: (@Sendable () -> Void)?
+
+        let handler = FastExitApplicationTerminationHandler.makePrequitHandler(
+            stopIfActive: {
+                recorder.append("stop:start")
+                try? await Task.sleep(for: .seconds(60))
+                recorder.append("stop:end")
+            },
+            shutdownPreparedWhisperCppAdapters: {
+                recorder.append("shutdown:start")
+            },
+            logFastExit: { message in
+                recorder.append("log:\(message)")
+            },
+            logDeadlineExceeded: { message in
+                recorder.append("deadline:\(message)")
+            },
+            fastExit: {
+                recorder.append("exit")
+            },
+            scheduleDeadline: { delay, action in
+                scheduledDelay = delay
+                fireDeadline = action
+            }
+        )
+
+        let quit = Task { await handler() }
+        while !recorder.snapshot().contains("stop:start") {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(scheduledDelay, .seconds(3))
+        fireDeadline?()
+
+        XCTAssertEqual(
+            recorder.snapshot(),
+            [
+                "stop:start",
+                "deadline:fast_exit_deadline_exceeded stage=stopIfActive",
+                "exit",
+            ]
+        )
+        quit.cancel()
     }
 }
 

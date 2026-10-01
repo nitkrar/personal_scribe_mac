@@ -7,31 +7,45 @@ import PersonalScribeCore
 /// next launch (background-mode activation policy, recording-hotkey
 /// registration, future similarly-gated settings).
 ///
-/// Mechanism: ask `NSWorkspace` to launch a fresh instance of the app
-/// bundle with `createsNewApplicationInstance = true` so the OS spawns
-/// a second process instead of reactivating the current one, then call
-/// `NSApp.terminate(nil)` once the open completes. Both steps are needed
-/// — without the new-instance flag, `openApplication` just reactivates
-/// the current process and we never restart.
-///
-/// The open-completion callback can run on an arbitrary queue; we hop
-/// back to the main actor to terminate so AppKit state is drained
-/// cleanly. Any error is logged and the terminate is skipped, leaving
-/// the current process alive (the user can retry or restart manually).
+/// Mechanism: spawn a detached helper shell that waits for this process
+/// to exit and then `open`s the app bundle, then `NSApp.terminate(nil)`.
+/// Quit-first ordering means there is never a second copy alive next to
+/// one that's still shutting down; the termination handler's deadline
+/// guarantees the wait ends. If the helper can't be spawned, the error
+/// is logged and the terminate is skipped, leaving the current process
+/// alive (the user can retry or restart manually).
 @MainActor
 public enum AppRelauncher {
     public static func relaunch(logger: PersonalScribeLogger) {
-        let url = Bundle.main.bundleURL
-        let config = NSWorkspace.OpenConfiguration()
-        config.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: url, configuration: config) { _, error in
-            if let error {
-                logger.error("AppRelauncher: openApplication failed", error: error)
-                return
-            }
-            Task { @MainActor in
-                NSApp.terminate(nil)
-            }
+        do {
+            try spawnRelaunchHelper(
+                waitingFor: ProcessInfo.processInfo.processIdentifier,
+                appURL: Bundle.main.bundleURL
+            )
+        } catch {
+            logger.error("AppRelauncher: relaunch helper failed to spawn", error: error)
+            return
         }
+        NSApp.terminate(nil)
+    }
+
+    @discardableResult
+    nonisolated static func spawnRelaunchHelper(
+        waitingFor pid: pid_t,
+        appURL: URL,
+        opener: String = "/usr/bin/open"
+    ) throws -> Process {
+        let helper = Process()
+        helper.executableURL = URL(fileURLWithPath: "/bin/sh")
+        helper.arguments = [
+            "-c",
+            "while kill -0 \"$1\" 2>/dev/null; do sleep 0.1; done; exec \"$2\" \"$3\"",
+            "relaunch-helper",
+            String(pid),
+            opener,
+            appURL.path,
+        ]
+        try helper.run()
+        return helper
     }
 }

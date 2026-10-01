@@ -8,6 +8,8 @@
 
 - [ ] **MV-SETT-4 — No blank window at launch:** quit Ninimma, relaunch from `/Applications`. No blank gray `Ninimma Settings` window appears (with Background mode on or off). Press `⌘,` with Ninimma frontmost and confirm the unified window opens on the Settings tab.
 
+- [ ] **MV-SETT-5 — Restart is quit-first, single copy:** toggle Background mode, click the restart caption. The current copy exits within ~3s and exactly one new copy starts (`pgrep -f PersonalScribeAppKit` shows one pid). Launching `/Applications/Ninimma.app` again while it runs leaves the pid unchanged.
+
 ## Clipboard restore delay
 
 - Slider reflects current delay: open `General`, confirm the `Clipboard restore delay` control matches the current setting value, and confirm the helper text reads `After paste, wait Ns before restoring your clipboard` with the same value.

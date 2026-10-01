@@ -24,6 +24,9 @@ struct PersonalScribeAppMain: App {
     @StateObject private var diagnosticsOverlayController: LiveDiagnosticsOverlayController
 
     init() {
+        // Before any composition work: a second copy must not touch
+        // shared state (DB, models, hotkey tap) at all.
+        SingleInstanceGuard.exitIfAnotherInstanceIsRunning()
         let defaults = UserDefaults.standard
         // Run preference migrations before any AppComposition access so
         // shared singletons resolve upgraded defaults on first launch
