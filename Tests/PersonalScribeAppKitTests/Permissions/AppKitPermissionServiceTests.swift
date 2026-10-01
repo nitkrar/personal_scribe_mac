@@ -27,6 +27,28 @@ final class AppKitPermissionServiceTests: XCTestCase {
         XCTAssertEqual(publishCount, 1, "unchanged snapshot must not republish")
     }
 
+    func testStatusChangesAreLoggedOnceWithBeforeAndAfter() {
+        let fixture = Fixture()
+        fixture.microphone.authorizationStatus = .authorized
+        fixture.accessibility.isTrusted = true
+        let service = fixture.makeService()
+        defer { withExtendedLifetime(service) {} }
+
+        XCTAssertEqual(
+            fixture.statusLog.lines,
+            ["permission_status_initial — microphone=granted accessibility=granted"]
+        )
+
+        fixture.accessibility.isTrusted = false
+        fixture.statusPoller.triggerDidBecomeActive()
+        fixture.statusPoller.triggerDidBecomeActive()
+
+        XCTAssertEqual(
+            fixture.statusLog.lines.dropFirst(),
+            ["permission_status_changed — accessibility=granted→pending"]
+        )
+    }
+
     func testInitialRefreshSeedsPublishedStatusSnapshot() {
         let fixture = Fixture()
         fixture.microphone.authorizationStatus = .authorized
@@ -223,6 +245,7 @@ private struct Fixture {
     let urlOpener = URLOpenerSpy()
     let activationObserver = ActivationObserverSpy()
     let statusPoller = ActivationObserverSpy()
+    let statusLog = StatusLogSpy()
 
     func makeService() -> AppKitPermissionService {
         AppKitPermissionService(
@@ -230,7 +253,8 @@ private struct Fixture {
             accessibility: accessibility.client,
             urlOpener: urlOpener.opener,
             activationObserver: activationObserver.observer,
-            statusPoller: statusPoller.observer
+            statusPoller: statusPoller.observer,
+            logStatusChange: statusLog.record
         )
     }
 }
@@ -293,6 +317,15 @@ private final class URLOpenerSpy {
         PermissionURLOpener(open: { [unowned self] url in
             openedURLs.append(url)
         })
+    }
+}
+
+@MainActor
+private final class StatusLogSpy {
+    private(set) var lines: [String] = []
+
+    var record: @MainActor (String) -> Void {
+        { [unowned self] line in lines.append(line) }
     }
 }
 

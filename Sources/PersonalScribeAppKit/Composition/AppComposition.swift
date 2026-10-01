@@ -532,7 +532,8 @@ public enum AppComposition {
     }
 
     static func makePermissionService() -> AppKitPermissionService {
-        AppKitPermissionService()
+        let logger = makeLogger(PersonalScribeLogCategory.app)
+        return AppKitPermissionService(logStatusChange: { line in logger.info(line) })
     }
 
     private static func makePermissionServiceAdapter(

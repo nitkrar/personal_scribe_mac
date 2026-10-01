@@ -12,17 +12,21 @@ final class AppKitPermissionService: ObservableObject, PermissionService {
     private let urlOpener: PermissionURLOpener
     private var activationObservation: ActivationObservation!
     private var pollObservation: ActivationObservation!
+    private let logStatusChange: @MainActor (String) -> Void
+    private var hasLoggedInitialStatuses = false
 
     init(
         microphone: MicrophonePermissionClient = .live,
         accessibility: AccessibilityPermissionClient = .live,
         urlOpener: PermissionURLOpener = .live,
         activationObserver: ApplicationActivationObserver = .live,
-        statusPoller: ApplicationActivationObserver = .polling(every: 1)
+        statusPoller: ApplicationActivationObserver = .polling(every: 1),
+        logStatusChange: @escaping @MainActor (String) -> Void = { _ in }
     ) {
         self.microphone = microphone
         self.accessibility = accessibility
         self.urlOpener = urlOpener
+        self.logStatusChange = logStatusChange
         self.activationObservation = activationObserver.observe { [weak self] in
             self?.refresh()
         }
@@ -66,8 +70,34 @@ final class AppKitPermissionService: ObservableObject, PermissionService {
 
     func refresh() {
         let snapshot = statusSnapshot()
+        logTransitions(from: statuses, to: snapshot)
         guard snapshot != statuses else { return }
         statuses = snapshot
+    }
+
+    /// Diagnostics for intermittent TCC behavior (e.g. a macOS
+    /// Accessibility prompt while the toggle is already on): one line
+    /// with the launch state, then one line per actual transition —
+    /// never per poll tick.
+    private func logTransitions(
+        from previous: [Permission: PermissionStatus],
+        to current: [Permission: PermissionStatus]
+    ) {
+        guard hasLoggedInitialStatuses else {
+            hasLoggedInitialStatuses = true
+            let summary = Permission.allCases
+                .map { "\($0.rawValue)=\(current[$0] ?? .pending)" }
+                .joined(separator: " ")
+            logStatusChange("permission_status_initial — \(summary)")
+            return
+        }
+        let changes = Permission.allCases.compactMap { permission -> String? in
+            let before = previous[permission] ?? .pending
+            let after = current[permission] ?? .pending
+            return before == after ? nil : "\(permission.rawValue)=\(before)→\(after)"
+        }
+        guard !changes.isEmpty else { return }
+        logStatusChange("permission_status_changed — \(changes.joined(separator: " "))")
     }
 
     func systemSettingsDeepLink(for permission: Permission) -> URL {
