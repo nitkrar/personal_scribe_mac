@@ -57,6 +57,39 @@ final class KeyEventRouterTests: XCTestCase {
         return CFMachPortCreate(nil, { _, _, _, _ in }, &context, nil)!
     }
 
+    // MARK: - Tap retry
+
+    func testRetryTapIfNeededInstallsTapAfterInitialFailureWithoutDuplicates() {
+        var installerAttempts = 0
+        var permissionGranted = false
+        let router = KeyEventRouter(
+            tapFactory: { decider in
+                HotkeyEventTap(
+                    decider: decider,
+                    installer: { _, _ in
+                        installerAttempts += 1
+                        return permissionGranted ? Self.makeFakePort() : nil
+                    }
+                )
+            },
+            installLocal: { _, _ in NSObject() },
+            installGlobal: { _, _ in NSObject() },
+            uninstall: { _ in }
+        )
+
+        XCTAssertFalse(router.start())
+        XCTAssertFalse(router.retryTapIfNeeded())
+        XCTAssertFalse(router.isTapActive)
+
+        permissionGranted = true
+        XCTAssertTrue(router.retryTapIfNeeded())
+        XCTAssertTrue(router.isTapActive)
+
+        let attemptsAfterRecovery = installerAttempts
+        XCTAssertTrue(router.retryTapIfNeeded())
+        XCTAssertEqual(installerAttempts, attemptsAfterRecovery)
+    }
+
     // MARK: - Local-decider chain
 
     func testLocalDecidersDispatchInRegistrationOrder() {

@@ -159,6 +159,24 @@ public final class KeyEventRouter {
         return tapStarted
     }
 
+    /// Re-attempt the CG tap install after `start()` failed (permission
+    /// granted later while running). No-op returning `true` when the tap
+    /// is already live, so callers can invoke it freely.
+    @discardableResult
+    public func retryTapIfNeeded() -> Bool {
+        if tap?.isActive == true {
+            return true
+        }
+        let tap = tapFactory({ [weak self] event in
+            self?.dispatchGlobalDeciders(event) ?? false
+        })
+        guard tap.start() else {
+            return false
+        }
+        self.tap = tap
+        return true
+    }
+
     public func stop() {
         tap?.stop()
         tap = nil

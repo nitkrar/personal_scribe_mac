@@ -182,3 +182,12 @@ warning, live apply (no relaunch).
   recorder shows a yellow-style warning naming the disabled system
   shortcut — and the **Set** button is enabled. Confirm and verify the
   new binding fires. Re-enable the system shortcut after the test.
+
+- [ ] **MV-SHORT-7 — Hotkey recovers after a permission grant, no relaunch:**
+  Turn Ninimma off in System Settings → Privacy & Security →
+  Accessibility, relaunch with Background mode on (no window open).
+  `errors.log` names `Accessibility (…)` as the missing permission.
+  Re-enable Ninimma under Accessibility without relaunching or opening
+  any Ninimma window; within ~1s the recording hotkey works from
+  another app, and `diagnostics.log` shows
+  `Global hotkey tap recovered after permission grant`.

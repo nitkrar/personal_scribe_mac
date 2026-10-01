@@ -339,9 +339,9 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
 
     // MARK: - Permission-failure logging (unchanged from Issue 4)
 
-    func testNilMonitorFailureEmitsDeniedWarningThroughLogSink() {
+    func testInstallFailureMessageNamesEveryMissingPermission() {
         let permissionService = FakePermissionService(
-            statuses: [.inputMonitoring: .denied]
+            statuses: [.inputMonitoring: .denied, .accessibility: .pending]
         )
         let sink = CapturingLogSink()
         let monitor = GlobalHotkeyMonitor(
@@ -355,28 +355,73 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         let captured = sink.snapshot()
         XCTAssertEqual(captured.count, 1)
         XCTAssertEqual(captured.first?.level, "error")
-        XCTAssertTrue(captured.first?.message.contains("Input Monitoring permission denied") == true)
+        XCTAssertTrue(captured.first?.message.contains("Input Monitoring (denied)") == true)
+        XCTAssertTrue(captured.first?.message.contains("Accessibility (pending)") == true)
     }
 
-    func testNilMonitorFailureReportsPendingWhenTCCUnresolved() {
+    func testInstallFailureMessageBlamesAccessibilityWhenInputMonitoringGranted() {
+        let message = GlobalHotkeyMonitor.monitorInstallFailureMessage(
+            accessibility: .pending,
+            inputMonitoring: .granted
+        )
+        XCTAssertTrue(message.contains("Accessibility (pending)"))
+        XCTAssertFalse(message.contains("Input Monitoring ("))
+    }
+
+    func testInstallFailureMessageReportsTransientFailureWhenBothGranted() {
+        let message = GlobalHotkeyMonitor.monitorInstallFailureMessage(
+            accessibility: .granted,
+            inputMonitoring: .granted
+        )
+        XCTAssertTrue(message.contains("both permissions granted"))
+    }
+
+    func testTapRecoversOnceAccessibilityAndInputMonitoringAreGranted() {
+        var installerAttempts = 0
+        var tapAllowed = false
+        let router = KeyEventRouter(
+            tapFactory: { decider in
+                HotkeyEventTap(decider: decider, installer: { callback, userInfo in
+                    installerAttempts += 1
+                    return tapAllowed ? Self.succeedingInstaller()(callback, userInfo) : nil
+                })
+            },
+            installLocal: { _, _ in NSObject() },
+            installGlobal: { _, _ in NSObject() },
+            uninstall: { _ in }
+        )
+        router.start()
         let permissionService = FakePermissionService(
-            statuses: [.inputMonitoring: .pending]
+            statuses: [.inputMonitoring: .granted, .accessibility: .pending]
         )
         let sink = CapturingLogSink()
+        var retryTick: (@MainActor () -> Void)?
+        var retryCancelled = false
         let monitor = GlobalHotkeyMonitor(
             onToggle: {},
+            scheduleTapRetry: { _, tick in
+                retryTick = tick
+                return { retryCancelled = true }
+            },
             permissionService: permissionService,
+            router: router,
             logSink: sink.capture
         )
 
-        monitor.handleMonitorInstallFailure()
+        monitor.start()
+        XCTAssertNotNil(retryTick, "failed tap install must schedule retries")
 
-        XCTAssertTrue(sink.snapshot().first?.message.contains("still pending") == true)
-    }
+        retryTick?()
+        XCTAssertEqual(installerAttempts, 1, "no tap attempt while Accessibility is missing")
 
-    func testFailureMessageMentionsGrantedPathWhenProbeReportsGrantedDespiteNilMonitor() {
-        let message = GlobalHotkeyMonitor.monitorInstallFailureMessage(for: PermissionStatus.granted)
-        XCTAssertTrue(message.contains("reporting granted"))
+        permissionService.set(.accessibility, .granted)
+        tapAllowed = true
+        retryTick?()
+
+        XCTAssertTrue(router.isTapActive)
+        XCTAssertTrue(retryCancelled)
+        XCTAssertEqual(sink.snapshot().last?.level, "info")
+        XCTAssertTrue(sink.snapshot().last?.message.contains("recovered") == true)
     }
 
     // MARK: - Bug #4 — local monitor for in-app key events
@@ -882,6 +927,10 @@ private final class FakePermissionService: PermissionService {
 
     func systemSettingsDeepLink(for permission: Permission) -> URL {
         URL(string: "https://example.invalid/\(permission.rawValue)")!
+    }
+
+    func set(_ permission: Permission, _ status: PermissionStatus) {
+        statuses[permission] = status
     }
 }
 

@@ -73,6 +73,7 @@ extension GlobalHotkeyMonitor {
                 workItem.cancel()
             }
         },
+        scheduleTapRetry: @escaping TapRetryScheduler = { _, _ in {} },
         permissionService: (any PermissionService)? = nil,
         router: KeyEventRouter? = nil,
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
@@ -85,6 +86,7 @@ extension GlobalHotkeyMonitor {
             holdThreshold: holdThreshold,
             doubleTapWindow: doubleTapWindow,
             scheduleHoldDetection: scheduleHoldDetection,
+            scheduleTapRetry: scheduleTapRetry,
             permissionService: permissionService,
             router: router,
             logger: AppKitTestingDiagnostics.logger(),

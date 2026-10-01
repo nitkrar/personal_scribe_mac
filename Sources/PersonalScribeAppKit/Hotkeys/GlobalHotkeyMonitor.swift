@@ -31,6 +31,11 @@ public final class GlobalHotkeyMonitor {
         _ action: @escaping @MainActor () -> Void
     ) -> HoldCanceller
     public typealias HoldCanceller = @MainActor () -> Void
+    /// Repeating scheduler for tap-install retries; returns a canceller.
+    public typealias TapRetryScheduler = @MainActor (
+        _ interval: TimeInterval,
+        _ tick: @escaping @MainActor () -> Void
+    ) -> HoldCanceller
 
     /// Threshold (seconds) separating tap vs hold. Matches spec §3
     /// ("press + release < 300 ms" = tap).
@@ -58,6 +63,8 @@ public final class GlobalHotkeyMonitor {
     private let holdThreshold: TimeInterval
     private let doubleTapWindow: TimeInterval
     private let scheduleHoldDetection: HoldScheduler
+    private let scheduleTapRetry: TapRetryScheduler
+    private var tapRetryCanceller: HoldCanceller?
     private let permissionService: any PermissionService
     private let logger: PersonalScribeLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
@@ -112,6 +119,12 @@ public final class GlobalHotkeyMonitor {
                 workItem.cancel()
             }
         },
+        scheduleTapRetry: @escaping TapRetryScheduler = { interval, tick in
+            let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
+                MainActor.assumeIsolated { tick() }
+            }
+            return { timer.invalidate() }
+        },
         permissionService: (any PermissionService)? = nil,
         router: KeyEventRouter? = nil,
         logger: PersonalScribeLogger,
@@ -124,6 +137,7 @@ public final class GlobalHotkeyMonitor {
         self.holdThreshold = holdThreshold
         self.doubleTapWindow = doubleTapWindow
         self.scheduleHoldDetection = scheduleHoldDetection
+        self.scheduleTapRetry = scheduleTapRetry
         self.permissionService = permissionService ?? AppKitPermissionService()
         // Tests that don't exercise the lifecycle pass `router: nil`
         // and rely on the gesture-machine entry points (`handle(event:)`,
@@ -158,11 +172,14 @@ public final class GlobalHotkeyMonitor {
         // works when our window is frontmost). Both share the same
         // gesture-machine + swallow logic.
         if !router.isTapActive {
-            // Router's tap install failed (Input Monitoring denied or
-            // transient OS failure). Surface the warning so the menu
-            // bar can prompt the user. Local NSEvent path keeps
-            // working — hotkey still fires when Ninimma is frontmost.
+            // Router's tap install failed (Accessibility / Input
+            // Monitoring missing, or transient OS failure). Surface the
+            // warning so the menu bar can prompt the user, then keep
+            // retrying so a grant made while running takes effect
+            // without a relaunch. Local NSEvent path keeps working
+            // meanwhile — hotkey still fires when Ninimma is frontmost.
             handleMonitorInstallFailure()
+            scheduleTapRetries()
         }
 
         let decider: @MainActor (HotkeyEvent) -> Bool = { [weak self] event in
@@ -174,32 +191,68 @@ public final class GlobalHotkeyMonitor {
         globalToken = router.registerGlobalDecider(decider)
     }
 
-    /// Emits the Input Monitoring warning when `addGlobalMonitorForEvents`
-    /// returns nil. Probes the current TCC state so the log message can tell
-    /// the reader whether permission is denied vs. still pending.
+    static let tapRetryInterval: TimeInterval = 1.0
+    static let tapRecoveredMessage = "Global hotkey tap recovered after permission grant"
+
+    /// Emits the install-failure warning. Probes current TCC state so the
+    /// message names the permission(s) actually missing — the active CG
+    /// tap needs both Accessibility and Input Monitoring.
     internal func handleMonitorInstallFailure() {
-        let state = permissionService.status(for: .inputMonitoring)
-        let message = Self.monitorInstallFailureMessage(for: state)
+        let message = Self.monitorInstallFailureMessage(
+            accessibility: permissionService.status(for: .accessibility),
+            inputMonitoring: permissionService.status(for: .inputMonitoring)
+        )
         logger.error(message)
         logSink?("error", message)
     }
 
-    internal static func monitorInstallFailureMessage(for state: PermissionStatus) -> String {
-        let suffix = "Use the menu bar warning or grant access in System Settings -> "
-            + "Privacy & Security -> Input Monitoring, then restart."
-        switch state {
-        case .denied:
-            return "Global hotkey monitor failed to register — Input Monitoring permission denied. " + suffix
-        case .pending:
-            return "Global hotkey monitor failed to register — Input Monitoring permission still "
-                + "pending (system may surface the TCC prompt on next attempt). " + suffix
-        case .granted:
-            return "Global hotkey monitor failed to register despite Input Monitoring reporting granted "
-                + "— likely a transient AppKit failure. " + suffix
+    internal static func monitorInstallFailureMessage(
+        accessibility: PermissionStatus,
+        inputMonitoring: PermissionStatus
+    ) -> String {
+        let missing = [
+            (name: "Accessibility", status: accessibility),
+            (name: "Input Monitoring", status: inputMonitoring),
+        ]
+        .filter { $0.status != .granted }
+        .map { "\($0.name) (\($0.status))" }
+
+        guard !missing.isEmpty else {
+            return "Global hotkey monitor failed to register despite both permissions granted "
+                + "— likely a transient system failure; retrying."
+        }
+        return "Global hotkey monitor failed to register — missing permission: "
+            + missing.joined(separator: ", ")
+            + ". Grant access in System Settings -> Privacy & Security; "
+            + "the hotkey recovers automatically once granted."
+    }
+
+    /// Retry ticks are silent until recovery: they only attempt the tap
+    /// when both permissions report granted (so no TCC prompt churn)
+    /// and log once, at info, when it comes back.
+    private func scheduleTapRetries() {
+        tapRetryCanceller?()
+        tapRetryCanceller = scheduleTapRetry(Self.tapRetryInterval) { [weak self] in
+            self?.retryTapTick()
         }
     }
 
+    private func retryTapTick() {
+        guard permissionService.status(for: .accessibility) == .granted,
+              permissionService.status(for: .inputMonitoring) == .granted,
+              router.retryTapIfNeeded()
+        else {
+            return
+        }
+        tapRetryCanceller?()
+        tapRetryCanceller = nil
+        logger.info(Self.tapRecoveredMessage)
+        logSink?("info", Self.tapRecoveredMessage)
+    }
+
     public func stop() {
+        tapRetryCanceller?()
+        tapRetryCanceller = nil
         // RAII deinit on each token Task-dispatches the actual
         // unregister. Setting to nil drops our strong refs.
         localToken = nil
