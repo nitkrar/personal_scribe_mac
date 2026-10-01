@@ -408,15 +408,17 @@ struct PersonalScribeAppMain: App {
         // Native NSStatusItem + NSMenu lives in StatusItemController
         // (owned by StatusItemControllerHost above). Per
         // plans/seshat_agent_bundle/03_Surfaces/MenuBarMenu/IMPORTANT.md
-        // the menu bar is zero-SwiftUI; we keep a Settings scene here
-        // only to satisfy SwiftUI.App's non-empty-body requirement on
-        // an LSUIElement app. It never appears.
+        // the menu bar is zero-SwiftUI; we keep a never-inserted
+        // MenuBarExtra here only to satisfy SwiftUI.App's non-empty-body
+        // requirement. It owns no window, so nothing can appear at
+        // launch. (A `Settings { EmptyView() }` placeholder used to sit
+        // here; the app isn't LSUIElement, and macOS 26 presented it as
+        // a blank "Ninimma Settings" window on launch.)
         //
         // `.commands { CommandGroup(replacing: .appSettings) }` overrides
         // SwiftUI's default `⌘,` handler so the shortcut opens our real
-        // settings surface (the unified window's Settings tab) instead of
-        // the empty `Settings { EmptyView() }` window above.
-        Settings {
+        // settings surface (the unified window's Settings tab).
+        MenuBarExtra(AppBrand.displayName, isInserted: .constant(false)) {
             EmptyView()
         }
         .commands {

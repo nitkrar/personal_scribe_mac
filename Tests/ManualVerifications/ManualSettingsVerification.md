@@ -6,6 +6,8 @@
 - Both-hidden combination blocked with visible error state: hide the menu bar item, then try to set pill visibility to `Hidden`, and confirm the UI rejects the change with an inline explanation that one surface must remain visible.
 - [ ] **MV-SETT-1** Open Settings. The segmented sub-tab picker (General / AI Models / Shortcuts / Advanced / Permissions) renders on a single line at the default window width (760pt). The redundant "Settings" largeTitle above the picker must NOT be present — window title bar + sidebar row already identify the tab.
 
+- [ ] **MV-SETT-4 — No blank window at launch:** quit Ninimma, relaunch from `/Applications`. No blank gray `Ninimma Settings` window appears (with Background mode on or off). Press `⌘,` with Ninimma frontmost and confirm the unified window opens on the Settings tab.
+
 ## Clipboard restore delay
 
 - Slider reflects current delay: open `General`, confirm the `Clipboard restore delay` control matches the current setting value, and confirm the helper text reads `After paste, wait Ns before restoring your clipboard` with the same value.
