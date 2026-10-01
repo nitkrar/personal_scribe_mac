@@ -1,14 +1,14 @@
 import Foundation
 
+/// Writes info + notice events to diagnostics.log. Always on, per
+/// docs/INSTRUMENTATION_PRINCIPLES.md: this is the production evidence
+/// trail (OSLog keeps info only in memory). Size is bounded by the
+/// per-file cap plus daily rotation and retention.
 public struct VerboseFileDiagnosticsSink: DiagnosticsSink {
     private let writer: DiagnosticsFileWriter
-    private let isEnabled: @Sendable () -> Bool
 
     public init(
         storageLocatorProvider: @escaping @Sendable () -> any StorageLocator = { AppConfig.liveStorageLocator() },
-        isEnabled: @escaping @Sendable () -> Bool = {
-            DiagnosticLoggingMode.resolve() == .verbose
-        },
         atomicFileWriter: any AtomicFileWriter = FileManagerAtomicFileWriter(),
         maxLogSizeBytes: Int = 1_000_000
     ) {
@@ -18,11 +18,10 @@ public struct VerboseFileDiagnosticsSink: DiagnosticsSink {
             atomicFileWriter: atomicFileWriter,
             maxLogSizeBytes: maxLogSizeBytes
         )
-        self.isEnabled = isEnabled
     }
 
     public func record(_ event: RedactedDiagnosticsEvent) async {
-        guard isEnabled(), event.level == .info || event.level == .notice else {
+        guard event.level == .info || event.level == .notice else {
             return
         }
 

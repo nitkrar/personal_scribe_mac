@@ -149,6 +149,20 @@ final class AppCompositionTests: XCTestCase {
         XCTAssertFalse(diagnosticsContents.contains("message=\"debug-only\""))
     }
 
+    func testReporterWritesInfoToDiagnosticsLogInDefaultErrorsOnlyMode() async throws {
+        let tempDirectory = try makeTemporaryDirectory()
+        let reporter = AppComposition.makeDiagnosticsReporter(
+            storageLocatorProvider: { TestStorageLocator(baseDirectory: tempDirectory) },
+            diagnosticLoggingModeProvider: { .errorsOnly },
+            diagnosticsStore: DiagnosticsStore(capacity: 20)
+        )
+
+        reporter.info("session-evidence", category: PersonalScribeLogCategory.session)
+
+        let diagnosticsContents = try await waitForLogContents(named: "diagnostics.log", in: tempDirectory)
+        XCTAssertTrue(diagnosticsContents.contains("message=\"session-evidence\""))
+    }
+
     private func makePinnedAsrModelService() -> ActiveModelService {
         let suiteName = "AppCompositionTests.\(#function).\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

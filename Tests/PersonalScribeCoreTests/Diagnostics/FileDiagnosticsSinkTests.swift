@@ -52,7 +52,6 @@ final class FileDiagnosticsSinkTests: XCTestCase {
         let tempDirectory = try makeTemporaryDirectory()
         let sink = VerboseFileDiagnosticsSink(
             storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-            isEnabled: { true },
             atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
         )
 
@@ -67,7 +66,6 @@ final class FileDiagnosticsSinkTests: XCTestCase {
         let tempDirectory = try makeTemporaryDirectory()
         let sink = VerboseFileDiagnosticsSink(
             storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-            isEnabled: { true },
             atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
         )
 
@@ -82,7 +80,6 @@ final class FileDiagnosticsSinkTests: XCTestCase {
         let tempDirectory = try makeTemporaryDirectory()
         let sink = VerboseFileDiagnosticsSink(
             storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-            isEnabled: { true },
             atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
         )
 
@@ -95,7 +92,6 @@ final class FileDiagnosticsSinkTests: XCTestCase {
         let tempDirectory = try makeTemporaryDirectory()
         let sink = VerboseFileDiagnosticsSink(
             storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-            isEnabled: { true },
             atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
         )
 

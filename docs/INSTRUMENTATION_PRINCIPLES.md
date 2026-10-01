@@ -11,6 +11,7 @@
 |---|---|
 | What goes where | Errors → `errors.log` · info/notice → `diagnostics.log` · debug → `debug.log` |
 | Retention | `errors.log` + `diagnostics.log`: **14 days** · `debug.log`: **3 days** |
+| Always on | All three files are written in every build regardless of Settings → Advanced → Diagnostic logging; that picker only sets what the in-app diagnostics view buffers (Errors Only vs Verbose) |
 | Frequency budget | A single log line must not exceed **~100 fires per session** — anything higher is debug, not info |
 | Summary vs per-event | Prefer one summary log at a boundary (session end, processor completion, state change) over N per-event logs |
 | Privacy | Log shapes and counts, never user content |

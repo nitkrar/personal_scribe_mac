@@ -41,10 +41,7 @@ public enum AppComposition {
                 OSLogDiagnosticsSink(),
                 ErrorFileDiagnosticsSink(storageLocatorProvider: storageLocatorProvider),
                 DebugFileDiagnosticsSink(storageLocatorProvider: storageLocatorProvider),
-                VerboseFileDiagnosticsSink(
-                    storageLocatorProvider: storageLocatorProvider,
-                    isEnabled: { diagnosticLoggingModeProvider() == .verbose }
-                ),
+                VerboseFileDiagnosticsSink(storageLocatorProvider: storageLocatorProvider),
                 RingBufferDiagnosticsSink(
                     store: diagnosticsStore,
                     minimumLevelProvider: {

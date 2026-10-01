@@ -400,9 +400,9 @@ final class AdvancedTabViewModel: ObservableObject {
     var diagnosticLoggingModeDescription: String {
         switch diagnosticLoggingMode {
         case .errorsOnly:
-            return "Persist only error diagnostics to disk and the Console."
+            return "Log files always record errors and session diagnostics. The in-app diagnostics view keeps errors only."
         case .verbose:
-            return "Capture debug, info, notice, and error diagnostics locally."
+            return "Log files always record errors and session diagnostics. The in-app diagnostics view also keeps debug, info, and notice events."
         }
     }
 
