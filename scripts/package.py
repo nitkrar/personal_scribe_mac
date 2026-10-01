@@ -362,6 +362,25 @@ def assemble_app(binary: Path, config: str) -> None:
         sys.exit(1)
     shutil.copytree(framework_source, framework_dest, symlinks=True)
 
+    # SwiftPM resource bundles (`<Package>_<Target>.bundle`) back each
+    # target's `Bundle.module`. The generated accessor looks in
+    # `Bundle.main.resourceURL` and fatalErrors on a miss. The legacy
+    # native build system also baked in an absolute `.build/` fallback
+    # path, which masked their absence here as long as the repo's build
+    # dir existed; the Swift Build backend (Swift 6.4+) dropped that.
+    resource_bundles = sorted(binary.resolve().parent.glob("*.bundle"))
+    if not resource_bundles:
+        print(
+            f"error: no SwiftPM resource bundles next to {binary.resolve()}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    for bundle in resource_bundles:
+        print(f"==> Bundling resource bundle {bundle.name}...")
+        shutil.copytree(
+            bundle, APP_PATH / "Contents" / "Resources" / bundle.name, symlinks=True
+        )
+
     if not binary_has_rpath(dest_binary, RUNTIME_FRAMEWORK_RPATH):
         print(f"==> Adding runtime search path {RUNTIME_FRAMEWORK_RPATH}...")
         run(
