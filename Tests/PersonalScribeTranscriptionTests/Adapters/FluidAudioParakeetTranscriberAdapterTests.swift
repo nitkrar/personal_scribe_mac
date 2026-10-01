@@ -178,6 +178,73 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(auxCalls.first?.aux, .ctc110m)
     }
 
+    /// Launch-time prepare must not hit the network when the model is
+    /// already on disk: `DownloadUtils.downloadRepo` lists the HF repo
+    /// first (flashing "Downloading 0%" and failing offline) before it
+    /// skips existing files.
+    func testPrepareSkipsDownloadWhenArtifactsAlreadyOnDisk() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetTDT06Bv2
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let leaf = storageLocator.url(for: .models)
+            .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
+        try writeValidArtifacts(for: descriptor, in: leaf)
+
+        let manager = StubFluidAudioParakeetManager()
+        let adapter = FluidAudioParakeetTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.prepare()
+
+        let downloadCount = await manager.downloadIfNeededCallCount()
+        XCTAssertEqual(downloadCount, 0)
+        let loadCount = await manager.loadCallCount()
+        XCTAssertEqual(loadCount, 1)
+    }
+
+    func testPrepareSkipsAuxiliaryDownloadWhenAuxiliaryFolderAlreadyOnDisk() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let modelsRoot = storageLocator.url(for: .models)
+        try writeValidArtifacts(
+            for: descriptor,
+            in: modelsRoot.appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
+        )
+        for folder in descriptor.auxiliaryRepoFolderNames {
+            let aux = modelsRoot.appendingPathComponent(folder, isDirectory: true)
+            try FileManager.default.createDirectory(at: aux, withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: aux.appendingPathComponent("model.bin"))
+        }
+
+        let manager = StubFluidAudioParakeetManager()
+        let adapter = FluidAudioParakeetTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.prepare()
+
+        let downloadCount = await manager.downloadIfNeededCallCount()
+        XCTAssertEqual(downloadCount, 0)
+        let auxCalls = await manager.auxiliaryDownloadCalls()
+        XCTAssertEqual(auxCalls.count, 0)
+    }
+
+    private func writeValidArtifacts(for descriptor: ModelDescriptor, in directory: URL) throws {
+        for relativePath in descriptor.requiredRelativePaths {
+            let file = directory.appendingPathComponent(relativePath, isDirectory: false)
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let contents = file.pathExtension == "json" ? "{}" : "coreml"
+            try Data(contents.utf8).write(to: file)
+        }
+    }
+
     func testCleanupForwardsToManagerAndAllowsPrepareToReload() async throws {
         let descriptor = BuiltInModelCatalog.parakeetTDT06Bv3
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())

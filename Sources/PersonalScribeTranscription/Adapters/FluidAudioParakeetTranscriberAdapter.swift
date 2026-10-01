@@ -277,18 +277,24 @@ extension FluidAudioParakeetTranscriberAdapter {
         let progressBroadcaster = self.progressBroadcaster
 
         do {
-            try await manager.downloadIfNeeded(
-                to: modelsRoot,
-                version: runtimeVariant.asrModelVersion,
-                progressHandler: { snapshot in
-                    self.progressBroadcaster.emit(snapshot)
-                }
-            )
+            // Skip the download step entirely when the files are already
+            // on disk: `DownloadUtils.downloadRepo` lists the HF repo over
+            // the network before skipping existing files, which flashed
+            // "Downloading 0%" on every launch and failed prepare offline.
+            if !ModelArtifactValidation.areValid(in: modelDirectory, descriptor: descriptor) {
+                try await manager.downloadIfNeeded(
+                    to: modelsRoot,
+                    version: runtimeVariant.asrModelVersion,
+                    progressHandler: { snapshot in
+                        self.progressBroadcaster.emit(snapshot)
+                    }
+                )
+            }
             // Mirror the auxiliary pull from `downloadIfNeeded` so the
             // Activate-time chain (prepare) is symmetric with the
-            // Download-button chain. Idempotent — DownloadUtils skips
-            // per-file when bytes are already on disk.
-            if runtimeVariant.asrModelVersion == .tdtCtc110m {
+            // Download-button chain. Same on-disk short-circuit.
+            if runtimeVariant.asrModelVersion == .tdtCtc110m,
+               !auxiliaryReposPresent(in: modelsRoot) {
                 try await manager.downloadAuxiliary(
                     .ctc110m,
                     to: modelsRoot,
@@ -310,6 +316,16 @@ extension FluidAudioParakeetTranscriberAdapter {
         }
 
         progressBroadcaster.emit(.finished)
+    }
+
+    /// Auxiliary repos (e.g. the 110m hybrid's CTC head) aren't covered
+    /// by `requiredRelativePaths`; treat a non-empty folder as present.
+    func auxiliaryReposPresent(in modelsRoot: URL) -> Bool {
+        descriptor.auxiliaryRepoFolderNames.allSatisfy { folder in
+            let path = modelsRoot.appendingPathComponent(folder, isDirectory: true).path
+            let contents = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
+            return !contents.isEmpty
+        }
     }
 
     func modelDirectory() throws -> URL {
