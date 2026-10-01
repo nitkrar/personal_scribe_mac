@@ -903,23 +903,20 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 finishedLiveStreamingState: finishedLiveStreamingState,
                 languageHint: languageHint
             )
+            let rawResult: TranscriptionResult
             switch processor {
             case .transcriber(let transcriber):
                 let coalesced = try Self.coalesce(replayBuffers)
-                let result = try await transcriber.transcribe(
+                rawResult = try await transcriber.transcribe(
                     coalesced,
                     languageHint: languageHint
                 )
-                logPipelineProcessingResult(processor: processor, result: result)
-                return result
 
             case .streamingTranscriber:
-                let result = try await runBoundStreamingTranscription(
+                rawResult = try await runBoundStreamingTranscription(
                     replayBuffers: replayBuffers,
                     finishedLiveStreamingState: finishedLiveStreamingState
                 )
-                logPipelineProcessingResult(processor: processor, result: result)
-                return result
 
             case .diarizedTurns(let diarizer, let perTurnTranscriber, let sensitivity):
                 let fusion = DiarizedTurnTranscriptionProcessor(
@@ -931,10 +928,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 )
                 let coalesced = try Self.coalesce(replayBuffers)
                 let output = try await fusion.process(audio: coalesced, priors: [])
-                let result = try Self.unwrapTextOutput(output)
-                logPipelineProcessingResult(processor: processor, result: result)
-                return result
+                rawResult = try Self.unwrapTextOutput(output)
             }
+            // Single exit for every engine: Whisper-family models emit
+            // `[BLANK_AUDIO]`-style markers on silence / noise, which
+            // must never be pasted.
+            let result = rawResult.removingNonSpeechMarkers()
+            logPipelineProcessingResult(processor: processor, result: result)
+            return result
         } catch let failure as PipelineStageFailure {
             throw failure
         } catch {
@@ -1562,6 +1563,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             return
         }
 
+        // Strip non-speech markers before anything sees the event: live
+        // card, accumulator (the stop-time fallback text), cursor sink.
+        let event = event.removingNonSpeechMarkers()
         liveStreamingObservability.record(event)
         let text = accumulator.apply(event)
         liveStreamingAccumulator = accumulator

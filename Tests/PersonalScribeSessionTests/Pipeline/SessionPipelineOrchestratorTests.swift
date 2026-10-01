@@ -505,6 +505,46 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(snapshot.lastCompletedResult?.text, "Hello world.")
     }
 
+    func testStreamingTrailingBlankAudioMarkerIsNeverDelivered() async throws {
+        let buffers = [
+            try makeBuffer(sampleCount: 1_600),
+            try makeBuffer(sampleCount: 1_600),
+        ]
+        let streamingTranscriber = ScriptedStreamingTranscriber(
+            perBufferEvents: [
+                [.partial(text: "send it today")],
+                [.endOfUtterance(text: "[BLANK_AUDIO]")],
+            ],
+            terminalResult: TranscriptionResult(
+                text: "Send it today. [BLANK_AUDIO]",
+                audioDuration: .milliseconds(200),
+                processingDuration: .milliseconds(10)
+            )
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: buffers),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: false
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.lastCompletedResult?.text, "Send it today.")
+    }
+
     func testStreamingSecondPassBecomesAuthoritativeWhenAvailable() async throws {
         let buffers = [
             try makeBuffer(sampleCount: 1_600),
