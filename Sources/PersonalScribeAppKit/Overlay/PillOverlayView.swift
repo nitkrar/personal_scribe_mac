@@ -345,7 +345,7 @@ public struct PillOverlayView: View {
                 .controlSize(.small)
                 .tint(fg)
 
-            Text("Loading model…")
+            Text("Warming up model…")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(fg)
         }

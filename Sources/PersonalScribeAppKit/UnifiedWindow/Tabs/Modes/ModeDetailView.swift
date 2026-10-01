@@ -21,7 +21,10 @@ struct ModeDetailView: View {
             wrappedValue: ModeDetailViewModel(
                 mode: mode,
                 registry: registry,
-                registeredDescriptors: modelService.registeredModels
+                registeredDescriptors: modelService.registeredModels,
+                hasDownloadedModel: { [modelService] kind in
+                    modelService.hasDownloadedModel(for: kind)
+                }
             )
         )
         self.modelService = modelService
@@ -113,6 +116,16 @@ struct ModeDetailView: View {
                         .font(PersonalScribeTheme.Typography.caption.font)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            // A rejected edit (e.g. Realtime with no active streaming
+            // model) leaves the mode unchanged; say why instead of the
+            // toggle silently snapping back.
+            if let message = viewModel.lastError {
+                Text(message)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(PersonalScribeTheme.Status.warning)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if viewModel.realtimeOn {

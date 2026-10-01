@@ -175,6 +175,68 @@ final class ActiveModelServiceTests: XCTestCase {
         XCTAssertEqual(service.downloadStates[target.id]?.fractionCompleted, 1)
     }
 
+    func testDownloadActivatesOnlyEmptyKindSlotsAndNeverReplacesExistingChoice() async throws {
+        let batch = BuiltInModelCatalog.parakeetTDT06Bv2
+        let firstStreaming = BuiltInModelCatalog.whisperKitSmall216MB
+        let laterStreaming = BuiltInModelCatalog.whisperKitTiny
+        let preference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [:],
+            defaults: isolatedDefaults()
+        )
+        preference.persist([.asr: batch.id])
+        let service = ActiveModelService(
+            activeIDsPreference: preference,
+            isDownloaded: { _ in false },
+            download: { _, _ in },
+            chipFamily: { .m2OrLater },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        try await service.download(firstStreaming)
+
+        XCTAssertEqual(service.activeDescriptor(for: .streamingASR)?.id, firstStreaming.id)
+        XCTAssertEqual(service.activeDescriptor(for: .asr)?.id, batch.id)
+
+        try await service.download(laterStreaming)
+
+        XCTAssertEqual(service.activeDescriptor(for: .streamingASR)?.id, firstStreaming.id)
+        XCTAssertEqual(preference.resolve(), [.asr: batch.id, .streamingASR: firstStreaming.id])
+    }
+
+    func testDownloadWarmsUpInactiveModelOnlyAndShowsLoadingWhileWarming() async throws {
+        let batch = BuiltInModelCatalog.parakeetTDT06Bv2
+        let activatedOnDownload = BuiltInModelCatalog.whisperKitSmall216MB
+        let inactiveOnDownload = BuiltInModelCatalog.whisperKitTiny
+        let preference = Preference<[ModelKind: String]>(
+            key: ActiveModelService.preferenceKey,
+            default: [:],
+            defaults: isolatedDefaults()
+        )
+        preference.persist([.asr: batch.id])
+        let service = ActiveModelService(
+            activeIDsPreference: preference,
+            isDownloaded: { _ in false },
+            download: { _, _ in },
+            chipFamily: { .m2OrLater },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+        var warmedIDs: [String] = []
+        var phaseDuringWarm: ModelDownloadState.Phase?
+        service.warmUpInactiveDownload = { [weak service] descriptor in
+            warmedIDs.append(descriptor.id)
+            phaseDuringWarm = service?.downloadStates[descriptor.id]?.phase
+        }
+
+        try await service.download(activatedOnDownload)
+        XCTAssertEqual(warmedIDs, [], "auto-activated download is warmed by the setActive prewarm")
+
+        try await service.download(inactiveOnDownload)
+        XCTAssertEqual(warmedIDs, [inactiveOnDownload.id])
+        XCTAssertEqual(phaseDuringWarm, .loading)
+        XCTAssertEqual(service.downloadStates[inactiveOnDownload.id]?.phase, .ready)
+    }
+
     func testDownloadPropagatesHandlerError() async {
         let service = ActiveModelService(
             activeIDsPreference: Preference<[ModelKind: String]>(

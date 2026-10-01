@@ -33,6 +33,46 @@ final class ModeDetailViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.lastError)
     }
 
+    func testRealtimeToggleWithoutStreamingModelExplainsWhyAndKeepsMode() throws {
+        let custom = WorkflowMode(
+            id: "rt-unavailable",
+            name: "Realtime Unavailable",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let store = InMemoryWorkflowModeStore(
+            initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+        )
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+        var streamingDownloaded = false
+        let viewModel = ModeDetailViewModel(
+            mode: custom,
+            registry: registry,
+            hasDownloadedModel: { kind in kind == .streamingASR && streamingDownloaded }
+        )
+
+        viewModel.setRealtime(true)
+
+        XCTAssertFalse(viewModel.realtimeOn)
+        XCTAssertEqual(
+            viewModel.lastError,
+            "Realtime requires a streaming ASR model. Download one in AI Models."
+        )
+
+        streamingDownloaded = true
+        viewModel.setRealtime(true)
+
+        XCTAssertEqual(
+            viewModel.lastError,
+            "Realtime ASR model not active. Activate one in AI Models."
+        )
+    }
+
     func testVoiceModelPinIDRoundTripsThroughRegistry() throws {
         let custom = WorkflowMode(
             id: "pin-rt",

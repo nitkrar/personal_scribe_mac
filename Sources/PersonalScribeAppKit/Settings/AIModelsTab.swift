@@ -331,7 +331,7 @@ struct ModelRow: View {
             // until that's revisited.
             return (.warning, "Downloading…")
         case .loading:
-            return (.warning, "Loading…")
+            return (.warning, "Warming up…")
         case .ready:
             return (.ready, isActive ? "Active" : "Ready")
         case .failed(let message):

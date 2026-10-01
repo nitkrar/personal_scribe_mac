@@ -53,7 +53,7 @@ final class AIModelsTabRowTests: XCTestCase {
         )
         let r = row(state: state)
         XCTAssertEqual(r.chip.status, .warning)
-        XCTAssertEqual(r.chip.label, "Loading…")
+        XCTAssertEqual(r.chip.label, "Warming up…")
     }
 
     func testChipForReadyActiveUsesReadyStatusAndActiveLabel() {

@@ -28,3 +28,21 @@ public protocol ModelBoundProcessorProviding: Sendable {
     /// that have actually been prepared.
     func preparedDescriptors() -> [ModelDescriptor]
 }
+
+extension ModelBoundProcessorProviding {
+    /// Load `descriptor`'s model once so its one-time CoreML compile
+    /// happens now (the compiled cache persists on disk). Pair with
+    /// `evict(_:)` when the model isn't active, so no weights stay
+    /// resident. Multi-kind engines (WhisperKit, whisper.cpp) share one
+    /// adapter, so preparing the first matching role warms all roles.
+    public func warmUp(_ descriptor: ModelDescriptor) async throws {
+        let capabilities = descriptor.engine.capabilities
+        if capabilities.contains(.asr) {
+            try await transcriber(for: descriptor).prepare()
+        } else if capabilities.contains(.streamingASR) {
+            try await streamingTranscriber(for: descriptor).prepare()
+        } else if capabilities.contains(.diarization) {
+            try await diarizer(for: descriptor).prepare()
+        }
+    }
+}

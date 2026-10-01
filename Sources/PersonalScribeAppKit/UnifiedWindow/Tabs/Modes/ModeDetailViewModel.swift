@@ -12,15 +12,18 @@ final class ModeDetailViewModel: ObservableObject {
 
     private let registry: WorkflowModeRegistry
     private let registeredDescriptors: [ModelDescriptor]
+    private let hasDownloadedModel: (ModelKind) -> Bool
 
     init(
         mode: WorkflowMode,
         registry: WorkflowModeRegistry,
-        registeredDescriptors: [ModelDescriptor] = BuiltInModelCatalog.registeredModels
+        registeredDescriptors: [ModelDescriptor] = BuiltInModelCatalog.registeredModels,
+        hasDownloadedModel: @escaping (ModelKind) -> Bool = { _ in false }
     ) {
         self.mode = mode
         self.registry = registry
         self.registeredDescriptors = registeredDescriptors
+        self.hasDownloadedModel = hasDownloadedModel
     }
 
     var realtimeOn: Bool {
@@ -239,7 +242,10 @@ final class ModeDetailViewModel: ObservableObject {
             mode = updated
             lastError = nil
         } catch {
-            lastError = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            lastError = WorkflowModeValidationMessage.text(
+                for: error,
+                hasDownloadedModel: hasDownloadedModel
+            )
         }
     }
 }

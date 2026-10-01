@@ -198,3 +198,15 @@ mode-list event or app restart. Acceptable trade-off for V1.
 6. Record with that mode. Expect: a live StreamCard appears during
    capture and stop-time finalization still uses the authoritative
    second pass when an ASR model is available.
+
+- [ ] **MV-MODES-19 — First download fills an empty slot only:** with no
+  Realtime model active (`defaults delete com.nitkrar.personal_scribe
+  ActiveModelIDs` on a scratch machine, or deactivate), download a
+  streaming-capable model in AI Models. It shows as active for Realtime
+  without pressing Activate, and its warm-up starts. Download a second
+  streaming model: the first stays active.
+- [ ] **MV-MODES-20 — Realtime toggle explains a rejection:** with no
+  Realtime model active, flip Realtime on in a mode's detail screen. The
+  toggle stays off and an orange caption reads "Realtime requires a
+  streaming ASR model…" (nothing downloaded) or "Realtime ASR model not
+  active…" (downloaded but inactive).

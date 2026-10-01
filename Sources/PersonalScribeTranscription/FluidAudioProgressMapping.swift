@@ -13,7 +13,7 @@ import PersonalScribeCore
 ///
 /// Today `fractionCompleted` is intentionally always 0 for downloading
 /// and 1 for finished — the chip currently shows "Downloading…" /
-/// "Loading…" / "Ready" labels only, no progress bar. FluidAudio's
+/// "Warming up…" / "Ready" labels only, no progress bar. FluidAudio's
 /// per-chunk delegate emissions are too coarse to drive a smooth bar
 /// for `URLSession.download(for:)` in practice; reviving the fraction
 /// is a future change once the underlying delegate fires more often
@@ -32,7 +32,7 @@ enum FluidAudioProgressMapper {
             // `loadModelsOnce`'s cache-hit shortcut emits this signature
             // (DownloadUtils.swift:202-204) when files are already on
             // disk — `totalFiles == 0` is impossible during a real
-            // download. Map to `.loading` so the chip says "Loading…"
+            // download. Map to `.loading` so the chip says "Warming up…"
             // instead of momentarily flashing "Downloading…" before the
             // compile phase begins.
             return ModelDownloadProgress(

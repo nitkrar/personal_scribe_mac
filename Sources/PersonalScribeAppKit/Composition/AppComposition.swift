@@ -254,6 +254,7 @@ public enum AppComposition {
         )
 
         wirePostSetActivePrewarm(modelService: modelService, coordinator: coordinator)
+        wirePostDownloadWarmUp(modelService: modelService, processorProvider: processorProvider)
 
         return coordinator
     }()
@@ -277,6 +278,35 @@ public enum AppComposition {
                 return
             } catch {
                 logger.error("Post-setActive prewarm failed", error: error)
+            }
+        }
+    }
+
+    /// Wire `modelService.warmUpInactiveDownload`: a freshly downloaded
+    /// model that didn't become active is loaded once (one-time CoreML
+    /// compile, cached on disk) and released again, so the user's first
+    /// recording with it later starts warm. Skips the release if the
+    /// user activated it while it was warming.
+    private static func wirePostDownloadWarmUp(
+        modelService: ActiveModelService,
+        processorProvider: any ModelBoundProcessorProviding
+    ) {
+        let logger = makeLogger(PersonalScribeLogCategory.transcription)
+        modelService.warmUpInactiveDownload = { [weak modelService] descriptor in
+            let started = ContinuousClock.now
+            do {
+                try await processorProvider.warmUp(descriptor)
+            } catch is CancellationError {
+                return
+            } catch {
+                logger.error("Post-download warm-up failed", error: error)
+            }
+            let elapsed = ContinuousClock.now - started
+            logger.info(
+                "model_warmup_after_download — descriptorID=\(descriptor.id) durationMs=\(Int(elapsed / .milliseconds(1)))"
+            )
+            if modelService?.activeModelIDs.values.contains(descriptor.id) != true {
+                processorProvider.evict(descriptor)
             }
         }
     }

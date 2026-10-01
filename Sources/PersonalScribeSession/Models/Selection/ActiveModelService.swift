@@ -68,6 +68,15 @@ public final class ActiveModelService: ObservableObject {
     /// post-setActive side effects don't need to wire anything.
     public var onSetActive: (@Sendable () async -> Void)?
 
+    /// Compile/warm a freshly downloaded model that did NOT become
+    /// active, so the one-time CoreML compile happens now instead of
+    /// inside the user's first recording with it. The composition root
+    /// loads it once and releases it — no lasting memory cost (the
+    /// `ModelLifecycle` "download doesn't load" rule is about resident
+    /// weights; the compiled cache persists on disk). The row shows
+    /// `.loading` ("Warming up…") meanwhile.
+    public var warmUpInactiveDownload: (@MainActor (ModelDescriptor) async -> Void)?
+
     public convenience init(
         storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
         defaults: UserDefaults = .standard,
@@ -281,6 +290,15 @@ public final class ActiveModelService: ObservableObject {
         return kinds
     }
 
+    /// True iff at least one enabled descriptor of `kind` is downloaded
+    /// (regardless of activation). Distinguishes "not downloaded at all"
+    /// from "downloaded but not the active descriptor".
+    public func hasDownloadedModel(for kind: ModelKind) -> Bool {
+        enabledModels(kind: kind).contains { descriptor in
+            downloadStates[descriptor.id]?.phase == .ready
+        }
+    }
+
     public func isDownloaded(_ descriptor: ModelDescriptor) -> Bool {
         guard let canonical = registeredModels.first(where: { $0.id == descriptor.id }) else {
             return false
@@ -288,9 +306,12 @@ public final class ActiveModelService: ObservableObject {
         return isDownloadedHandler(canonical)
     }
 
-    /// Download `descriptor`'s artifacts. Never touches the active
-    /// selection. Idempotent — a no-op publish of `.ready` when already
-    /// on disk. Progress is ingested into `downloadStates` internally
+    /// Download `descriptor`'s artifacts, then activate it for every
+    /// kind it supports that has no active model yet (a fresh install's
+    /// first realtime download "just works"). An existing choice is
+    /// never replaced — additional downloads stay inactive until the
+    /// user activates them. Idempotent — a no-op publish of `.ready`
+    /// when already on disk. Progress is ingested into `downloadStates` internally
     /// (no external progress closure) so `@ObservedObject` subscribers
     /// see `.downloading` / `.loading` / `.ready` phases flow through
     /// without a separate observer wired at the call site.
@@ -305,6 +326,7 @@ public final class ActiveModelService: ObservableObject {
                     fractionCompleted: 1
                 )
             )
+            activateForEmptyKinds(canonical)
             return
         }
 
@@ -332,6 +354,32 @@ public final class ActiveModelService: ObservableObject {
                 fractionCompleted: 1
             )
         )
+        activateForEmptyKinds(canonical)
+        await warmUpIfInactive(canonical)
+    }
+
+    private func warmUpIfInactive(_ descriptor: ModelDescriptor) async {
+        guard let warmUpInactiveDownload,
+              !activeModelIDs.values.contains(descriptor.id)
+        else {
+            return
+        }
+        publishDownloadState(
+            ModelDownloadState(descriptorId: descriptor.id, phase: .loading, fractionCompleted: 1)
+        )
+        await warmUpInactiveDownload(descriptor)
+        publishDownloadState(
+            ModelDownloadState(descriptorId: descriptor.id, phase: .ready, fractionCompleted: 1)
+        )
+    }
+
+    private func activateForEmptyKinds(_ descriptor: ModelDescriptor) {
+        for kind in ModelKind.allCases
+        where kind.isEnabled
+            && descriptor.engine.capabilities.contains(kind)
+            && activeDescriptor(for: kind) == nil {
+            setActive(descriptor, forKind: kind)
+        }
     }
 
     /// Ticket #024: remove `descriptor`'s on-disk artifacts and flip the

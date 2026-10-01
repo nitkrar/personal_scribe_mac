@@ -12,6 +12,8 @@
 
 - [ ] **MV-SETT-6 — Permissions tab updates live:** with Settings → Permissions open, revoke then re-grant Ninimma's Microphone (or Accessibility) in System Settings, or answer the first-launch mic prompt. The row flips within ~1s without switching tabs or relaunching.
 
+- [ ] **MV-SETT-7 — Downloaded models warm up before first use:** in AI Models, download a model whose slot already has an active model. Its chip shows `Warming up…` after the download, then `Ready`; `diagnostics.log` has `model_warmup_after_download … durationMs=…`. Activate it and record right away: the live text starts within ~2s (no long `Warming up model…` pill).
+
 ## Clipboard restore delay
 
 - Slider reflects current delay: open `General`, confirm the `Clipboard restore delay` control matches the current setting value, and confirm the helper text reads `After paste, wait Ns before restoring your clipboard` with the same value.
