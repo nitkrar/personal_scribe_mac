@@ -10,6 +10,8 @@
 
 - [ ] **MV-SETT-5 — Restart is quit-first, single copy:** toggle Background mode, click the restart caption. The current copy exits within ~3s and exactly one new copy starts (`pgrep -f PersonalScribeAppKit` shows one pid). Launching `/Applications/Ninimma.app` again while it runs leaves the pid unchanged.
 
+- [ ] **MV-SETT-6 — Permissions tab updates live:** with Settings → Permissions open, revoke then re-grant Ninimma's Microphone (or Accessibility) in System Settings, or answer the first-launch mic prompt. The row flips within ~1s without switching tabs or relaunching.
+
 ## Clipboard restore delay
 
 - Slider reflects current delay: open `General`, confirm the `Clipboard restore delay` control matches the current setting value, and confirm the helper text reads `After paste, wait Ns before restoring your clipboard` with the same value.

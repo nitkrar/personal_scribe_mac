@@ -7,6 +7,26 @@ import PersonalScribeCore
 
 @MainActor
 final class AppKitPermissionServiceTests: XCTestCase {
+    func testPollTickPublishesStatusChangeWithoutActivationAndSkipsNoOpTicks() {
+        let fixture = Fixture()
+        fixture.microphone.authorizationStatus = .notDetermined
+        let service = fixture.makeService()
+        var publishCount = 0
+        let subscription = service.objectWillChange.sink { publishCount += 1 }
+        defer { subscription.cancel() }
+
+        // Mic granted via the audio engine's system-modal prompt: the
+        // app never deactivates, so only the poll can notice.
+        fixture.microphone.authorizationStatus = .authorized
+        fixture.statusPoller.triggerDidBecomeActive()
+
+        XCTAssertEqual(service.statuses[.microphone], .granted)
+        XCTAssertEqual(publishCount, 1)
+
+        fixture.statusPoller.triggerDidBecomeActive()
+        XCTAssertEqual(publishCount, 1, "unchanged snapshot must not republish")
+    }
+
     func testInitialRefreshSeedsPublishedStatusSnapshot() {
         let fixture = Fixture()
         fixture.microphone.authorizationStatus = .authorized
@@ -253,6 +273,7 @@ private struct Fixture {
     let accessibility = AccessibilityPermissionSpy()
     let urlOpener = URLOpenerSpy()
     let activationObserver = ActivationObserverSpy()
+    let statusPoller = ActivationObserverSpy()
 
     func makeService() -> AppKitPermissionService {
         AppKitPermissionService(
@@ -260,7 +281,8 @@ private struct Fixture {
             inputMonitoring: inputMonitoring.client,
             accessibility: accessibility.client,
             urlOpener: urlOpener.opener,
-            activationObserver: activationObserver.observer
+            activationObserver: activationObserver.observer,
+            statusPoller: statusPoller.observer
         )
     }
 }

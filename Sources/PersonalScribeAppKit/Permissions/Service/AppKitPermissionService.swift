@@ -12,19 +12,30 @@ final class AppKitPermissionService: ObservableObject, PermissionService {
     private let accessibility: AccessibilityPermissionClient
     private let urlOpener: PermissionURLOpener
     private var activationObservation: ActivationObservation!
+    private var pollObservation: ActivationObservation!
 
     init(
         microphone: MicrophonePermissionClient = .live,
         inputMonitoring: InputMonitoringPermissionClient = .live,
         accessibility: AccessibilityPermissionClient = .live,
         urlOpener: PermissionURLOpener = .live,
-        activationObserver: ApplicationActivationObserver = .live
+        activationObserver: ApplicationActivationObserver = .live,
+        statusPoller: ApplicationActivationObserver = .polling(every: 1)
     ) {
         self.microphone = microphone
         self.inputMonitoring = inputMonitoring
         self.accessibility = accessibility
         self.urlOpener = urlOpener
         self.activationObservation = activationObserver.observe { [weak self] in
+            self?.refresh()
+        }
+        // Activation alone misses grants made through system-modal
+        // prompts (the mic prompt raised by the audio engine never
+        // deactivates the app) and System Settings toggles while a
+        // Ninimma window stays key. The poll catches both; `refresh()`
+        // only publishes on change, so idle ticks cost three status
+        // reads and nothing else.
+        self.pollObservation = statusPoller.observe { [weak self] in
             self?.refresh()
         }
         refresh()
@@ -61,7 +72,9 @@ final class AppKitPermissionService: ObservableObject, PermissionService {
     }
 
     func refresh() {
-        statuses = statusSnapshot()
+        let snapshot = statusSnapshot()
+        guard snapshot != statuses else { return }
+        statuses = snapshot
     }
 
     func systemSettingsDeepLink(for permission: Permission) -> URL {
@@ -83,6 +96,7 @@ final class AppKitPermissionService: ObservableObject, PermissionService {
 
     isolated deinit {
         activationObservation.cancel()
+        pollObservation.cancel()
     }
 
     private func requestMicrophone() async -> RequestOutcome {

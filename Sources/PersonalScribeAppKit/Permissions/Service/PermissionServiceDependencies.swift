@@ -14,7 +14,17 @@ struct MicrophonePermissionClient {
     static var live: Self {
         Self(
             authorizationStatus: {
-                AVCaptureDevice.authorizationStatus(for: .audio)
+                // `AVCaptureDevice.authorizationStatus` caches its first
+                // answer per process: a grant made through the prompt the
+                // audio engine raises (first recording) is never reflected
+                // until relaunch. `AVAudioApplication.recordPermission`
+                // reads the live grant, so either reporting granted wins.
+                let captureStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+                if captureStatus != .authorized,
+                   AVAudioApplication.shared.recordPermission == .granted {
+                    return .authorized
+                }
+                return captureStatus
             },
             requestAccess: {
                 await withCheckedContinuation { continuation in
@@ -91,6 +101,21 @@ struct ActivationObservation {
 
 struct ApplicationActivationObserver {
     let observe: @MainActor (@escaping @MainActor () -> Void) -> ActivationObservation
+
+    /// Repeating main-runloop timer with the same observe/cancel shape,
+    /// used as a refresh trigger for state the OS doesn't notify about.
+    static func polling(every interval: TimeInterval) -> Self {
+        Self(observe: { handler in
+            let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
+                MainActor.assumeIsolated {
+                    handler()
+                }
+            }
+            return ActivationObservation(cancel: {
+                timer.invalidate()
+            })
+        })
+    }
 
     static var live: Self {
         Self(observe: { handler in
