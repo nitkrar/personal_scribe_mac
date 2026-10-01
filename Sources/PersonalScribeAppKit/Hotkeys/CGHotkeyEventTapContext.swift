@@ -77,7 +77,7 @@ public enum CGHotkeyEventTapInstaller {
     ///
     /// `.cgSessionEventTap` (not `.cghidEventTap`) — the HID tap is
     /// root-only on modern macOS; session tap is what LSUIElement apps
-    /// can legitimately install with Input Monitoring permission.
+    /// can legitimately install with Accessibility permission.
     public static func createTap(
         callback: CGHotkeyEventTapCallback,
         userInfo: UnsafeMutableRawPointer?

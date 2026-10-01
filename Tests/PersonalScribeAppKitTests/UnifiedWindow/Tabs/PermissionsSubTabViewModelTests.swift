@@ -12,7 +12,6 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
     func testInitializesStatusesFromService() {
         let service = FakePermissionService(statuses: [
             .microphone: .granted,
-            .inputMonitoring: .granted,
             .accessibility: .granted,
         ])
 
@@ -22,14 +21,12 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.statuses[.microphone], .granted)
-        XCTAssertEqual(viewModel.statuses[.inputMonitoring], .granted)
         XCTAssertEqual(viewModel.statuses[.accessibility], .granted)
     }
 
     func testStatusAccessorReadsFromStatuses() {
         let service = FakePermissionService(statuses: [
             .microphone: .granted,
-            .inputMonitoring: .denied,
             .accessibility: .pending,
         ])
 
@@ -39,7 +36,6 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.status(for: .microphone), .granted)
-        XCTAssertEqual(viewModel.status(for: .inputMonitoring), .denied)
         XCTAssertEqual(viewModel.status(for: .accessibility), .pending)
     }
 
@@ -52,14 +48,12 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.status(for: .microphone), .pending)
-        XCTAssertEqual(viewModel.status(for: .inputMonitoring), .pending)
         XCTAssertEqual(viewModel.status(for: .accessibility), .pending)
     }
 
     func testStatusUpdatesWhenServicePublishes() {
         let service = FakePermissionService(statuses: [
             .microphone: .pending,
-            .inputMonitoring: .pending,
             .accessibility: .pending,
         ])
         let viewModel = PermissionsSubTabViewModel(
@@ -71,7 +65,6 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
 
         service.updateStatuses([
             .microphone: .granted,
-            .inputMonitoring: .denied,
             .accessibility: .pending,
         ])
 
@@ -80,7 +73,6 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         drainMainQueue()
 
         XCTAssertEqual(viewModel.status(for: .microphone), .granted)
-        XCTAssertEqual(viewModel.status(for: .inputMonitoring), .denied)
         XCTAssertEqual(viewModel.status(for: .accessibility), .pending)
     }
 
@@ -93,7 +85,6 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
     func testRefreshReReadsLatestSnapshotFromService() {
         let service = FakePermissionService(statuses: [
             .microphone: .pending,
-            .inputMonitoring: .pending,
             .accessibility: .pending,
         ])
         let viewModel = PermissionsSubTabViewModel(
@@ -108,7 +99,6 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         // prompt accepted while the app stayed active).
         service.stageNextSnapshot([
             .microphone: .granted,
-            .inputMonitoring: .pending,
             .accessibility: .pending,
         ])
 
@@ -121,7 +111,6 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         viewModel.refresh()
 
         XCTAssertEqual(viewModel.status(for: .microphone), .granted)
-        XCTAssertEqual(viewModel.status(for: .inputMonitoring), .pending)
         XCTAssertEqual(viewModel.status(for: .accessibility), .pending)
     }
 
@@ -161,7 +150,7 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
 
     func testStatusLabelIsRequiredForDeniedPermission() {
         let service = FakePermissionService(statuses: [
-            .inputMonitoring: .denied,
+            .microphone: .denied,
         ])
         let viewModel = PermissionsSubTabViewModel(
             permissionService: service,
@@ -169,7 +158,7 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            viewModel.statusLabel(for: .inputMonitoring),
+            viewModel.statusLabel(for: .microphone),
             "Required"
         )
     }
@@ -180,7 +169,6 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
     func testStatusLabelIsGrantedForGrantedPermission() {
         let service = FakePermissionService(statuses: [
             .microphone: .granted,
-            .inputMonitoring: .granted,
             .accessibility: .granted,
         ])
         let viewModel = PermissionsSubTabViewModel(
@@ -189,18 +177,18 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         )
 
         XCTAssertEqual(viewModel.statusLabel(for: .microphone), "Granted")
-        XCTAssertEqual(viewModel.statusLabel(for: .inputMonitoring), "Granted")
         XCTAssertEqual(viewModel.statusLabel(for: .accessibility), "Granted")
     }
 
-    // MARK: - Input Monitoring hotkey hint (mockup-gaps C.7)
+    // MARK: - Accessibility hotkey hint (mockup-gaps C.7)
 
-    /// Input Monitoring subtitle reads `"Required for global hotkey <hint>"`
+    /// Accessibility subtitle reads `"Required for global hotkey <hint> and paste"`
     /// where `hint` comes from `HotkeyShortcutFormatter.displayString`
     /// applied to the currently-bound `HotkeyPreference`. Default
     /// preference (option + `/`) formats to `⌥/`, so the default
-    /// subtitle is `"Required for global hotkey ⌥/"`.
-    func testInputMonitoringSubtitleEmbedsDefaultHotkeyHint() {
+    /// subtitle is `"Required for global hotkey ⌥/ and paste"`. The
+    /// hotkey's event tap needs Accessibility (no Input Monitoring).
+    func testAccessibilitySubtitleEmbedsDefaultHotkeyHint() {
         let defaults = Self.ephemeralUserDefaults()
         let service = FakePermissionService()
         let viewModel = PermissionsSubTabViewModel(
@@ -211,13 +199,13 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
 
         let expectedHint = HotkeyShortcutFormatter.displayString(for: .default)
         XCTAssertEqual(
-            viewModel.subtitle(for: .inputMonitoring),
-            "Required for global hotkey \(expectedHint)"
+            viewModel.subtitle(for: .accessibility),
+            "Required for global hotkey \(expectedHint) and paste"
         )
     }
 
     /// Custom hotkey preference flows into the subtitle.
-    func testInputMonitoringSubtitleReflectsCustomHotkey() {
+    func testAccessibilitySubtitleReflectsCustomHotkey() {
         let defaults = Self.ephemeralUserDefaults()
         let custom = HotkeyPreference(
             keyCode: 49, // spacebar
@@ -235,8 +223,8 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
 
         let expectedHint = HotkeyShortcutFormatter.displayString(for: custom)
         XCTAssertEqual(
-            viewModel.subtitle(for: .inputMonitoring),
-            "Required for global hotkey \(expectedHint)"
+            viewModel.subtitle(for: .accessibility),
+            "Required for global hotkey \(expectedHint) and paste"
         )
         XCTAssertEqual(viewModel.recordingHotkey, custom)
     }
@@ -260,22 +248,6 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         )
     }
 
-    /// Accessibility subtitle matches the mockup verbatim — the
-    /// existing "Paste transcripts into the current app." string is
-    /// replaced with "Required for paste injection".
-    func testAccessibilitySubtitleMatchesMockup() {
-        let service = FakePermissionService()
-        let viewModel = PermissionsSubTabViewModel(
-            permissionService: service,
-            openURL: { _ in }
-        )
-
-        XCTAssertEqual(
-            viewModel.subtitle(for: .accessibility),
-            "Required for paste injection"
-        )
-    }
-
     // MARK: - grantAccess URL routing
 
     func testGrantAccessOpensMicrophoneSystemSettingsURL() {
@@ -285,16 +257,6 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
 
         XCTAssertEqual(capturedURLs.values, [
             PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .microphone)
-        ])
-    }
-
-    func testGrantAccessOpensInputMonitoringSystemSettingsURL() {
-        let (viewModel, capturedURLs) = makeViewModelCapturingOpens()
-
-        viewModel.grantAccess(for: .inputMonitoring)
-
-        XCTAssertEqual(capturedURLs.values, [
-            PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .inputMonitoring)
         ])
     }
 
@@ -362,7 +324,6 @@ private final class FakePermissionService: PermissionService {
     init(
         statuses: [Permission: PermissionStatus] = [
             .microphone: .pending,
-            .inputMonitoring: .pending,
             .accessibility: .pending,
         ]
     ) {

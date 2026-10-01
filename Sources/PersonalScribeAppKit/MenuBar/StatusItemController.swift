@@ -39,7 +39,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
-        openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
+        openAccessibilitySystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenAccessibilitySettings,
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
         modesProvider: @escaping @MainActor () -> [WorkflowMode] = { WorkflowModeRegistry.builtInModes },
         setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
@@ -58,7 +58,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             openURL: openURL,
             openMicrophoneSystemSettings: openMicrophoneSystemSettings,
-            openInputMonitoringSystemSettings: openInputMonitoringSystemSettings,
+            openAccessibilitySystemSettings: openAccessibilitySystemSettings,
             inputDeviceProvider: inputDeviceProvider,
             modesProvider: modesProvider,
             setActiveMode: setActiveMode,
@@ -79,7 +79,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         isOnboardingCompleteProvider: (@MainActor () -> Bool)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
         openMicrophoneSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenMicrophoneSettings,
-        openInputMonitoringSystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenInputMonitoringSettings,
+        openAccessibilitySystemSettings: @escaping @MainActor () -> Void = StatusItemController.defaultOpenAccessibilitySettings,
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
         modesProvider: @escaping @MainActor () -> [WorkflowMode] = { WorkflowModeRegistry.builtInModes },
         setActiveMode: @escaping @MainActor (WorkflowMode) async -> Void = { _ in },
@@ -101,8 +101,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             switch url {
             case PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .microphone):
                 openMicrophoneSystemSettings()
-            case PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .inputMonitoring):
-                openInputMonitoringSystemSettings()
+            case PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .accessibility):
+                openAccessibilitySystemSettings()
             default:
                 _ = NSWorkspace.shared.open(url)
             }
@@ -186,8 +186,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
         case .openMicrophoneSystemSettings:
             openURL(PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .microphone))
-        case .openInputMonitoringSystemSettings:
-            openURL(PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .inputMonitoring))
+        case .openAccessibilitySystemSettings:
+            openURL(PermissionServiceAdapter.defaultSystemSettingsDeepLink(for: .accessibility))
         case .quit:
             // Route through the prequit handler first so an in-flight
             // recording can tear down cleanly (e.g. restoring the system
@@ -295,7 +295,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: snapshot.sessionState,
             micPermission: permissions[.microphone] ?? .pending,
-            inputMonitoringPermission: permissions[.inputMonitoring] ?? .pending,
+            accessibilityPermission: permissions[.accessibility] ?? .pending,
             activeModeName: snapshot.activeMode?.name,
             isOnboardingComplete: isOnboardingCompleteProvider(),
             inputDevices: inputDevices,
@@ -464,9 +464,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         NSWorkspace.shared.open(url)
     }
 
-    private static let defaultOpenInputMonitoringSettings: @MainActor () -> Void = {
+    private static let defaultOpenAccessibilitySettings: @MainActor () -> Void = {
         guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         ) else { return }
         NSWorkspace.shared.open(url)
     }

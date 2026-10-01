@@ -27,7 +27,6 @@ final class OnboardingCompletionObserverTests: XCTestCase {
         let defaults = isolatedDefaults()
         let service = FakePermissionService(statuses: [
             .microphone: .pending,
-            .inputMonitoring: .pending,
         ])
         let observer = OnboardingCompletionObserver(
             permissionService: service,
@@ -45,8 +44,7 @@ final class OnboardingCompletionObserverTests: XCTestCase {
         let defaults = isolatedDefaults()
         let service = FakePermissionService(statuses: [
             .microphone: .granted,
-            .inputMonitoring: .granted,
-            .accessibility: .pending,
+            .accessibility: .granted,
         ])
         let observer = OnboardingCompletionObserver(
             permissionService: service,
@@ -63,7 +61,6 @@ final class OnboardingCompletionObserverTests: XCTestCase {
         let defaults = isolatedDefaults()
         let service = FakePermissionService(statuses: [
             .microphone: .pending,
-            .inputMonitoring: .pending,
         ])
         let observer = OnboardingCompletionObserver(
             permissionService: service,
@@ -74,7 +71,7 @@ final class OnboardingCompletionObserverTests: XCTestCase {
 
         service.nextRefreshStatuses = [
             .microphone: .granted,
-            .inputMonitoring: .granted,
+            .accessibility: .granted,
         ]
         service.refresh()
 
@@ -85,13 +82,12 @@ final class OnboardingCompletionObserverTests: XCTestCase {
         XCTAssertEqual(OnboardingState.resolve(from: defaults), .completed)
     }
 
-    /// Granting only Accessibility (the optional step) doesn't flip
-    /// the flag — required perms remain pending.
+    /// Granting only Accessibility doesn't flip the flag — the
+    /// microphone is still pending.
     func testOnlyAccessibilityGrantDoesNotFlipFlag() async {
         let defaults = isolatedDefaults()
         let service = FakePermissionService(statuses: [
             .microphone: .pending,
-            .inputMonitoring: .pending,
             .accessibility: .pending,
         ])
         let observer = OnboardingCompletionObserver(
@@ -102,7 +98,6 @@ final class OnboardingCompletionObserverTests: XCTestCase {
 
         service.nextRefreshStatuses = [
             .microphone: .pending,
-            .inputMonitoring: .pending,
             .accessibility: .granted,
         ]
         service.refresh()
@@ -120,7 +115,6 @@ final class OnboardingCompletionObserverTests: XCTestCase {
         OnboardingState.completed.persist(to: defaults)
         let service = FakePermissionService(statuses: [
             .microphone: .granted,
-            .inputMonitoring: .granted,
         ])
         let observer = OnboardingCompletionObserver(
             permissionService: service,
@@ -132,7 +126,6 @@ final class OnboardingCompletionObserverTests: XCTestCase {
         // from the system. Flag must stay `.completed`.
         service.nextRefreshStatuses = [
             .microphone: .denied,
-            .inputMonitoring: .granted,
         ]
         service.refresh()
 

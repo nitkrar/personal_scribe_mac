@@ -18,7 +18,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             inputDevices: [],
             currentInputDeviceID: nil
@@ -46,7 +46,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-ext"
@@ -63,7 +63,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: nil
@@ -83,7 +83,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-unplugged"
@@ -104,7 +104,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-1"
@@ -129,7 +129,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-2"
@@ -149,7 +149,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: nil
@@ -166,7 +166,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-1"
@@ -192,7 +192,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             inputDevices: devices,
             currentInputDeviceID: "uid-1"
@@ -241,7 +241,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             modes: modes,
             currentModeID: WorkflowMode.dictation.id
@@ -260,7 +260,7 @@ final class StatusItemMenuModelSubmenuTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             modes: [],
             currentModeID: nil

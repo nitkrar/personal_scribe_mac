@@ -5,7 +5,7 @@ final class PermissionDomainTests: XCTestCase {
     func testPermissionHasOnlyLockedCases() {
         XCTAssertEqual(
             Permission.allCases,
-            [.microphone, .inputMonitoring, .accessibility]
+            [.microphone, .accessibility]
         )
     }
 

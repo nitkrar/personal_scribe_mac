@@ -50,9 +50,9 @@ these entries are guidance, not a literal checklist item.
 
 `OnboardingCompletionObserver` watches the PermissionService and
 flips the `OnboardingCompleted` UserDefault to `true` the first time
-Microphone + Input Monitoring are both `.granted` (Accessibility is
-optional — an app that can't hear you or receive your hotkey can't
-work, but paste-at-cursor has a clipboard fallback). After the first
+Microphone + Accessibility are both `.granted` (Accessibility carries
+the global hotkey's event tap and paste; Input Monitoring is not
+requested — Accessibility trust implies keyboard listen access). After the first
 flip the observer self-terminates, so a later permission revoke in
 System Settings does NOT re-trigger first-run auto-open.
 

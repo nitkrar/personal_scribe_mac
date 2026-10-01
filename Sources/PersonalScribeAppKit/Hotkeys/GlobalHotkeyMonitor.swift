@@ -1,8 +1,8 @@
-/// Global keyboard monitoring requires Input Monitoring permission in
-/// System Settings -> Privacy & Security. The first call to
-/// `NSEvent.addGlobalMonitorForEvents` may prompt for access or silently fail
-/// until permission is granted. This is a separate permission prompt from
-/// microphone access.
+/// Global keyboard monitoring (the active CG event tap) requires
+/// Accessibility permission in System Settings -> Privacy & Security.
+/// Accessibility trust also grants keyboard listen access, so no separate
+/// Input Monitoring permission is requested. Until it's granted the tap
+/// fails and the monitor retries (see `scheduleTapRetries`).
 ///
 /// # Gesture model (pill UX spec §3, 2026-04-21)
 ///
@@ -172,8 +172,8 @@ public final class GlobalHotkeyMonitor {
         // works when our window is frontmost). Both share the same
         // gesture-machine + swallow logic.
         if !router.isTapActive {
-            // Router's tap install failed (Accessibility / Input
-            // Monitoring missing, or transient OS failure). Surface the
+            // Router's tap install failed (Accessibility missing, or
+            // transient OS failure). Surface the
             // warning so the menu bar can prompt the user, then keep
             // retrying so a grant made while running takes effect
             // without a relaunch. Local NSEvent path keeps working
@@ -194,41 +194,31 @@ public final class GlobalHotkeyMonitor {
     static let tapRetryInterval: TimeInterval = 1.0
     static let tapRecoveredMessage = "Global hotkey tap recovered after permission grant"
 
-    /// Emits the install-failure warning. Probes current TCC state so the
-    /// message names the permission(s) actually missing — the active CG
-    /// tap needs both Accessibility and Input Monitoring.
+    /// Emits the install-failure warning. The active CG tap needs only
+    /// Accessibility: macOS grants keyboard listen access to
+    /// Accessibility-trusted apps (verified 2026-10-02 — hotkey works
+    /// with no Input Monitoring entry at all), so it is the one
+    /// permission to name.
     internal func handleMonitorInstallFailure() {
         let message = Self.monitorInstallFailureMessage(
-            accessibility: permissionService.status(for: .accessibility),
-            inputMonitoring: permissionService.status(for: .inputMonitoring)
+            accessibility: permissionService.status(for: .accessibility)
         )
         logger.error(message)
         logSink?("error", message)
     }
 
-    internal static func monitorInstallFailureMessage(
-        accessibility: PermissionStatus,
-        inputMonitoring: PermissionStatus
-    ) -> String {
-        let missing = [
-            (name: "Accessibility", status: accessibility),
-            (name: "Input Monitoring", status: inputMonitoring),
-        ]
-        .filter { $0.status != .granted }
-        .map { "\($0.name) (\($0.status))" }
-
-        guard !missing.isEmpty else {
-            return "Global hotkey monitor failed to register despite both permissions granted "
+    internal static func monitorInstallFailureMessage(accessibility: PermissionStatus) -> String {
+        guard accessibility != .granted else {
+            return "Global hotkey monitor failed to register despite Accessibility granted "
                 + "— likely a transient system failure; retrying."
         }
-        return "Global hotkey monitor failed to register — missing permission: "
-            + missing.joined(separator: ", ")
-            + ". Grant access in System Settings -> Privacy & Security; "
+        return "Global hotkey monitor failed to register — Accessibility permission \(accessibility). "
+            + "Grant access in System Settings -> Privacy & Security -> Accessibility; "
             + "the hotkey recovers automatically once granted."
     }
 
     /// Retry ticks are silent until recovery: they only attempt the tap
-    /// when both permissions report granted (so no TCC prompt churn)
+    /// once Accessibility reports granted (so no TCC prompt churn)
     /// and log once, at info, when it comes back.
     private func scheduleTapRetries() {
         tapRetryCanceller?()
@@ -239,7 +229,6 @@ public final class GlobalHotkeyMonitor {
 
     private func retryTapTick() {
         guard permissionService.status(for: .accessibility) == .granted,
-              permissionService.status(for: .inputMonitoring) == .granted,
               router.retryTapIfNeeded()
         else {
             return

@@ -14,7 +14,6 @@ final class PermissionServiceContractTests: XCTestCase {
             service.statuses,
             [
                 .microphone: .pending,
-                .inputMonitoring: .granted,
                 .accessibility: .pending,
             ]
         )
@@ -22,19 +21,18 @@ final class PermissionServiceContractTests: XCTestCase {
             service.statusSnapshot(),
             [
                 .microphone: .pending,
-                .inputMonitoring: .granted,
                 .accessibility: .pending,
             ]
         )
 
-        let requestOutcome = await service.request(.inputMonitoring)
+        let requestOutcome = await service.request(.accessibility)
         XCTAssertEqual(
             requestOutcome,
             RequestOutcome(
                 prompted: true,
                 openedSettings: false,
-                requiresRelaunch: true,
-                finalStatus: .granted
+                requiresRelaunch: false,
+                finalStatus: .pending
             )
         )
 
@@ -51,7 +49,6 @@ final class PermissionServiceContractTests: XCTestCase {
         let service: any PermissionService = stub
         let expectedStatuses: [Permission: PermissionStatus] = [
             .microphone: .granted,
-            .inputMonitoring: .granted,
             .accessibility: .granted,
         ]
         var changeCount = 0
@@ -78,7 +75,6 @@ private final class StubPermissionService: PermissionService {
     init() {
         let initialStatuses: [Permission: PermissionStatus] = [
             .microphone: .pending,
-            .inputMonitoring: .granted,
             .accessibility: .pending,
         ]
         self.statuses = initialStatuses
@@ -91,9 +87,9 @@ private final class StubPermissionService: PermissionService {
 
     func request(_ permission: Permission) async -> RequestOutcome {
         return RequestOutcome(
-            prompted: permission == .inputMonitoring,
+            prompted: permission == .accessibility,
             openedSettings: false,
-            requiresRelaunch: permission == .inputMonitoring,
+            requiresRelaunch: false,
             finalStatus: status(for: permission)
         )
     }
@@ -111,10 +107,6 @@ private final class StubPermissionService: PermissionService {
         case .microphone:
             return URL(
                 string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-            )!
-        case .inputMonitoring:
-            return URL(
-                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
             )!
         case .accessibility:
             return URL(

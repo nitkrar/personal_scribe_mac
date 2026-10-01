@@ -117,7 +117,6 @@ final class AppStoreTests: XCTestCase {
         let session = FakeAppStoreSessionProvider()
         let permissions = FakePermissionService(statuses: [
             .microphone: .pending,
-            .inputMonitoring: .pending,
             .accessibility: .denied,
         ])
         let store = makeStore(
@@ -132,7 +131,6 @@ final class AppStoreTests: XCTestCase {
 
         let refreshedStatuses: [Permission: PermissionStatus] = [
             .microphone: .granted,
-            .inputMonitoring: .granted,
             .accessibility: .granted,
         ]
         permissions.nextRefreshStatuses = refreshedStatuses

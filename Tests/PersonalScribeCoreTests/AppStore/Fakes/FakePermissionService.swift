@@ -11,7 +11,6 @@ final class FakePermissionService: PermissionService {
     init(
         statuses: [Permission: PermissionStatus] = [
             .microphone: .pending,
-            .inputMonitoring: .pending,
             .accessibility: .pending,
         ]
     ) {

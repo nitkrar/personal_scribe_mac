@@ -8,7 +8,6 @@ final class AppKitPermissionService: ObservableObject, PermissionService {
     @Published private(set) var statuses: [Permission: PermissionStatus] = [:]
 
     private let microphone: MicrophonePermissionClient
-    private let inputMonitoring: InputMonitoringPermissionClient
     private let accessibility: AccessibilityPermissionClient
     private let urlOpener: PermissionURLOpener
     private var activationObservation: ActivationObservation!
@@ -16,14 +15,12 @@ final class AppKitPermissionService: ObservableObject, PermissionService {
 
     init(
         microphone: MicrophonePermissionClient = .live,
-        inputMonitoring: InputMonitoringPermissionClient = .live,
         accessibility: AccessibilityPermissionClient = .live,
         urlOpener: PermissionURLOpener = .live,
         activationObserver: ApplicationActivationObserver = .live,
         statusPoller: ApplicationActivationObserver = .polling(every: 1)
     ) {
         self.microphone = microphone
-        self.inputMonitoring = inputMonitoring
         self.accessibility = accessibility
         self.urlOpener = urlOpener
         self.activationObservation = activationObserver.observe { [weak self] in
@@ -45,8 +42,6 @@ final class AppKitPermissionService: ObservableObject, PermissionService {
         switch permission {
         case .microphone:
             return mapMicrophoneStatus(microphone.authorizationStatus())
-        case .inputMonitoring:
-            return inputMonitoring.status()
         case .accessibility:
             return accessibility.isTrusted() ? .granted : .pending
         }
@@ -56,8 +51,6 @@ final class AppKitPermissionService: ObservableObject, PermissionService {
         switch permission {
         case .microphone:
             return await requestMicrophone()
-        case .inputMonitoring:
-            return requestInputMonitoring()
         case .accessibility:
             return requestAccessibility()
         }
@@ -82,10 +75,6 @@ final class AppKitPermissionService: ObservableObject, PermissionService {
         case .microphone:
             return URL(
                 string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-            )!
-        case .inputMonitoring:
-            return URL(
-                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
             )!
         case .accessibility:
             return URL(
@@ -114,27 +103,6 @@ final class AppKitPermissionService: ObservableObject, PermissionService {
             return refreshedOutcome(
                 for: .microphone,
                 openedSettings: true
-            )
-        }
-    }
-
-    private func requestInputMonitoring() -> RequestOutcome {
-        switch status(for: .inputMonitoring) {
-        case .granted:
-            return refreshedOutcome(for: .inputMonitoring)
-        case .pending:
-            _ = inputMonitoring.requestAccess()
-            return refreshedOutcome(
-                for: .inputMonitoring,
-                prompted: true,
-                requiresRelaunch: true
-            )
-        case .denied:
-            urlOpener.open(systemSettingsDeepLink(for: .inputMonitoring))
-            return refreshedOutcome(
-                for: .inputMonitoring,
-                openedSettings: true,
-                requiresRelaunch: true
             )
         }
     }

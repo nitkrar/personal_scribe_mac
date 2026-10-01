@@ -18,7 +18,7 @@ final class PermissionsSubTabViewModel: ObservableObject {
     @Published private(set) var statuses: [Permission: PermissionStatus]
 
     /// Currently-bound recording hotkey, resolved from UserDefaults on
-    /// init and re-resolved on `refresh()`. Drives the Input Monitoring
+    /// init and re-resolved on `refresh()`. Drives the Accessibility
     /// row's subtitle so the displayed hint tracks the user's actual
     /// binding (mockup-gaps C.7, same plumbing pattern as Home tab's
     /// empty-state hint — see `HomeTabViewModel.recordingHotkey`).
@@ -73,27 +73,25 @@ final class PermissionsSubTabViewModel: ObservableObject {
     /// Subtitle text shown beneath each permission title. Copy matches
     /// the mockup verbatim
     /// (`plans/App UI design/final_settings_permissions_v2.png`). The
-    /// Input Monitoring subtitle embeds the currently-bound recording
-    /// hotkey hint; the microphone and accessibility subtitles are
-    /// static mockup copy.
+    /// Accessibility subtitle embeds the currently-bound recording
+    /// hotkey hint (the hotkey's event tap needs Accessibility — no
+    /// separate Input Monitoring permission is used).
     func subtitle(for permission: Permission) -> String {
         switch permission {
         case .microphone:
             return "Required for voice recording"
-        case .inputMonitoring:
-            return inputMonitoringSubtitle
         case .accessibility:
-            return "Required for paste injection"
+            return accessibilitySubtitle
         }
     }
 
-    /// Dynamic subtitle for the Input Monitoring row. Embeds the live
+    /// Dynamic subtitle for the Accessibility row. Embeds the live
     /// hotkey display string formatted by `HotkeyShortcutFormatter` so
     /// the copy tracks whatever binding the user has selected in
     /// Settings → Shortcuts.
-    var inputMonitoringSubtitle: String {
+    var accessibilitySubtitle: String {
         let hint = HotkeyShortcutFormatter.displayString(for: recordingHotkey)
-        return "Required for global hotkey \(hint)"
+        return "Required for global hotkey \(hint) and paste"
     }
 
     /// Re-query TCC and publish the fresh snapshot. Call from
@@ -104,7 +102,7 @@ final class PermissionsSubTabViewModel: ObservableObject {
     func refresh() {
         permissionService.refresh()
         statuses = permissionService.statusSnapshot()
-        // Re-resolve the hotkey so the Input Monitoring subtitle
+        // Re-resolve the hotkey so the Accessibility subtitle
         // reflects any change the user made in Settings → Shortcuts
         // while the tab was off-screen.
         recordingHotkey = HotkeyPreference.resolve(from: defaults)

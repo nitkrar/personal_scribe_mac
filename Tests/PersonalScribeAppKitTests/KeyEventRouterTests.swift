@@ -24,7 +24,7 @@ final class KeyEventRouterTests: XCTestCase {
     }
 
     /// Build a router whose CG tap is wired through a fake installer.
-    /// `installerReturnsNil` simulates Input Monitoring denied so we
+    /// `installerReturnsNil` simulates Accessibility not granted so we
     /// can exercise both branches of `start()`.
     private func makeRouter(
         installerReturnsNil: Bool = false,
@@ -255,7 +255,7 @@ final class KeyEventRouterTests: XCTestCase {
     }
 
     func testStartReturnsFalseWhenTapInstallerFails() {
-        // Even if the CG tap can't install (Input Monitoring denied),
+        // Even if the CG tap can't install (Accessibility not granted),
         // local + global NSEvent monitors should still install and the
         // router's local-keystroke functionality remains usable.
         let router = makeRouter(installerReturnsNil: true)

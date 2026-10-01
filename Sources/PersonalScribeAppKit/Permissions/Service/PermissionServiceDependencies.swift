@@ -3,9 +3,6 @@ import AppKit
 import ApplicationServices
 import Foundation
 import PersonalScribeCore
-#if canImport(IOKit)
-import IOKit.hid
-#endif
 
 struct MicrophonePermissionClient {
     let authorizationStatus: @MainActor () -> AVAuthorizationStatus
@@ -32,37 +29,6 @@ struct MicrophonePermissionClient {
                         continuation.resume(returning: granted)
                     }
                 }
-            }
-        )
-    }
-}
-
-struct InputMonitoringPermissionClient {
-    let status: @MainActor () -> PermissionStatus
-    let requestAccess: @MainActor () -> Bool
-
-    static var live: Self {
-        Self(
-            status: {
-#if canImport(IOKit)
-                switch IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) {
-                case kIOHIDAccessTypeGranted:
-                    return .granted
-                case kIOHIDAccessTypeDenied:
-                    return .denied
-                default:
-                    return .pending
-                }
-#else
-                return .pending
-#endif
-            },
-            requestAccess: {
-#if canImport(IOKit)
-                return IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
-#else
-                return false
-#endif
             }
         )
     }

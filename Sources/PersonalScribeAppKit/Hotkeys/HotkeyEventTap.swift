@@ -73,7 +73,7 @@ public final class HotkeyEventTap {
 
     /// Installs the tap + adds its run-loop source. Returns `true` on
     /// success. Returns `false` if `CGEvent.tapCreate` returns `nil`
-    /// (Input Monitoring permission denied, or a transient OS-level
+    /// (Accessibility not granted, or a transient OS-level
     /// failure). Caller should route the `false` result through its
     /// existing permission-failure path.
     @discardableResult

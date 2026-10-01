@@ -101,7 +101,7 @@ public final class KeyEventRouter {
     }
 
     /// True when at least one of the three monitors is live. The CG
-    /// tap may fail to install (Input Monitoring denied) while the
+    /// tap may fail to install (Accessibility not granted) while the
     /// NSEvent monitors still succeed — `start()` returns the tap
     /// result so the caller can surface the permission error, but the
     /// router stays usable for in-app keystrokes regardless.
@@ -110,7 +110,7 @@ public final class KeyEventRouter {
     }
 
     /// True when the CG tap (system-wide swallow path) is alive. False
-    /// when the tap install failed (Input Monitoring denied) or the
+    /// when the tap install failed (Accessibility not granted) or the
     /// router has not been started. Consumers that need to surface a
     /// permission warning to the user (e.g. `GlobalHotkeyMonitor`'s
     /// "÷÷÷÷ leak" warning) read this getter after registering.

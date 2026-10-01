@@ -339,9 +339,9 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
 
     // MARK: - Permission-failure logging (unchanged from Issue 4)
 
-    func testInstallFailureMessageNamesEveryMissingPermission() {
+    func testInstallFailureMessageNamesMissingAccessibility() {
         let permissionService = FakePermissionService(
-            statuses: [.inputMonitoring: .denied, .accessibility: .pending]
+            statuses: [.accessibility: .pending]
         )
         let sink = CapturingLogSink()
         let monitor = GlobalHotkeyMonitor(
@@ -355,28 +355,16 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         let captured = sink.snapshot()
         XCTAssertEqual(captured.count, 1)
         XCTAssertEqual(captured.first?.level, "error")
-        XCTAssertTrue(captured.first?.message.contains("Input Monitoring (denied)") == true)
-        XCTAssertTrue(captured.first?.message.contains("Accessibility (pending)") == true)
+        XCTAssertTrue(captured.first?.message.contains("Accessibility permission pending") == true)
+        XCTAssertFalse(captured.first?.message.contains("Input Monitoring") == true)
     }
 
-    func testInstallFailureMessageBlamesAccessibilityWhenInputMonitoringGranted() {
-        let message = GlobalHotkeyMonitor.monitorInstallFailureMessage(
-            accessibility: .pending,
-            inputMonitoring: .granted
-        )
-        XCTAssertTrue(message.contains("Accessibility (pending)"))
-        XCTAssertFalse(message.contains("Input Monitoring ("))
+    func testInstallFailureMessageReportsTransientFailureWhenAccessibilityGranted() {
+        let message = GlobalHotkeyMonitor.monitorInstallFailureMessage(accessibility: .granted)
+        XCTAssertTrue(message.contains("despite Accessibility granted"))
     }
 
-    func testInstallFailureMessageReportsTransientFailureWhenBothGranted() {
-        let message = GlobalHotkeyMonitor.monitorInstallFailureMessage(
-            accessibility: .granted,
-            inputMonitoring: .granted
-        )
-        XCTAssertTrue(message.contains("both permissions granted"))
-    }
-
-    func testTapRecoversOnceAccessibilityAndInputMonitoringAreGranted() {
+    func testTapRecoversOnceAccessibilityIsGranted() {
         var installerAttempts = 0
         var tapAllowed = false
         let router = KeyEventRouter(
@@ -392,7 +380,7 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         )
         router.start()
         let permissionService = FakePermissionService(
-            statuses: [.inputMonitoring: .granted, .accessibility: .pending]
+            statuses: [.accessibility: .pending]
         )
         let sink = CapturingLogSink()
         var retryTick: (@MainActor () -> Void)?
@@ -606,7 +594,7 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
 
     func testStartContinuesWithLocalDeciderWhenTapInstallFails() {
         // Post-#028: the router owns the CG tap. When tap install
-        // fails (Input Monitoring denied), the router's NSEvent
+        // fails (Accessibility not granted), the router's NSEvent
         // monitors still install. GlobalHotkeyMonitor.start() routes
         // the failure signal through handleMonitorInstallFailure but
         // continues to register both deciders — the local decider is
@@ -914,7 +902,7 @@ private final class FakePermissionService: PermissionService {
         RequestOutcome(
             prompted: false,
             openedSettings: false,
-            requiresRelaunch: permission == .inputMonitoring,
+            requiresRelaunch: false,
             finalStatus: status(for: permission)
         )
     }

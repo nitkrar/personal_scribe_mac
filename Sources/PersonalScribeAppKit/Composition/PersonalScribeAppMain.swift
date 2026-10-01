@@ -376,7 +376,7 @@ struct PersonalScribeAppMain: App {
         }
 
         // #015: watch the permission service and flip
-        // `OnboardingCompleted` the first time Mic + Input Monitoring
+        // `OnboardingCompleted` the first time Mic + Accessibility
         // both land as `.granted`. Covers the "perms granted before
         // launch" case (flag flips immediately) AND the "user grants
         // during first session" case (observer fires on publish). Once

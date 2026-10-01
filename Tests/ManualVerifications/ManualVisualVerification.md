@@ -438,13 +438,16 @@ mockup:
 11. Microphone subtitle reads **"Required for voice recording"**.
 12. Accessibility subtitle reads **"Required for paste injection"**.
 
-### C.7 — Input Monitoring subtitle includes the hotkey hint
-13. Input Monitoring subtitle reads **"Required for global hotkey ⌥/"**
+### C.7 — Accessibility subtitle includes the hotkey hint
+(Permissions shows two rows — Microphone, Accessibility. The mockup's
+Input Monitoring row is a deliberate divergence: the permission isn't
+needed.)
+13. Accessibility subtitle reads **"Required for global hotkey ⌥/ and paste"**
     (or whatever the current `HotkeyPreference` formats to via
     `HotkeyShortcutFormatter.displayString`). With the default preference
     (option + `/`), the displayed hint is `⌥/`.
 14. Change the hotkey via Settings → Shortcuts → Change…, pick a new
-    binding, confirm, return to Permissions. The Input Monitoring subtitle
+    binding, confirm, return to Permissions. The Accessibility subtitle
     reflects the new hotkey.
 
 ## Settings → General — mockup-gaps D.1–D.3

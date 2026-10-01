@@ -97,7 +97,6 @@ final class AppEntryPointTests: XCTestCase {
 private final class FakePermissionService: PermissionService {
     @Published private(set) var statuses: [Permission: PermissionStatus] = [
         .microphone: .granted,
-        .inputMonitoring: .granted,
         .accessibility: .granted,
     ]
 

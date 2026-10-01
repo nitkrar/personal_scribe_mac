@@ -5,9 +5,10 @@ import XCTest
 /// decides when the first-run `OnboardingCompleted` flag should flip
 /// to `true` based on the user's permission grants.
 ///
-/// Ticket #015 (minimal scope). Accessibility is optional; Mic +
-/// Input Monitoring are required (an app that can't hear you or
-/// receive your hotkey is useless).
+/// Mic + Accessibility are required: the global hotkey's active
+/// CGEventTap needs Accessibility (it receives keyboard events with
+/// Accessibility alone — verified 2026-10-02; Input Monitoring is not
+/// requested at all), and paste needs it too.
 final class OnboardingCompletionPolicyTests: XCTestCase {
     func testReturnsFalseForEmptyStatuses() {
         XCTAssertFalse(OnboardingCompletionPolicy.shouldMarkComplete(statuses: [:]))
@@ -16,63 +17,31 @@ final class OnboardingCompletionPolicyTests: XCTestCase {
     func testReturnsFalseWhenOnlyMicrophoneIsGranted() {
         let statuses: [Permission: PermissionStatus] = [
             .microphone: .granted,
-            .inputMonitoring: .pending,
             .accessibility: .pending,
         ]
         XCTAssertFalse(OnboardingCompletionPolicy.shouldMarkComplete(statuses: statuses))
     }
 
-    func testReturnsFalseWhenOnlyInputMonitoringIsGranted() {
+    func testReturnsFalseWhenOnlyAccessibilityIsGranted() {
         let statuses: [Permission: PermissionStatus] = [
             .microphone: .pending,
-            .inputMonitoring: .granted,
-            .accessibility: .pending,
+            .accessibility: .granted,
         ]
         XCTAssertFalse(OnboardingCompletionPolicy.shouldMarkComplete(statuses: statuses))
     }
 
-    func testReturnsTrueWhenBothRequiredPermissionsAreGranted() {
+    func testReturnsTrueWhenMicrophoneAndAccessibilityAreGranted() {
         let statuses: [Permission: PermissionStatus] = [
             .microphone: .granted,
-            .inputMonitoring: .granted,
-            .accessibility: .pending,
+            .accessibility: .granted,
         ]
         XCTAssertTrue(OnboardingCompletionPolicy.shouldMarkComplete(statuses: statuses))
     }
 
-    /// Accessibility is an optional step per the ticket body — it
-    /// enables paste-injection but the app can function (clipboard
-    /// fallback path) without it. Grant state is irrelevant to the
-    /// completion predicate.
-    func testAccessibilityGrantDoesNotAffectCompletion() {
-        let denied: [Permission: PermissionStatus] = [
-            .microphone: .granted,
-            .inputMonitoring: .granted,
-            .accessibility: .denied,
-        ]
-        XCTAssertTrue(OnboardingCompletionPolicy.shouldMarkComplete(statuses: denied))
-
-        let granted: [Permission: PermissionStatus] = [
-            .microphone: .granted,
-            .inputMonitoring: .granted,
-            .accessibility: .granted,
-        ]
-        XCTAssertTrue(OnboardingCompletionPolicy.shouldMarkComplete(statuses: granted))
-    }
-
-    func testReturnsFalseWhenRequiredPermissionIsDenied() {
+    func testReturnsFalseWhenMicrophoneIsDenied() {
         let statuses: [Permission: PermissionStatus] = [
-            .microphone: .granted,
-            .inputMonitoring: .denied,
+            .microphone: .denied,
             .accessibility: .granted,
-        ]
-        XCTAssertFalse(OnboardingCompletionPolicy.shouldMarkComplete(statuses: statuses))
-    }
-
-    func testReturnsFalseWhenRequiredPermissionIsPending() {
-        let statuses: [Permission: PermissionStatus] = [
-            .microphone: .granted,
-            .inputMonitoring: .pending,
         ]
         XCTAssertFalse(OnboardingCompletionPolicy.shouldMarkComplete(statuses: statuses))
     }

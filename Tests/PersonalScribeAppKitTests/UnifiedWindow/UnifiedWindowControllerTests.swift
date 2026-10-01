@@ -264,7 +264,6 @@ private struct StubMetricsReader: MetricsReading {
 private final class StubPermissionService: PermissionService {
     @Published private(set) var statuses: [Permission: PermissionStatus] = [
         .microphone: .granted,
-        .inputMonitoring: .granted,
         .accessibility: .granted,
     ]
 

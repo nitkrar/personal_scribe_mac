@@ -78,8 +78,10 @@ keystrokes no longer leak into focused apps.
   doesn't disable the hotkey. To actually exercise the fail-open path,
   revoke BOTH Input Monitoring AND Accessibility for Ninimma before
   relaunch. Verified 2026-04-21: accessibility-grant path carries the
-  tap cleanly; permission-probe plumbing covered by
-  `InputMonitoringPermissionProbeTests`.
+  tap cleanly. Re-verified 2026-10-02 with no Input Monitoring entry at
+  all (hotkey works; `IOHIDCheckAccess` reports granted under
+  Accessibility trust), so the Input Monitoring permission was removed
+  from the app entirely — see MV-SHORT-7 for the Accessibility path.
 - [x] **MV-HK-11** Press a plain `/` (no option) in another app's text
   field. The `/` character types normally — tap swallow is scoped to
   the matching hotkey, not all keyDowns. Regression guard for the

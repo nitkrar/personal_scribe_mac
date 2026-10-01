@@ -30,7 +30,6 @@ final class AppKitPermissionServiceTests: XCTestCase {
     func testInitialRefreshSeedsPublishedStatusSnapshot() {
         let fixture = Fixture()
         fixture.microphone.authorizationStatus = .authorized
-        fixture.inputMonitoring.status = .denied
         fixture.accessibility.isTrusted = false
 
         let service = fixture.makeService()
@@ -39,7 +38,6 @@ final class AppKitPermissionServiceTests: XCTestCase {
             service.statuses,
             [
                 .microphone: .granted,
-                .inputMonitoring: .denied,
                 .accessibility: .pending,
             ]
         )
@@ -51,11 +49,9 @@ final class AppKitPermissionServiceTests: XCTestCase {
         let service = fixture.makeService()
 
         fixture.microphone.authorizationStatus = .denied
-        fixture.inputMonitoring.status = .granted
         fixture.accessibility.isTrusted = true
 
         XCTAssertEqual(service.status(for: .microphone), .denied)
-        XCTAssertEqual(service.status(for: .inputMonitoring), .granted)
         XCTAssertEqual(service.status(for: .accessibility), .granted)
     }
 
@@ -76,10 +72,6 @@ final class AppKitPermissionServiceTests: XCTestCase {
         XCTAssertEqual(
             service.systemSettingsDeepLink(for: .microphone).absoluteString,
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-        )
-        XCTAssertEqual(
-            service.systemSettingsDeepLink(for: .inputMonitoring).absoluteString,
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
         )
         XCTAssertEqual(
             service.systemSettingsDeepLink(for: .accessibility).absoluteString,
@@ -123,41 +115,6 @@ final class AppKitPermissionServiceTests: XCTestCase {
         )
     }
 
-    func testRequestInputMonitoringRequiresRelaunchWhenPromptPathRuns() async {
-        let fixture = Fixture()
-        fixture.inputMonitoring.status = .pending
-        fixture.inputMonitoring.requestAccessResult = false
-        fixture.inputMonitoring.statusAfterRequest = .denied
-        let service = fixture.makeService()
-
-        let outcome = await service.request(.inputMonitoring)
-
-        XCTAssertEqual(fixture.inputMonitoring.requestAccessCallCount, 1)
-        XCTAssertTrue(outcome.prompted)
-        XCTAssertFalse(outcome.openedSettings)
-        XCTAssertTrue(outcome.requiresRelaunch)
-        XCTAssertEqual(outcome.finalStatus, .denied)
-        XCTAssertTrue(fixture.urlOpener.openedURLs.isEmpty)
-    }
-
-    func testRequestInputMonitoringRequiresRelaunchWhenSettingsPathRuns() async {
-        let fixture = Fixture()
-        fixture.inputMonitoring.status = .denied
-        let service = fixture.makeService()
-
-        let outcome = await service.request(.inputMonitoring)
-
-        XCTAssertEqual(fixture.inputMonitoring.requestAccessCallCount, 0)
-        XCTAssertFalse(outcome.prompted)
-        XCTAssertTrue(outcome.openedSettings)
-        XCTAssertTrue(outcome.requiresRelaunch)
-        XCTAssertEqual(outcome.finalStatus, .denied)
-        XCTAssertEqual(
-            fixture.urlOpener.openedURLs,
-            [service.systemSettingsDeepLink(for: .inputMonitoring)]
-        )
-    }
-
     func testRequestAccessibilityTriggersPromptWithoutFakingDenied() async {
         let fixture = Fixture()
         fixture.accessibility.isTrusted = false
@@ -187,7 +144,6 @@ final class AppKitPermissionServiceTests: XCTestCase {
             .sink { snapshots.append($0) }
 
         fixture.microphone.authorizationStatus = .authorized
-        fixture.inputMonitoring.status = .granted
         fixture.accessibility.isTrusted = true
 
         service.refresh()
@@ -198,7 +154,6 @@ final class AppKitPermissionServiceTests: XCTestCase {
             snapshots.first,
             [
                 .microphone: .granted,
-                .inputMonitoring: .granted,
                 .accessibility: .granted,
             ]
         )
@@ -208,14 +163,12 @@ final class AppKitPermissionServiceTests: XCTestCase {
         let fixture = Fixture()
         let service = AppKitPermissionService(
             microphone: fixture.microphone.client,
-            inputMonitoring: fixture.inputMonitoring.client,
             accessibility: fixture.accessibility.client,
             urlOpener: fixture.urlOpener.opener,
             activationObserver: .live
         )
 
         fixture.microphone.authorizationStatus = .authorized
-        fixture.inputMonitoring.status = .granted
         fixture.accessibility.isTrusted = true
 
         NotificationCenter.default.post(
@@ -227,7 +180,6 @@ final class AppKitPermissionServiceTests: XCTestCase {
             service.statuses,
             [
                 .microphone: .granted,
-                .inputMonitoring: .granted,
                 .accessibility: .granted,
             ]
         )
@@ -238,7 +190,6 @@ final class AppKitPermissionServiceTests: XCTestCase {
         let service = fixture.makeService()
 
         fixture.microphone.authorizationStatus = .authorized
-        fixture.inputMonitoring.status = .granted
         fixture.accessibility.isTrusted = true
 
         fixture.activationObserver.triggerDidBecomeActive()
@@ -247,7 +198,6 @@ final class AppKitPermissionServiceTests: XCTestCase {
             service.statuses,
             [
                 .microphone: .granted,
-                .inputMonitoring: .granted,
                 .accessibility: .granted,
             ]
         )
@@ -269,7 +219,6 @@ final class AppKitPermissionServiceTests: XCTestCase {
 @MainActor
 private struct Fixture {
     let microphone = MicrophonePermissionSpy()
-    let inputMonitoring = InputMonitoringPermissionSpy()
     let accessibility = AccessibilityPermissionSpy()
     let urlOpener = URLOpenerSpy()
     let activationObserver = ActivationObserverSpy()
@@ -278,7 +227,6 @@ private struct Fixture {
     func makeService() -> AppKitPermissionService {
         AppKitPermissionService(
             microphone: microphone.client,
-            inputMonitoring: inputMonitoring.client,
             accessibility: accessibility.client,
             urlOpener: urlOpener.opener,
             activationObserver: activationObserver.observer,
@@ -307,31 +255,6 @@ private final class MicrophonePermissionSpy {
                     authorizationStatus = authorizationStatusAfterRequest
                 }
                 return requestResult
-            }
-        )
-    }
-}
-
-@MainActor
-private final class InputMonitoringPermissionSpy {
-    var status: PermissionStatus = .pending
-    var statusAfterRequest: PermissionStatus?
-    var requestAccessResult = false
-    private(set) var statusCallCount = 0
-    private(set) var requestAccessCallCount = 0
-
-    var client: InputMonitoringPermissionClient {
-        InputMonitoringPermissionClient(
-            status: { [unowned self] in
-                statusCallCount += 1
-                return status
-            },
-            requestAccess: { [unowned self] in
-                requestAccessCallCount += 1
-                if let statusAfterRequest {
-                    status = statusAfterRequest
-                }
-                return requestAccessResult
             }
         )
     }

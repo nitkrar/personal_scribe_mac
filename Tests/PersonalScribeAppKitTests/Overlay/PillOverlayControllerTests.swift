@@ -116,7 +116,6 @@ private extension PillOverlayControllerTests {
             session: session,
             permissions: [
                 .microphone: .granted,
-                .inputMonitoring: .granted,
                 .accessibility: .granted,
             ],
             activeMode: WorkflowMode.dictation,
@@ -243,7 +242,6 @@ private final class FakeSessionProvider: @unchecked Sendable, AppStoreSessionPro
 private final class FakePermissionService: PermissionService {
     @Published private(set) var statuses: [Permission: PermissionStatus] = [
         .microphone: .granted,
-        .inputMonitoring: .granted,
         .accessibility: .granted,
     ]
 

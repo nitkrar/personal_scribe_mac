@@ -39,16 +39,6 @@ struct PermissionsSubTab: View {
             )
 
             PermissionRow(
-                permission: .inputMonitoring,
-                systemImageName: "keyboard.fill",
-                title: "Input Monitoring",
-                subtitle: viewModel.subtitle(for: .inputMonitoring),
-                status: viewModel.status(for: .inputMonitoring),
-                statusLabel: viewModel.statusLabel(for: .inputMonitoring),
-                grantAction: { viewModel.grantAccess(for: .inputMonitoring) }
-            )
-
-            PermissionRow(
                 permission: .accessibility,
                 systemImageName: "accessibility.fill",
                 title: "Accessibility",

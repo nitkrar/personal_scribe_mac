@@ -103,7 +103,7 @@ struct StatusItemMenuModel: Equatable {
         case copyLastTranscript
         case retranscribeLastRecording
         case openMicrophoneSystemSettings
-        case openInputMonitoringSystemSettings
+        case openAccessibilitySystemSettings
         case quit
         /// Dispatch id for Microphone-submenu device rows. The payload
         /// (`AudioInputDevice.id`) travels on the `SubmenuChild`, not
@@ -153,7 +153,7 @@ struct StatusItemMenuModel: Equatable {
     static func makeUnified(
         sessionState: SessionState,
         micPermission: PermissionStatus,
-        inputMonitoringPermission: PermissionStatus,
+        accessibilityPermission: PermissionStatus,
         activeModeName: String? = nil,
         isOnboardingComplete: Bool = true,
         inputDevices: [AudioInputDevice] = [],
@@ -163,13 +163,15 @@ struct StatusItemMenuModel: Equatable {
         canRetranscribeLastRecording: Bool = false,
         recordingHotkey: HotkeyPreference = HotkeyPreference.resolve()
     ) -> StatusItemMenuModel {
-        _ = isOnboardingComplete
         var items: [Item] = []
 
         let hasMicWarning = (micPermission == .denied)
-        let hasImWarning = (inputMonitoringPermission == .denied)
+        // Accessibility never reports `.denied` (untrusted → `.pending`),
+        // so warn on anything but granted once onboarding is done; before
+        // that, onboarding owns the prompting.
+        let hasAccessibilityWarning = isOnboardingComplete && accessibilityPermission != .granted
 
-        if hasMicWarning || hasImWarning {
+        if hasMicWarning || hasAccessibilityWarning {
             items.append(.header(title: "Permissions needed before recording"))
         }
 
@@ -182,16 +184,16 @@ struct StatusItemMenuModel: Equatable {
             )))
         }
 
-        if hasImWarning {
+        if hasAccessibilityWarning {
             items.append(.action(ActionItem(
-                id: .openInputMonitoringSystemSettings,
-                title: "⚠︎ Input Monitoring required — Open Settings",
+                id: .openAccessibilitySystemSettings,
+                title: "⚠︎ Accessibility required — Open Settings",
                 keyEquivalent: "",
                 isEnabled: true
             )))
         }
 
-        if hasMicWarning || hasImWarning {
+        if hasMicWarning || hasAccessibilityWarning {
             items.append(.separator)
         }
 

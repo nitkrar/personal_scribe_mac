@@ -39,7 +39,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             recordingHotkey: Self.testRecordingHotkey
         )
@@ -82,7 +82,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: "Long-form"
         )
         // Post-#6: brand + mode collapse into a single header at index 0.
@@ -93,7 +93,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: nil
         )
         // No em-dash / mode suffix when activeModeName is nil.
@@ -106,7 +106,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .capturing,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             recordingHotkey: Self.testRecordingHotkey
         )
@@ -123,7 +123,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .transcribing,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name
         )
         guard case let .action(item) = model.items[5] else {
@@ -138,7 +138,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .error(.modelLoadFailure),
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             recordingHotkey: Self.testRecordingHotkey
         )
@@ -156,7 +156,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .denied,
-            inputMonitoringPermission: .granted
+            accessibilityPermission: .granted
         )
 
         assertHeader(model.items[0], "Permissions needed before recording")
@@ -169,19 +169,22 @@ final class StatusItemMenuModelTests: XCTestCase {
         XCTAssertEqual(model.items[2], .separator)
     }
 
-    func testDeniedInputMonitoringPrependsPermissionsNoteAndWarningItem() {
+    /// Accessibility never reports `.denied` (untrusted maps to
+    /// `.pending`), so once onboarding is done any non-granted state
+    /// must warn — the hotkey can't work without it.
+    func testMissingAccessibilityAfterOnboardingPrependsPermissionsNoteAndWarningItem() {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .denied
+            accessibilityPermission: .pending
         )
 
         assertHeader(model.items[0], "Permissions needed before recording")
         guard case let .action(firstWarning) = model.items[1] else {
             return XCTFail("Expected second item to be a warning action")
         }
-        XCTAssertEqual(firstWarning.id, .openInputMonitoringSystemSettings)
-        XCTAssertTrue(firstWarning.title.contains("Input Monitoring"))
+        XCTAssertEqual(firstWarning.id, .openAccessibilitySystemSettings)
+        XCTAssertTrue(firstWarning.title.contains("Accessibility"))
         XCTAssertTrue(firstWarning.isEnabled)
         XCTAssertEqual(model.items[2], .separator)
     }
@@ -190,7 +193,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .denied,
-            inputMonitoringPermission: .denied
+            accessibilityPermission: .denied
         )
 
         assertHeader(model.items[0], "Permissions needed before recording")
@@ -201,22 +204,23 @@ final class StatusItemMenuModelTests: XCTestCase {
         XCTAssertEqual(first.id, .openMicrophoneSystemSettings)
 
         guard case let .action(second) = model.items[2] else {
-            return XCTFail("Expected second warning to be Input Monitoring")
+            return XCTFail("Expected second warning to be Accessibility")
         }
-        XCTAssertEqual(second.id, .openInputMonitoringSystemSettings)
+        XCTAssertEqual(second.id, .openAccessibilitySystemSettings)
 
         XCTAssertEqual(model.items[3], .separator)
     }
 
-    func testPendingDoesNotPrependWarning() {
-        // Fresh install: permission is still pending. The menu
+    func testPendingDoesNotPrependWarningBeforeOnboardingCompletes() {
+        // Fresh install: permissions are still pending. The menu
         // should NOT show a warning before the user has even been
-        // prompted — onboarding (Phase 3) covers that flow.
+        // prompted — onboarding covers that flow.
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .pending,
-            inputMonitoringPermission: .pending,
-            activeModeName: WorkflowMode.dictation.name
+            accessibilityPermission: .pending,
+            activeModeName: WorkflowMode.dictation.name,
+            isOnboardingComplete: false
         )
         // First item is the combined brand — mode header, not a warning.
         assertHeader(model.items[0], "\(AppBrand.displayName) — \(WorkflowMode.dictation.name)")
@@ -227,7 +231,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             canRetranscribeLastRecording: false
         )
@@ -245,7 +249,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             canRetranscribeLastRecording: true
         )
@@ -265,7 +269,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .denied,
-            inputMonitoringPermission: .denied
+            accessibilityPermission: .denied
         )
         let ids = model.items.compactMap { item -> StatusItemMenuModel.ActionID? in
             if case let .action(action) = item { return action.id }
@@ -278,7 +282,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name
         )
         guard case let .action(quit) = model.items.last else {
@@ -297,7 +301,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             recordingHotkey: Self.testRecordingHotkey
         )
@@ -321,7 +325,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name,
             recordingHotkey: custom
         )
@@ -362,7 +366,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             modes: [pinned, unpinned],
             currentModeID: pinned.id
         )
@@ -396,7 +400,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: nil
         )
         guard case let .header(title, _) = model.items[0] else {
@@ -483,7 +487,7 @@ final class StatusItemMenuModelTests: XCTestCase {
         let model = StatusItemMenuModel.makeUnified(
             sessionState: .idle,
             micPermission: .granted,
-            inputMonitoringPermission: .granted,
+            accessibilityPermission: .granted,
             activeModeName: WorkflowMode.dictation.name
         )
         let match = model.items.compactMap { item -> StatusItemMenuModel.ActionItem? in

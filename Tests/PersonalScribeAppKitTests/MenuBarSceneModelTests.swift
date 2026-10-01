@@ -11,7 +11,6 @@ final class MenuBarSceneModelTests: XCTestCase {
     func testInitSeedsSnapshotPermissionsFromService() async throws {
         let permissionService = FakePermissionService(statuses: [
             .microphone: .denied,
-            .inputMonitoring: .granted,
             .accessibility: .granted,
         ])
         let model = try makeModel(permissionService: permissionService)
@@ -23,7 +22,6 @@ final class MenuBarSceneModelTests: XCTestCase {
         let coordinator = try makeCoordinator()
         let permissionService = FakePermissionService(statuses: [
             .microphone: .pending,
-            .inputMonitoring: .granted,
             .accessibility: .granted,
         ])
         permissionService.statusUpdatesAfterRequest[.microphone] = .denied
@@ -73,7 +71,6 @@ final class MenuBarSceneModelTests: XCTestCase {
         let coordinator = try makeCoordinator()
         let permissionService = FakePermissionService(statuses: [
             .microphone: .pending,
-            .inputMonitoring: .granted,
             .accessibility: .granted,
         ])
         permissionService.statusUpdatesAfterRequest[.microphone] = .granted
@@ -111,7 +108,6 @@ final class MenuBarSceneModelTests: XCTestCase {
         let coordinator = try makeCoordinator()
         let permissionService = FakePermissionService(statuses: [
             .microphone: .denied,
-            .inputMonitoring: .denied,
             .accessibility: .pending,
         ])
         let model = try makeModel(
@@ -363,7 +359,6 @@ final class MenuBarSceneModelTests: XCTestCase {
         var openSettingsCallCount = 0
         let permissionService = FakePermissionService(statuses: [
             .microphone: .denied,
-            .inputMonitoring: .granted,
             .accessibility: .granted,
         ])
         let model = try makeModel(
@@ -586,7 +581,6 @@ private final class FakePermissionService: PermissionService {
     init(
         statuses: [Permission: PermissionStatus] = [
             .microphone: .granted,
-            .inputMonitoring: .granted,
             .accessibility: .granted,
         ]
     ) {

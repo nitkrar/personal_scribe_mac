@@ -76,10 +76,6 @@ public final class PermissionServiceAdapter: PermissionService {
             return URL(
                 string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
             )!
-        case .inputMonitoring:
-            return URL(
-                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
-            )!
         case .accessibility:
             return URL(
                 string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
@@ -108,19 +104,6 @@ extension MicrophonePermissionState {
     var unifiedPermissionStatus: PermissionStatus {
         switch self {
         case .notYetRequested:
-            return .pending
-        case .granted:
-            return .granted
-        case .denied:
-            return .denied
-        }
-    }
-}
-
-extension InputMonitoringPermissionState {
-    var unifiedPermissionStatus: PermissionStatus {
-        switch self {
-        case .notDetermined:
             return .pending
         case .granted:
             return .granted
