@@ -1274,9 +1274,11 @@ Extend the Phase 5 Cancel Card Undo path from `.string`-only to all `NSPasteboar
 ### #053 — 7-stage post-processing pipeline
 
 `feature` · `P2` · `parked` · `area: post-processing, memory-learning`
-*Updated 2026-04-22*
+*Updated 2026-10-02*
 
 Extend #045 Stage A's chain-of-stages architecture with named stages that add new transformation behavior: ITN → punctuation → filler removal → personal dictionary → capitalization → disfluency repair → formatter. Each stage is additive output cleanup, not a restructuring of existing logic. ITN (Inverse Text Normalization) subsumes FluidAudio `CustomPronunciation.md` path.
+
+**User request 2026-10-02 (ITN first):** dictation currently writes spoken forms verbatim in English words. Competing apps convert to written forms — "one dollar" → "$1", "twenty percent" → "20%", "march third" → "March 3", "five thirty pm" → "5:30 PM", "one two three main street" → "123 Main Street". ITN is the stage the user notices most; consider shipping it ahead of the other six. Must run after `NonSpeechMarkerFilter` (phase-1 step 102.9) and apply to the final text and live EOU chunks alike.
 
 **Depends on:** #045 Stage A (the chain architecture must exist first)
 **Legacy:** `plans/_legacy/BACKLOG_pre_migration.md` → "7-stage post-processing pipeline"
