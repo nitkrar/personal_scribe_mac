@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -48,7 +49,9 @@ RUNTIME_FRAMEWORK_RPATH = "@loader_path/../Frameworks"
 
 # Keep Stable self-signed identity for TCC persistence across rebuilds
 # (see sign() for why).
-SIGN_IDENTITY_PREFERRED = "Nitkrar Dev"
+# Per-machine self-signed identity, e.g. "nitinkum-mac Dev". Named after
+# the host so each machine's keychain cert is distinguishable.
+SIGN_IDENTITY_PREFERRED = f"{socket.gethostname().split('.')[0]} Dev"
 
 
 # --- Subprocess helpers ------------------------------------------------------
@@ -413,13 +416,8 @@ def assemble_app(binary: Path, config: str) -> None:
 # --- Signing -----------------------------------------------------------------
 
 
-def resolve_signing_identity() -> str:
+def has_signing_identity(name: str) -> bool:
     """
-    Prefer the stable self-signed identity (`Nitkrar Dev`) if present.
-    Stable identity → TCC permissions persist across rebuilds because
-    TCC keys signed apps on signing identity, not on CD hash. Ad-hoc
-    (`-`) is the fallback for fresh clones / other machines.
-
     Use `security find-identity -p codesigning` WITHOUT `-v`.
     Self-signed roots report CSSMERR_TP_NOT_TRUSTED and get filtered
     by `-v` (valid-only), but `codesign --sign` uses them fine — it
@@ -431,17 +429,87 @@ def resolve_signing_identity() -> str:
         text=True,
         check=False,
     )
-    if f'"{SIGN_IDENTITY_PREFERRED}"' in (result.stdout or ""):
+    return f'"{name}"' in (result.stdout or "")
+
+
+def create_signing_identity(name: str) -> None:
+    """
+    Generate a self-signed code-signing cert + key and import it into
+    the login keychain. One-time per machine. Uses /usr/bin/openssl
+    (LibreSSL): its PKCS#12 output uses the legacy encryption that
+    `security import` accepts; Homebrew OpenSSL 3 defaults don't.
+    `-T /usr/bin/codesign` pre-authorizes codesign so signing doesn't
+    prompt for keychain access.
+    """
+    print(f"==> Creating self-signed code-signing identity '{name}' in login keychain...")
+    keychain = Path.home() / "Library" / "Keychains" / "login.keychain-db"
+    with tempfile.TemporaryDirectory(prefix="personal_scribe-cert.") as tmp:
+        tmp_dir = Path(tmp)
+        config = tmp_dir / "cert.cnf"
+        config.write_text(
+            "[req]\n"
+            "distinguished_name = dn\n"
+            "x509_extensions = ext\n"
+            "prompt = no\n"
+            "[dn]\n"
+            f"CN = {name}\n"
+            "[ext]\n"
+            "basicConstraints = critical, CA:false\n"
+            "keyUsage = critical, digitalSignature\n"
+            "extendedKeyUsage = critical, codeSigning\n"
+        )
+        key, cert, p12 = tmp_dir / "key.pem", tmp_dir / "cert.pem", tmp_dir / "id.p12"
+        # Throwaway transport password: `security import` rejects
+        # empty-password PKCS#12 on recent macOS.
+        password = os.urandom(16).hex()
+        run(
+            [
+                "/usr/bin/openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                "-days", "3650", "-config", str(config),
+                "-keyout", str(key), "-out", str(cert),
+            ],
+            capture=True,
+        )
+        run(
+            [
+                "/usr/bin/openssl", "pkcs12", "-export",
+                "-inkey", str(key), "-in", str(cert), "-out", str(p12),
+                "-passout", f"pass:{password}",
+            ],
+            capture=True,
+        )
+        run(
+            [
+                "security", "import", str(p12), "-k", str(keychain),
+                "-P", password, "-T", "/usr/bin/codesign",
+            ],
+            capture=True,
+        )
+
+
+def resolve_signing_identity() -> str:
+    """
+    Prefer the stable per-machine self-signed identity, creating it
+    on first use. Stable identity → TCC permissions persist across
+    rebuilds because TCC keys signed apps on signing identity, not on
+    CD hash. Ad-hoc (`-`) is the fallback if creation fails.
+    """
+    if not has_signing_identity(SIGN_IDENTITY_PREFERRED):
+        try:
+            create_signing_identity(SIGN_IDENTITY_PREFERRED)
+        except subprocess.CalledProcessError as error:
+            print(
+                f"warning: creating '{SIGN_IDENTITY_PREFERRED}' failed: "
+                f"{' '.join(error.cmd[:3])} → {(error.stderr or '').strip()}",
+                file=sys.stderr,
+            )
+    if has_signing_identity(SIGN_IDENTITY_PREFERRED):
         return SIGN_IDENTITY_PREFERRED
     print(
-        f"==> '{SIGN_IDENTITY_PREFERRED}' codesigning identity not found — "
+        f"==> '{SIGN_IDENTITY_PREFERRED}' codesigning identity unavailable — "
         "falling back to ad-hoc."
     )
-    print(
-        "    (Permissions will reset each rebuild. Create the cert in "
-        "Keychain Access to preserve TCC grants across rebuilds on this "
-        "machine.)"
-    )
+    print("    (Permissions will reset each rebuild.)")
     return "-"
 
 
