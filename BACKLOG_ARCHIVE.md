@@ -1062,7 +1062,7 @@ Active follow-ups split off as tickets: **#104** (whisper.cpp dedup tracker — 
 
 ---
 
-## Archived 2026-10-02: 11 tickets closed (shipped audit + stale-backlog merge)
+## Archived 2026-10-02: 13 tickets closed (shipped audit + stale-backlog merge)
 
 Closing evidence is on each ticket's `**Closed:**` line where the audit added one; #027 and #033 were already marked done.
 
@@ -1610,3 +1610,42 @@ Idle release working as designed (req-0050, `1c23cfa`). Verified empirically 202
 **No action.** Keep as ticket so the empirical numbers don't get lost.
 
 **Legacy:** `plans/BACKLOG.md` #042 (ID already used in `BACKLOG_ARCHIVE.md`; renumbered 2026-10-02)
+
+---
+
+### #105 — WhisperKit streaming dogfood verification
+
+`feature` · `P2` · `done` · `stage: verify` · `area: transcription, streaming, dogfood`
+*Updated 2026-10-02*
+
+The WhisperKit streaming adapter (rebuild bucket 6, `dd100ee` + `322a4da`) landed. Source + tests green (1496/0/1) but no DMG-built dogfood exercise yet. Built app at `/Applications/Ninimma.app` is on `11c0f99` (one commit behind #101).
+
+**Verification checklist:**
+- Rebuild + sign + reinstall DMG.
+- Switch active streaming model to a WhisperKit descriptor in AI Models tab.
+- Run streaming dictation: confirm `.endOfUtterance` chunks paste cleanly via live cursor into focused app (confirmed-delta-only emission means no parallel-lane duplicates).
+- Confirm live card updates with unconfirmed-tail `.partial` events during speech, then committed segments on confirmation.
+- Run stop-time second pass: confirm force-rule reuses the same WhisperKit instance (no second download/load).
+- Regression: switch back to Parakeet streaming and confirm it still works as before the #100 and WhisperKit-streaming catalog changes.
+- Regression: switch back to whisper.cpp streaming and confirm the live-cursor gate still suppresses EoU paste.
+
+**Reference:** plans/101_whisperkit_streaming/HERMES_BRIEF.md; CODEX_RESEARCH.md.
+
+**Legacy:** `plans/BACKLOG.md` #040 (ID already used in `BACKLOG_ARCHIVE.md`; renumbered 2026-10-02)
+
+**Closed:** 2026-10-02 — user ran WhisperKit streaming dictation in the installed app; the end-to-end benchmark (`StreamingSecondPassBenchmarkTests`) also ran WhisperKit live + second pass on real models.
+
+---
+
+### #106 — Delete `AppEntryPointTests.testPersonalScribeAppMainBuildsSceneModelFromComposition` skip
+
+`refactor` · `P3` · `done` · `stage: impl` · `area: tests`
+*Updated 2026-10-02*
+
+Test skipped since 2026-04-20 because `@StateObject` lifetime isn't retained in unit-test context. `MenuBarFlowIntegrationTests.testRecordStopTranscribeIdleFlowPublishesLatestResult` already covers the composition end-to-end without depending on `@StateObject` lifetime, so the skipped test is redundant.
+
+**Action:** delete the test (not unskip, not refactor). Full suite expected to drop from 1496 pass / 1 skip → 1495 pass / 0 skip.
+
+**Legacy:** `plans/BACKLOG.md` #041 (ID already used in `BACKLOG_ARCHIVE.md`; renumbered 2026-10-02)
+
+**Closed:** 2026-10-02 — `AppEntryPointTests.swift` deleted; `MenuBarFlowIntegrationTests.testRecordStopTranscribeIdleFlowPublishesLatestResult` covers the flow.

@@ -611,41 +611,6 @@ Repro with the opt-in `StreamingSecondPassBenchmarkTests` (`NINIMMA_BENCH_WAV=�
 
 ---
 
-### #105 — WhisperKit streaming dogfood verification
-
-`feature` · `P2` · `open` · `stage: verify` · `area: transcription, streaming, dogfood`
-*Updated 2026-05-25*
-
-The WhisperKit streaming adapter (rebuild bucket 6, `dd100ee` + `322a4da`) landed. Source + tests green (1496/0/1) but no DMG-built dogfood exercise yet. Built app at `/Applications/Ninimma.app` is on `11c0f99` (one commit behind #101).
-
-**Verification checklist:**
-- Rebuild + sign + reinstall DMG.
-- Switch active streaming model to a WhisperKit descriptor in AI Models tab.
-- Run streaming dictation: confirm `.endOfUtterance` chunks paste cleanly via live cursor into focused app (confirmed-delta-only emission means no parallel-lane duplicates).
-- Confirm live card updates with unconfirmed-tail `.partial` events during speech, then committed segments on confirmation.
-- Run stop-time second pass: confirm force-rule reuses the same WhisperKit instance (no second download/load).
-- Regression: switch back to Parakeet streaming and confirm it still works as before the #100 and WhisperKit-streaming catalog changes.
-- Regression: switch back to whisper.cpp streaming and confirm the live-cursor gate still suppresses EoU paste.
-
-**Reference:** plans/101_whisperkit_streaming/HERMES_BRIEF.md; CODEX_RESEARCH.md.
-
-**Legacy:** `plans/BACKLOG.md` #040 (ID already used in `BACKLOG_ARCHIVE.md`; renumbered 2026-10-02)
-
----
-
-### #106 — Delete `AppEntryPointTests.testPersonalScribeAppMainBuildsSceneModelFromComposition` skip
-
-`refactor` · `P3` · `open` · `stage: impl` · `area: tests`
-*Updated 2026-05-25*
-
-Test skipped since 2026-04-20 because `@StateObject` lifetime isn't retained in unit-test context. `MenuBarFlowIntegrationTests.testRecordStopTranscribeIdleFlowPublishesLatestResult` already covers the composition end-to-end without depending on `@StateObject` lifetime, so the skipped test is redundant.
-
-**Action:** delete the test (not unskip, not refactor). Full suite expected to drop from 1496 pass / 1 skip → 1495 pass / 0 skip.
-
-**Legacy:** `plans/BACKLOG.md` #041 (ID already used in `BACKLOG_ARCHIVE.md`; renumbered 2026-10-02)
-
----
-
 ### #088 — Narrow FluidAudio model download to runtime-needed files
 
 `refactor` · `P2` · `open` · `area: transcription, models, downloads`
