@@ -16,7 +16,7 @@ struct WhisperCppArtifactStore: @unchecked Sendable {
         let modelFileURL = try self.modelFileURL()
         let temporaryFileURL = temporaryModelFileURL(for: modelFileURL)
 
-        guard !Self.modelArtifactsAreValid(
+        guard !ModelArtifactValidation.areValid(
             in: modelDirectory,
             descriptor: descriptor,
             fileManager: fileManager
@@ -139,44 +139,5 @@ struct WhisperCppArtifactStore: @unchecked Sendable {
         if fileManager.fileExists(atPath: modelFileURL.path) {
             try fileManager.removeItem(at: modelFileURL)
         }
-    }
-
-    static func modelArtifactsAreValid(
-        in directory: URL,
-        descriptor: ModelDescriptor,
-        fileManager: FileManager
-    ) -> Bool {
-        let requiredPaths = descriptor.requiredRelativePaths.map {
-            directory.appendingPathComponent($0, isDirectory: false)
-        }
-
-        guard requiredPaths.allSatisfy({ fileManager.fileExists(atPath: $0.path) }) else {
-            return false
-        }
-
-        for path in requiredPaths where path.lastPathComponent == "coremldata.bin" {
-            guard
-                let attributes = try? fileManager.attributesOfItem(atPath: path.path),
-                let size = attributes[.size] as? NSNumber,
-                size.intValue > 0
-            else {
-                return false
-            }
-        }
-
-        for path in requiredPaths where path.pathExtension == "json" {
-            guard
-                let data = try? Data(contentsOf: path),
-                !data.isEmpty,
-                let first = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .first,
-                first == "{" || first == "["
-            else {
-                return false
-            }
-        }
-
-        return true
     }
 }

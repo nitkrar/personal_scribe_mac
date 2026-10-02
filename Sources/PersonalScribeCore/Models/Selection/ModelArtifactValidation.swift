@@ -3,18 +3,18 @@ import Foundation
 /// Single on-disk validity check for a descriptor's model artifacts:
 /// every `requiredRelativePaths` entry exists, `coremldata.bin` files
 /// are non-empty, and JSON files parse as an object/array. Lives in
-/// Core so both the provider (Session: "is it downloaded?" for the UI)
-/// and adapters (Transcription: skip the network download step at
-/// prepare time) use the same rule.
+/// Core so the provider (Session: "is it downloaded?" for the UI) and
+/// every adapter (Transcription: skip the download step at prepare
+/// time — Parakeet, WhisperKit, whisper.cpp) use the same rule.
 public enum ModelArtifactValidation {
     public static func areValid(
         in directory: URL,
-        descriptor: ModelDescriptor
+        descriptor: ModelDescriptor,
+        fileManager: FileManager = .default
     ) -> Bool {
         let requiredPaths = descriptor.requiredRelativePaths.map {
             directory.appendingPathComponent($0, isDirectory: false)
         }
-        let fileManager = FileManager.default
 
         guard requiredPaths.allSatisfy({ fileManager.fileExists(atPath: $0.path) }) else {
             return false

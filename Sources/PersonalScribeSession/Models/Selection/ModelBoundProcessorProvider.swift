@@ -137,7 +137,7 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
         guard let canonical = registeredDescriptorsByID[descriptor.id] else {
             return false
         }
-        return ModelArtifactFilesystem.modelArtifactsAreValid(
+        return ModelArtifactValidation.areValid(
             in: modelDirectory(for: canonical),
             descriptor: canonical
         )
@@ -269,12 +269,5 @@ private enum ModelArtifactFilesystem {
             .url(for: .models)
             .appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
             .standardizedFileURL
-    }
-
-    static func modelArtifactsAreValid(
-        in directory: URL,
-        descriptor: ModelDescriptor
-    ) -> Bool {
-        ModelArtifactValidation.areValid(in: directory, descriptor: descriptor)
     }
 }
