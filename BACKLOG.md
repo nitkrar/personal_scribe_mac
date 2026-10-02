@@ -906,6 +906,26 @@ back-to-back case. Surface the trade-off in adapter logging
 
 ---
 
+### #101 — Unified window buried after a full-screen Space round-trip
+
+`bug` · `P2` · `open` · `area: window, spaces`
+*Opened 2026-10-02*
+
+Repro: open the Ninimma window on the desktop Space, swipe to a full-screen app (iTerm) and back. The window shows for ~1–2s during the transition, then ends up behind another app's window (it is still on the desktop Space per Mission Control). Happens with Background mode on and off; in Background mode only the menu bar recovers it.
+
+Findings (diagnostics logs, 2026-10-02):
+- `NSWorkspace.activeSpaceDidChangeNotification` arrives *before* `didResignActive`, and by resign time the window is already not key/main — so the #041 recovery (`pendingRestore` armed on key/main at resign) never arms.
+- On return macOS activates another app on that desktop (Chrome), not Ninimma, so the activation-based restore never fires either.
+- Removing `.fullScreenAuxiliary` (window `[.moveToActiveSpace]` only) did NOT help; activation policy (Background on/off) made no difference.
+
+Tried: arm on "Ninimma was active when the Space was left" and raise the window on return (`plans/backlog/101-space-return-restore.patch`, incl. `unified_window_space_changed` / `unified_window_app_resigned` diagnostics). Works, but visibly flickers (macOS raises Chrome first, then we raise Ninimma). Known gap: leaving from Ninimma then ⌘-Tab to another app on the desktop would also restore.
+
+Next ideas: find what macOS uses to pick the post-return frontmost app (window ordering / `NSWindow.isExcludedFromWindowsMenu`, `.managed` behavior, a second key window like the pill panel stealing frontmost status); raise earlier (on `NSWorkspace.activeSpaceDidChange` before the animation settles) or via `orderFrontRegardless` without app activation to cut the flicker.
+
+Decided (2026-10-02): opening from the menu bar while in a full-screen app may switch to the desktop Space — acceptable to the user.
+
+---
+
 
 
 `refactor` · `P2` · `open` · `area: transcription, models, modes, recipes`
