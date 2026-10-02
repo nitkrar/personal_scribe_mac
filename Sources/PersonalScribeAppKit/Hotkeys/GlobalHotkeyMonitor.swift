@@ -1,8 +1,7 @@
-/// Global keyboard monitoring (the active CG event tap) requires
-/// Accessibility permission in System Settings -> Privacy & Security.
-/// Accessibility trust also grants keyboard listen access, so no separate
-/// Input Monitoring permission is requested. Until it's granted the tap
-/// fails and the monitor retries (see `scheduleTapRetries`).
+/// Global recording hotkey + per-mode hotkeys. Each binding is
+/// registered with macOS as a hot key through `KeyEventRouter`
+/// (`registerGlobalChord`), so it works while another app is frontmost
+/// without any keyboard tap or Accessibility permission (DECISIONS #25).
 ///
 /// # Gesture model (pill UX spec §3, 2026-04-21)
 ///
@@ -31,11 +30,6 @@ public final class GlobalHotkeyMonitor {
         _ action: @escaping @MainActor () -> Void
     ) -> HoldCanceller
     public typealias HoldCanceller = @MainActor () -> Void
-    /// Repeating scheduler for tap-install retries; returns a canceller.
-    public typealias TapRetryScheduler = @MainActor (
-        _ interval: TimeInterval,
-        _ tick: @escaping @MainActor () -> Void
-    ) -> HoldCanceller
 
     /// Threshold (seconds) separating tap vs hold. Matches spec §3
     /// ("press + release < 300 ms" = tap).
@@ -63,17 +57,14 @@ public final class GlobalHotkeyMonitor {
     private let holdThreshold: TimeInterval
     private let doubleTapWindow: TimeInterval
     private let scheduleHoldDetection: HoldScheduler
-    private let scheduleTapRetry: TapRetryScheduler
-    private var tapRetryCanceller: HoldCanceller?
-    private let permissionService: any PermissionService
     private let logger: PersonalScribeLogger
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
     private let router: KeyEventRouter
 
     /// #028 — RAII registrations on the shared `KeyEventRouter`.
     /// `localToken` covers events delivered to Ninimma (swallow on
-    /// match); `globalToken` covers events delivered to other apps via
-    /// the CG tap (swallow on match — fixes the `÷÷÷÷` leak).
+    /// match); `globalToken` covers registered chords pressed in other
+    /// apps (macOS hot keys, already swallowed — no `÷÷÷÷` leak).
     private var localToken: KeyEventRouterToken?
     private var globalToken: KeyEventRouterToken?
     /// The recording + per-mode chords, registered with the router so
@@ -123,14 +114,7 @@ public final class GlobalHotkeyMonitor {
                 workItem.cancel()
             }
         },
-        scheduleTapRetry: @escaping TapRetryScheduler = { interval, tick in
-            let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-                MainActor.assumeIsolated { tick() }
-            }
-            return { timer.invalidate() }
-        },
-        permissionService: (any PermissionService)? = nil,
-        router: KeyEventRouter? = nil,
+        router: KeyEventRouter,
         logger: PersonalScribeLogger,
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
     ) {
@@ -141,13 +125,7 @@ public final class GlobalHotkeyMonitor {
         self.holdThreshold = holdThreshold
         self.doubleTapWindow = doubleTapWindow
         self.scheduleHoldDetection = scheduleHoldDetection
-        self.scheduleTapRetry = scheduleTapRetry
-        self.permissionService = permissionService ?? AppKitPermissionService()
-        // Tests that don't exercise the lifecycle pass `router: nil`
-        // and rely on the gesture-machine entry points (`handle(event:)`,
-        // `shouldSwallowLocal(_:)`) directly. A fresh, never-started
-        // `KeyEventRouter` is harmless for that mode.
-        self.router = router ?? KeyEventRouter(logger: logger)
+        self.router = router
         self.logger = logger
         self.logSink = logSink
     }
@@ -170,22 +148,10 @@ public final class GlobalHotkeyMonitor {
         resetState()
 
         // #028: register two deciders on the shared router — one for
-        // events delivered to other apps (CG tap path; swallows the
-        // `÷÷÷÷` leak during hold) and one for events delivered to
-        // Ninimma itself (local NSEvent path; needed so the hotkey
-        // works when our window is frontmost). Both share the same
-        // gesture-machine + swallow logic.
-        if router.needsAccessibilityForHotkeys && !router.isTapActive {
-            // Router's tap install failed (Accessibility missing, or
-            // transient OS failure). Surface the
-            // warning so the menu bar can prompt the user, then keep
-            // retrying so a grant made while running takes effect
-            // without a relaunch. Local NSEvent path keeps working
-            // meanwhile — hotkey still fires when Ninimma is frontmost.
-            handleMonitorInstallFailure()
-            scheduleTapRetries()
-        }
-
+        // registered chords pressed in other apps (macOS hot keys,
+        // already swallowed — fixes the `÷÷÷÷` leak during hold) and one
+        // for events delivered to Ninimma itself (local NSEvent path).
+        // Both share the same gesture-machine + swallow logic.
         let decider: @MainActor (HotkeyEvent) -> Bool = { [weak self] event in
             guard let self else { return false }
             self.handle(event: event)
@@ -212,57 +178,7 @@ public final class GlobalHotkeyMonitor {
         }
     }
 
-    static let tapRetryInterval: TimeInterval = 1.0
-    static let tapRecoveredMessage = "Global hotkey tap recovered after permission grant"
-
-    /// Emits the install-failure warning. The active CG tap needs only
-    /// Accessibility: macOS grants keyboard listen access to
-    /// Accessibility-trusted apps (verified 2026-10-02 — hotkey works
-    /// with no Input Monitoring entry at all), so it is the one
-    /// permission to name.
-    internal func handleMonitorInstallFailure() {
-        let message = Self.monitorInstallFailureMessage(
-            accessibility: permissionService.status(for: .accessibility)
-        )
-        logger.error(message)
-        logSink?("error", message)
-    }
-
-    internal static func monitorInstallFailureMessage(accessibility: PermissionStatus) -> String {
-        guard accessibility != .granted else {
-            return "Global hotkey monitor failed to register despite Accessibility granted "
-                + "— likely a transient system failure; retrying."
-        }
-        return "Global hotkey monitor failed to register — Accessibility permission \(accessibility). "
-            + "Grant access in System Settings -> Privacy & Security -> Accessibility; "
-            + "the hotkey recovers automatically once granted."
-    }
-
-    /// Retry ticks are silent until recovery: they only attempt the tap
-    /// once Accessibility reports granted (so no TCC prompt churn)
-    /// and log once, at info, when it comes back.
-    private func scheduleTapRetries() {
-        tapRetryCanceller?()
-        tapRetryCanceller = scheduleTapRetry(Self.tapRetryInterval) { [weak self] in
-            self?.retryTapTick()
-        }
-    }
-
-    private func retryTapTick() {
-        guard permissionService.status(for: .accessibility) == .granted,
-              router.retryTapIfNeeded()
-        else {
-            return
-        }
-        tapRetryCanceller?()
-        tapRetryCanceller = nil
-        logger.info(Self.tapRecoveredMessage)
-        logSink?("info", Self.tapRecoveredMessage)
-    }
-
     public func stop() {
-        tapRetryCanceller?()
-        tapRetryCanceller = nil
         // RAII deinit on each token Task-dispatches the actual
         // unregister. Setting to nil drops our strong refs.
         localToken = nil
@@ -317,7 +233,7 @@ public final class GlobalHotkeyMonitor {
         }
     }
 
-    /// Swallow decision for the CGEventTap (global path). Same logic as
+    /// Swallow decision shared by both paths. Same logic as
     /// `shouldSwallowLocal` — swallow matching keyDown (setting the
     /// balance flag), swallow matching-keyCode keyUp only when the
     /// prior keyDown was swallowed, pass flagsChanged through. Both

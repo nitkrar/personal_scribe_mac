@@ -81,7 +81,7 @@ keystrokes no longer leak into focused apps.
   tap cleanly. Re-verified 2026-10-02 with no Input Monitoring entry at
   all (hotkey works; `IOHIDCheckAccess` reports granted under
   Accessibility trust), so the Input Monitoring permission was removed
-  from the app entirely — see MV-SHORT-7 for the Accessibility path.
+  from the app entirely — see MV-SHORT-7 (hotkeys need no Accessibility).
 - [x] **MV-HK-11** Press a plain `/` (no option) in another app's text
   field. The `/` character types normally — tap swallow is scoped to
   the matching hotkey, not all keyDowns. Regression guard for the
@@ -185,11 +185,9 @@ warning, live apply (no relaunch).
   shortcut — and the **Set** button is enabled. Confirm and verify the
   new binding fires. Re-enable the system shortcut after the test.
 
-- [ ] **MV-SHORT-7 — Hotkey recovers after a permission grant, no relaunch:**
-  Turn Ninimma off in System Settings → Privacy & Security →
-  Accessibility, relaunch with Background mode on (no window open).
-  `errors.log` names `Accessibility (…)` as the missing permission.
-  Re-enable Ninimma under Accessibility without relaunching or opening
-  any Ninimma window; within ~1s the recording hotkey works from
-  another app, and `diagnostics.log` shows
-  `Global hotkey tap recovered after permission grant`.
+- [ ] **MV-SHORT-7 — Hotkeys don't depend on Accessibility (DECISIONS #25):**
+  With Ninimma running, switch it off under System Settings → Privacy &
+  Security → Accessibility. Typing in every app stays responsive, and
+  ⌥/ still starts and stops a recording; the transcript lands on the
+  clipboard with "Copied · enable Accessibility to auto-paste". Switch
+  Accessibility back on; the next dictation auto-pastes.

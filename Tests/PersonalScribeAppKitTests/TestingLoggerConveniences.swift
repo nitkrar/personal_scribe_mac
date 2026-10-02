@@ -12,27 +12,9 @@ private enum AppKitTestingDiagnostics {
 }
 
 @MainActor
-extension HotkeyEventTap {
-    convenience init(
-        decider: @escaping Decider,
-        installer: @escaping Installer = { callback, userInfo in
-            CGHotkeyEventTapInstaller.createTap(callback: callback, userInfo: userInfo)
-        }
-    ) {
-        self.init(
-            decider: decider,
-            installer: installer,
-            logger: AppKitTestingDiagnostics.logger()
-        )
-    }
-}
-
-@MainActor
 extension KeyEventRouter {
     convenience init(
-        tapFactory: @escaping TapFactory = { decider in
-            HotkeyEventTap(decider: decider)
-        },
+        chordRegistrar: any HotkeyChordRegistering = FakeChordRegistrar(),
         installLocal: @escaping LocalInstaller = { mask, handler in
             NSEvent.addLocalMonitorForEvents(matching: mask, handler: handler)
         },
@@ -44,7 +26,7 @@ extension KeyEventRouter {
         }
     ) {
         self.init(
-            tapFactory: tapFactory,
+            chordRegistrar: chordRegistrar,
             installLocal: installLocal,
             installGlobal: installGlobal,
             uninstall: uninstall,
@@ -73,8 +55,6 @@ extension GlobalHotkeyMonitor {
                 workItem.cancel()
             }
         },
-        scheduleTapRetry: @escaping TapRetryScheduler = { _, _ in {} },
-        permissionService: (any PermissionService)? = nil,
         router: KeyEventRouter? = nil,
         logSink: (@Sendable (_ level: String, _ message: String) -> Void)? = nil
     ) {
@@ -86,9 +66,7 @@ extension GlobalHotkeyMonitor {
             holdThreshold: holdThreshold,
             doubleTapWindow: doubleTapWindow,
             scheduleHoldDetection: scheduleHoldDetection,
-            scheduleTapRetry: scheduleTapRetry,
-            permissionService: permissionService,
-            router: router,
+            router: router ?? KeyEventRouter(),
             logger: AppKitTestingDiagnostics.logger(),
             logSink: logSink
         )

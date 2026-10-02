@@ -180,53 +180,17 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.statusLabel(for: .accessibility), "Granted")
     }
 
-    // MARK: - Accessibility hotkey hint (mockup-gaps C.7)
+    // MARK: - Accessibility subtitle
 
-    /// Accessibility subtitle reads `"Required for global hotkey <hint> and paste"`
-    /// where `hint` comes from `HotkeyShortcutFormatter.displayString`
-    /// applied to the currently-bound `HotkeyPreference`. Default
-    /// preference (option + `/`) formats to `⌥/`, so the default
-    /// subtitle is `"Required for global hotkey ⌥/ and paste"`. The
-    /// hotkey's event tap needs Accessibility (no Input Monitoring).
-    func testAccessibilitySubtitleEmbedsDefaultHotkeyHint() {
-        let defaults = Self.ephemeralUserDefaults()
-        let service = FakePermissionService()
+    /// Hotkeys are registered with macOS and need no permission
+    /// (DECISIONS #25); Accessibility is only needed to post ⌘V.
+    func testAccessibilitySubtitleNamesAutoPasteOnly() {
         let viewModel = PermissionsSubTabViewModel(
-            permissionService: service,
-            defaults: defaults,
+            permissionService: FakePermissionService(),
             openURL: { _ in }
         )
 
-        let expectedHint = HotkeyShortcutFormatter.displayString(for: .default)
-        XCTAssertEqual(
-            viewModel.subtitle(for: .accessibility),
-            "Required for global hotkey \(expectedHint) and paste"
-        )
-    }
-
-    /// Custom hotkey preference flows into the subtitle.
-    func testAccessibilitySubtitleReflectsCustomHotkey() {
-        let defaults = Self.ephemeralUserDefaults()
-        let custom = HotkeyPreference(
-            keyCode: 49, // spacebar
-            tapCount: 1,
-            modifiers: NSEvent.ModifierFlags.control.rawValue
-        )
-        custom.persist(to: defaults)
-
-        let service = FakePermissionService()
-        let viewModel = PermissionsSubTabViewModel(
-            permissionService: service,
-            defaults: defaults,
-            openURL: { _ in }
-        )
-
-        let expectedHint = HotkeyShortcutFormatter.displayString(for: custom)
-        XCTAssertEqual(
-            viewModel.subtitle(for: .accessibility),
-            "Required for global hotkey \(expectedHint) and paste"
-        )
-        XCTAssertEqual(viewModel.recordingHotkey, custom)
+        XCTAssertEqual(viewModel.subtitle(for: .accessibility), "Required to auto-paste transcripts")
     }
 
     // MARK: - Subtitle copy (mockup-gaps C.6)

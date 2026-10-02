@@ -28,35 +28,10 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         modifiers: NSEvent.ModifierFlags.option.rawValue
     )
 
-    /// Installer that returns a sentinel `CFMachPort` for tests that exercise
-    /// `start()` lifecycle assertions. The default installer hits
-    /// `CGEvent.tapCreate`, which fails in test processes without Input
-    /// Monitoring permission — leaving the monitor's `tap` nil and
-    /// `isActive` false, which masquerades as a real bug in the lifecycle
-    /// path. Tests that don't care about real CGEventTap behaviour use this
-    /// to validate the wiring/state-machine instead.
-    private static func succeedingInstaller() -> HotkeyEventTap.Installer {
-        return { _, _ in
-            CFMachPortCreate(
-                kCFAllocatorDefault,
-                { _, _, _, _ in },
-                nil,
-                nil
-            )
-        }
-    }
-
-    /// Build a `KeyEventRouter` whose CG tap install will succeed
-    /// (sentinel `CFMachPort`) and whose NSEvent install/uninstall
-    /// no-ops. Used by lifecycle tests that call `monitor.start()` —
-    /// `monitor.start()` registers deciders on the router; the router's
-    /// `start()` is exercised so its `isTapActive` returns true.
+    /// Router with a fake chord registrar and no-op NSEvent installers.
     @MainActor
     private static func makeStubRouter() -> KeyEventRouter {
         let router = KeyEventRouter(
-            tapFactory: { decider in
-                HotkeyEventTap(decider: decider, installer: succeedingInstaller())
-            },
             installLocal: { _, _ in NSObject() },
             installGlobal: { _, _ in NSObject() },
             uninstall: { _ in }
@@ -337,81 +312,6 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
         XCTAssertEqual(holdStarts, 1)
     }
 
-    // MARK: - Permission-failure logging (unchanged from Issue 4)
-
-    func testInstallFailureMessageNamesMissingAccessibility() {
-        let permissionService = FakePermissionService(
-            statuses: [.accessibility: .pending]
-        )
-        let sink = CapturingLogSink()
-        let monitor = GlobalHotkeyMonitor(
-            onToggle: {},
-            permissionService: permissionService,
-            logSink: sink.capture
-        )
-
-        monitor.handleMonitorInstallFailure()
-
-        let captured = sink.snapshot()
-        XCTAssertEqual(captured.count, 1)
-        XCTAssertEqual(captured.first?.level, "error")
-        XCTAssertTrue(captured.first?.message.contains("Accessibility permission pending") == true)
-        XCTAssertFalse(captured.first?.message.contains("Input Monitoring") == true)
-    }
-
-    func testInstallFailureMessageReportsTransientFailureWhenAccessibilityGranted() {
-        let message = GlobalHotkeyMonitor.monitorInstallFailureMessage(accessibility: .granted)
-        XCTAssertTrue(message.contains("despite Accessibility granted"))
-    }
-
-    func testTapRecoversOnceAccessibilityIsGranted() {
-        var installerAttempts = 0
-        var tapAllowed = false
-        let router = KeyEventRouter(
-            tapFactory: { decider in
-                HotkeyEventTap(decider: decider, installer: { callback, userInfo in
-                    installerAttempts += 1
-                    return tapAllowed ? Self.succeedingInstaller()(callback, userInfo) : nil
-                })
-            },
-            installLocal: { _, _ in NSObject() },
-            installGlobal: { _, _ in NSObject() },
-            uninstall: { _ in }
-        )
-        router.start()
-        let permissionService = FakePermissionService(
-            statuses: [.accessibility: .pending]
-        )
-        let sink = CapturingLogSink()
-        var retryTick: (@MainActor () -> Void)?
-        var retryCancelled = false
-        let monitor = GlobalHotkeyMonitor(
-            onToggle: {},
-            scheduleTapRetry: { _, tick in
-                retryTick = tick
-                return { retryCancelled = true }
-            },
-            permissionService: permissionService,
-            router: router,
-            logSink: sink.capture
-        )
-
-        monitor.start()
-        XCTAssertNotNil(retryTick, "failed tap install must schedule retries")
-
-        retryTick?()
-        XCTAssertEqual(installerAttempts, 1, "no tap attempt while Accessibility is missing")
-
-        permissionService.set(.accessibility, .granted)
-        tapAllowed = true
-        retryTick?()
-
-        XCTAssertTrue(router.isTapActive)
-        XCTAssertTrue(retryCancelled)
-        XCTAssertEqual(sink.snapshot().last?.level, "info")
-        XCTAssertTrue(sink.snapshot().last?.message.contains("recovered") == true)
-    }
-
     // MARK: - Bug #4 — local monitor for in-app key events
 
     /// `NSEvent.addGlobalMonitorForEvents` only fires when the event is
@@ -590,45 +490,6 @@ final class GlobalHotkeyMonitorTests: XCTestCase {
             timestamp: 1.0
         )
         XCTAssertFalse(monitor.shouldSwallowLocal(event))
-    }
-
-    func testStartContinuesWithLocalDeciderWhenTapInstallFails() {
-        // Post-#028: the router owns the CG tap. When tap install
-        // fails (Accessibility not granted), the router's NSEvent
-        // monitors still install. GlobalHotkeyMonitor.start() routes
-        // the failure signal through handleMonitorInstallFailure but
-        // continues to register both deciders — the local decider is
-        // still useful for events delivered to Ninimma when the
-        // window is frontmost.
-        var installerAttempts = 0
-        let failingInstaller: HotkeyEventTap.Installer = { _, _ in
-            installerAttempts += 1
-            return nil
-        }
-        let router = KeyEventRouter(
-            tapFactory: { decider in
-                HotkeyEventTap(decider: decider, installer: failingInstaller)
-            },
-            installLocal: { _, _ in NSObject() },
-            installGlobal: { _, _ in NSObject() },
-            uninstall: { _ in }
-        )
-        XCTAssertFalse(router.start(), "Stub installer returns nil → tap install fails")
-        XCTAssertFalse(router.isTapActive)
-
-        let monitor = GlobalHotkeyMonitor(
-            onToggle: {},
-            router: router
-        )
-
-        monitor.start()
-
-        XCTAssertEqual(installerAttempts, 1)
-        // Both tokens are registered on the router (local + global)
-        // even though the global path won't dispatch through a failed
-        // tap — the local-NSEvent path stays usable.
-        XCTAssertTrue(monitor.isLocalMonitorActive)
-        XCTAssertTrue(monitor.isGlobalMonitorActive)
     }
 
     // MARK: - #017 live-apply (updateRecordingHotkey)

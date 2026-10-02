@@ -1,5 +1,4 @@
 import AppKit
-import CoreGraphics
 import XCTest
 @testable import PersonalScribeAppKit
 
@@ -23,71 +22,15 @@ final class KeyEventRouterTests: XCTestCase {
         )
     }
 
-    /// Build a router whose CG tap is wired through a fake installer.
-    /// `installerReturnsNil` simulates Accessibility not granted so we
-    /// can exercise both branches of `start()`.
     private func makeRouter(
-        installerReturnsNil: Bool = false,
         localInstaller: @escaping KeyEventRouter.LocalInstaller = { _, _ in NSObject() },
         globalInstaller: @escaping KeyEventRouter.GlobalInstaller = { _, _ in NSObject() }
     ) -> KeyEventRouter {
         KeyEventRouter(
-            tapFactory: { decider in
-                HotkeyEventTap(
-                    decider: decider,
-                    installer: { _, _ in
-                        installerReturnsNil ? nil : Self.makeFakePort()
-                    }
-                )
-            },
             installLocal: localInstaller,
             installGlobal: globalInstaller,
             uninstall: { _ in }
         )
-    }
-
-    private static func makeFakePort() -> CFMachPort {
-        var context = CFMachPortContext(
-            version: 0,
-            info: nil,
-            retain: nil,
-            release: nil,
-            copyDescription: nil
-        )
-        return CFMachPortCreate(nil, { _, _, _, _ in }, &context, nil)!
-    }
-
-    // MARK: - Tap retry
-
-    func testRetryTapIfNeededInstallsTapAfterInitialFailureWithoutDuplicates() {
-        var installerAttempts = 0
-        var permissionGranted = false
-        let router = KeyEventRouter(
-            tapFactory: { decider in
-                HotkeyEventTap(
-                    decider: decider,
-                    installer: { _, _ in
-                        installerAttempts += 1
-                        return permissionGranted ? Self.makeFakePort() : nil
-                    }
-                )
-            },
-            installLocal: { _, _ in NSObject() },
-            installGlobal: { _, _ in NSObject() },
-            uninstall: { _ in }
-        )
-
-        XCTAssertFalse(router.start())
-        XCTAssertFalse(router.retryTapIfNeeded())
-        XCTAssertFalse(router.isTapActive)
-
-        permissionGranted = true
-        XCTAssertTrue(router.retryTapIfNeeded())
-        XCTAssertTrue(router.isTapActive)
-
-        let attemptsAfterRecovery = installerAttempts
-        XCTAssertTrue(router.retryTapIfNeeded())
-        XCTAssertEqual(installerAttempts, attemptsAfterRecovery)
     }
 
     // MARK: - Local-decider chain
@@ -244,24 +187,11 @@ final class KeyEventRouterTests: XCTestCase {
 
     // MARK: - Lifecycle
 
-    func testStartReturnsTrueWhenTapInstalls() {
+    func testStartInstallsMonitorsAndStopRemovesThem() {
         let router = makeRouter()
 
-        XCTAssertTrue(router.start())
+        router.start()
         XCTAssertTrue(router.isActive)
-
-        router.stop()
-        XCTAssertFalse(router.isActive)
-    }
-
-    func testStartReturnsFalseWhenTapInstallerFails() {
-        // Even if the CG tap can't install (Accessibility not granted),
-        // local + global NSEvent monitors should still install and the
-        // router's local-keystroke functionality remains usable.
-        let router = makeRouter(installerReturnsNil: true)
-
-        XCTAssertFalse(router.start(), "Tap install failed → start returns false")
-        XCTAssertTrue(router.isActive, "Local NSEvent monitor still installed")
 
         router.stop()
         XCTAssertFalse(router.isActive)

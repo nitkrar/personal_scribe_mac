@@ -162,10 +162,7 @@ struct PersonalScribeAppMain: App {
         let startupCoordinator = startupCoordinator
             ?? AppComposition.makeStartupCoordinator(
                 coordinator: coordinator,
-                hotkeyMonitor: AppComposition.makeGlobalHotkeyMonitor(
-                    permissionService: appPermissionService,
-                    coordinator: coordinator
-                )
+                hotkeyMonitor: AppComposition.makeGlobalHotkeyMonitor(coordinator: coordinator)
             )
         self.startupCoordinator = startupCoordinator
         let metricsReader: any MetricsReading = {

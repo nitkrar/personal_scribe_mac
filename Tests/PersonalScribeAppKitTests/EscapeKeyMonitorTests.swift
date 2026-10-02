@@ -1,5 +1,4 @@
 import AppKit
-import CoreGraphics
 import XCTest
 @testable import PersonalScribeAppKit
 
@@ -106,44 +105,12 @@ final class EscapeKeyMonitorTests: XCTestCase {
         XCTAssertTrue(monitor.isActive)
     }
 
-    /// Esc during a recording must not reach the frontmost app (it
-    /// leaked to terminals / Claude Code as an interrupt). With the CG
-    /// tap installed, the monitor is a global *decider* and swallows it.
-    func testEscapeIsSwallowedSystemWideWhileRecording() {
-        let router = makeStubRouter()
-        router.start()
-        let monitor = EscapeKeyMonitor(router: router) { true }
-        monitor.start()
-
-        let swallowed = router.handleGlobal(makeKeyDown(
-            keyCode: EscapeKeyMonitor.escapeKeyCode,
-            modifierFlags: []
-        ))
-
-        XCTAssertTrue(swallowed)
-    }
-
-    /// Outside a recording the handler returns false and Esc passes
-    /// through to the focused app untouched.
-    func testEscapePassesThroughSystemWideWhenNotRecording() {
-        let router = makeStubRouter()
-        router.start()
-        let monitor = EscapeKeyMonitor(router: router) { false }
-        monitor.start()
-
-        let swallowed = router.handleGlobal(makeKeyDown(
-            keyCode: EscapeKeyMonitor.escapeKeyCode,
-            modifierFlags: []
-        ))
-
-        XCTAssertFalse(swallowed)
-    }
-
-    /// Without the CG tap (no Accessibility) the observe-only global
-    /// monitor is the fallback: it still cancels (can't swallow). With the
-    /// tap active it stays quiet so one Esc doesn't cancel twice.
-    func testObserverFallbackFiresOnlyWhenTapIsUnavailable() {
-        let router = makeStubRouter()
+    /// The observe-only global monitor is the fallback for when macOS
+    /// refused the Esc hot key: it still cancels (can't swallow). While
+    /// Esc is registered it stays quiet so one press doesn't cancel twice.
+    func testObserverFallbackFiresOnlyWhenEscapeIsNotRegistered() {
+        let registrar = FakeChordRegistrar()
+        let router = makeStubRouter(registrar: registrar)
         var fireCount = 0
         let monitor = EscapeKeyMonitor(router: router) {
             fireCount += 1
@@ -152,12 +119,15 @@ final class EscapeKeyMonitorTests: XCTestCase {
         monitor.start()
         let esc = makeKeyDown(keyCode: EscapeKeyMonitor.escapeKeyCode, modifierFlags: [])
 
+        monitor.setArmed(true)
         router.handleGlobalObserved(esc)
-        XCTAssertEqual(fireCount, 1, "no tap: observer cancels")
+        XCTAssertEqual(fireCount, 0, "registered: the hot key path owns Esc")
 
-        router.start()
+        monitor.setArmed(false)
+        registrar.refuse = [HotkeyChord(keyCode: EscapeKeyMonitor.escapeKeyCode, modifiers: [])]
+        monitor.setArmed(true)
         router.handleGlobalObserved(esc)
-        XCTAssertEqual(fireCount, 1, "tap active: decider path owns Esc")
+        XCTAssertEqual(fireCount, 1, "refused: observer cancels")
     }
 
     func testStartIsIdempotent() {
@@ -223,35 +193,14 @@ final class EscapeKeyMonitorTests: XCTestCase {
         )
     }
 
-    /// Stub router whose CG tap install is fake (no real Input
-    /// Monitoring permission required). Local + global NSEvent
-    /// installers no-op (return a sentinel) so the router's `start()`
-    /// is not exercised — tests drive registration through the router's
-    /// `handleLocal` / `handleGlobalObserved` test seams.
-    private func makeStubRouter() -> KeyEventRouter {
+    /// Stub router: fake chord registrar; NSEvent installers no-op so
+    /// tests drive dispatch through the router's test seams.
+    private func makeStubRouter(registrar: FakeChordRegistrar = FakeChordRegistrar()) -> KeyEventRouter {
         KeyEventRouter(
-            tapFactory: { decider in
-                HotkeyEventTap(
-                    decider: decider,
-                    installer: { _, _ in
-                        Self.makeFakePort()
-                    }
-                )
-            },
+            chordRegistrar: registrar,
             installLocal: { _, _ in NSObject() },
             installGlobal: { _, _ in NSObject() },
             uninstall: { _ in }
         )
-    }
-
-    private static func makeFakePort() -> CFMachPort {
-        var context = CFMachPortContext(
-            version: 0,
-            info: nil,
-            retain: nil,
-            release: nil,
-            copyDescription: nil
-        )
-        return CFMachPortCreate(nil, { _, _, _, _ in }, &context, nil)!
     }
 }

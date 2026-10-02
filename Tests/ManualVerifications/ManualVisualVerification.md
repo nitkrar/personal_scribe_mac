@@ -438,11 +438,11 @@ mockup:
 11. Microphone subtitle reads **"Required for voice recording"**.
 12. Accessibility subtitle reads **"Required for paste injection"**.
 
-### C.7 — Accessibility subtitle includes the hotkey hint
+### C.7 — Accessibility subtitle names auto-paste (hotkeys need no permission)
 (Permissions shows two rows — Microphone, Accessibility. The mockup's
 Input Monitoring row is a deliberate divergence: the permission isn't
 needed.)
-13. Accessibility subtitle reads **"Required for global hotkey ⌥/ and paste"**
+13. Accessibility subtitle reads **"Required to auto-paste transcripts"**
     (or whatever the current `HotkeyPreference` formats to via
     `HotkeyShortcutFormatter.displayString`). With the default preference
     (option + `/`), the displayed hint is `⌥/`.

@@ -185,26 +185,17 @@ public enum AppComposition {
         logger: makeLogger(PersonalScribeLogCategory.transcription)
     )
 
-    /// #028 / 5a-v2 — central key-event router. Owns the single
-    /// `HotkeyEventTap` (CGEvent), local NSEvent monitor, and global
+    /// #028 / 5a-v2 — central key-event router. Owns the macOS hot key
+    /// registrations (DECISIONS #25), local NSEvent monitor, and global
     /// NSEvent monitor that all hotkey consumers register against.
     /// Started in `makeStartupCoordinator`'s `startHotkeyMonitor`
     /// closure; never stopped during the app's lifetime. Subscribers
     /// (`EscapeKeyMonitor`, `GlobalHotkeyMonitor`, `HotkeyRecorder`)
     /// register deciders/observers that auto-unregister via RAII tokens.
-    ///
-    /// Backend: shortcuts registered with macOS (`registeredChords`) by
-    /// default; `defaults write <bundle-id> HotkeyBackend tap` switches
-    /// back to the keyboard tap while the new path is being verified.
     @MainActor
     public static let keyEventRouter: KeyEventRouter = {
         let logger = makeLogger(PersonalScribeLogCategory.ui)
-        let useTap = UserDefaults.standard.string(forKey: "HotkeyBackend") == "tap"
-        logger.info("hotkey_backend — \(useTap ? "keyboardTap" : "registeredChords")")
-        return KeyEventRouter(
-            logger: logger,
-            backend: useTap ? .keyboardTap : .registeredChords(CarbonHotkeyRegistrar(logger: logger))
-        )
+        return KeyEventRouter(chordRegistrar: CarbonHotkeyRegistrar(logger: logger), logger: logger)
     }()
 
     /// #033 — live cursor stream output for streaming-with-liveCursorEnabled
@@ -365,10 +356,7 @@ public enum AppComposition {
     }()
 
     public static func makeGlobalHotkeyMonitor() -> GlobalHotkeyMonitor {
-        makeGlobalHotkeyMonitor(
-            permissionService: makePermissionService(),
-            coordinator: AppComposition.sessionCoordinator
-        )
+        makeGlobalHotkeyMonitor(coordinator: AppComposition.sessionCoordinator)
     }
 
     /// Build the hotkey monitor wired to the session coordinator.
@@ -384,7 +372,6 @@ public enum AppComposition {
     ///   `coordinator.stopIfActive()`; the session-state mapping takes
     ///   over and shows `.transcribing`.
     public static func makeGlobalHotkeyMonitor(
-        permissionService: any PermissionService,
         coordinator: SessionCoordinator
     ) -> GlobalHotkeyMonitor {
         return GlobalHotkeyMonitor(
@@ -403,7 +390,6 @@ public enum AppComposition {
                     await coordinator.stopIfActive()
                 }
             },
-            permissionService: makePermissionServiceAdapter(wrapping: permissionService),
             router: AppComposition.keyEventRouter,
             logger: makeLogger(PersonalScribeLogCategory.ui)
         )

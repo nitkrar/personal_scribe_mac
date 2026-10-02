@@ -3,7 +3,7 @@ import XCTest
 import PersonalScribeCore
 @testable import PersonalScribeAppKit
 
-/// Registered-chord hotkey backend (macOS hot key API): each configured
+/// Registered-chord hotkeys (macOS hot key API): each configured
 /// shortcut is registered with the OS, which delivers only that chord —
 /// no system-wide keyboard tap sits in the typing path.
 @MainActor
@@ -15,35 +15,17 @@ final class HotkeyChordBackendTests: XCTestCase {
         PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
     }
 
-    private func makeRouter(
-        registrar: FakeChordRegistrar,
-        tapFactoryCalls: UnsafeMutablePointer<Int>? = nil
-    ) -> KeyEventRouter {
+    private func makeRouter(registrar: FakeChordRegistrar) -> KeyEventRouter {
         KeyEventRouter(
-            tapFactory: { decider in
-                tapFactoryCalls?.pointee += 1
-                return HotkeyEventTap(decider: decider, installer: { _, _ in nil })
-            },
+            chordRegistrar: registrar,
             installLocal: { _, _ in NSObject() },
             installGlobal: { _, _ in NSObject() },
             uninstall: { _ in },
-            logger: logger,
-            backend: .registeredChords(registrar)
+            logger: logger
         )
     }
 
     // MARK: - Router
-
-    func testChordBackendNeverCreatesKeyboardTap() {
-        var tapCalls = 0
-        let router = withUnsafeMutablePointer(to: &tapCalls) { pointer in
-            let router = makeRouter(registrar: FakeChordRegistrar(), tapFactoryCalls: pointer)
-            router.start()
-            return router
-        }
-        XCTAssertEqual(tapCalls, 0)
-        XCTAssertFalse(router.needsAccessibilityForHotkeys)
-    }
 
     func testRegisteredChordDeliversPressAndReleaseToGlobalDeciders() {
         let registrar = FakeChordRegistrar()
@@ -207,11 +189,11 @@ final class HotkeyChordRecorderFlowTests: XCTestCase {
         let registrar = FakeChordRegistrar()
         let logger = PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
         let router = KeyEventRouter(
+            chordRegistrar: registrar,
             installLocal: { _, _ in NSObject() },
             installGlobal: { _, _ in NSObject() },
             uninstall: { _ in },
-            logger: logger,
-            backend: .registeredChords(registrar)
+            logger: logger
         )
         router.start()
         let preference = HotkeyPreference(keyCode: 44, modifiers: NSEvent.ModifierFlags.option.rawValue)
@@ -232,11 +214,11 @@ final class HotkeyChordRecorderFlowTests: XCTestCase {
 final class HotkeyRecorderChordSuspensionTests: XCTestCase {
     private func makeRouter(_ registrar: FakeChordRegistrar) -> KeyEventRouter {
         KeyEventRouter(
+            chordRegistrar: registrar,
             installLocal: { _, _ in NSObject() },
             installGlobal: { _, _ in NSObject() },
             uninstall: { _ in },
-            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
-            backend: .registeredChords(registrar)
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
         )
     }
 

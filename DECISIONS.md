@@ -19,6 +19,7 @@
 | 22 | VAD | Silero-VAD via FluidAudio (bundled) | FluidAudio includes Silero VAD — no separate integration needed | 2026-04-16 |
 | 23 | Embedding default | Apple NLEmbedding (Tier 2) | Zero RAM cost, built into macOS, sufficient for personal-scale data | 2026-04-16 |
 | 24 | Streaming second-pass model | Same model as the live (streaming) pass, re-run on the full recording; no separate setting. Streaming-only engines (Parakeet EOU) fall back to the active dictation model | One model in memory, no extra load; the second pass's value is full-recording context. Speed is bounded by the streaming model (WhisperKit small ≈ 40–60 ms per audio-second) — accepted over a second-pass model setting | 2026-10-02 |
+| 25 | Global hotkeys | Register every shortcut (recording, per-mode, Esc only while recording) with macOS (`RegisterEventHotKey`); no keyboard event tap | An active `CGEventTap` sits in front of every keystroke: a stalled app or an Accessibility toggle froze the user's whole keyboard (2026-10-02). Hot keys deliver only the registered chords, already swallowed, and need no permission. Modifier-only shortcuts aren't supported (the recorder already rejects them); a listen-only fallback would be needed if they're ever added | 2026-10-02 |
 
 ## Hypotheses to Validate
 

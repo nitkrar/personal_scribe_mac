@@ -1,14 +1,12 @@
 import AppKit
-import CoreGraphics
 import Foundation
 
 /// Source-neutral representation of a keyboard event consumed by
 /// `GlobalHotkeyMonitor`'s gesture state machine.
 ///
-/// Both `NSEvent` (today's `addGlobalMonitorForEvents` / `addLocalMonitorForEvents`
-/// path) and `CGEvent` (the upcoming CGEventTap path in 5a-v1 commit 2) feed
-/// into the same `HotkeyEvent` so the state machine doesn't care which
-/// framework produced the event.
+/// Both `NSEvent` monitors and registered macOS hot keys (see
+/// `KeyEventRouter`) feed into the same `HotkeyEvent` so the state
+/// machine doesn't care which source produced the event.
 ///
 /// Lifted to `public` (#028) because `KeyEventRouter`'s public
 /// `Decider` typealias references this type — Swift requires
@@ -27,11 +25,9 @@ public struct HotkeyEvent: Sendable {
     public let timestamp: TimeInterval
     public let isARepeat: Bool
     /// Source characters when the event came from an `NSEvent` (local /
-    /// global NSEvent monitor path). `nil` when the event came from the
-    /// `CGEventTap` path — `CGEvent` does not surface readable
-    /// characters in a Sendable form, and the CG-tap consumers
-    /// (gesture state machine) don't need them. Used by `HotkeyRecorder`
-    /// for chord-display rendering.
+    /// global NSEvent monitor path). `nil` for registered hot key events,
+    /// whose consumers (gesture state machine) don't need them. Used by
+    /// `HotkeyRecorder` for chord-display rendering.
     public let charactersIgnoringModifiers: String?
     public let characters: String?
 
@@ -93,53 +89,4 @@ extension HotkeyEvent {
         }
     }
 
-    /// Adapter from a `CGEvent` delivered through `CGEventTap`. Returns
-    /// `nil` for non-key event types (including tap-disabled events,
-    /// which `HotkeyEventTap` handles separately before converting).
-    ///
-    /// Timestamp uses `ProcessInfo.systemUptime` — seconds since boot,
-    /// matching `NSEvent.timestamp` semantics. Mixing sources in the
-    /// state machine's timing math (e.g., keyDown from NSEvent +
-    /// keyUp from CGEvent) remains consistent.
-    init?(cgEvent: CGEvent, type: CGEventType) {
-        let eventType: EventType
-        switch type {
-        case .keyDown:
-            eventType = .keyDown
-        case .keyUp:
-            eventType = .keyUp
-        case .flagsChanged:
-            eventType = .flagsChanged
-        default:
-            return nil
-        }
-        self.type = eventType
-        self.keyCode = UInt16(cgEvent.getIntegerValueField(.keyboardEventKeycode))
-        self.modifierFlags = NSEvent.ModifierFlags(cgEventFlags: cgEvent.flags)
-        self.timestamp = ProcessInfo.processInfo.systemUptime
-        self.isARepeat = (type == .keyDown)
-            ? (cgEvent.getIntegerValueField(.keyboardEventAutorepeat) != 0)
-            : false
-        // CGEvent has no Sendable character accessor; HotkeyRecorder
-        // (the only consumer that reads characters) is local-NSEvent-
-        // only, so the CG path leaves these nil.
-        self.charactersIgnoringModifiers = nil
-        self.characters = nil
-    }
-}
-
-extension NSEvent.ModifierFlags {
-    /// Bitmask translation from `CGEventFlags` (CoreGraphics) to the
-    /// `NSEvent.ModifierFlags` used by `HotkeyEvent.modifierFlags` and
-    /// `HotkeyPreference`. Keeps modifier-matching logic in the state
-    /// machine source-agnostic.
-    init(cgEventFlags flags: CGEventFlags) {
-        var result: NSEvent.ModifierFlags = []
-        if flags.contains(.maskCommand) { result.insert(.command) }
-        if flags.contains(.maskControl) { result.insert(.control) }
-        if flags.contains(.maskAlternate) { result.insert(.option) }
-        if flags.contains(.maskShift) { result.insert(.shift) }
-        if flags.contains(.maskAlphaShift) { result.insert(.capsLock) }
-        self = result
-    }
 }

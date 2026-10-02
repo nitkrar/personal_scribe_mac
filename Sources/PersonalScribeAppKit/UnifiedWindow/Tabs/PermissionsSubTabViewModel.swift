@@ -17,30 +17,19 @@ import PersonalScribeCore
 final class PermissionsSubTabViewModel: ObservableObject {
     @Published private(set) var statuses: [Permission: PermissionStatus]
 
-    /// Currently-bound recording hotkey, resolved from UserDefaults on
-    /// init and re-resolved on `refresh()`. Drives the Accessibility
-    /// row's subtitle so the displayed hint tracks the user's actual
-    /// binding (mockup-gaps C.7, same plumbing pattern as Home tab's
-    /// empty-state hint — see `HomeTabViewModel.recordingHotkey`).
-    @Published private(set) var recordingHotkey: HotkeyPreference
-
     private let permissionService: any PermissionService
-    private let defaults: UserDefaults
     private let openURL: @MainActor (URL) -> Void
     private var permissionObservation: AnyCancellable?
 
     init(
         permissionService: any PermissionService,
-        defaults: UserDefaults = .standard,
         openURL: @escaping @MainActor (URL) -> Void = { url in
             NSWorkspace.shared.open(url)
         }
     ) {
         self.permissionService = permissionService
-        self.defaults = defaults
         self.openURL = openURL
         self.statuses = permissionService.statusSnapshot()
-        self.recordingHotkey = HotkeyPreference.resolve(from: defaults)
         self.permissionObservation = Self.observePermissionChanges(
             for: permissionService
         ) { [weak self] latest in
@@ -70,28 +59,16 @@ final class PermissionsSubTabViewModel: ObservableObject {
         }
     }
 
-    /// Subtitle text shown beneath each permission title. Copy matches
-    /// the mockup verbatim
-    /// (`plans/App UI design/final_settings_permissions_v2.png`). The
-    /// Accessibility subtitle embeds the currently-bound recording
-    /// hotkey hint (the hotkey's event tap needs Accessibility — no
-    /// separate Input Monitoring permission is used).
+    /// Subtitle text shown beneath each permission title. Hotkeys are
+    /// registered with macOS and need no permission (DECISIONS #25), so
+    /// Accessibility only covers posting ⌘V for auto-paste.
     func subtitle(for permission: Permission) -> String {
         switch permission {
         case .microphone:
             return "Required for voice recording"
         case .accessibility:
-            return accessibilitySubtitle
+            return "Required to auto-paste transcripts"
         }
-    }
-
-    /// Dynamic subtitle for the Accessibility row. Embeds the live
-    /// hotkey display string formatted by `HotkeyShortcutFormatter` so
-    /// the copy tracks whatever binding the user has selected in
-    /// Settings → Shortcuts.
-    var accessibilitySubtitle: String {
-        let hint = HotkeyShortcutFormatter.displayString(for: recordingHotkey)
-        return "Required for global hotkey \(hint) and paste"
     }
 
     /// Re-query TCC and publish the fresh snapshot. Call from
@@ -102,10 +79,6 @@ final class PermissionsSubTabViewModel: ObservableObject {
     func refresh() {
         permissionService.refresh()
         statuses = permissionService.statusSnapshot()
-        // Re-resolve the hotkey so the Accessibility subtitle
-        // reflects any change the user made in Settings → Shortcuts
-        // while the tab was off-screen.
-        recordingHotkey = HotkeyPreference.resolve(from: defaults)
     }
 
     /// Open the Privacy pane in System Settings for `permission`. Uses

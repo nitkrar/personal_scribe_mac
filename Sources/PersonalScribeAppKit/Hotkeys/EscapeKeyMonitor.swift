@@ -12,26 +12,16 @@ import PersonalScribeCore
 /// = false`. A non-key window cannot deliver `keyDown` to SwiftUI content,
 /// so SwiftUI's `.onKeyPress` never fires.
 ///
-/// # Wiring (post-#028)
+/// # Wiring
 ///
-/// `EscapeKeyMonitor` registers two subscriptions on the shared
-/// `KeyEventRouter`:
-///
-/// * **Local decider** (`registerLocalDecider`) for keystrokes
-///   delivered to Ninimma itself — needed since Ninimma launches as a
-///   `.regular` app and can be frontmost while the user records
-///   (Settings open, Notes window open, dock-icon focused). Returns
-///   `true` to swallow when `onEscapePressed()` claims the event so it
-///   doesn't bubble to text fields / SwiftUI handlers.
-/// * **Global observer** (`registerGlobalObserver`) for keystrokes
-///   delivered to OTHER apps — the canonical "user is recording into a
-///   text editor and presses Esc" path. Observe-only by NSEvent
-///   global-monitor design; we react but don't (and can't) swallow.
-///
-/// Pre-#028, this monitor owned its own NSEvent install/uninstall
-/// pair. The router-based wiring centralizes monitor lifecycle and
-/// makes registration order explicit (Esc registers first at app
-/// launch, ahead of the recording-hotkey decider).
+/// * **Local decider** — keystrokes delivered to Ninimma itself (it can
+///   be frontmost while recording); swallows when `onEscapePressed()`
+///   claims the event.
+/// * **Registered chord** — while armed (`setArmed(true)`, i.e. during a
+///   recording) Esc is registered with macOS as a hot key, so it cancels
+///   and is swallowed in every app; disarming releases it immediately.
+/// * **Global observer** — observe-only fallback if macOS refused the
+///   Esc registration: still cancels, can't swallow.
 ///
 /// # Filter
 ///
@@ -82,20 +72,15 @@ public final class EscapeKeyMonitor {
         localToken = router.registerLocalDecider { [weak self] event in
             self?.handle(event: event) ?? false
         }
-        // CG-tap path: swallow Esc system-wide while a recording is
-        // active (the handler returns true only then), so it doesn't also
-        // reach the frontmost app — it was leaking to terminals as an
-        // interrupt. Outside a recording it returns false and passes through.
+        // Registered-chord path: receives Esc while armed (see setArmed).
         globalDeciderToken = router.registerGlobalDecider { [weak self] event in
             self?.handle(event: event) ?? false
         }
-        // Fallback when the tap isn't installed (Accessibility missing):
-        // the observe-only monitor still cancels, but can't swallow. Quiet
-        // while the tap is live so one Esc doesn't cancel twice.
+        // Fallback when macOS refused the Esc registration: the
+        // observe-only monitor still cancels, but can't swallow. Quiet
+        // while Esc is registered so one press doesn't cancel twice.
         globalToken = router.registerGlobalObserver { [weak self] event in
-            guard let self, !self.router.isTapActive,
-                  self.escapeRegistration?.isRegistered != true
-            else { return }
+            guard let self, self.escapeRegistration?.isRegistered != true else { return }
             _ = self.handle(event: event)
         }
     }
