@@ -461,6 +461,28 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(recordingFrame.minY, idle.minY)
     }
 
+    /// After an edge-clamped grow, shrinking back returns the pill to
+    /// where the user left it rather than the shifted center.
+    func testPillReturnsToItsEdgeSpotAfterRecording() {
+        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let viewModel = PillOverlayViewModel(visibility: .idle, visibilityMode: .alwaysOn)
+        let panelBuilder = RecordingPanelBuilder()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            screenBounds: { _ in screen }
+        )
+        _ = presenter
+        panelBuilder.panel.frame.origin.x = screen.maxX - panelBuilder.panel.frame.width - OverlayPlacement.screenMargin
+        presenter.userDidMovePanel()
+        let idleFrame = panelBuilder.panel.frame
+
+        viewModel.apply(visibility: PillVisibilityState.recording)
+        viewModel.apply(visibility: PillVisibilityState.idle)
+
+        XCTAssertEqual(panelBuilder.panel.frame, idleFrame)
+    }
+
     /// pill → Cancel Card transition is a crossfade, not a morph. The
     /// panel frame jumps to the cancel-card size with `animate: false`
     /// (SwiftUI owns the opacity tween inside `PillOverlayView`).

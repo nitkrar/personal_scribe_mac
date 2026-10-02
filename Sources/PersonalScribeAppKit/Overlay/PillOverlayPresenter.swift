@@ -315,6 +315,11 @@ public final class PillOverlayPresenter {
     /// `PillOverlayView.size(for:)` on every visibility transition.
     private let panelSize = NSSize(width: 280, height: 60)
     private var hasUserRepositioned = false
+    /// Bottom-center the pill should sit at — the default spot or where
+    /// the user dropped it. Every resize starts from here and is then
+    /// clamped on-screen, so an edge-shifted recording pill returns to
+    /// its spot when it shrinks instead of creeping toward the center.
+    private var homeAnchor: NSPoint?
     /// The last visibility we sized the panel for. Used to decide
     /// whether `animate: true` should be passed to `setFrame` — the
     /// first transition out of `.hidden` must arrive at the target
@@ -436,9 +441,11 @@ public final class PillOverlayPresenter {
         // A pill near a screen edge that grows (idle → recording) is
         // shifted back on-screen rather than spilling past the edge.
         let previousFrame = panel.frame
+        let anchor = homeAnchor ?? NSPoint(x: previousFrame.midX, y: previousFrame.minY)
+        homeAnchor = anchor
         let newOrigin = NSPoint(
-            x: previousFrame.midX - newSize.width / 2,
-            y: previousFrame.minY
+            x: anchor.x - newSize.width / 2,
+            y: anchor.y
         )
         let newFrame = OverlayPlacement.clamp(
             NSRect(origin: newOrigin, size: newSize),
@@ -528,12 +535,13 @@ public final class PillOverlayPresenter {
 
     /// Called once the user drops the pill after a drag. A pill dragged
     /// partly off-screen is pulled back inside, and the cards follow.
-    private func userDidMovePanel() {
+    func userDidMovePanel() {
         hasUserRepositioned = true
         guard let panel else {
             return
         }
         let settled = OverlayPlacement.clamp(panel.frame, within: screenBounds(panel.frame))
+        homeAnchor = NSPoint(x: settled.midX, y: settled.minY)
         if settled != panel.frame {
             panel.setFrame(settled, animate: true)
         }
@@ -686,6 +694,7 @@ public final class PillOverlayPresenter {
         let y = screenFrame.minY + 64
 
         panel.setFrameOrigin(NSPoint(x: x, y: y))
+        homeAnchor = nil
     }
 
     private var supportsTap: Bool {
