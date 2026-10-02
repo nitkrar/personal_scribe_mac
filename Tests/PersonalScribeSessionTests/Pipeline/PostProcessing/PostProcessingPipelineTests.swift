@@ -17,9 +17,22 @@ final class PostProcessingPipelineTests: XCTestCase {
         XCTAssertEqual(output, "Hello world.")
     }
 
-    func testRemovesHedges() async throws {
-        let output = try await pipeline.run("you know i think sort of it works", context: makeContext())
-        XCTAssertEqual(output, "I think it works.")
+    /// Phrases a regex can't tell from fillers stay; these sentences come from real dictations.
+    func testKeepsWordsThatCanCarryMeaning() async throws {
+        let sentences = [
+            "This is what the image looks like.",
+            "Sunset is also good and I like how I can change this.",
+            "I feel like I wasted so much time.",
+            "I guess it could be slightly more vertical.",
+            "I mean the point is we can keep it string.",
+            "So our tool sort of honors it.",
+            "One of the apps does this kind of animation.",
+            "Do you know what it does?",
+        ]
+        for sentence in sentences {
+            let output = try await pipeline.run(sentence, context: makeContext())
+            XCTAssertEqual(output, sentence)
+        }
     }
 
     func testPreservesTerminalPunctuation() async throws {

@@ -1,12 +1,10 @@
 import Foundation
 
 public struct FillerRemovalStage: PostProcessingStage {
-    private static let singleWordFillers = try! NSRegularExpression(
-        pattern: #"\b(um|uh|uhm|er|erm|ah|ahh|hmm|hmmm|like)\b"#,
-        options: [.caseInsensitive]
-    )
-    private static let hedges = try! NSRegularExpression(
-        pattern: #"\b(you know|i mean|i guess|sort of|kind of)\b"#,
+    /// Vocal fillers only. "like", "I mean", "kind of" etc. are real words as often as
+    /// not, and a regex can't tell which, so they stay.
+    private static let fillers = try! NSRegularExpression(
+        pattern: #"\b(um|uh|uhm|er|erm|ah|ahh|hmm|hmmm)\b"#,
         options: [.caseInsensitive]
     )
     private static let repeatedWhitespace = try! NSRegularExpression(
@@ -24,19 +22,14 @@ public struct FillerRemovalStage: PostProcessingStage {
     public init() {}
 
     public func apply(_ text: String, context: PostProcessingContext) async throws -> String {
-        let withoutSingleWordFillers = Self.singleWordFillers.stringByReplacingMatches(
+        let withoutFillers = Self.fillers.stringByReplacingMatches(
             in: text,
             range: NSRange(text.startIndex..., in: text),
             withTemplate: " "
         )
-        let withoutHedges = Self.hedges.stringByReplacingMatches(
-            in: withoutSingleWordFillers,
-            range: NSRange(withoutSingleWordFillers.startIndex..., in: withoutSingleWordFillers),
-            withTemplate: " "
-        )
         let collapsedWhitespace = Self.repeatedWhitespace.stringByReplacingMatches(
-            in: withoutHedges,
-            range: NSRange(withoutHedges.startIndex..., in: withoutHedges),
+            in: withoutFillers,
+            range: NSRange(withoutFillers.startIndex..., in: withoutFillers),
             withTemplate: " "
         )
         let trimmedLeadingPunctuationWhitespace = Self.leadingPunctuationWhitespace.stringByReplacingMatches(
