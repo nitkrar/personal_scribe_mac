@@ -21,7 +21,6 @@ Each ticket has an `*Updated YYYY-MM-DD*` line under the tag row. Bump on meanin
 
 | Ticket | Owner | Started | Last update | Notes |
 |---|---|---|---|---|
-| #056 | slate | 2026-05-01 | 2026-05-02 | **[needs user]** Code complete + race + chain bugs fixed in `80f9bf0`. Awaiting rebuild + retest. EOU silent-paint inconsistency open — `.finalized`-backfill UX call pending. |
 
 **Session naming.** The **main** Claude session running in the user's terminal picks a short single-word identifier (nature words work well — `heron`, `cobalt`, `slate`, `olive`, `rust`) the first time it touches this file and uses it consistently. Subagents dispatched from a main session **inherit its name** — they do NOT claim their own. Only a parallel main session (e.g. a second terminal) picks a distinct name. Don't use `main session` / `parallel session` / `user` as owners — too ambiguous when >1 session is live.
 
@@ -280,45 +279,6 @@ Partial coverage exists via Home rollups (`SQLiteMetricsService` rolling-7-day w
 Prefix a recording with a short tag word ("reminder", "email Alice", "todo") that drives downstream routing or labeling. Overlaps conceptually with #057 (app-context mode-selection rules) — investigate whether voice tags subsume, complement, or compete with context rules before scoping implementation.
 
 **Legacy:** `plans/_legacy/BACKLOG_pre_migration.md` → "Voice tags, micro-prompts"
-
----
-
-### #056 — Streaming dictation mode (StreamCard + EOU cursor stream + optional second pass)
-
-`feature` · `P2` · `in-progress` · `phase: 4` · `area: dictation, session`
-*Updated 2026-10-02*
-
-**Shipped so far:** `94fc079`, `dd41738`, `f5ec7cc`, `5deed46`, `9541643`, `2419927` — StreamCard, EOU cursor delivery, second-pass fallback, and session-lifecycle hardening are in the current pipeline; runtime verification remains open.
-
-V1 remains a user-created custom mode / preset (not a built-in mode). English-only. Precondition for #057 (app-context rules).
-
-**Design:** [`plans/056_streaming_dictation/DESIGN.md`](./plans/056_streaming_dictation/DESIGN.md)
-**Implementation:** [`plans/056_streaming_dictation/IMPLEMENTATION.md`](./plans/056_streaming_dictation/IMPLEMENTATION.md)
-
-**Locked design (2026-04-30):**
-- Split surfaces:
-  - `StreamCard` = live transcript only, controlled by the session pipeline.
-  - existing `ResponseCard` = short operational/status messages only (`Finalizing…`, `Copied to clipboard`, `Clipboard restored`, transport fallback / errors).
-- `StreamCard` shows the rolling session tail. Make it wider than the current ResponseCard, but keep it single-line. No editing.
-- Live cursor streaming is a separate setting (global default + per-mode override). Cursor delivery is append-only and emits end-of-utterance chunks only.
-- If live cursor streaming is on, there is never an extra stop-time cursor write.
-- Second pass is optional (global default + per-mode override). When enabled, it is authoritative for history + clipboard only; it never rewrites external apps. If second pass fails, fall back to the streaming model's final text.
-- If second pass is off, persist/copy the streaming model's own final text.
-- Restore-clipboard in live mode restores the pre-recording clipboard snapshot.
-- Existing final auto-paste path still applies only when live cursor streaming is off.
-
-**Status (2026-05-02):** all 6 IMPLEMENTATION stages plus the post-implementation hardening commits have landed on trunk. Live cursor transport (#033) is wired through `LiveCursorOutput`. Code is complete; **runtime verification in progress on the user's other laptop**. Stale dogfood lines from earlier rounds removed — the prior body claimed "no live partial surface wired" which is no longer true post-`41c2024`/`51fb4a8`/`46e2ed8`.
-
-**Scope notes:**
-- `Streaming Dictation` is a custom-mode preset (#089 covers per-mode hotkeys / mode selection).
-- StreamCard surface, second-pass authoritative final, and cursor-stream transport are all live.
-- Shared audio spooling / temp-file capture is out of scope for #056 and should land as shared infrastructure for all modes (separate ticket if dogfood demands).
-
-**Known stale UI** (slated for #033 cleanup, not blocking): `ModeDetailView.swift:130` + `GeneralTab.swift:341` still display *"Live cursor transport is not active in this build."* — pre-#033 wording.
-
-**Depends on:** #033 (✅ done) — wired the live cursor transport.
-
-**Legacy:** `plans/_legacy/BACKLOG_pre_migration.md` → "Streaming dictation mode"
 
 ---
 
