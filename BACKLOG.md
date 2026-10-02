@@ -943,6 +943,17 @@ Scope note: 2 and 3 are independent quick fixes; 1 is the actual refactor (layou
 
 ---
 
+### #103 — WhisperKit streaming hangs on finish() after a burst of audio
+
+`bug` · `P3` · `open` · `area: transcription, streaming`
+*Opened 2026-10-02*
+
+Found by the opt-in real-model benchmark (`StreamingSecondPassBenchmarkTests`, run with `NINIMMA_BENCH_WAV=…`). Feeding 32 s of audio to `WhisperKitAdapter.transcribe(stream:)` in one burst (faster than real time) never completes: the process sits at 0% CPU inside `LiveWhisperKitRuntimeBridge.finish()` — `stopStreamTranscription()` is called but `transcriberTask` never ends. Fed at real-time pace (like the mic) it completes normally, so live dictation isn't affected today; it would bite any path that hands WhisperKit buffered audio at once (e.g. a capture stall then catch-up, or a future file-to-streaming path). Parakeet EOU handles the burst fine.
+
+Benchmark results that motivated it (31.8 s TTS audio, real-time fed): WhisperKit small.en first partial 2.2 s, second pass 2.4 s (76 ms/audio-s), 2 word errors; Parakeet EOU first partial 0.55 s + Parakeet TDT second pass 0.3 s (9 ms/audio-s), 0 word errors.
+
+---
+
 
 
 `refactor` · `P2` · `open` · `area: transcription, models, modes, recipes`
