@@ -106,7 +106,43 @@ final class EscapeKeyMonitorTests: XCTestCase {
         XCTAssertTrue(monitor.isActive)
     }
 
-    func testStartRegistersGlobalObserverThatFiresWithoutSwallowing() {
+    /// Esc during a recording must not reach the frontmost app (it
+    /// leaked to terminals / Claude Code as an interrupt). With the CG
+    /// tap installed, the monitor is a global *decider* and swallows it.
+    func testEscapeIsSwallowedSystemWideWhileRecording() {
+        let router = makeStubRouter()
+        router.start()
+        let monitor = EscapeKeyMonitor(router: router) { true }
+        monitor.start()
+
+        let swallowed = router.handleGlobal(makeKeyDown(
+            keyCode: EscapeKeyMonitor.escapeKeyCode,
+            modifierFlags: []
+        ))
+
+        XCTAssertTrue(swallowed)
+    }
+
+    /// Outside a recording the handler returns false and Esc passes
+    /// through to the focused app untouched.
+    func testEscapePassesThroughSystemWideWhenNotRecording() {
+        let router = makeStubRouter()
+        router.start()
+        let monitor = EscapeKeyMonitor(router: router) { false }
+        monitor.start()
+
+        let swallowed = router.handleGlobal(makeKeyDown(
+            keyCode: EscapeKeyMonitor.escapeKeyCode,
+            modifierFlags: []
+        ))
+
+        XCTAssertFalse(swallowed)
+    }
+
+    /// Without the CG tap (no Accessibility) the observe-only global
+    /// monitor is the fallback: it still cancels (can't swallow). With the
+    /// tap active it stays quiet so one Esc doesn't cancel twice.
+    func testObserverFallbackFiresOnlyWhenTapIsUnavailable() {
         let router = makeStubRouter()
         var fireCount = 0
         let monitor = EscapeKeyMonitor(router: router) {
@@ -114,14 +150,14 @@ final class EscapeKeyMonitorTests: XCTestCase {
             return true
         }
         monitor.start()
+        let esc = makeKeyDown(keyCode: EscapeKeyMonitor.escapeKeyCode, modifierFlags: [])
 
-        // Global observers can't swallow — `handleGlobalObserved` returns Void.
-        router.handleGlobalObserved(makeKeyDown(
-            keyCode: EscapeKeyMonitor.escapeKeyCode,
-            modifierFlags: []
-        ))
+        router.handleGlobalObserved(esc)
+        XCTAssertEqual(fireCount, 1, "no tap: observer cancels")
 
-        XCTAssertEqual(fireCount, 1, "Esc keyDown to other apps must trigger handler")
+        router.start()
+        router.handleGlobalObserved(esc)
+        XCTAssertEqual(fireCount, 1, "tap active: decider path owns Esc")
     }
 
     func testStartIsIdempotent() {

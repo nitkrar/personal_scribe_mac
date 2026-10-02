@@ -59,6 +59,7 @@ public final class EscapeKeyMonitor {
     private let router: KeyEventRouter
     private let onEscapePressed: @MainActor () -> Bool
     private var localToken: KeyEventRouterToken?
+    private var globalDeciderToken: KeyEventRouterToken?
     private var globalToken: KeyEventRouterToken?
 
     public init(
@@ -70,7 +71,7 @@ public final class EscapeKeyMonitor {
     }
 
     public var isActive: Bool {
-        localToken != nil || globalToken != nil
+        localToken != nil || globalDeciderToken != nil || globalToken != nil
     }
 
     public func start() {
@@ -78,8 +79,19 @@ public final class EscapeKeyMonitor {
         localToken = router.registerLocalDecider { [weak self] event in
             self?.handle(event: event) ?? false
         }
+        // CG-tap path: swallow Esc system-wide while a recording is
+        // active (the handler returns true only then), so it doesn't also
+        // reach the frontmost app — it was leaking to terminals as an
+        // interrupt. Outside a recording it returns false and passes through.
+        globalDeciderToken = router.registerGlobalDecider { [weak self] event in
+            self?.handle(event: event) ?? false
+        }
+        // Fallback when the tap isn't installed (Accessibility missing):
+        // the observe-only monitor still cancels, but can't swallow. Quiet
+        // while the tap is live so one Esc doesn't cancel twice.
         globalToken = router.registerGlobalObserver { [weak self] event in
-            _ = self?.handle(event: event)
+            guard let self, !self.router.isTapActive else { return }
+            _ = self.handle(event: event)
         }
     }
 
@@ -88,6 +100,7 @@ public final class EscapeKeyMonitor {
         // Task-dispatched cleanup. Setting to nil drops the strong
         // refs.
         localToken = nil
+        globalDeciderToken = nil
         globalToken = nil
     }
 
