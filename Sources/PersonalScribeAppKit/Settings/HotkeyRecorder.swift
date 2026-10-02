@@ -84,12 +84,10 @@ public struct HotkeyRecorder: View {
         .padding(PersonalScribeTheme.Spacing.windowPadding)
         .frame(minWidth: 420, alignment: .leading)
         .background(
-            HotkeyRecorderEventMonitor { event in
-                (try? model.handle(event: event)) ?? false
-            }
-            // ^^ `event` is `HotkeyEvent` post-#028; the model's
-            // `handle(event: HotkeyEvent)` overload preserves
-            // the existing semantics.
+            Color.clear
+                .frame(width: 0, height: 0)
+                .onAppear { model.attach(to: AppComposition.keyEventRouter) }
+                .onDisappear { model.detach() }
         )
     }
 }
@@ -119,6 +117,11 @@ final class HotkeyRecorderModel: ObservableObject {
     private let onCancel: @MainActor () -> Void
     private let systemHotkeys: [SystemHotkey]
     private let additionalReservations: [HotkeyPreference]
+    /// Live while the recorder is capturing: its key decider (first in
+    /// the local chain) and the suspension of registered shortcuts (which
+    /// macOS would otherwise intercept before the recorder sees them).
+    private var deciderToken: KeyEventRouterToken?
+    private var chordSuspension: KeyEventRouterToken?
 
     init(
         onConfirm: @escaping @MainActor (HotkeyPreference) -> Void,
@@ -191,9 +194,28 @@ final class HotkeyRecorderModel: ObservableObject {
         }
     }
 
+    /// Start capturing from `router`. Idempotent.
+    func attach(to router: KeyEventRouter) {
+        guard deciderToken == nil else { return }
+        deciderToken = router.registerLocalDecider(
+            { [weak self] event in (try? self?.handle(event: event)) ?? false },
+            position: .first
+        )
+        chordSuspension = router.suspendGlobalChords()
+    }
+
+    /// Stop capturing and hand the shortcuts back. Set / Cancel call this
+    /// directly: a dismissed sheet's view can outlive the dismissal, so
+    /// waiting for `onDisappear` left every hotkey suspended.
+    func detach() {
+        deciderToken = nil
+        chordSuspension = nil
+    }
+
     func confirm() {
         switch captureResult {
         case let .captured(preference), let .capturedWithWarning(preference, _):
+            detach()
             onConfirm(preference)
         case .idle, .rejected:
             return
@@ -201,6 +223,7 @@ final class HotkeyRecorderModel: ObservableObject {
     }
 
     func cancel() {
+        detach()
         onCancel()
     }
 
@@ -434,40 +457,5 @@ enum HotkeyShortcutFormatter {
 
     private static func isOptionKeyCode(_ keyCode: UInt16) -> Bool {
         keyCode == 58 || keyCode == 61
-    }
-}
-
-private struct HotkeyRecorderEventMonitor: View {
-    let onEvent: (HotkeyEvent) -> Bool
-
-    @State private var token: KeyEventRouterToken?
-    @State private var chordSuspension: KeyEventRouterToken?
-
-    var body: some View {
-        Color.clear
-            .frame(width: 0, height: 0)
-            .onAppear {
-                guard token == nil else {
-                    return
-                }
-                // #028 — register on the shared `KeyEventRouter` at
-                // `position: .first` so the recorder takes priority
-                // over already-registered consumers (`EscapeKeyMonitor`,
-                // `GlobalHotkeyMonitor`) on the local NSEvent path
-                // while the recorder UI is open. Token is dropped on
-                // disappear; RAII deinit auto-unregisters.
-                token = AppComposition.keyEventRouter.registerLocalDecider(
-                    { event in onEvent(event) },
-                    position: .first
-                )
-                // Registered shortcuts are intercepted by macOS before
-                // our local monitor; release them so the recorder can
-                // capture an existing chord instead of triggering it.
-                chordSuspension = AppComposition.keyEventRouter.suspendGlobalChords()
-            }
-            .onDisappear {
-                token = nil
-                chordSuspension = nil
-            }
     }
 }

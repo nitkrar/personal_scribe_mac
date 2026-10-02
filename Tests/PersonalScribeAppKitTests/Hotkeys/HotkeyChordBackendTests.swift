@@ -197,3 +197,69 @@ final class FakeChordRegistrar: HotkeyChordRegistering {
         onEvent?(id, pressed, ProcessInfo.processInfo.systemUptime)
     }
 }
+
+@MainActor
+final class HotkeyChordRecorderFlowTests: XCTestCase {
+    /// Re-recording the same shortcut in Settings: chords are suspended
+    /// while the recorder is open, the binding is "updated" to the same
+    /// chord, then the recorder closes. The shortcut must work again.
+    func testReRecordingSameShortcutLeavesItRegistered() async {
+        let registrar = FakeChordRegistrar()
+        let logger = PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
+        let router = KeyEventRouter(
+            installLocal: { _, _ in NSObject() },
+            installGlobal: { _, _ in NSObject() },
+            uninstall: { _ in },
+            logger: logger,
+            backend: .registeredChords(registrar)
+        )
+        router.start()
+        let preference = HotkeyPreference(keyCode: 44, modifiers: NSEvent.ModifierFlags.option.rawValue)
+        let monitor = GlobalHotkeyMonitor(onToggle: {}, recordingHotkey: preference, router: router, logger: logger)
+        monitor.start()
+
+        var suspension: KeyEventRouterToken? = router.suspendGlobalChords()
+        monitor.updateRecordingHotkey(preference)
+        suspension = nil
+        for _ in 0..<5 { await Task.yield() }
+
+        XCTAssertNil(suspension)
+        XCTAssertEqual(registrar.registered, [HotkeyChord(preference)])
+    }
+}
+
+@MainActor
+final class HotkeyRecorderChordSuspensionTests: XCTestCase {
+    private func makeRouter(_ registrar: FakeChordRegistrar) -> KeyEventRouter {
+        KeyEventRouter(
+            installLocal: { _, _ in NSObject() },
+            installGlobal: { _, _ in NSObject() },
+            uninstall: { _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
+            backend: .registeredChords(registrar)
+        )
+    }
+
+    /// The sheet's view may outlive its dismissal, so Set / Cancel must
+    /// hand the shortcuts back themselves — not wait for the view to go.
+    func testSetAndCancelResumeShortcutsWithoutWaitingForTheView() async {
+        for finish in [{ (m: HotkeyRecorderModel) in m.confirm() }, { $0.cancel() }] {
+            let registrar = FakeChordRegistrar()
+            let router = makeRouter(registrar)
+            let chord = HotkeyChord(keyCode: 44, modifiers: [.option])
+            let registration = router.registerGlobalChord(chord)
+            let model = HotkeyRecorderModel(onConfirm: { _ in }, onCancel: {})
+
+            model.attach(to: router)
+            XCTAssertEqual(registrar.registered, [], "recorder must capture, not trigger, existing shortcuts")
+            _ = try? model.handle(event: HotkeyEvent(
+                type: .keyDown, keyCode: 44, modifierFlags: [.option], timestamp: 0, isARepeat: false
+            ))
+            finish(model)
+            for _ in 0..<5 { await Task.yield() }
+
+            XCTAssertEqual(registrar.registered, [chord])
+            withExtendedLifetime(registration) {}
+        }
+    }
+}
