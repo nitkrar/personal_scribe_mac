@@ -468,10 +468,21 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         } else {
             streamingBehaviorDesc = "nil"
         }
-        let secondPassDesc = recipe.streamingSecondPassTranscriber == nil ? "nil" : "set"
+        let secondPassDesc = Self.secondPassDescription(
+            enabled: recipe.streamingBehavior?.secondPassEnabled ?? false,
+            transcriberBound: recipe.streamingSecondPassTranscriber != nil
+        )
         logger.info(
             "session_started_bound — recipeID=\(recipe.recipeID) recipeName=\(recipe.recipeName) pipelineShape=\(recipe.pipelineShape.rawValue) processors=[\(processorTypes)] streamingBehavior=\(streamingBehaviorDesc) secondPassTranscriber=\(secondPassDesc) holdToRecord=\(holdToRecord)"
         )
+    }
+
+    /// `skipped_no_dictation_model`: second pass is on, but the streaming
+    /// model can't re-run a full recording (Parakeet EOU) and no dictation
+    /// model is active, so the live text is used as-is.
+    static func secondPassDescription(enabled: Bool, transcriberBound: Bool) -> String {
+        if transcriberBound { return "set" }
+        return enabled ? "skipped_no_dictation_model" : "off"
     }
 
     private func recordStreamingInputForwarded(_ buffer: PCMBuffer) {

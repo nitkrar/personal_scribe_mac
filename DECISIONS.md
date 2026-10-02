@@ -18,6 +18,7 @@
 | 14 | Memory/learning | Dictionary + string ops (no fine-tuning) | Portable, instant, lossless, survives model updates | 2026-04-16 |
 | 22 | VAD | Silero-VAD via FluidAudio (bundled) | FluidAudio includes Silero VAD — no separate integration needed | 2026-04-16 |
 | 23 | Embedding default | Apple NLEmbedding (Tier 2) | Zero RAM cost, built into macOS, sufficient for personal-scale data | 2026-04-16 |
+| 24 | Streaming second-pass model | Same model as the live (streaming) pass, re-run on the full recording; no separate setting. Streaming-only engines (Parakeet EOU) fall back to the active dictation model | One model in memory, no extra load; the second pass's value is full-recording context. Speed is bounded by the streaming model (WhisperKit small ≈ 40–60 ms per audio-second) — accepted over a second-pass model setting | 2026-10-02 |
 
 ## Hypotheses to Validate
 

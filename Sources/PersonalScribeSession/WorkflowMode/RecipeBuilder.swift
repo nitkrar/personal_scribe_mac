@@ -174,11 +174,20 @@ public final class RecipeBuilder {
             return nil
         }
 
+        // Decision (2026-10-02, DECISIONS.md #24): the second pass re-runs
+        // the *same* model as the live pass over the full recording — one
+        // model in memory, no extra load. Its value is full-recording
+        // context, not a different model. Not a WhisperKit special case:
+        // any streaming engine that can also transcribe a whole recording
+        // (WhisperKit, whisper.cpp) reuses itself.
         if let streamingDescriptor,
            streamingDescriptor.engine == .whisperCpp || streamingDescriptor.engine == .whisperKit {
             return try processorProvider.transcriber(for: streamingDescriptor)
         }
 
+        // Streaming-only engines (Parakeet EOU) can't re-run a recording,
+        // so fall back to the active dictation model. None active → no
+        // second pass (logged as `skipped_no_dictation_model`).
         guard let descriptor = modelService.activeDescriptor(for: .asr) else {
             return nil
         }

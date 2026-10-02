@@ -469,6 +469,18 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(observed.last?.lastCompletedResult?.text, "Hidden transcript.")
     }
 
+    /// Second pass enabled but nothing to run it with (streaming-only
+    /// model, no dictation model active) used to read as an unexplained
+    /// `secondPassTranscriber=nil`; the session log now says why.
+    func testSecondPassLogDescriptionExplainsSkip() {
+        XCTAssertEqual(SessionPipelineOrchestrator.secondPassDescription(enabled: true, transcriberBound: true), "set")
+        XCTAssertEqual(SessionPipelineOrchestrator.secondPassDescription(enabled: false, transcriberBound: false), "off")
+        XCTAssertEqual(
+            SessionPipelineOrchestrator.secondPassDescription(enabled: true, transcriberBound: false),
+            "skipped_no_dictation_model"
+        )
+    }
+
     /// Delivery is the recipe's last step, run by the pipeline: the
     /// output stage receives the final transcript and the recipe's sinks.
     func testCompletedSessionRunsOutputStageWithRecipeSinks() async throws {
