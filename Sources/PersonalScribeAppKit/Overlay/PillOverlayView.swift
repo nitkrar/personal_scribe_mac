@@ -464,7 +464,7 @@ private struct PillChrome: ViewModifier {
                     style: .continuous
                 )
                 // Vertical gradient: top face ~7% brighter than base.
-                .fill(base.opacity(0.94))
+                .fill(base)
                 .overlay {
                     RoundedRectangle(
                         cornerRadius: radius,
@@ -476,6 +476,24 @@ private struct PillChrome: ViewModifier {
                             startPoint: .top,
                             endPoint: .bottom
                         )
+                    )
+                }
+                // Bevel: light catches the top edge, the bottom edge falls
+                // into shade.
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: radius,
+                        style: .continuous
+                    )
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: isLight
+                                ? [Color.white.opacity(0.9), Color.black.opacity(0.14)]
+                                : [Color.white.opacity(0.22), Color.black.opacity(0.45)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 1
                     )
                 }
                 // State-aware border stroke — see `PillBorderStyle`.

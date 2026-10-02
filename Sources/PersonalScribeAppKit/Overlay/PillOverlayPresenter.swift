@@ -248,6 +248,10 @@ extension DraggablePanel: PillOverlayPaneling {
 
     func setFrame(_ frame: NSRect, animate: Bool) {
         setFrame(frame, display: true, animate: animate)
+        // The shadow is computed from the window's rendered pixels; the
+        // new content renders on the next pass, so refresh then too.
+        invalidateShadow()
+        DispatchQueue.main.async { [weak self] in self?.invalidateShadow() }
     }
 }
 
@@ -288,12 +292,9 @@ struct AppKitPillOverlayPanelBuilder: PillOverlayPanelBuilding {
         panel.level = .floating
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        // System shadow off — the pill's SwiftUI view applies a custom
-        // shadow AFTER clipShape, which gives a clean rounded edge.
-        // Leaving the system shadow on produces the fuzzy fringe around
-        // the rounded corners (2026-04-18 dogfood report: "hairy border
-        // artefact on the pill").
-        panel.hasShadow = false
+        // The system shadow is drawn outside the window and follows the
+        // pill's (fully opaque) shape; it's recomputed after each resize.
+        panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.canHide = false
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
