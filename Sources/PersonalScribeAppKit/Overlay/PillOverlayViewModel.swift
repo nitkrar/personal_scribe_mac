@@ -10,16 +10,12 @@ public final class PillOverlayViewModel: ObservableObject {
     @Published public private(set) var visibilityMode: PillVisibility
     @Published public var audioLevel: Double = 0
 
-    /// Window during which the Cancel Card is visible after a cancel.
-    /// Spec §3: "4 seconds elapsed | Cancel Card is visible | Dismiss
-    /// Cancel Card; return to .idle".
-    public static let cancelCardDismissDelay: Duration = .seconds(4)
-
-    /// Invoked when the user clicks Undo on the Cancel Card. Phase 3
-    /// sets up the hook; Phase 5 wires it to restore the pasteboard
-    /// snapshot captured at recording start. Called on the main actor
-    /// before the card dismisses back to `.idle`.
-    public var onUndoCancelledRecording: (@MainActor () -> Void)?
+    /// Invoked when the user clicks Resume on the Cancel Card: continue
+    /// the cancelled recording (the pipeline kept its audio).
+    public var onResumeCancelledRecording: (@MainActor () -> Void)?
+    /// Invoked when the Cancel Card times out — Resume is no longer
+    /// offered, so the kept audio can be discarded.
+    public var onCancelCardExpired: (@MainActor () -> Void)?
 
     private var cancelDismissTask: Task<Void, Never>?
     /// Latest session-driven visibility received while the Cancel Card
@@ -41,12 +37,20 @@ public final class PillOverlayViewModel: ObservableObject {
         visibility == .recording || visibility == .holdToRecord
     }
 
+    /// How long the Cancel Card stays up (the user's "Cancel card duration"
+    /// setting, read at each cancel so changes apply immediately).
+    private let cancelCardDuration: @MainActor () -> Duration
+
     public init(
         visibility: Visibility = .idle,
-        visibilityMode: PillVisibility = .autoShow
+        visibilityMode: PillVisibility = .autoShow,
+        cancelCardDuration: @escaping @MainActor () -> Duration = {
+            .seconds(CancelCardDuration.resolve().seconds)
+        }
     ) {
         self.visibility = visibility
         self.visibilityMode = visibilityMode
+        self.cancelCardDuration = cancelCardDuration
     }
 
     deinit {
@@ -77,7 +81,7 @@ public final class PillOverlayViewModel: ObservableObject {
     // MARK: - Cancel Card state (spec §2f + §3)
 
     /// Enter the `.cancelled` state and show the Cancel Card. Auto-
-    /// dismisses back to `.idle` after `cancelCardDismissDelay`. Pass a
+    /// dismisses after the configured `cancelCardDuration`. Pass a
     /// custom `sleep` for tests that want to exercise the auto-dismiss
     /// path without real wall-clock waits.
     public func cancel(
@@ -87,7 +91,7 @@ public final class PillOverlayViewModel: ObservableObject {
         heldVisibility = nil
         visibility = .cancelled
 
-        let delay = Self.cancelCardDismissDelay
+        let delay = cancelCardDuration()
         cancelDismissTask = Task { [weak self] in
             do {
                 try await sleep(delay)
@@ -99,18 +103,19 @@ public final class PillOverlayViewModel: ObservableObject {
 
             await MainActor.run {
                 guard let self, self.visibility == .cancelled else { return }
+                self.onCancelCardExpired?()
                 self.closeCancelCard()
             }
         }
     }
 
-    /// Invoked when the user clicks Undo. Cancels the auto-dismiss
-    /// timer, fires `onUndoCancelledRecording`, and returns to `.idle`.
-    public func undoCancel() {
+    /// Resume clicked: stop the auto-dismiss timer, hand off to the
+    /// pipeline (`onResumeCancelledRecording`), and close the card.
+    public func resumeCancelledRecording() {
         cancelDismissTask?.cancel()
         cancelDismissTask = nil
         if visibility == .cancelled {
-            onUndoCancelledRecording?()
+            onResumeCancelledRecording?()
             closeCancelCard()
         }
     }

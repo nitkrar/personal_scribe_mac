@@ -375,33 +375,59 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isShowingCancelCard)
     }
 
-    func testUndoCancelFiresCallbackAndReturnsToIdle() {
+    func testResumeFiresCallbackAndClosesCard() {
         let viewModel = PillOverlayViewModel()
-        var undoCount = 0
-        viewModel.onUndoCancelledRecording = {
-            undoCount += 1
-        }
+        var resumes = 0
+        var expiries = 0
+        viewModel.onResumeCancelledRecording = { resumes += 1 }
+        viewModel.onCancelCardExpired = { expiries += 1 }
         viewModel.apply(visibility: .recording)
         viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })
 
-        viewModel.undoCancel()
+        viewModel.resumeCancelledRecording()
 
-        XCTAssertEqual(undoCount, 1)
-        XCTAssertEqual(viewModel.visibility, .idle)
+        XCTAssertEqual(resumes, 1)
+        XCTAssertEqual(expiries, 0, "resuming must not discard the kept audio")
         XCTAssertFalse(viewModel.isShowingCancelCard)
     }
 
-    func testUndoCancelIsNoopWhenNotCancelled() {
+    /// The card's lifetime is the "Cancel card duration" setting.
+    func testCancelCardUsesConfiguredDuration() async {
+        let viewModel = PillOverlayViewModel(cancelCardDuration: { .seconds(7) })
+        let requested = RequestedDelay()
+        viewModel.apply(visibility: .recording)
+
+        viewModel.cancel(sleep: { delay in await requested.set(delay) })
+        try? await Task.sleep(for: .milliseconds(50))
+
+        let delay = await requested.value
+        XCTAssertEqual(delay, .seconds(7))
+    }
+
+    func testResumeIsNoopWhenNotCancelled() {
         let viewModel = PillOverlayViewModel()
-        var undoCount = 0
-        viewModel.onUndoCancelledRecording = {
-            undoCount += 1
-        }
+        var resumes = 0
+        viewModel.onResumeCancelledRecording = { resumes += 1 }
 
-        viewModel.undoCancel()
+        viewModel.resumeCancelledRecording()
 
-        XCTAssertEqual(undoCount, 0)
+        XCTAssertEqual(resumes, 0)
         XCTAssertEqual(viewModel.visibility, .idle)
+    }
+
+    /// The card timing out ends the chance to Resume: the kept
+    /// audio is discarded.
+    func testCancelCardExpiryDiscardsKeptRecording() async {
+        let viewModel = PillOverlayViewModel()
+        var expiries = 0
+        viewModel.onCancelCardExpired = { expiries += 1 }
+        viewModel.apply(visibility: .recording)
+
+        viewModel.cancel(sleep: { _ in })
+        try? await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(expiries, 1)
+        XCTAssertFalse(viewModel.isShowingCancelCard)
     }
 
     func testHoldToRecordIsStickyAgainstIncomingRecordingVisibility() {
@@ -457,4 +483,9 @@ final class PillOverlayViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.visibility, .hidden)
     }
+}
+
+private actor RequestedDelay {
+    private(set) var value: Duration?
+    func set(_ delay: Duration) { value = delay }
 }

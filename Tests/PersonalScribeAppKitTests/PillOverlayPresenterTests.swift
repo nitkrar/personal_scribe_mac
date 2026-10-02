@@ -518,7 +518,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })
         XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.cancelCardSize)
 
-        viewModel.undoCancel()
+        viewModel.resumeCancelledRecording()
         XCTAssertEqual(viewModel.visibility, .idle)
         XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.cancelCardSize, "no shrink mid-crossfade")
 

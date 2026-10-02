@@ -1,10 +1,10 @@
 import AppKit
 import Foundation
 
-/// Unified snapshot + restore of the system pasteboard, covering both the
-/// pill UX's Cancel Card Undo affordance (a durable session-lifecycle slot)
-/// and the `ClipboardBatchOutput` auto-restore timer (transient per-paste
-/// handles). Replaces the pre-#072 split where `PasteboardSnapshotService`
+/// Snapshot + restore of the system pasteboard for the
+/// `ClipboardBatchOutput` auto-restore timer (transient per-paste
+/// handles). The Cancel Card's clipboard-restoring Undo slot was removed
+/// once cancelled sessions stopped touching the clipboard. Replaces the pre-#072 split where `PasteboardSnapshotService`
 /// held a string-only slot for Undo and `ClipboardBatchOutput.deliverBatch`
 /// held an inline `[NSPasteboardItem]` local for auto-restore — parallel
 /// implementations of the same concept. See `plans/072_snapshot_unification/`.
@@ -30,12 +30,6 @@ import Foundation
 /// string" into a no-op — that was a scope cut, not an invariant.
 @MainActor
 public final class PasteboardSnapshotService {
-    public enum Slot: Hashable, Sendable {
-        /// Pre-recording pasteboard contents captured on `idle → recording`
-        /// and consumed on Cancel Card Undo.
-        case cancelUndo
-    }
-
     /// Opaque receipt for a transient snapshot. Must be returned to the
     /// service's `restoreSnapshot(_:)`, `restoreSnapshotIfUnchanged(_:token:)`,
     /// or `discardSnapshot(_:)`. Not constructible by callers outside this
@@ -54,7 +48,6 @@ public final class PasteboardSnapshotService {
     private let stringWriter: StringWriter
     private let changeCountReader: ChangeCountReader
 
-    private var slotSnapshots: [Slot: [NSPasteboardItem]] = [:]
     private var transientSnapshots: [UUID: [NSPasteboardItem]] = [:]
 
     public convenience init(pasteboard: NSPasteboard = .general) {
@@ -76,25 +69,6 @@ public final class PasteboardSnapshotService {
         self.itemsWriter = itemsWriter
         self.stringWriter = stringWriter
         self.changeCountReader = changeCountReader
-    }
-
-    // MARK: - Durable slots
-
-    public func captureCurrentContents(into slot: Slot) {
-        slotSnapshots[slot] = Self.deepCopy(itemsReader())
-    }
-
-    @discardableResult
-    public func restoreSnapshot(from slot: Slot) -> Bool {
-        guard let items = slotSnapshots.removeValue(forKey: slot) else {
-            return false
-        }
-        itemsWriter(items)
-        return true
-    }
-
-    public func clearSnapshot(in slot: Slot) {
-        slotSnapshots.removeValue(forKey: slot)
     }
 
     // MARK: - Transient handles

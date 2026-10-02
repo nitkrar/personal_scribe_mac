@@ -19,7 +19,6 @@ struct PersonalScribeAppMain: App {
     @StateObject private var pillController: PillOverlayController
     @StateObject private var statusItemController: StatusItemControllerHost
     @StateObject private var unifiedWindowController: UnifiedWindowControllerHost
-    @StateObject private var pasteboardSnapshotHost: PasteboardSnapshotHost
     @StateObject private var escapeKeyMonitorHost: EscapeKeyMonitorHost
     @StateObject private var diagnosticsOverlayController: LiveDiagnosticsOverlayController
 
@@ -118,18 +117,6 @@ struct PersonalScribeAppMain: App {
             pillController.showClipboardOnlyNotice(notice)
         }
 
-        // Pill UX Phase 5: snapshot the user's pre-recording clipboard
-        // contents when recording starts so the Cancel Card's Undo
-        // button can restore them if the user discards the recording.
-        // Hook into session state transitions via the app store. The
-        // `PasteboardSnapshotHost` @StateObject owns the subscription
-        // lifetime — attaching cancellables to the struct itself
-        // wouldn't survive SwiftUI init re-runs.
-        let pasteboardSnapshotHost = PasteboardSnapshotHost(
-            appStore: appStore,
-            viewModel: pillController.viewModel,
-            service: AppComposition.pasteboardSnapshotService
-        )
         let diagnosticsOverlayController = LiveDiagnosticsOverlayController(
             store: AppComposition.diagnosticsStore
         )
@@ -156,6 +143,16 @@ struct PersonalScribeAppMain: App {
                 await coordinator?.cancelIfActive()
             }
             return true
+        }
+
+        // Cancel Card: Resume continues the cancelled recording (the
+        // pipeline keeps its audio while the card is up); the card timing
+        // out ends that window and drops the audio.
+        pillController.viewModel.onResumeCancelledRecording = { [weak coordinator] in
+            Task { await coordinator?.resumeCancelled() }
+        }
+        pillController.viewModel.onCancelCardExpired = { [weak coordinator] in
+            Task { await coordinator?.discardCancelled() }
         }
 
         // #071: hold-start now routes through `coordinator.startHoldIfIdle()`
@@ -330,9 +327,6 @@ struct PersonalScribeAppMain: App {
         )
         _unifiedWindowController = StateObject(
             wrappedValue: unifiedWindowControllerHost
-        )
-        _pasteboardSnapshotHost = StateObject(
-            wrappedValue: pasteboardSnapshotHost
         )
         _escapeKeyMonitorHost = StateObject(
             wrappedValue: EscapeKeyMonitorHost(
@@ -545,62 +539,6 @@ final class EscapeKeyMonitorHost: ObservableObject {
         Task { @MainActor [monitor] in
             monitor.stop()
         }
-    }
-}
-
-/// @StateObject host for the `PasteboardSnapshotService` + the Combine
-/// subscription that wires `AppStore` session-state transitions to
-/// snapshot / clear calls. Pill UX spec §4 requires saving the pre-
-/// recording clipboard so the Cancel Card's Undo can restore it.
-@MainActor
-final class PasteboardSnapshotHost: ObservableObject {
-    let service: PasteboardSnapshotService
-    private var cancellables: Set<AnyCancellable> = []
-    private var previousSessionState: SessionState
-
-    init(
-        appStore: AppStore,
-        viewModel: PillOverlayViewModel,
-        service: PasteboardSnapshotService = PasteboardSnapshotService()
-    ) {
-        self.service = service
-        self.previousSessionState = appStore.snapshot.sessionState
-
-        viewModel.onUndoCancelledRecording = { [weak service] in
-            service?.restoreSnapshot(from: .cancelUndo)
-        }
-
-        // Subscribe to `$snapshot` (the Published projected publisher) and read
-        // the new state from the closure parameter. Using `objectWillChange`
-        // here would fire inside willSet — `appStore.snapshot.sessionState`
-        // would still hold the old value, and the edge detection would never
-        // see a transition. The publisher delivers the new snapshot directly.
-        //
-        // No `.receive(on: DispatchQueue.main)` — AppStore is `@MainActor`,
-        // so `$snapshot` already fires on main. Adding a dispatch hop would
-        // defer execution past the test harness's `Task.yield()` settle
-        // window without changing semantics in production.
-        appStore.$snapshot
-            .sink { [weak self, weak service] newSnapshot in
-                MainActor.assumeIsolated {
-                    guard let self, let service else { return }
-                    let next = newSnapshot.sessionState
-                    defer { self.previousSessionState = next }
-
-                    // Snapshot on idle → recording. Pre-recording user
-                    // clipboard contents are what Undo must restore.
-                    if case .idle = self.previousSessionState, case .capturing = next {
-                        service.captureCurrentContents(into: .cancelUndo)
-                    }
-
-                    // Clear on transcribing → idle (successful complete).
-                    // A fresh snapshot will be taken on the next recording.
-                    if case .transcribing = self.previousSessionState, case .idle = next {
-                        service.clearSnapshot(in: .cancelUndo)
-                    }
-                }
-            }
-            .store(in: &cancellables)
     }
 }
 

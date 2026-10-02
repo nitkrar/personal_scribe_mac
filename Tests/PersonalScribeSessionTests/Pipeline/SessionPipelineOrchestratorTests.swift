@@ -3162,3 +3162,82 @@ private actor HangingStartCapture: AudioCapturer {
         }
     }
 }
+
+// MARK: - Resume after cancel
+
+/// Records the duration of every buffer handed to `transcribe`.
+private actor DurationRecordingTranscriber: Transcriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+    private(set) var transcribedDurations: [Duration] = []
+
+    func prepare() async throws {}
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+    func transcribe(_ audio: PCMBuffer, languageHint: String?) async throws -> TranscriptionResult {
+        transcribedDurations.append(audio.duration)
+        return TranscriptionResult(text: "both parts", audioDuration: audio.duration, processingDuration: .zero)
+    }
+    func releaseIdleResources() async {}
+}
+
+extension SessionPipelineOrchestratorTests {
+    private func waitForState(_ state: SessionState, _ orchestrator: SessionPipelineOrchestrator) async throws {
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().sessionState != state {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+    }
+
+    /// Esc then Resume: the cancelled audio is kept and the resumed
+    /// capture appends to it, so stop transcribes ONE recording covering
+    /// both parts.
+    func testResumeAfterCancelTranscribesBothPartsAsOneRecording() async throws {
+        let transcriber = DurationRecordingTranscriber()
+        let sink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            transcriber: transcriber,
+            outputSink: sink
+        )
+
+        await orchestrator.toggleCapture()
+        try await waitForState(.capturing, orchestrator)
+        try await Task.sleep(for: .milliseconds(100))
+        await orchestrator.cancelCapture()
+        try await waitForState(.idle, orchestrator)
+
+        await orchestrator.resumeCancelledCapture()
+        try await waitForState(.capturing, orchestrator)
+        try await Task.sleep(for: .milliseconds(100))
+        await orchestrator.toggleCapture()
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+
+        let durations = await transcriber.transcribedDurations
+        XCTAssertEqual(durations, [.seconds(2)])
+        let finals = await sink.finalDeliveries()
+        XCTAssertEqual(finals.count, 1)
+    }
+
+    /// Once the Cancel Card expires the audio is dropped; Resume is a no-op.
+    func testResumeAfterDiscardDoesNothing() async throws {
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            transcriber: DurationRecordingTranscriber()
+        )
+
+        await orchestrator.toggleCapture()
+        try await waitForState(.capturing, orchestrator)
+        await orchestrator.cancelCapture()
+        await orchestrator.discardCancelledCapture()
+        await orchestrator.resumeCancelledCapture()
+
+        let state = await orchestrator.snapshot().sessionState
+        XCTAssertEqual(state, .idle)
+    }
+}

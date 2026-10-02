@@ -217,6 +217,16 @@ public actor SessionCoordinator {
         }
     }
 
+    /// Cancel Card "Resume": continue the cancelled recording.
+    public func resumeCancelled() async {
+        await pipeline.resumeCancelledCapture()
+    }
+
+    /// Cancel Card closed without Resume: drop the kept audio.
+    public func discardCancelled() async {
+        await pipeline.discardCancelledCapture()
+    }
+
     public func state() async -> SessionState {
         await currentDisplayState()
     }

@@ -13,6 +13,12 @@ public protocol SessionPipelining: Actor, Sendable {
     /// transcription, no output delivery. No-op from any non-active
     /// state. See `#002`.
     func cancelCapture() async
+    /// Resume the last cancelled capture (kept while the Cancel Card is
+    /// up): capture again, appending to its audio, so stop transcribes
+    /// one recording. No-op if nothing is resumable.
+    func resumeCancelledCapture() async
+    /// Drop the cancelled capture's audio (Cancel Card closed).
+    func discardCancelledCapture() async
     func prepareTranscriber() async throws
     func snapshot() -> SessionSnapshot
     func snapshotStream() -> AsyncStream<SessionSnapshot>

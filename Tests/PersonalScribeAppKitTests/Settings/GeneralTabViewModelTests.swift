@@ -101,6 +101,17 @@ final class GeneralTabViewModelTests: XCTestCase {
         XCTAssertEqual(ClipboardRestoreDelay.resolve(from: defaults).seconds, 2.4, accuracy: 0.0001)
     }
 
+    func testSetCancelCardDurationPersistsAndUpdatesState() {
+        let defaults = isolatedDefaults()
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+        XCTAssertEqual(viewModel.cancelCardDuration.seconds, 3)
+
+        viewModel.setCancelCardDurationSeconds(5)
+
+        XCTAssertEqual(viewModel.cancelCardDuration.seconds, 5)
+        XCTAssertEqual(CancelCardDuration.resolve(from: defaults).seconds, 5)
+    }
+
     func testInitResolvesPersistedStreamingDefaults() {
         let defaults = isolatedDefaults()
         StreamingLiveCardEnabledPreference.persist(false, to: defaults)

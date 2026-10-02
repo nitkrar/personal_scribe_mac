@@ -499,6 +499,26 @@ public struct GeneralTab: View {
 
             Divider()
 
+            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                Text("Cancel card duration")
+                    .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+
+                Text(viewModel.cancelCardDurationDescription)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+
+                Slider(
+                    value: Binding(
+                        get: { viewModel.cancelCardDuration.seconds },
+                        set: { viewModel.setCancelCardDurationSeconds($0) }
+                    ),
+                    in: CancelCardDuration.minimumSeconds...CancelCardDuration.maximumSeconds,
+                    step: 1
+                )
+            }
+
+            Divider()
+
             Toggle(
                 "Mute system audio while recording",
                 isOn: Binding(
@@ -663,6 +683,7 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var pillStyle: PillStyle
     @Published private(set) var waveformPalette: WaveformPalette
     @Published private(set) var clipboardRestoreDelay: ClipboardRestoreDelay
+    @Published private(set) var cancelCardDuration: CancelCardDuration
     @Published private(set) var visibilityError: VisibilityConfigError?
     @Published private(set) var launchAtLogin: Bool
     /// Background mode = menu-bar-only accessory app. Default `false`
@@ -795,6 +816,7 @@ final class GeneralTabViewModel: ObservableObject {
         self.pillStyle = PillStyle.resolve(from: defaults)
         self.waveformPalette = WaveformPalette.resolve(from: defaults)
         self.clipboardRestoreDelay = ClipboardRestoreDelay.resolve(from: defaults)
+        self.cancelCardDuration = CancelCardDuration.resolve(from: defaults)
         // launchAtLogin seeds from the injected service. The real impl
         // (`SystemLaunchAtLoginService`) reads SMAppService.mainApp.status
         // — .enabled means the app is registered to launch at login.
@@ -1044,6 +1066,15 @@ final class GeneralTabViewModel: ObservableObject {
     // while the window was closed).
     func refreshLaunchAtLoginStatus() {
         launchAtLogin = launchAtLoginService.isEnabled
+    }
+
+    func setCancelCardDurationSeconds(_ seconds: TimeInterval) {
+        CancelCardDuration.persist(to: defaults, .init(seconds: seconds))
+        cancelCardDuration = CancelCardDuration.resolve(from: defaults)
+    }
+
+    var cancelCardDurationDescription: String {
+        "After you cancel a recording, the Cancel card offers Resume for \(Self.formatSeconds(cancelCardDuration.seconds))s"
     }
 
     func setClipboardRestoreDelaySeconds(_ seconds: TimeInterval) {

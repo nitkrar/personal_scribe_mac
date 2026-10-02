@@ -164,8 +164,8 @@ public struct PillOverlayView: View {
             case .hidden:
                 EmptyView()
             case .cancelled:
-                CancelCardView(onUndo: { [weak model] in
-                    model?.undoCancel()
+                CancelCardView(onResume: { [weak model] in
+                    model?.resumeCancelledRecording()
                 })
             case .idle:
                 idlePill
@@ -492,14 +492,14 @@ private struct PillChrome: ViewModifier {
 /// Cancel Card — shown when `PillOverlayViewModel.visibility == .cancelled`
 /// (pill UX spec §2f). Replaces the pill surface at the same screen
 /// anchor. Not a pill — its own cooler-navy background, red border, and
-/// right-aligned Undo button.
+/// right-aligned Resume button.
 ///
 /// Auto-dismiss + clipboard restore are managed on the view model side
 /// (`PillOverlayViewModel.cancel(...)` + `.undoCancel()`); this view is
 /// purely presentational.
 @MainActor
 struct CancelCardView: View {
-    let onUndo: @MainActor () -> Void
+    let onResume: @MainActor () -> Void
 
     var body: some View {
         let textColor = PersonalScribeTheme.Pill.Dark.waveform
@@ -518,8 +518,8 @@ struct CancelCardView: View {
 
             Spacer(minLength: 8)
 
-            Button(action: onUndo) {
-                Text("Undo")
+            Button(action: onResume) {
+                Text("Resume")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(undoText)
                     .padding(.horizontal, 10)
@@ -534,7 +534,7 @@ struct CancelCardView: View {
                     )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Undo — restore clipboard contents from before the recording")
+            .accessibilityLabel("Resume — continue the cancelled recording")
         }
         .padding(.horizontal, 14)
         .frame(
@@ -556,7 +556,7 @@ struct CancelCardView: View {
 }
 
 #Preview("Cancel Card — default") {
-    CancelCardView(onUndo: {})
+    CancelCardView(onResume: {})
         .padding(40)
         .background(Color.black.opacity(0.3))
         .preferredColorScheme(.dark)

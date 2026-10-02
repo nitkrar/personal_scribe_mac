@@ -463,7 +463,7 @@ public enum PersonalScribeTheme {
             public static let snug: CGFloat = 160
             public static let medium: CGFloat = 220
             public static let wide: CGFloat = 240
-            public static let card: CGFloat = 240
+            public static let card: CGFloat = 264
         }
 
         /// Cancel-card-specific tokens (pill UX spec §2f). The card is

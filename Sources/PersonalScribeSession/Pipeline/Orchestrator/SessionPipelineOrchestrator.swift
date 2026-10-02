@@ -119,6 +119,19 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private var startRecordingInFlight = false
     private var snapshotContinuations: [UUID: AsyncStream<SessionSnapshot>.Continuation] = [:]
     private var bufferedAudio: [PCMBuffer] = []
+    /// Audio of the last cancelled capture, kept while the Cancel Card
+    /// offers Resume. Dropped by `discardCancelledCapture()` (card expired)
+    /// or when any new capture starts.
+    private struct ResumableCapture {
+        let buffers: [PCMBuffer]
+        let recipe: BoundRecipe?
+        /// Live streaming text seen before the cancel — prepended when a
+        /// resumed streaming session falls back to its live text.
+        let liveText: String?
+    }
+    private var resumableCapture: ResumableCapture?
+    /// Live text carried into the current (resumed) session.
+    private var resumedLiveText: String?
     private var captureTask: Task<Void, Never>?
     private var liveStreamingInputContinuation:
         AsyncThrowingStream<PCMBuffer, Error>.Continuation?
@@ -317,6 +330,28 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         case .idle, .completed, .shortExit, .transcribing, .error:
             logger.info("Ignored cancel from non-active session state")
         }
+    }
+
+    /// Resume the last cancelled capture: capture again, appending to the
+    /// kept audio, so the eventual stop transcribes one recording. No-op
+    /// when nothing is resumable or a session is active.
+    public func resumeCancelledCapture() async {
+        guard let resumable = resumableCapture else {
+            logger.info("Ignored resume — no cancelled capture to resume")
+            return
+        }
+        switch currentSnapshot.sessionState {
+        case .idle, .completed, .shortExit:
+            logger.info("capture_resumed — keptBufferCount=\(resumable.buffers.count)")
+            await startRecording(resuming: resumable)
+        case .capturing, .holdRecording, .transcribing, .error:
+            logger.info("Ignored resume while session is not idle")
+        }
+    }
+
+    /// Drop the cancelled capture's audio (Cancel Card closed).
+    public func discardCancelledCapture() {
+        resumableCapture = nil
     }
 
     public func prepareTranscriber() async throws {
@@ -543,7 +578,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         )
     }
 
-    private func startRecording() async {
+    private func startRecording(resuming resumable: ResumableCapture? = nil) async {
         guard !startRecordingInFlight else {
             logger.info("Ignored re-entrant startRecording while a prior start is still awaiting capture.start()")
             return
@@ -551,12 +586,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         startRecordingInFlight = true
         defer { startRecordingInFlight = false }
 
-        bufferedAudio.removeAll(keepingCapacity: true)
+        bufferedAudio = resumable?.buffers ?? []
+        resumedLiveText = resumable?.liveText
+        resumableCapture = nil
         nextRevision = 0
         latestStageFailure = nil
         activeContext = contextProvider.currentContext()
         resetGraceForNewSession()
-        let sessionRecipe = boundRecipe
+        let sessionRecipe = resumable?.recipe ?? boundRecipe
         activeSessionRecipe = sessionRecipe
         logSessionStartedBound(sessionRecipe: sessionRecipe, holdToRecord: false)
 
@@ -627,6 +664,18 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         audioLevelTask = nil
         await cancelLiveStreamingSession()
 
+        // Keep the audio while the Cancel Card offers Resume.
+        if !bufferedAudio.isEmpty {
+            let liveText = [resumedLiveText, currentSnapshot.transcriptProgress?.text]
+                .compactMap { $0?.isEmpty == false ? $0 : nil }
+                .joined(separator: " ")
+            resumableCapture = ResumableCapture(
+                buffers: bufferedAudio,
+                recipe: activeSessionRecipe,
+                liveText: liveText.isEmpty ? nil : liveText
+            )
+        }
+        resumedLiveText = nil
         bufferedAudio.removeAll(keepingCapacity: true)
         nextRevision = 0
         latestStageFailure = nil
@@ -657,6 +706,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// transitioning state to `.error` — the eager publish is reverted
     /// implicitly by the error publication.
     private func startHoldRecording() async {
+        resumableCapture = nil
+        resumedLiveText = nil
         bufferedAudio.removeAll(keepingCapacity: true)
         nextRevision = 0
         latestStageFailure = nil
@@ -1016,6 +1067,15 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 liveFailure: liveFailure != nil,
                 finalSource: "streamingFallback"
             )
+            // The live session restarted on resume, so its text covers
+            // only the resumed part; put the pre-cancel text in front.
+            if let prefix = resumedLiveText {
+                return TranscriptionResult(
+                    text: prefix + " " + streamingFallbackResult.text,
+                    audioDuration: bufferedDuration,
+                    processingDuration: streamingFallbackResult.processingDuration
+                )
+            }
             return streamingFallbackResult
         }
 

@@ -441,3 +441,15 @@ paste whenever the focus owner is not Ninimma's pid.
   live under `Tests/PersonalScribeAppKitTests/` and `Tests/PersonalScribeCoreTests/`.
 - Light-mode parity check: flip macOS Appearance to Light and repeat
   MV-B1-1 + MV-B1-5 to confirm palette resolution.
+
+## Cancel card: Resume (2026-10-02)
+
+Esc / ✕ during a recording keeps its audio while the Cancel card is up
+(Settings → Behavior → "Cancel card duration", default 3s). Resume
+continues the same recording; stop transcribes both parts as one.
+
+- [ ] **MV-PILL-RESUME-1** Dictate a sentence, press Esc, click Resume,
+  dictate a second sentence, stop. One paste containing both sentences.
+- [ ] **MV-PILL-RESUME-2** Press Esc and let the card expire. Nothing is
+  pasted or copied; the next recording starts fresh (no old audio).
+- [ ] **MV-PILL-RESUME-3** Set the duration to 6s; the card stays ~6s.
