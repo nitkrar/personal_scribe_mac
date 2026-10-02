@@ -3,7 +3,7 @@
 
 Prints:
 - Trunk HEAD + recent-commit stats (absolute + since-last-check delta)
-- Active worktrees (count, locked, ahead of trunk)
+- Active worktrees (count, locked, ahead of main)
 - Heartbeats in main repo (triggered/active/stale/wedged/completed)
 - Heartbeats per worktree (triggered/active/stale/wedged/completed)
 
@@ -270,7 +270,7 @@ def section_worktrees(cfg: Config) -> list[tuple[str, int]]:
                 continue
             name = wt.name
             branch = f"worktree-{name}"
-            ahead_out = git(cfg, "rev-list", "--count", f"trunk..{branch}")
+            ahead_out = git(cfg, "rev-list", "--count", f"main..{branch}")
             try:
                 ahead = int(ahead_out) if ahead_out else 0
             except ValueError:
@@ -282,7 +282,7 @@ def section_worktrees(cfg: Config) -> list[tuple[str, int]]:
     print(
         f"  {Color.bold('stats:')} {Color.bold(str(len(worktrees)))} worktrees{sep}"
         f"{Color.bold(str(wt_locked))} locked{sep}"
-        f"{Color.good(str(wt_ahead)) if wt_ahead > 0 else Color.dim('0')} ahead of trunk"
+        f"{Color.good(str(wt_ahead)) if wt_ahead > 0 else Color.dim('0')} ahead of main"
     )
     print()
     return worktrees
@@ -325,7 +325,7 @@ def section_worktree_heartbeats(cfg: Config, worktrees: list[tuple[str, int]]) -
     completed = 0
     for name, ahead in worktrees:
         print()
-        ahead_str = Color.good(f"ahead of trunk: {ahead}") if ahead > 0 else Color.dim(f"ahead of trunk: {ahead}")
+        ahead_str = Color.good(f"ahead of main: {ahead}") if ahead > 0 else Color.dim(f"ahead of main: {ahead}")
         print(f"--- {Color.bold(name)} ({ahead_str}) ---")
         hb_dir = cfg.repo / cfg.worktree_root / name / cfg.heartbeat_dir
         found = False
