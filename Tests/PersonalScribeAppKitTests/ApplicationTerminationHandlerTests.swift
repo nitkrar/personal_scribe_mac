@@ -106,3 +106,23 @@ private final class EventRecorder: @unchecked Sendable {
         }
     }
 }
+
+/// Re-launching Ninimma while it runs (Finder / Spotlight / `open`) makes
+/// LaunchServices send a reopen event to the running copy instead of
+/// starting a new process. In Background mode there is no Dock icon or
+/// window, so without handling it the launch looked like a no-op.
+@MainActor
+final class ApplicationReopenTests: XCTestCase {
+    func testReopenEventInvokesInstalledHandlerToShowMainWindow() {
+        let delegate = FastExitApplicationTerminationDelegate(
+            replyToApplicationShouldTerminate: { _ in }
+        )
+        var reopenCount = 0
+        delegate.installReopenHandler { reopenCount += 1 }
+
+        let handled = delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: false)
+
+        XCTAssertEqual(reopenCount, 1)
+        XCTAssertFalse(handled, "we show the window ourselves; AppKit must not also act")
+    }
+}

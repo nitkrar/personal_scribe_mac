@@ -18,6 +18,8 @@
 
 - [ ] **MV-SETT-9 — Light pill theme inverts the pill:** Pill theme → Light: pill surface is cream with dark logo/icons/text, waveform uses the palette's deeper shades, and the streaming live-transcript card is cream with dark text. System matches Light while macOS is light; Dark unchanged.
 
+- [ ] **MV-SETT-10 — Re-launch shows the main window:** with Ninimma running and its window closed (Background mode on and off), launch it again from Finder / Spotlight (`open /Applications/Ninimma.app`) and via `open -n`: the main window appears, still one process.
+
 ## Clipboard restore delay
 
 - Slider reflects current delay: open `General`, confirm the `Clipboard restore delay` control matches the current setting value, and confirm the helper text reads `After paste, wait Ns before restoring your clipboard` with the same value.

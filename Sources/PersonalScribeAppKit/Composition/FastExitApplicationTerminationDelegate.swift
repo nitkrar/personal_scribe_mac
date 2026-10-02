@@ -7,6 +7,8 @@ final class FastExitApplicationTerminationDelegate: NSObject, NSApplicationDeleg
     typealias ScheduleAction = @MainActor @Sendable (@escaping AsyncAction) -> Void
 
     private var prequitHandler: AsyncAction = {}
+    private var reopenHandler: @MainActor () -> Void = {}
+    private var showWindowRequestObserver: NSObjectProtocol?
     private let replyToApplicationShouldTerminate: ReplyAction
     private let scheduleTermination: ScheduleAction
     private var terminationInterceptionInFlight = false
@@ -36,6 +38,31 @@ final class FastExitApplicationTerminationDelegate: NSObject, NSApplicationDeleg
 
     func installPrequitHandler(_ handler: @escaping AsyncAction) {
         prequitHandler = handler
+    }
+
+    func installReopenHandler(_ handler: @escaping @MainActor () -> Void) {
+        reopenHandler = handler
+        guard showWindowRequestObserver == nil else { return }
+        // A second process (`open -n`, launch race) can't send a reopen
+        // event; `SingleInstanceGuard` posts this before it exits.
+        showWindowRequestObserver = DistributedNotificationCenter.default().addObserver(
+            forName: SingleInstanceGuard.showMainWindowRequest,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.reopenHandler()
+            }
+        }
+    }
+
+    /// Re-launching while running (Finder, Spotlight, `open`) sends a
+    /// reopen event here instead of starting a second process. In
+    /// Background mode there's no Dock icon or window, so show the main
+    /// window ourselves; return `false` so AppKit doesn't also act.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        reopenHandler()
+        return false
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

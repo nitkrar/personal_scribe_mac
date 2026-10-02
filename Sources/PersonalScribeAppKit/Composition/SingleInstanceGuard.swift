@@ -7,6 +7,11 @@ import Foundation
 /// runs. Relaunch stays compatible because `AppRelauncher` only opens
 /// the new copy after the old process has exited.
 enum SingleInstanceGuard {
+    /// Posted (cross-process) by a second launch so the running copy
+    /// shows its main window — in Background mode activation alone has
+    /// nothing visible to bring forward.
+    static let showMainWindowRequest = Notification.Name("com.nitkrar.personal_scribe.showMainWindowRequest")
+
     struct Instance: Equatable {
         let pid: pid_t
         let isTerminated: Bool
@@ -28,6 +33,12 @@ enum SingleInstanceGuard {
             currentPID: ProcessInfo.processInfo.processIdentifier
         ) else { return }
         apps.first { $0.processIdentifier == other.pid }?.activate()
+        DistributedNotificationCenter.default().postNotificationName(
+            showMainWindowRequest,
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
+        )
         exit(0)
     }
 }

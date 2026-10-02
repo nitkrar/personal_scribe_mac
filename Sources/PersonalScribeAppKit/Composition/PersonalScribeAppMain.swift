@@ -405,6 +405,12 @@ struct PersonalScribeAppMain: App {
         }
 
         applicationTerminationDelegate.installPrequitHandler(prequitHandler)
+        // Second launch while running: show the main window (Background
+        // mode has no Dock icon / window to bring forward otherwise).
+        applicationTerminationDelegate.installReopenHandler {
+            unifiedWindowControllerHost.showWindow()
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     var body: some Scene {
