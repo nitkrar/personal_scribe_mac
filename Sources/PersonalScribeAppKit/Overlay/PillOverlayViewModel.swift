@@ -22,6 +22,9 @@ public final class PillOverlayViewModel: ObservableObject {
     public var onUndoCancelledRecording: (@MainActor () -> Void)?
 
     private var cancelDismissTask: Task<Void, Never>?
+    /// Latest session-driven visibility received while the Cancel Card
+    /// was up; shown when the card closes.
+    private var heldVisibility: Visibility?
     /// Override that suppresses incoming `apply(visibility:)` calls from
     /// the AppStore session-state mapping while `.cancelled` is
     /// "sticky". Without this, the session's normal
@@ -63,7 +66,8 @@ public final class PillOverlayViewModel: ObservableObject {
         // the 4s auto-dismiss fires or the user clicks Undo. Prevents
         // the session's own `.capturing → .idle` cancel transition
         // from wiping the Cancel Card before the user can see it.
-        if isShowingCancelCard && visibility != .cancelled && visibility != .idle {
+        if isShowingCancelCard && visibility != .cancelled {
+            heldVisibility = visibility
             return
         }
 
@@ -80,6 +84,7 @@ public final class PillOverlayViewModel: ObservableObject {
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         cancelDismissTask?.cancel()
+        heldVisibility = nil
         visibility = .cancelled
 
         let delay = Self.cancelCardDismissDelay
@@ -94,7 +99,7 @@ public final class PillOverlayViewModel: ObservableObject {
 
             await MainActor.run {
                 guard let self, self.visibility == .cancelled else { return }
-                self.visibility = .idle
+                self.closeCancelCard()
             }
         }
     }
@@ -106,8 +111,14 @@ public final class PillOverlayViewModel: ObservableObject {
         cancelDismissTask = nil
         if visibility == .cancelled {
             onUndoCancelledRecording?()
-            visibility = .idle
+            closeCancelCard()
         }
+    }
+
+    private func closeCancelCard() {
+        let next = heldVisibility ?? .idle
+        heldVisibility = nil
+        visibility = next
     }
 
     public func setVisibilityMode(_ mode: PillVisibility) {

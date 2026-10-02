@@ -155,6 +155,10 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     var onMouseDragged: (() -> Void)?
     var onTap: (() -> Void)?
     var isTapEnabled: (() -> Bool)?
+    /// When true (Cancel Card up), clicks go to the SwiftUI content — its
+    /// Undo button — instead of the pill's tap / drag handling.
+    var passesClicksToContent: (() -> Bool)?
+    private var contentOwnsClick = false
     private var interactionState = OverlayPanelInteractionState()
     /// Screen-space cursor and panel origin at mouse-down; the drag moves
     /// the panel by the cursor's offset from here.
@@ -165,6 +169,11 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     }
 
     override func mouseDown(with event: NSEvent) {
+        contentOwnsClick = passesClicksToContent?() == true
+        if contentOwnsClick {
+            super.mouseDown(with: event)
+            return
+        }
         interactionState.begin(at: convert(event.locationInWindow, from: nil))
         if let window {
             dragAnchor = (window.convertPoint(toScreen: event.locationInWindow), window.frame.origin)
@@ -172,6 +181,10 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if contentOwnsClick {
+            super.mouseDragged(with: event)
+            return
+        }
         let localPoint = convert(event.locationInWindow, from: nil)
         _ = interactionState.drag(to: localPoint)
         // Move the panel ourselves rather than via `performDrag`: that
@@ -189,6 +202,11 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if contentOwnsClick {
+            contentOwnsClick = false
+            super.mouseUp(with: event)
+            return
+        }
         let localPoint = convert(event.locationInWindow, from: nil)
         let wasDragging = interactionState.isDragging
         dragAnchor = nil
@@ -293,6 +311,9 @@ struct AppKitPillOverlayPanelBuilder: PillOverlayPanelBuilding {
         hostingView.onMouseDragged = onMouseDragged
         hostingView.onTap = onTap
         hostingView.isTapEnabled = isTapEnabled
+        hostingView.passesClicksToContent = { [weak model] in
+            model?.visibility == .cancelled
+        }
         hostingView.frame = contentView.bounds
         hostingView.autoresizingMask = [.width, .height]
         contentView.addSubview(hostingView)
@@ -337,6 +358,9 @@ public final class PillOverlayPresenter {
     /// clamped on-screen, so an edge-shifted recording pill returns to
     /// its spot when it shrinks instead of creeping toward the center.
     private var homeAnchor: NSPoint?
+    private var pendingShrink: DispatchWorkItem?
+    /// Matches the card ↔ pill `.animation` duration in `PillOverlayView`.
+    static let cancelCrossfadeDuration: TimeInterval = 0.25
     /// The last visibility we sized the panel for. Used to decide
     /// whether `animate: true` should be passed to `setFrame` — the
     /// first transition out of `.hidden` must arrive at the target
@@ -481,8 +505,24 @@ public final class PillOverlayPresenter {
         let involvesCancelCrossfade = wasCancelled || becomingCancelled
         let shouldAnimate = !isFirstSizing && !involvesCancelCrossfade
 
-        panel.setFrame(newFrame, animate: shouldAnimate)
         lastSizedVisibility = visibility
+        if wasCancelled && !isFirstSizing {
+            // Leaving the Cancel Card: SwiftUI is crossfading card → pill
+            // inside the panel. Shrinking the panel mid-fade stalls the
+            // fade (old card stuck on screen, new pill invisible), so
+            // shrink once the fade has finished.
+            pendingShrink?.cancel()
+            let work = DispatchWorkItem { [weak self, weak panel] in
+                guard let self, let panel, self.lastSizedVisibility == visibility else { return }
+                panel.setFrame(newFrame, animate: false)
+            }
+            pendingShrink = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.cancelCrossfadeDuration, execute: work)
+        } else {
+            pendingShrink?.cancel()
+            pendingShrink = nil
+            panel.setFrame(newFrame, animate: shouldAnimate)
+        }
 
         // Response card follows the pill's bottom-center. A SwiftUI
         // `.animation` on the card itself is not viable (NSPanel-based),

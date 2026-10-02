@@ -428,27 +428,33 @@ final class PillOverlayViewModelTests: XCTestCase {
     }
 
     func testCancelledStateIsStickyAgainstIncomingSessionVisibilityUpdates() {
-        // Once the view model enters `.cancelled`, an incoming
-        // `apply(visibility: .recording)` from the session-state
-        // mapping must not clobber the Cancel Card before the user
-        // sees it. `.idle` is allowed (that's the dismiss path).
+        // Once the view model enters `.cancelled`, session-state updates
+        // must not clobber the Cancel Card before the user sees it —
+        // including the session's own `.capturing → .idle` on cancel,
+        // which used to wipe the card ~50 ms after Esc.
         let viewModel = PillOverlayViewModel()
         viewModel.apply(visibility: .recording)
         viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })
         XCTAssertEqual(viewModel.visibility, .cancelled)
 
+        for incoming: PillOverlayViewModel.Visibility in [.recording, .transcribing, .hidden, .idle] {
+            viewModel.apply(visibility: incoming)
+            XCTAssertEqual(viewModel.visibility, .cancelled, "\(incoming) must not dismiss the Cancel Card")
+        }
+    }
+
+    /// When the card closes it shows whatever the session reported
+    /// meanwhile (e.g. hidden in auto-show mode), not a hard-coded idle.
+    func testCancelCardDismissAppliesLatestSessionVisibility() async {
+        let viewModel = PillOverlayViewModel()
         viewModel.apply(visibility: .recording)
-        XCTAssertEqual(viewModel.visibility, .cancelled)
-
-        viewModel.apply(visibility: .transcribing)
-        XCTAssertEqual(viewModel.visibility, .cancelled)
-
+        viewModel.cancel(sleep: { _ in try await Task.sleep(for: .milliseconds(10)) })
+        viewModel.apply(visibility: .idle)
         viewModel.apply(visibility: .hidden)
         XCTAssertEqual(viewModel.visibility, .cancelled)
 
-        // `.idle` is allowed through — the auto-dismiss timer relies
-        // on it, and undoCancel() calls it directly.
-        viewModel.apply(visibility: .idle)
-        XCTAssertEqual(viewModel.visibility, .idle)
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(viewModel.visibility, .hidden)
     }
 }

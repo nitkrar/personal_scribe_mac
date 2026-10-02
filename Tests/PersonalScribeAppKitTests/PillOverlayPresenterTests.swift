@@ -49,6 +49,27 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(tapCount, 1)
     }
 
+    /// While the Cancel Card is up, clicks belong to its Undo button:
+    /// the pill must neither treat them as a tap nor start a drag.
+    func testClicksPassToContentWhileContentOwnsThem() throws {
+        let (window, hostingView) = makeHostingView()
+        var tapCount = 0
+        var dragEnds = 0
+        hostingView.onTap = { tapCount += 1 }
+        hostingView.onMouseDragged = { dragEnds += 1 }
+        hostingView.isTapEnabled = { true }
+        hostingView.passesClicksToContent = { true }
+        let origin = window.frame.origin
+
+        hostingView.mouseDown(with: try makeMouseEvent(.leftMouseDown, at: NSPoint(x: 20, y: 20), window: window))
+        hostingView.mouseDragged(with: try makeMouseEvent(.leftMouseDragged, at: NSPoint(x: 40, y: 40), window: window))
+        hostingView.mouseUp(with: try makeMouseEvent(.leftMouseUp, at: NSPoint(x: 40, y: 40), window: window))
+
+        XCTAssertEqual(tapCount, 0)
+        XCTAssertEqual(dragEnds, 0)
+        XCTAssertEqual(window.frame.origin, origin)
+    }
+
     func testMouseUpDoesNotFireTapWhenTapIsDisabled() throws {
         let (window, hostingView) = makeHostingView()
         var tapCount = 0
@@ -484,6 +505,25 @@ final class PillOverlayPresenterTests: XCTestCase {
         viewModel.apply(visibility: PillVisibilityState.idle)
 
         XCTAssertEqual(panelBuilder.panel.frame, idleFrame)
+    }
+
+    /// Leaving the Cancel Card, the panel keeps the card's size until
+    /// SwiftUI's card → pill crossfade ends; shrinking mid-fade froze the
+    /// pill's content (old card stuck on screen).
+    func testPanelShrinksOnlyAfterCancelCardCrossfade() async throws {
+        let viewModel = PillOverlayViewModel(visibility: .recording, visibilityMode: .alwaysOn)
+        let panelBuilder = RecordingPanelBuilder()
+        let presenter = PillOverlayPresenter(model: viewModel, panelBuilder: panelBuilder)
+        _ = presenter
+        viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })
+        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.cancelCardSize)
+
+        viewModel.undoCancel()
+        XCTAssertEqual(viewModel.visibility, .idle)
+        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.cancelCardSize, "no shrink mid-crossfade")
+
+        try await Task.sleep(for: .milliseconds(Int(PillOverlayPresenter.cancelCrossfadeDuration * 1000) + 150))
+        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.idleSize)
     }
 
     /// pill → Cancel Card transition is a crossfade, not a morph. The
