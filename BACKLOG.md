@@ -71,17 +71,6 @@ Quick lookup when an old commit or doc cites a legacy ID.
 
 Done bugs archived 2026-04-30 → see [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.md) "Archived 2026-04-30: 9 bugs closed" for #002, #007, #039, #042, #071, #072, #073, #075, #077.
 
-### #010 — Drag-suppresses-tap end-to-end test (Test C)
-
-`bug` · `P2` · `open` · `area: pill, testing`
-*Updated 2026-04-21*
-
-`mouseDown` → simulated 10pt drag (multiple `mouseDragged` events crossing the 4pt threshold) → `mouseUp`. Assert `onTap` does NOT fire; `onMouseDragged` does. Tests A + B landed (`1cb665c`). State-machine drag test at `PillOverlayPresenterTests.swift:17-34` already exists; this covers the end-to-end hosting-view path.
-
-**Legacy:** `PLAN_PHASES.md` Step 1.4b
-
----
-
 ### #104 — Whisper.cpp streaming dedup tracker
 
 `bug` · `P3` · `open` · `stage: design` · `area: transcription, streaming`

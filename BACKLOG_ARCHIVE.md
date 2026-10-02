@@ -1062,7 +1062,7 @@ Active follow-ups split off as tickets: **#104** (whisper.cpp dedup tracker — 
 
 ---
 
-## Archived 2026-10-02: 14 tickets closed (shipped audit + stale-backlog merge)
+## Archived 2026-10-02: 15 tickets closed (shipped audit + stale-backlog merge)
 
 Closing evidence is on each ticket's `**Closed:**` line where the audit added one; #027 and #033 were already marked done.
 
@@ -1690,3 +1690,16 @@ V1 remains a user-created custom mode / preset (not a built-in mode). English-on
 **Legacy:** `plans/_legacy/BACKLOG_pre_migration.md` → "Streaming dictation mode"
 
 **Closed:** 2026-10-02 — streaming dictation used throughout the 2026-10-01/02 sessions (WhisperKit and Parakeet EOU live, second pass, Esc → Resume across parts); closed by user decision. The open "EOU silent-paint inconsistency" note from the in-flight row had no further detail; a card-vs-paste mismatch, if seen, is a new bug.
+
+---
+
+### #010 — Drag-suppresses-tap end-to-end test (Test C)
+
+`bug` · `P2` · `done` · `area: pill, testing`
+*Updated 2026-10-02*
+
+`mouseDown` → simulated 10pt drag (multiple `mouseDragged` events crossing the 4pt threshold) → `mouseUp`. Assert `onTap` does NOT fire; `onMouseDragged` does. Tests A + B landed (`1cb665c`). State-machine drag test at `PillOverlayPresenterTests.swift:17-34` already exists; this covers the end-to-end hosting-view path.
+
+**Legacy:** `PLAN_PHASES.md` Step 1.4b
+
+**Closed:** `c2ef752` — `PillOverlayPresenterTests.testDragPastThresholdSuppressesTapAndFiresDraggedCallback` drives real mouse events through the hosting view; already shipped when the ticket was filed.
