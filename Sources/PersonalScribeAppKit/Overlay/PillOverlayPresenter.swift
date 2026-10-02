@@ -150,10 +150,15 @@ final class DraggablePanel: NSPanel {
 }
 
 final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
+    /// Fires once when a drag ends (mouse-up), after the panel reached
+    /// its dropped position.
     var onMouseDragged: (() -> Void)?
     var onTap: (() -> Void)?
     var isTapEnabled: (() -> Bool)?
     private var interactionState = OverlayPanelInteractionState()
+    /// Screen-space cursor and panel origin at mouse-down; the drag moves
+    /// the panel by the cursor's offset from here.
+    private var dragAnchor: (mouse: NSPoint, origin: NSPoint)?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
@@ -161,24 +166,36 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
 
     override func mouseDown(with event: NSEvent) {
         interactionState.begin(at: convert(event.locationInWindow, from: nil))
+        if let window {
+            dragAnchor = (window.convertPoint(toScreen: event.locationInWindow), window.frame.origin)
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
         let localPoint = convert(event.locationInWindow, from: nil)
-        let startedDragging = interactionState.drag(to: localPoint)
-        if interactionState.isDragging {
-            // `performDrag` runs AppKit's move loop until mouse-up, so
-            // the callback below sees the panel's final, dropped frame.
-            window?.performDrag(with: event)
-            if startedDragging {
-                onMouseDragged?()
-            }
+        _ = interactionState.drag(to: localPoint)
+        // Move the panel ourselves rather than via `performDrag`: that
+        // hands the drag to the window server and returns at once, so we
+        // never learned where the pill was dropped. Here mouse-up still
+        // reaches us with the final frame.
+        guard interactionState.isDragging, let window, let dragAnchor else {
+            return
         }
+        let mouse = window.convertPoint(toScreen: event.locationInWindow)
+        window.setFrameOrigin(NSPoint(
+            x: dragAnchor.origin.x + mouse.x - dragAnchor.mouse.x,
+            y: dragAnchor.origin.y + mouse.y - dragAnchor.mouse.y
+        ))
     }
 
     override func mouseUp(with event: NSEvent) {
         let localPoint = convert(event.locationInWindow, from: nil)
+        let wasDragging = interactionState.isDragging
+        dragAnchor = nil
         guard interactionState.end(at: localPoint) else {
+            if wasDragging {
+                onMouseDragged?()
+            }
             return
         }
 

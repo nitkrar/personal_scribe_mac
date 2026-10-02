@@ -78,6 +78,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         hostingView.onMouseDragged = { draggedCount += 1 }
         hostingView.isTapEnabled = { true }
 
+        let startOrigin = window.frame.origin
         hostingView.mouseDown(
             with: try makeMouseEvent(.leftMouseDown, at: NSPoint(x: 20, y: 20), window: window)
         )
@@ -90,11 +91,13 @@ final class PillOverlayPresenterTests: XCTestCase {
         hostingView.mouseDragged(
             with: try makeMouseEvent(.leftMouseDragged, at: NSPoint(x: 30, y: 30), window: window)
         )
+        XCTAssertEqual(draggedCount, 0, "drag-end callback must wait for the drop — it reads the final frame")
+        XCTAssertNotEqual(window.frame.origin, startOrigin, "the panel follows the drag")
         hostingView.mouseUp(
             with: try makeMouseEvent(.leftMouseUp, at: NSPoint(x: 30, y: 30), window: window)
         )
 
-        XCTAssertEqual(draggedCount, 1, "onMouseDragged should fire once when drag first crosses threshold")
+        XCTAssertEqual(draggedCount, 1, "drag-end callback fires once, on mouse-up")
         XCTAssertEqual(tapCount, 0, "onTap must be suppressed after a drag session")
     }
 
