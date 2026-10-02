@@ -6,7 +6,7 @@ import ServiceManagement
 // `SystemLaunchAtLoginService` wraps `SMAppService.mainApp` — tests
 // inject a fake instead of touching the real login-items registry.
 //
-// See plans/BACKLOG.md #005 for the UX-feedback rationale: register()
+// See BACKLOG_ARCHIVE.md #005 for the UX-feedback rationale: register()
 // / unregister() errors were previously swallowed with no user feedback;
 // the status dot in GeneralTab now reflects `isEnabled` re-read after
 // every call so a failed register turns the dot red.

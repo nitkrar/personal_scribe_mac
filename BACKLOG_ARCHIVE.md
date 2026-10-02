@@ -1018,3 +1018,595 @@ Each mode can pin a specific `ModelDescriptor` instead of late-binding to whiche
 
 **Depends on:** #001 (shipped, in `BACKLOG_ARCHIVE.md`)
 **Legacy:** `ui-dogfood-bugs-2026-04-21.md` #19
+
+---
+
+## From `REBUILD_BACKLOG.md` (post-reset rebuild, 19 closed)
+
+**Context:** Trunk was hard-reset to `b6699b2` on 2026-05-20 to escape a Parakeet streaming regression introduced by the VAD-boundary architecture (`9d1945b` + descendants). Bisect concluded the architecture itself was broken, not any single commit. Pre-reset trunk (44 commits) preserved on `origin/trunk` and via tag `bookmark-before-reset-2026-05-20`. Local trunk rebuilt by re-doing 7 feature buckets from scratch with clean commits + TDD. Backlog drained 2026-05-25 with bucket #6 (WhisperKit streaming). All buckets landed; local trunk unpushed.
+
+| # | Feature | Commit | How |
+|---|---|---|---|
+| 0a | Diagnostics infra: log spam dedupe, log retention (14d default), on-demand diagnostics window, session lifecycle logs (`session_started_intent`/`_bound`/`streaming_session_started`) | `63bdc58` | hermes (req-0042) |
+| 0b | CancellationError noise fix: `TranscriptRepository` 5 read methods stop logging Swift.CancellationError as failures | `cf4d184` | atlas direct |
+| 0c | Graceful whisper.cpp adapter shutdown before `NSApplication.terminate` (fixes ggml_metal_rsets_free quit crash) | `1fcb5a1` | hermes (req-0043) |
+| 0d | Fast-exit after graceful shutdown (skip whisper.cpp C++ atexit crash) | `36194c1` | hermes (req-0045) |
+| 0e | Route all quit paths through fast-exit handler (NSApplicationDelegateAdaptor; covers status-item Quit + Cmd+Q + Cmd+Q-while-modal) | `de40fae` | hermes (req-0047) |
+| 0f | Fix NSApplicationDelegateAdaptor crash-on-launch (override init() for FastExitApplicationTerminationDelegate) | `20058f2` | atlas direct |
+| obs | Pipeline observability — 8 lifecycle logs (streaming input forwarded, adapter summary, orchestrator summary, stop resolution, stream card state, batch processing started/result, diarized processor summary) | `b465aea` | hermes (req-0046) |
+| qwen+gates | Fix stale qwen3 hint test + add `AGENTS.md` delivery discipline (full-suite gate before DONE, launch-verification gate, canonical DONE format) | `f58cfe6` | atlas direct |
+| debug-sink | Split debug.log sink + 3-day retention separate from errors/diagnostics 14-day retention | `f3ca7e1` | hermes (req-0049) |
+| 1a | Mode-editor picker labels: drop Force/Live prefixes (`ParameterPickerView`, `SensitivityParameterPickerView`) | `cb99c59` | atlas direct |
+| 1b+2+3 | Bundled: Whisper adapter filter (default `.both`) + per-mode language hint #091 + idle resource release for whispercpp/VAD lifecycles | `3bfaccb` | hermes (req-0048) |
+| idle-all | Enforce `releaseIdleResources()` at protocol (drop default no-op) + add real implementations for Parakeet streaming/batch + Qwen3 + WhisperKit + diarizer + `adapter_idle_release` observability log | `1c23cfa` | hermes (req-0050) |
+| logs-ui | Advanced settings: buttons to open errors.log / diagnostics.log / debug.log (falls back to logs/ dir when file not yet written) | `65011c8` | atlas direct |
+| 4 | Audio recording persistence #069 Stage A (8 sub-features: DB relocation, v6 audio_filename column, RecordingFileWriter, pref-gated persist, cascade delete, Recordings UI card, RecordingRetentionSweeper, MV docs) | `2288e8b` | hermes (req-0044) |
+| 5 | Offline file transcription #094 Stage A (FileSourceAudioStream, OfflineTranscriptionCoordinator, OfflineTranscriptionTab, menu-bar Retranscribe last recording, Transcriptions row Re-transcribe icon with press feedback + busy state, ToastBroadcaster, per-source dedup, list refresh on transcript-commit). 10x-engineer + pool-codex-1 reviews clean. | `bef41f7` | hermes (req-0051) |
+| 7 | Whisper.cpp streaming adapter #099 (initial: `.whisperCppStreaming` engine + 3 paired catalog descriptors + tracker + VAD-as-EoU + merged-prefix dedup; +31 tests). **Partially reverted by #100** which consolidated to one descriptor + merged adapter. Streaming-side logic preserved in the merged actor. | `0c74b4d` | hermes (req-0054) |
+| 8 | Engine capabilities + unified WhisperCpp adapter #100 — `TranscriptionEngine.capabilities: Set<ModelKind>`, one descriptor per artifact, ONE merged `WhisperCppAdapter` actor conforming to `Transcriber` + `StreamingTranscriber`, per-section `setActive(_:forKind:)`, `RecipeBuilder.buildStreamingSecondPassTranscriber` force-rule for `.whisperCpp`. Locked the shared-adapter design pattern. | `bc27776` | hermes |
+| 9 | Live cursor EoU paste gated off for whisper.cpp streaming. `RecipeBuilder` forces `liveCursorEnabled=false` when streaming engine is `.whisperCpp` (CGEventPost is fire-and-forget; tracker produces duplicate EoU chunks from re-decode jitter and they paste irrevocably). UI surfaces the gate in Settings → General + Mode detail with disabled toggle + tooltip. Live card visualization + stop-time second-pass paste unaffected. | `11c0f99` | atlas direct |
+| 6 | WhisperKit streaming adapter #101. Extended `TranscriptionEngine.whisperKit.capabilities = [.asr, .streamingASR]`; new `WhisperKitStreamingLedger` (confirmed-delta-only `.endOfUtterance` + unconfirmed-tail `.partial`); new `BufferFedWhisperKitAudioProcessor` (drives WhisperKit's `AudioStreamTranscriber` from our `PCMBuffer` stream); merged `WhisperKitAdapter` actor (renamed from `WhisperKitTranscriberAdapter`) conforming to both `Transcriber` + `StreamingTranscriber`; `ModelBoundProcessorProvider.whisperKit` factory wires same adapter to both batch + streaming slots; `RecipeBuilder` second-pass force-rule extends to `.whisperKit`. Live cursor stays user-controllable for WhisperKit (whisper.cpp gate does NOT extend — WhisperKit's internal `lastConfirmedSegmentEndSeconds` clipping prevents the duplicate-lane bug class). Codex audit (req-0069) corrected the original brief's "watermark = EoU" framing. +17 tests. | `dd100ee` + `322a4da` | hermes (req-0071) |
+
+### Permanently deferred — DO NOT rebuild
+
+| Feature | Why |
+|---|---|
+| VAD-boundary Parakeet rewrite (`9d1945b` + `c167155` + `497a4cf` + `9eba15e`) | Known bad — caused the streaming regression that prompted the reset. Re-design required if revisited. |
+
+### Recovery anchors
+
+- Tag `bookmark-before-reset-2026-05-20` (on origin) — pre-reset broken trunk, 44 commits ahead of `b6699b2`. Cherry-pick source for any reference commits.
+- `origin/trunk` still has the old 44-commit history until force-pushed. Local trunk is canonical.
+
+Active follow-ups split off as tickets: **#104** (whisper.cpp dedup tracker — deferred), **#105** (WhisperKit streaming dogfood verification), **#106** (delete `AppEntryPointTests.testPersonalScribeAppMainBuildsSceneModelFromComposition` skip), **#107** (memory idle-release note — archived below). They were filed as #039–#042 in the stale `plans/BACKLOG.md` and renumbered 2026-10-02.
+
+---
+
+## Archived 2026-10-02: 11 tickets closed (shipped audit + stale-backlog merge)
+
+Closing evidence is on each ticket's `**Closed:**` line where the audit added one; #027 and #033 were already marked done.
+
+### #018 — Clipboard clobber timing (configurable paste-restore delay)
+
+`feature` · `P3` · `done` · `phase: 3` · `area: output, settings`
+*Updated 2026-10-02*
+
+**Closed:** `21ed9cd`, `a8f4f4f`, `6b9fa0c` — Settings exposes the restore-delay slider, `ClipboardRestoreDelay` persists it, and `ClipboardBatchOutput` reads it for each delivery.
+
+Default 0.5s. Surface in Settings → Advanced.
+
+**Legacy:** `PLAN_PHASES.md` Phase 3.H (UX-audit BUG-07)
+
+---
+
+### #027 — TranscriptEntry needs `modeId` + `trigger`
+
+`refactor` · `P2` · `done` · `phase: 4` · `area: storage, session`
+*Updated 2026-05-01*
+
+Schema evolution to record which mode produced each transcript. Drives the row pill mockup (#032) and downstream filtering once Command Mode (#021) lands. Unparked 2026-04-30 — multiple modes now exist via the #089 editor, so `modeId` has information value even before #021. **Shipped 2026-05-01** in `156f43b` (squashed from `deb807f` + 2 follow-ups, pushed to trunk; 1126 tests / 1 skipped / 0 failures). Trigger field intentionally deferred per locked design.
+
+**Codex follow-up baked into the squash:** `bindRecipeForNextSession(_:)` is mutated mid-flight by `SessionCoordinator` (eager pre-bind of the next session's recipe). The first cut read `boundRecipe?.recipeID` directly in `persist()` — a rebind landing during transcription would have rewritten the modeId. Same race on `runBoundProcessing`, `resolvedVadPreferencesForSession`, `currentBoundRecipe()`. Fix: introduce `activeSessionRecipe: BoundRecipe?` snapshotted at session start, retained through `.completed`, cleared on cancel/discard. Regression: `testCurrentBoundRecipeStaysSessionFrozenDespiteMidTranscriptionRebind`.
+
+**Locked design (2026-04-30 grooming session):**
+
+1. Add `preset: Preset` field to `WorkflowMode`. Codable additive — `decodeIfPresent` with `.dictation` fallback for pre-#027 documents. `Preset.materialize(name:)` sets it at creation time.
+2. Change `WorkflowMode.id` format from `custom-{UUID}` to `{cleanName}-{suffix}` (suffix = short random / hash). One-time migration of existing `customModes` re-mints ids. `cleanName` = user-facing name at creation, stripped to id-safe chars.
+3. Add `modeId: String` to `TranscriptEntry`. Captured at commit time from `registry.currentMode.id`.
+4. #032 row-badge rendering paths:
+   - **Live mode:** `customModes.first(where: { $0.id == modeId })?.preset.displayName` → "Notes" / "Meeting" / "Dictation" / "Streaming Dictation".
+   - **Deleted mode:** `modeId.split(separator: "-").first.map(String.init)` → e.g. "Meeting" for `Meeting-7a3f1c`. Robust to backend file edits — dumb split, no schema dependency.
+5. **No tombstone contract.** Mode deletion stays physical. The id-suffix scheme provides graceful fallback for orphaned transcript references — no GC strategy, no file growth, no naming-conflict tax.
+6. **L-14 skip-gaps logic dissolves.** Any name reuse is fine because the suffix guarantees id uniqueness regardless of name collisions.
+
+**Trigger field — decision deferred to unpark.** Brainstorm proposed `.hotkeyTap / .hotkeyHold / .menuBarClick / .pillClick`. May be dropped if no Command Mode use case requires it.
+
+**Rejected approaches (2026-04-30 conversation):**
+- `WorkflowMode` soft-delete / tombstone (legacy doc's original direction). File-growth + naming-conflict-on-reuse tax with no payoff once preset family is stored as a field.
+- Encoding preset family in the id prefix (e.g. `notes-Meeting-{suffix}`). Field-based lookup on `WorkflowMode.preset` is more resilient — id parsing only used as fallback for orphaned references.
+- Denormalising a `modeName` snapshot onto `TranscriptEntry`. Unnecessary once `WorkflowMode.preset` is a field and id encodes the name.
+
+**Backward compatibility — per legacy doc + 2026-04-21 user direction:** existing `transcripts.jsonl` rows can be wiped (dogfood-era data) or backfilled to a sentinel. Pick at impl time.
+
+**Depends on:** #026 (SQLite migration; sequencing decides whether the JSONL change is throwaway or first-schema-in-the-new-store), #021 (Command Mode — first consumer that drives distinct `modeId` values).
+
+**Legacy:** `plans/_legacy/backlog/transcript-trigger-context.md` (2026-04-21 brainstorm; "Mode reference" section's tombstone direction superseded by the 2026-04-30 lock above).
+
+---
+
+### #033 — Streaming output transport decision
+
+`refactor` · `P2` · `done` · `area: output, session`
+*Updated 2026-05-02*
+
+Live cursor stream transport for #056's streaming dictation. The live seam is `PipelineOutputSink.deliverPartial(_:)` (`Sources/PersonalScribeSession/Pipeline/Contracts/PipelineOutputSink.swift`); pre-#033 it had no production consumer.
+
+**Decisions locked 2026-05-01** (Claude × Codex debate at [`plans/investigations/2026-05-01-033-transport-debate.md`](./plans/investigations/2026-05-01-033-transport-debate.md)):
+
+| Sub-decision | Choice |
+|---|---|
+| Transport | clipboard chunk + synthetic `⌘V` |
+| Undo grouping | per-EOU |
+| Restore policy | save once at session start, restore once at session end (only when sink wrote a chunk) |
+| Cursorless target | silent — last-EOU on clipboard, no UI affordance |
+| Per-mode gate | paired — gate live partial on `liveCursorEnabled`; suppress stop-time `.frontmostPaste` when on |
+| API shape | new `LiveCursorOutput` alongside `ClipboardBatchOutput` |
+| Lifecycle hook | extend `PipelineOutputSink` with `endSession()` (default no-op) |
+
+**Commits**
+- `2a6e91f` — initial cohesive implementation (transport, paired gate, lifecycle hook, 19 tests).
+- `46e2ed8` — Codex review follow-up: snapshot eagerly at session start (anchors locked Q1 wording, not first-chunk timing); `didWriteChunkThisSession` flag so non-streaming sessions don't over-restore; `endSession()` runs **before** `publish(.completed)` / `handleStageFailure` / short-exit publish (closes the ordering hole where menu-bar idle-transition observers could race the snapshot restore); `awaitLiveStreamingEventTaskShutdown` gains graceful-vs-immediate split (stop drains naturally, cancel cancels immediately); `waitForTaskCompletion` replaced with polling-loop + actor tracker (the previous `withTaskGroup` shape had a latent hang — `cancelAll()` doesn't unwind `await task.value` for `Task<Void, Never>`); 5 additional regression tests.
+- `80f9bf0` — race + recipe-clear fix from dogfood errors at 2026-05-02 00:22:23.777Z (per `plans/investigations/2026-05-02-033-runtime-bugs-codex.md`). `startRecording()` gains `startRecordingInFlight` re-entry guard (preserves the prepare-before-publish invariant; closes the duplicate-`capture.start()` race that produced the `audioEngineFailure` errors). Catch-time `activeSessionRecipe = nil` removed from both `startRecording` and `startHoldRecording` — root cause of the downstream `runBoundProcessing → invalidState` chain (call B's catch nulled call A's recipe). `LiveCursorOutput.deliverPartial` now logs when `pasteShortcutPoster()` returns `false` (silent live-paint loss path Codex flagged). 1 new race regression test.
+
+**Implementation surfaces:**
+- `PipelineOutputSink.endSession()` — default no-op extension; called on success / cancel / error / short-exit / discard. Exists for session-scoped sinks like `LiveCursorOutput`.
+- `LiveCursorOutput` (`Sources/PersonalScribeAppKit/Output/LiveCursorOutput.swift`) — captures pre-recording clipboard at `resetForNewSession` (session start); on `deliverPartial` writes the EOU chunk + posts `⌘V` (gated by AX trust + PID externality probe shared with `ClipboardBatchOutput`); on `endSession` restores the snapshot **only when at least one chunk wrote** this session (else discards — preserves user's mid-session clipboard for non-streaming sessions where the orchestrator still calls the sink lifecycle).
+- `SessionPipelineOrchestrator.consumeLiveStreamingEvent` — capture-time `outputSink.deliverPartial(_:)` call gated on `bound.streamingBehavior?.liveCursorEnabled` (EOU events only, per #056 DESIGN's append-only contract).
+- `RecipeBuilder` — paired Q4 gate filters `.frontmostPaste` from the bound recipe when `liveCursorEnabled == true` (avoids double-paste at session end).
+- `SessionCoordinator` — accepts an injected `outputSink:` (falls back to no-op `CoordinatorPipelineOutputSink` for tests).
+- `AppComposition` — constructs `LiveCursorOutput` and passes it to `SessionCoordinator`.
+
+**Tests** (24 new across 4 files):
+- `SessionPipelineOrchestratorTests`: live cursor delivery on EOU only (exact ordered equality, not `.contains`), suppression when disabled, ignores `.partial` events, `endSession` fires on each of {completed, shortExit, cancel, error}, `endSession` runs before `publish(.completed)`.
+- `MenuBarSceneModelTests`: end-to-end ordering — menu-bar `deliverBatch` waits for pipeline `endSession` to complete.
+- `RecipeBuilderTests`: `.frontmostPaste` filtered when live cursor on; preserved when off.
+- `LiveCursorOutputTests`: writes chunk + posts paste, overwrites prior chunk, skips paste when AX untrusted or focus is in self, ignores blank text, `endSession` restores when chunk wrote, `endSession` discards (preserves mid-session clipboard) when no chunk wrote, `resetForNewSession` captures session-start snapshot before first chunk arrives.
+
+Full suite at close: **1190 tests / 1 skipped / 0 failures** (post-`80f9bf0`).
+
+**Known stale UI to clean up before next dogfood**
+- `Sources/PersonalScribeAppKit/UnifiedWindow/Tabs/Modes/ModeDetailView.swift:130` and `Sources/PersonalScribeAppKit/Settings/GeneralTab.swift:341` still ship the caption *"Saved now for streaming recipes. Live cursor transport is not active in this build."* That text was added under #056 when transport was pending #033; now stale. Risk: users won't enable the toggle thinking it's a no-op. One-line removal in each file (or rewrite to reflect actual gating: AX trust + active streaming-ASR model + `liveCursorEnabled`).
+
+**Out of scope (filed if dogfood demands):**
+- Cumulative-during-cursorless clipboard (deliberately last-EOU only — second-pass authoritative final at session end is the safety net).
+- ResponseCard "click into a text field" notice during cursorless period.
+- Hybrid transport (CGEvent for short chunks, paste for long).
+
+**Runtime verification:** in progress 2026-05-02 on the user's other laptop. First dogfood pass surfaced two errors (race + invalidState chain) — fixed in `80f9bf0`. EOU silent-paint inconsistency observed across tests 1-4: per Codex audit the cause is **EOU-only delivery + stop-before-EOU emission** (not a CGEvent paste race — app-side serialization is sound); `.finalized` event at stream-end intentionally doesn't backfill, so short utterances or VAD-pre-empted sessions paste nothing live. Decision pending: ship `.finalized`-backfill (Option B from the debate file) so single-utterance recordings paste at session end, or accept the locked "EOU chunks only" semantics. Reopen ticket if regression observed after rebuild on `80f9bf0`+.
+
+**Legacy:** `backlog/streaming-output-delivery-mechanism.md` + `backlog/pipeline-streaming-defer.md` *(merged — same decision from two layer seats)*
+
+---
+
+### #034 — Waveform decay tuning
+
+`feature` · `P3` · `done` · `area: pill`
+*Updated 2026-10-02*
+
+**Closed:** `2cd05d5`, `0c66f67` — `WaveformDecayMode.animated` linearly coasts the last level to zero over 0.5 seconds, and the recording pill renders `SineWaveView` with animated decay.
+
+Tune falloff on the pill waveform so bars don't snap to zero.
+
+**Legacy:** `ui-dogfood-bugs-2026-04-21.md` #10
+
+---
+
+### #091 — Per-mode language hint
+
+`refactor` · `P2` · `done` · `area: transcription, models, modes, recipes`
+*Updated 2026-10-02 (Filed 2026-04-29)*
+
+**Closed:** `cbdd9a6` — `WorkflowMode` stores the hint, the mode editor filters choices through each descriptor's `supportedLanguages`, validation rejects invalid combinations, and the orchestrator passes the resolved hint to batch and diarized transcription.
+
+When a pinned descriptor is multilingual, the user picks a target language for that mode. E.g. a "Japanese meeting" mode pinned to Qwen3 with `language: "ja"`.
+
+**Why deferred from #090**: two prerequisites that #090 couldn't satisfy.
+
+1. **Qwen3 re-enablement**. Qwen3 is `isEnabled: false` in `BuiltInModelCatalog` today (was a memory hog pre-#078). Post-#078 eviction fix (`10a81f0`) may have addressed it — needs re-validation on the Air with the released DMG. Until Qwen3 is re-enabled, the language picker has no consumer (Parakeet doesn't accept hints).
+2. **Parakeet upstream blocker**. Parakeet's "25 EU languages" is a model-internal capability with no FluidAudio API to control target language at runtime. File a FluidAudio issue requesting per-call language hint for Parakeet TDT batch + streaming. Until that lands, Parakeet rows hide the language picker even though the model card claims multilingual.
+
+**Scope**:
+- Add `language: String?` to `.transcriber` / `.streamingTranscriber` / `.diarizedTurns` (or wrap in a `TranscriptionOptions` struct alongside `descriptorID`).
+- Add `supportedLanguages: [String]?` to `ModelDescriptor`. nil = monolingual; otherwise structured language list (replaces freeform `worksWith` for picker logic, keeps `worksWith` for human copy).
+- `WorkflowModeValidator`: validate language-present-on-supported-processor + language-supported-by-pinned-descriptor.
+- `RecipeBuilder` → `BoundRecipe` → `Transcriber.transcribe(_:options:)` → adapters: thread the language through.
+- `FluidAudioQwenTranscriberAdapter`: plumb language to `Qwen3AsrManager.transcribe(audioSamples:language:)`.
+- Re-enable Qwen3 in `BuiltInModelCatalog` after memory re-validation.
+- Modes editor: add a "Language" row that appears only when the selected descriptor has `supportedLanguages != nil`. Carries through to the `WorkflowMode` recipe.
+- Reconcile language-list inconsistencies: codex flagged 16-vs-30 for Qwen, 24-vs-25 for Parakeet. File upstream issue or pin a canonical list with citations.
+
+**Future-relevant**: when Whisper.cpp (or any other multilingual engine) lands, this seam already exists.
+
+**Effort estimate** (carry-over from #090's codex breakdown):
+- Descriptor metadata + mapping tables + validator wiring: 0.25-0.5d
+- Recipe schema + Codable fallout + orchestrator/diarized-turn-processor plumbing: 0.5-0.75d
+- Qwen adapter + live-manager + validation: 0.25-0.5d
+- Modes editor integration: 0.25d
+- Total: M (~1-1.5d) for "Qwen-only" scope; L (>1.5d) if waiting on upstream Parakeet.
+
+**Depends on**: #090 (descriptor pinning, shipped). Qwen3 memory re-validation independent — schedule a 30-minute dogfood pass to confirm or deny the eviction fix's effect on Qwen.
+
+**Evidence**: `plans/investigations/2026-04-28-multilang-feasibility-codex.md`.
+
+**Legacy:** carved out of original #090 entry on 2026-04-29 when the descriptor-pinning slice shipped without language plumbing.
+
+---
+
+### #095 — Extend ASR catalog beyond Parakeet+Qwen
+
+`feature` · `P2` · `done` · `area: transcription, models, catalog, multilingual`
+*Updated 2026-10-02 (Filed 2026-04-30)*
+
+**Closed:** `f6bb93c`, `0f4bb97`, `32ddfd4` — the catalog contains multiple multilingual WhisperKit descriptors, `ModelBoundProcessorProvider` routes them to the unified `WhisperKitAdapter`, and the adapter supports batch and streaming transcription.
+
+Today the catalog ships English-only ASR (Parakeet TDT 0.6B v2/v3 + TDT-CTC 110M, plus Parakeet EOU streaming) and a single multilingual option (Qwen3 ASR, currently `isEnabled: false` per #091). Multilingual users have no working option. The English options are all NVIDIA Parakeet variants — same model family, no diversity in architecture or training data.
+
+This ticket tracks adding an additional ASR family beyond what FluidAudio supports, starting with Whisper.
+
+**No Tier 1 candidates exist today.** The only English-only Parakeet variant FluidAudio's `Repo` enum knows about that we haven't registered — `parakeet-ctc-0.6b-coreml` — is wired only into `CtcKeywordSpotter` (custom-vocabulary keyword detection), not the general `AsrManager`. Registering it as a transcriber descriptor would download the bytes but fail at session start because `AsrModelVersion` has no `ctc06b` case. Parakeet 1.1B has no CoreML conversion. Japanese/Chinese language-pinned variants are intentionally excluded from this scope (covered under per-language UX in #091).
+
+**Tier 2 — Whisper via WhisperKit** *(the actual scope of this ticket)*
+
+WhisperKit ([github.com/argmaxinc/WhisperKit](https://github.com/argmaxinc/WhisperKit)) is a pure-Swift Whisper runtime built on CoreML. Same author publishes pre-converted CoreML model bundles on HuggingFace (`argmaxinc/whisperkit-coreml`). Multilingual (~99 languages), gold-standard ASR accuracy, ANE-accelerated.
+
+Why WhisperKit specifically over whisper.cpp:
+- Pure Swift — no C++ bridging, no `module.modulemap` header juggling, less cross-platform glue.
+- Idiomatic async/await + Combine API matches our existing adapter shape (`Transcriber` protocol from #078).
+- Designed for Apple platforms; ANE acceleration on by default.
+- whisper.cpp is more mature and cross-platform but Ninimma is macOS-only — the cross-platform value doesn't apply.
+
+**Distil-Whisper note**: distilled smaller/faster Whisper variants from HuggingFace (`distil-large-v3`, `distil-medium`, `distil-small`). Loaded by the same WhisperKit runtime — not a separate runtime decision. If we want a "fast Whisper" tier alongside the accurate one, we ship a distil-* model bundle in addition to the standard one. Sub-decision under this ticket, not a separate ticket.
+
+**Scope**:
+
+1. **New Swift package dependency** — `argmaxinc/WhisperKit` in `Package.swift`. Pin a release (latest stable at filing time).
+2. **New `TranscriptionEngine` case** — `.whisper` (or `.whisperKit` if we want to keep engine cases vendor-bound). Single case covers all model sizes; size differentiation lives in the descriptor `id` + display metadata.
+3. **New `WhisperKitTranscriberAdapter`** — conforms to `Transcriber`. Mirrors `FluidAudioParakeetTranscriberAdapter`'s shape: `prepare()` loads the CoreML bundle via WhisperKit, `transcribe(_:)` runs inference, `modelDownloadProgress()` bridges WhisperKit's progress to our existing `ModelDownloadProgress` stream.
+4. **Model descriptors** (start with one or two; expand on demand):
+   - `whisper-large-v3-turbo` — accuracy/speed sweet spot. Most users.
+   - `whisper-large-v3` — slowest, highest accuracy. Optional second slot for power users.
+   - Optional `distil-large-v3` — fast English-focused tier. Defer until v2 if dogfooding shows demand.
+5. **AI Models tab integration** — the tab iterates over `BuiltInModelCatalog.registeredModels`, so new entries surface automatically. Validate per-row metadata (size, WER, license) renders correctly.
+6. **`worksWith` / `supportedLanguages`** — Whisper-large-v3 supports ~99 languages. Match against the schema decided in #091.
+7. **`requiredRelativePaths`** — WhisperKit's CoreML bundle has its own folder layout (encoder + decoder + tokenizer); confirm against `argmaxinc/whisperkit-coreml` HF tree at conversion time.
+8. **Tests** — `WhisperKitTranscriberAdapterTests` covering prepare/transcribe/progress flow against a stub WhisperKit; integration smoke test against a fixture audio if WhisperKit's API permits in-memory model injection.
+
+**Effort estimate**:
+- Package dependency + engine case + descriptor: 0.25d
+- Adapter (load + transcribe + progress bridge): 0.5–1d (depends on WhisperKit's internals; first integration always overruns)
+- Tests + fixtures: 0.25d
+- AI Models tab metadata sourcing (HF tree fetch, license, WER, RTFx): 0.25d
+- **Total**: M (~1.25–2d) for one model size; +0.25d per additional descriptor.
+
+**Depends on**: nothing blocking. Plays well with #091 (per-mode language hint) — Whisper's multilingual nature is the ideal consumer of the language picker once #091 lands.
+
+**Unblocks**: multilingual transcription for non-English users. Optional fallback when Parakeet underperforms on a recording's domain (medical, legal, accented speech).
+
+---
+
+## Tier 3 — reference notes (future / out-of-scope for this ticket)
+
+Models considered but not in immediate scope. Left here so future readers don't re-research the same ground.
+
+- **NVIDIA Canary** (`canary-1b`, `canary-180m-flash`) — multilingual ASR (en/de/es/fr) plus speech translation. Strong benchmarks. NeMo checkpoint format only; no CoreML conversion published. Adding requires NeMo→CoreML conversion pipeline (significant) or waiting for someone (FluidInference?) to publish.
+- **NVIDIA Parakeet 1.1B variants** (`parakeet-tdt-1.1b`, `parakeet-rnnt-1.1b`, `parakeet-ctc-1.1b`) — bigger sibling of the 0.6B. Same conversion blocker as Canary: NeMo only, no CoreML.
+- **Pure CTC 0.6B** (`FluidInference/parakeet-ctc-0.6b-coreml`) — CoreML exists but FluidAudio's `AsrModelVersion` enum has no `ctc06b` case, so `AsrManager` won't load it as a transcriber. Currently used internally by `CtcKeywordSpotter` only. Unblocks if FluidAudio adds the case OR if we write our own inference pipeline on top of the loaded models.
+- **IBM Granite Speech 3.3** — open weights, multilingual. CoreML ecosystem immature. Wait-and-see.
+- **Microsoft Phi-4 multimodal** — speech-aware multimodal model. New (early 2025); CoreML conversions immature.
+- **Meta SeamlessM4T** — speech-to-text + translation in one model. Heavy. Better fit if Ninimma ever adds a translation feature; not pure ASR.
+- **whisper.cpp** — alternative Whisper runtime. More mature than WhisperKit, but C++ bridging + cross-platform features that don't apply to a macOS-only app. Defer unless WhisperKit hits a wall.
+
+**Legacy:** none — net-new.
+
+---
+
+### #096 — Diagnostics system consolidation
+
+`refactor` · `P2` · `done` · `area: diagnostics, observability, errors, settings`
+*Updated 2026-10-02 (Filed 2026-04-30)*
+
+**Closed:** `56a8b95`, `53ebbbf`, `5df8635`, `81f4b1d` — `DiagnosticsReporter` owns the structured event model and sinks, the old session reporter is gone, Advanced settings controls capture and retention, and the filterable live diagnostics window is wired through app composition.
+
+Today's diagnostics is split across two adjacent mechanisms:
+
+- `Sources/PersonalScribeCore/Logger.swift` — `PersonalScribeLogger` wraps `os.Logger` for `debug / info / error` (~100 call sites in Sources/).
+- `Sources/PersonalScribeCore/SessionErrorReporter.swift` — structured session failures → `logs/errors.log` + `ReportedError` for the response-card path (added in `30381cf` / #092.5).
+
+That split is workable for the immediate error-display fix but is the wrong long-term shape — there's one event-emission concept being expressed twice. This ticket consolidates both into a single `DiagnosticsReporter` with one shared event model, optional `userFacing` payload that gates UI surfacing without coupling logging to UI, and adds Advanced-settings controls for verbose disk capture + a live diagnostics overlay panel.
+
+**Locked architectural decisions** (see design doc):
+
+- D1: One diagnostics system, one event model. No "logger vs reporter" split.
+- D2: `userFacing` is optional metadata on the event. **Not** a parallel `errorWithUserReport(...)` API.
+- D3: Diagnostics layer never imports AppKit. Session/UI layer converts `userFacing` payload to `SessionSnapshot.reportedError`. ResponseCard remains one consumer of that snapshot field.
+- D4: Error-level events always persist to `logs/errors.log` regardless of verbosity setting. Settings widen capture, never disable error logging.
+- D5: Advanced settings own `Diagnostic Logging` (`Errors Only` default / `Verbose`) + `Show Live Diagnostics Overlay` (off; only available when Verbose).
+- D6: `Diagnostics*` types live in `PersonalScribeCore`. Live overlay UI lives in `PersonalScribeAppKit`, consumes the in-memory ring buffer through public Core API.
+- D7: `DiagnosticsReporter` is constructed in `AppComposition` with sinks injected. Tests inject reporter with `InMemoryTestSink`. No `Diagnostics.shared` singleton.
+
+**Sinks** (all behind one fan-out reporter):
+
+- `OSLogSink` — replaces direct `PersonalScribeLogger` writes.
+- `ErrorFileSink` — `logs/errors.log` (always-on).
+- `VerboseFileSink` — `logs/diagnostics.log` (Verbose only). Errors NOT duplicated.
+- `RingBufferSink` — bounded (~200 events), feeds the live overlay.
+- `InMemoryTestSink` — unbounded + ordered; test-only, asserts emitted events.
+
+**PII redaction** at sink boundary via `PIIRedactor`:
+
+- Always-safe metadata keys: `level`, `category`, `mappedError`, `stage`, `mode`, `descriptorID`, `pipelineShape`, `errorType`.
+- Always-redacted metadata keys: `transcript`, `path`, `deviceName`, `windowTitle`, `appName`, `audioFile`, `userMessage`. Value → `<redacted>`; key preserved for grep.
+- Value-pattern: regex `/Users/[^/]+` → `/Users/<redacted>`.
+- `underlyingError` rendered as `String(describing: type(of: error))` + case name; never `String(describing: error)`.
+
+**Rollout** (Stage A–G; each stage leaves repo buildable):
+
+- A. Core diagnostics primitives (event/level/sinks/reporter/PIIRedactor).
+- B. Cut over `PersonalScribeLogger` — recommendation: retire after migration, mechanical rename of ~100 sites, delete `Logger.swift`. (Codex's plan currently keeps a permanent facade — pick before B starts.)
+- C. Session failure path migrated to emit through `DiagnosticsReporter` with `userFacing: .sessionError(...)`.
+- D. Non-session blind spots (`MenuBarSceneModel` auto-paste, `SessionCoordinator` persistence, orchestrator prewarm) emit via reporter; no `userFacing`.
+- E. Advanced-settings UI: `DiagnosticLoggingMode` enum + `showLiveDiagnosticsOverlay` bool. AppComposition wires sinks based on mode.
+- F. Live diagnostics overlay (`LiveDiagnosticsOverlayController/Presenter/View`) — separate floating panel, ResponseCard styling, persistent + scrollable + filterable + copy button. Read-only; no paste, no link actions.
+- G. Cleanup + docs + manual verification runbook (`MV-DIAG-1..5`).
+
+**Plans on disk** (read these first before implementation):
+
+- `plans/diagnostics-system-design.md` — locked decisions D1–D7 + Q1–Q4 + PII section.
+- `plans/diagnostics-system-implementation.md` — Stage A–G rollout, file lists, test expectations, exit criteria.
+- `plans/diagnostics-system-review.md` — concrete edits Codex should fold into both docs before starting (PII section, two-file model, retire-vs-facade, DI wiring example).
+
+**Effort estimate**: L (>1.5d) for full A–G; M (~1d) for Stage A alone.
+
+**Depends on**: nothing blocking. #092.5 (`30381cf`) is the precondition that proves the snapshot-driven UI seam works; this ticket consolidates the diagnostics backend the response-card seam already depends on.
+
+**Unblocks**: live debug overlay during dogfooding (currently no on-screen visibility into recent events); structured telemetry layer if ever needed; cleaner extension point for new categories without pollination across two systems.
+
+**Legacy:** none — net-new. Picks up where #092.5 left off.
+
+---
+
+### #097 — Paste pipeline observability (summary-shape)
+
+`infra` · `P2` · `done` · `area: paste, diagnostics, observability`
+*Updated 2026-10-02*
+
+**Closed:** `549772e` — `PasteSessionAccumulator` records live/final paste outcomes and renders one `paste_session_summary` at the session boundary without transcript content.
+
+Stage A shipped. 10x-engineer review C1 (clipboard-only delivery was
+recording `finalPasteSucceeded=true`) folded into the same commit:
+`finalPasteSkipped` field now distinguishes clipboard-only delivery
+from `⌘V` landing.
+
+The paste pipeline has **zero structured logging today**. Symptom that surfaced this gap (2026-05-24 dogfood):
+
+> "Live cursor pastes during streaming, but the final post-EoU output is not pasted at all. Can you confirm from logs?"
+
+Atlas grepped `diagnostics.log` for `live_paste`, `paste_attempt`, `paste_succeeded`, `paste_failed`, `live_cursor`, `writeAndPaste`, `pasteText` — **all zero hits**. The user observation is plausible (terminal text was 39 chars post-EoU on the affected session, consistent with "first paste landed, final didn't"), but log-unverifiable. Every future paste-adjacent bug hits the same wall.
+
+Add diagnostics so we can answer "did the paste land?" from logs alone. Follow `INSTRUMENTATION_PRINCIPLES.md`:
+- Summary-at-boundary shape, not per-event (per-event would spam during live-cursor replace).
+- Counts and shapes, not paste content (privacy + `principle #3`).
+- Reuses precedent of `stream_card_state_changed` collapse → summary (`0771c07`) and `streaming_adapter_summary` / `streaming_orchestrator_summary` shapes.
+
+**Locked logging shape:**
+
+One summary log per paste session boundary (session end / pipeline teardown), carrying aggregate counts:
+
+```
+paste_session_summary — sessionID=<id>
+  livePasteAttempts=<int> livePasteSucceeded=<int> livePasteFailed=<int>
+  livePasteReplaceOps=<int> livePasteCumulativeCharsWritten=<int>
+  finalPasteAttempted=<bool> finalPasteSucceeded=<bool> finalPasteCharsWritten=<int>
+  finalPasteFailureReason=<enum?>
+  targetAppPID=<pid?> targetAppBundleID=<bundle?>
+  totalDurationMs=<int>
+```
+
+**Error-level logs (always-on, errors.log)**: paste failures that abort with no fallback. One log per failure, not per attempt:
+
+```
+paste_failed — stage=<live|final> reason=<noTargetCursor|pidProbeRejected|eventPostFailed|other> attemptedChars=<int>
+```
+
+**Explicitly out of scope:**
+- Per-paste-event info logs (would spam ~1/sec during live replace — violates frequency budget #1).
+- Logging paste content (violates principle #3).
+- Per-keystroke / per-CGEventPost debug events (those belong in `debug.log` only, behind a Verbose toggle that #096 introduces).
+
+**Scope:**
+- Identify the paste-pipeline boundary that owns the session lifecycle (likely `LiveCursorWriter` or its caller in the pipeline orchestrator — grep for `CGEventPost` / `NSPasteboard.general.setString`).
+- Thread a per-session accumulator through the paste path, emit the summary at teardown.
+- Add `paste_failed` error-level log at the existing failure branches (no new failure detection — just instrument what's already a `return` / `throw` site).
+- Document the events + frequency budget in `docs/INSTRUMENTATION_PRINCIPLES.md`.
+
+**Tests:**
+- Unit-test the accumulator's count math (`livePasteAttempts` increments on each attempt, `livePasteSucceeded` only on success, etc.).
+- Integration-test that a paste pipeline mock fires the summary at teardown with the right counts.
+- No test asserting the literal log string — test the accumulator's exposed `Summary` value.
+
+**Depends on**: nothing. #096 (Diagnostics consolidation) would make the sink wiring cleaner but is not a blocker — current `PersonalScribeLogger.info(...)` is sufficient for Stage A.
+
+**Unblocks**:
+- Verifying / refuting the "final paste doesn't land after Parakeet EoU" bug surfaced 2026-05-24.
+- Future paste-pipeline bug triage without re-instrumenting from scratch each time.
+- Quantifying paste reliability (success rate, failure-reason histogram) before deciding whether an overlay-edit mode is needed as a workaround for live-paste fragility.
+
+**Connected work — Parakeet EoU degraded-output bug (separate ticket TBD)**: the same session that surfaced this gap also showed Parakeet streaming going into a near-mute mode after one EoU fires (9 partials in 37.5s vs 88 partials in a comparable session without EoU). Paste observability is a prerequisite for diagnosing whether the EoU bug's "no final paste" symptom is upstream (no final text emitted) or downstream (text emitted but paste fails). File the Parakeet EoU ticket separately once we have logs to disambiguate.
+
+**Legacy:** none — net-new.
+
+---
+
+### #098 — Streaming paste fixes (drop double-paste filter + chunk spacing + final-paste newline)
+
+`bug` · `P2` · `done` · `area: paste, streaming, recipes`
+*Updated 2026-10-02*
+
+**Closed:** `f0e0238` — live-cursor recipes retain final paste, subsequent EOU chunks gain a leading space, and final batch paste gains a newline only after a live paste occurred.
+
+Three coupled fixes shipped: (A) RecipeBuilder no longer filters
+`.frontmostPaste` when liveCursor=true; (B) `LiveCursorOutput`
+prepends a single space between EoU chunks; (C)
+`ClipboardBatchOutput` prepends `"\n"` before the final paste when
+`AppComposition.liveCursorOutput.lastSessionLivePasteAttempts > 0`
+and `.frontmostPaste(enabled: true)`. Wiring uses a closure
+parameter on `ClipboardBatchOutput` reading from a lifted
+`AppComposition.liveCursorOutput` static.
+
+Surfaced 2026-05-24 dogfood, confirmed via #097 logs:
+
+1. **Streaming mode's auto-paste setting is silently filtered out.** When `streamingBehavior.liveCursorEnabled == true`, `RecipeBuilder.swift:48-52` drops the `.frontmostPaste` sink from the bound recipe under the rationale "live cursor already pastes per-EOU; stop-time would double-paste." But Parakeet streaming reality: live cursor only pastes EoU chunks (which fire sparsely or not at all per session), and the second-pass authoritative final is *different text* than what was live-pasted (different model, cleaner punctuation). User wants BOTH pasted and to choose which they keep — not one silently dropped.
+
+2. **Live cursor chunks concatenate without spacing.** Consecutive `.endOfUtterance` chunks pasted via `LiveCursorOutput.deliverPartial(_:)` overwrite the clipboard with raw chunk text. When `Cmd+V` lands them sequentially the last word of chunk N runs into the first word of chunk N+1 (`"hello world" + "how are you"` → `"hello worldhow are you"`).
+
+3. **No separator between live-pasted chunks and the final authoritative paste.** Once (1) is fixed and `.frontmostPaste` flows through, the final paste lands immediately after the last live-pasted chunk — same concatenation problem at a larger scale.
+
+**Locked design (user decisions 2026-05-24):**
+
+- **(A)** Drop the `RecipeBuilder.swift:48-52` filter entirely. Streaming mode's auto-paste setting drives `.frontmostPaste(enabled:)` like every other mode. If the user enables both `liveCursor` AND `autoPaste`, both fire — user picks which output they prefer.
+- **(B)** `LiveCursorOutput.deliverPartial(_:)`: first chunk pastes unchanged. Subsequent chunks prepend a single space (`" \(chunk)"`) before writing to clipboard. Track "did we already paste a chunk this session?" via the existing `didWriteChunkThisSession` flag (already used for restore semantics) — when true, prepend space.
+- **(C)** `ClipboardBatchOutput.deliverBatch(...)`: when live cursor actually pasted ≥1 chunk in the same session AND `.frontmostPaste(enabled: true)` is in the sinks, prepend `"\n"` to the text before clipboard write. Use #097's `livePasteAttempts > 0` signal as the "actually pasted" gate (avoids stray newline when zero EoU chunks fired in a short streaming session).
+
+**Out of scope:**
+- Per-mode separator picker (space vs newline vs custom). Single-space hard-coded for now; can revisit if dogfood shows it's wrong.
+- Restructuring the orchestrator's sink ownership / dispatch. Minimal plumbing.
+- Anything in `LiveCursorOutput` beyond the chunk separator.
+
+**Scope:**
+- `Sources/PersonalScribeSession/WorkflowMode/RecipeBuilder.swift:48-52`: remove the filter.
+- `Sources/PersonalScribeAppKit/Output/LiveCursorOutput.swift`: chunk separator logic; reuse `didWriteChunkThisSession`.
+- `Sources/PersonalScribeAppKit/Output/ClipboardBatchOutput.swift`: accept a `liveCursorDidPaste: Bool` signal (parameter on `deliverBatch` OR shared accessor on a session-context type), prepend `"\n"` when true + paste enabled.
+- Plumbing: wherever `deliverBatch` is called by the orchestrator, pass through the live sink's `livePasteAttempts > 0` snapshot. Likely via a `PasteSessionContext` value type held by the orchestrator (small struct, not a refactor).
+
+**Tests:**
+- `RecipeBuilderTests`: expect 1-2 tests asserting the old filter behavior — update to assert `.frontmostPaste` survives when `liveCursorEnabled=true`.
+- `LiveCursorOutputTests` (new): `testFirstChunkPastesUnchanged`, `testSecondChunkPrependsSpace`, `testResetForNewSessionResetsChunkCounter`.
+- `ClipboardBatchOutputTests` (new): `testFinalPastePrependsNewlineWhenLiveCursorDidPaste`, `testFinalPasteDoesNotPrependNewlineWhenLiveCursorDidNotPaste`, `testFinalPasteDoesNotPrependNewlineWhenPasteDisabled`.
+
+**Depends on**: #097 (#097's accumulator provides the `livePasteAttempts > 0` signal needed for (C)).
+
+**Unblocks**: usable Parakeet streaming dictation — without #098, streaming-mode output is broken in two visible ways (no live paste of authoritative final, runtogether words).
+
+**Legacy:** none — net-new bug fix.
+
+---
+
+### #100 — Engine capabilities + unified WhisperCpp adapter (collapse #099 split)
+
+`refactor` · `P2` · `done` · `area: models, transcription, recipes, picker`
+*Updated 2026-10-02*
+
+**Closed:** `8570c4a` — `TranscriptionEngine.capabilities`, per-kind activation, and the single batch/streaming `WhisperCppAdapter` replace the split engine and duplicate adapter instances.
+
+Shipped: capability-set on TranscriptionEngine, per-section
+setActive(_:forKind:), merged WhisperCppAdapter (one actor, both
+protocols, single context), force-second-pass for whisper.cpp
+streaming. .whisperCppStreaming engine case + 3 streaming
+descriptors from #099 dropped. 10x review folded in (C1+C2+C4).
+No UserDefaults migration (whispercpp-streaming-* IDs never
+released).
+
+#099 shipped whisper.cpp streaming by adding a new `.whisperCppStreaming`
+engine case + 3 paired ModelDescriptor entries that share `repoFolderName`
+with their batch siblings. That choice (Option 1, mirroring pre-reset
+`5a0df9e`) was driven by a kind-system constraint: `ActiveModelService.visibleModels(kind:)`
+and `RecipeBuilder.resolveDescriptor` both filter by singular
+`descriptor.engine.kind`, so a whisper.cpp model that's batch-AND-streaming
+capable couldn't appear in both picker sections under a single descriptor.
+
+The cost of #099's choice:
+- 6 catalog rows for 3 underlying `.bin` files (user sees duplicate-looking
+  picker entries)
+- Two adapter instances per `.bin` when streaming + batch are both active
+  (RAM doubles: ~200-600MB extra per session depending on model size)
+- 3 descriptors to maintain per future whisper.cpp model addition
+
+**Design (user-locked 2026-05-24):**
+
+Replace singular `TranscriptionEngine.kind: ModelKind` with capability set
+`TranscriptionEngine.capabilities: Set<ModelKind>`. `.whisperCpp.capabilities = [.asr, .streamingASR]`;
+all other engines stay single-capability. Filter sites (`visibleModels(kind:)`,
+`RecipeBuilder.resolveDescriptor` pinned-kind check, AIModelsTab section
+filter) use `capabilities.contains(kind)` instead of `kind == kind`.
+
+`ActiveModelService.setActive(_:)` fans out across all capabilities the
+descriptor satisfies — picking whisper.cpp activates it as both
+`activeModelIDs[.asr]` AND `activeModelIDs[.streamingASR]` in one call.
+The user clicks "Make active" on a whisper.cpp row; it becomes the user's
+whisper.cpp model for both jobs.
+
+Merge `WhisperCppStreamingTranscriberAdapter` + `WhisperCppTranscriberAdapter`
+into ONE `WhisperCppAdapter` actor conforming to both `Transcriber` AND
+`StreamingTranscriber`. Single whisper.cpp context per descriptor; both
+decode entry points operate on it. `ModelBoundProcessorProvider`'s `.whisperCpp`
+factory returns one adapter instance, populated as both `transcriber:` AND
+`streamingTranscriber:` in the `AdapterRecord`. `releaseIdleResources()`
+contract honored at the actor level (one timer guarding the one context).
+
+Drop:
+- `TranscriptionEngine.whisperCppStreaming` case + Codable + kind mapping
+- 3 catalog descriptors `whispercpp-streaming-tiny`, `whispercpp-streaming-small-q5_1`,
+  `whispercpp-streaming-large-v3-turbo-q5_0`
+- `ModelBoundProcessorProvider.AdapterRecord` factory case for `.whisperCppStreaming`
+- `SessionCoordinator.whisperCppDescriptorsForApplicationTermination`'s
+  `.streamingASR` union (now redundant — capability fan-out covers it)
+- All tests asserting the split shape
+
+**UserDefaults migration:**
+
+Users who already saw the post-#099 picker may have activated
+`whispercpp-streaming-small-q5_1` (the streaming descriptor). After this
+ticket those IDs no longer exist. `ActiveModelService.init` reads stored
+IDs from UserDefaults — if a stored ID looks like `whispercpp-streaming-*`,
+strip the `-streaming` segment and rewrite to the surviving batch descriptor
+ID (e.g. `whispercpp-streaming-small-q5_1` → `whispercpp-small-q5_1`).
+One-shot migration; safe because the underlying `.bin` is identical.
+
+**Concurrency note:**
+
+Within a single session: streaming (during recording) and batch second-pass
+(after recording stops) never overlap in time. One context, two sequential
+consumers — no internal serialization needed.
+
+Across sessions: if user starts session N+1 before session N's second-pass
+batch decode finishes, both call sites on the same actor compete. Actor's
+isolation serializes them — second-pass blocks streaming briefly OR
+streaming blocks second-pass briefly. Either is acceptable for the rare
+back-to-back case. Surface the trade-off in adapter logging
+(`whispercpp_concurrent_access`) if it ever matters for diagnostics.
+
+**Scope:**
+
+- `Sources/PersonalScribeCore/Models/Selection/ModelDescriptor.swift` — `capabilities` field on TranscriptionEngine; remove `whisperCppStreaming` case
+- `Sources/PersonalScribeCore/Models/Selection/TranscriptionEngine+Codable.swift` — remove streaming case
+- `Sources/PersonalScribeCore/Models/Selection/TranscriptionEngine+Kind.swift` — replace `kind` property with `capabilities`
+- `Sources/PersonalScribeCore/Models/Selection/BuiltInModelCatalog.swift` — drop 3 streaming descriptor entries + the `whisperCppStreamingDescriptor(pairedWith:)` helper
+- `Sources/PersonalScribeSession/Models/Selection/ActiveModelService.swift` — `setActive(_:)` fans out to all capabilities; `visibleModels(kind:)` uses capabilities.contains
+- `Sources/PersonalScribeSession/Models/Selection/ModelBoundProcessorProvider.swift` — `.whisperCpp` factory creates one merged adapter, populates both slots
+- `Sources/PersonalScribeSession/WorkflowMode/RecipeBuilder.swift` — pinned-kind check uses capabilities.contains
+- `Sources/PersonalScribeSession/SessionCoordinator.swift` — eviction filter drops streaming union (now redundant)
+- `Sources/PersonalScribeTranscription/Adapters/WhisperCppAdapter.swift` — NEW merged actor (replaces both batch + streaming adapters)
+- `Sources/PersonalScribeAppKit/Settings/AIModelsTab.swift` — section filter uses capabilities.contains
+- `Sources/PersonalScribeAppKit/Settings/ActiveModelIDsMigration.swift` — NEW one-shot migration for stored whispercpp-streaming-* IDs
+
+**Out of scope:**
+- Expanding capabilities for other engines (whisperKit, parakeetTDT) — they could add `.streamingASR` later but that's per-engine work
+- Per-mode whisper.cpp settings split between streaming and batch passes (currently both use the same defaults; future ticket if dogfood asks)
+- Cross-process whisper.cpp context sharing
+
+**Tests:**
+- `TranscriptionEngineCapabilitiesTests` (NEW) — per-engine capability set
+- `ActiveModelServiceTests` extended — setActive fans out across capabilities; visibleModels uses contains
+- `BuiltInModelCatalogTests` — drop 3 streaming-descriptor assertions
+- `ModelBoundProcessorProviderTests` — same descriptor resolves to both transcriber AND streamingTranscriber, same instance
+- `WhisperCppAdapterTests` (NEW or renamed) — merged tests from former streaming + batch adapter tests
+- `ActiveModelIDsMigrationTests` (NEW) — stored `whispercpp-streaming-*` ID gets rewritten on first read
+
+**Depends on**: #099 (this is its partial revert + redesign).
+
+**Unblocks**: future engines that grow multi-capability without further refactors; ~300-600MB RAM saved per whisper.cpp streaming session that also runs second-pass.
+
+**Legacy:** partially reverts #099's catalog-split decision. Net delta: fewer files, cleaner kind taxonomy, less duplicated RAM.
+
+---
+
+### #107 — Memory idle-release verified (informational, no action)
+
+`feature` · `P3` · `done` · `area: lifecycle`
+*Updated 2026-05-25*
+
+Idle release working as designed (req-0050, `1c23cfa`). Verified empirically 2026-05-24 night: batch session 60→300→90 MB (93% reclaim), streaming session 90→723→333 MB (62% reclaim). Streaming residual is dominated by Parakeet TDT 0.6B used as second-pass batch (~600 MB peak). If lower streaming residual is needed, switching active batch ASR from Parakeet TDT 0.6B to Whisper Small WhisperKit (216 MB) cuts peak by ~400 MB. Current setting intentional per quality preference.
+
+**No action.** Keep as ticket so the empirical numbers don't get lost.
+
+**Legacy:** `plans/BACKLOG.md` #042 (ID already used in `BACKLOG_ARCHIVE.md`; renumbered 2026-10-02)
