@@ -1,4 +1,5 @@
 import Combine
+import SwiftUI
 import Foundation
 import PersonalScribeCore
 
@@ -9,6 +10,9 @@ public final class PillOverlayViewModel: ObservableObject {
     @Published public private(set) var visibility: Visibility
     @Published public private(set) var visibilityMode: PillVisibility
     @Published public var audioLevel: Double = 0
+    /// Side of the panel the pill content is pinned to (set by the
+    /// presenter from the pill's `PillAnchor`).
+    @Published var contentAlignment: Alignment = .bottom
 
     /// Invoked when the user clicks Resume on the Cancel Card: continue
     /// the cancelled recording (the pipeline kept its audio).

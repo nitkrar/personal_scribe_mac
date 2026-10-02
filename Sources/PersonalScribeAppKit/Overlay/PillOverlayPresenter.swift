@@ -350,11 +350,10 @@ public final class PillOverlayPresenter {
     /// `PillOverlayView.size(for:)` on every visibility transition.
     private let panelSize = NSSize(width: 280, height: 60)
     private var hasUserRepositioned = false
-    /// Bottom-center the pill should sit at — the default spot or where
-    /// the user dropped it. Every resize starts from here and is then
-    /// clamped on-screen, so an edge-shifted recording pill returns to
-    /// its spot when it shrinks instead of creeping toward the center.
-    private var homeAnchor: NSPoint?
+    /// Where the pill was put — the default spot or where the user
+    /// dropped it. Every resize is anchored to it (`PillAnchor`), so the
+    /// pill grows away from a nearby edge and shrinks back to this spot.
+    private var homeFrame: NSRect?
     private var pendingShrink: DispatchWorkItem?
     /// Matches the card ↔ pill `.animation` duration in `PillOverlayView`.
     static let cancelCrossfadeDuration: TimeInterval = 0.25
@@ -469,26 +468,12 @@ public final class PillOverlayPresenter {
             return
         }
 
-        // Bottom-center anchor: preserve the x-midpoint and bottom-Y of
-        // the currently-visible pill so the user's reading point stays
-        // fixed across state morphs. For first-show the default
-        // `updatePanelPosition` has already centered the panel at
-        // screen.midX / screen.minY + 64; for subsequent transitions
-        // the panel's own frame carries the (possibly user-dragged)
-        // anchor forward.
-        // A pill near a screen edge that grows (idle → recording) is
-        // shifted back on-screen rather than spilling past the edge.
-        let previousFrame = panel.frame
-        let anchor = homeAnchor ?? NSPoint(x: previousFrame.midX, y: previousFrame.minY)
-        homeAnchor = anchor
-        let newOrigin = NSPoint(
-            x: anchor.x - newSize.width / 2,
-            y: anchor.y
-        )
-        let newFrame = OverlayPlacement.clamp(
-            NSRect(origin: newOrigin, size: newSize),
-            within: screenBounds(previousFrame)
-        )
+        let home = homeFrame ?? panel.frame
+        homeFrame = home
+        let bounds = screenBounds(home)
+        let anchor = PillAnchor(home: home, within: bounds, largestSize: PillOverlayView.largestSize)
+        let newFrame = anchor.frame(for: newSize, within: bounds)
+        model.contentAlignment = anchor.contentAlignment
 
         // Animation policy:
         // - first sizing after show (`lastSizedVisibility == nil`): no
@@ -593,7 +578,7 @@ public final class PillOverlayPresenter {
             return
         }
         let settled = OverlayPlacement.clamp(panel.frame, within: screenBounds(panel.frame))
-        homeAnchor = NSPoint(x: settled.midX, y: settled.minY)
+        homeFrame = settled
         if settled != panel.frame {
             panel.setFrame(settled, animate: true)
         }
@@ -746,7 +731,7 @@ public final class PillOverlayPresenter {
         let y = screenFrame.minY + 64
 
         panel.setFrameOrigin(NSPoint(x: x, y: y))
-        homeAnchor = nil
+        homeFrame = nil
     }
 
     private var supportsTap: Bool {

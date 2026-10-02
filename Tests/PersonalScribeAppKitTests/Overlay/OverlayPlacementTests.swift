@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import XCTest
 @testable import PersonalScribeAppKit
 
@@ -74,5 +75,60 @@ final class OverlayPlacementTests: XCTestCase {
         )
         XCTAssertGreaterThanOrEqual(card.minX, narrow.minX)
         XCTAssertLessThanOrEqual(card.maxX, narrow.maxX)
+    }
+}
+
+/// Pills grow away from a nearby edge: the edge-side stays fixed.
+@MainActor
+final class PillAnchorTests: XCTestCase {
+    private let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
+    private let largest = NSSize(width: 264, height: 36)
+    private let idle = NSSize(width: 80, height: 28)
+    private let recording = NSSize(width: 220, height: 36)
+
+    private func anchor(_ home: NSRect) -> PillAnchor {
+        PillAnchor(home: home, within: screen, largestSize: largest)
+    }
+
+    func testPillNearLeftEdgeKeepsItsLeftSide() {
+        let home = NSRect(x: 8, y: 64, width: idle.width, height: idle.height)
+        let grown = anchor(home).frame(for: recording, within: screen)
+        XCTAssertEqual(grown.minX, home.minX)
+        XCTAssertEqual(anchor(home).frame(for: idle, within: screen), home)
+    }
+
+    func testPillNearRightEdgeKeepsItsRightSide() {
+        let home = NSRect(x: 912, y: 64, width: idle.width, height: idle.height)
+        XCTAssertEqual(anchor(home).frame(for: recording, within: screen).maxX, home.maxX)
+    }
+
+    func testPillAwayFromEdgesGrowsFromItsCenter() {
+        let home = NSRect(x: 460, y: 64, width: idle.width, height: idle.height)
+        let grown = anchor(home).frame(for: recording, within: screen)
+        XCTAssertEqual(grown.midX, home.midX)
+        XCTAssertEqual(grown.minY, home.minY, "bottom edge stays fixed by default")
+    }
+
+    func testPillAtTopEdgeKeepsItsTopSide() {
+        let home = NSRect(x: 460, y: 764, width: idle.width, height: idle.height)
+        XCTAssertEqual(anchor(home).frame(for: recording, within: screen).maxY, home.maxY)
+    }
+
+    /// Pill content is pinned to the fixed side so it doesn't slide while
+    /// the panel resizes around it.
+    func testContentAlignsToTheFixedSide() {
+        let left = NSRect(x: 8, y: 64, width: idle.width, height: idle.height)
+        let topRight = NSRect(x: 912, y: 764, width: idle.width, height: idle.height)
+        let middle = NSRect(x: 460, y: 64, width: idle.width, height: idle.height)
+        XCTAssertEqual(anchor(left).contentAlignment, .bottomLeading)
+        XCTAssertEqual(anchor(topRight).contentAlignment, .topTrailing)
+        XCTAssertEqual(anchor(middle).contentAlignment, .bottom)
+    }
+
+    /// Dropped while wide (recording) near the left edge: the idle pill
+    /// still hugs the left side instead of re-centering.
+    func testAnchorFromWideDropKeepsEdgeForSmallerStates() {
+        let home = NSRect(x: 8, y: 64, width: recording.width, height: recording.height)
+        XCTAssertEqual(anchor(home).frame(for: idle, within: screen).minX, home.minX)
     }
 }

@@ -85,6 +85,13 @@ public struct PillOverlayView: View {
         height: PersonalScribeTheme.Pill.Height.card
     )
 
+    /// Widest and tallest footprint across all states; decides whether
+    /// the pill sits "next to an edge" (see `PillAnchor`).
+    static let largestSize: CGSize = [
+        idleSize, holdToRecordSize, recordingSize, transcribingSize, doneSize,
+        downloadingSize, loadingSize, errorSize, cancelCardSize,
+    ].reduce(.zero) { CGSize(width: max($0.width, $1.width), height: max($0.height, $1.height)) }
+
     /// Pure mapping from a `PillOverlayVisibility` case to the panel
     /// footprint the overlay must render at. Used by
     /// `PillOverlayPresenter` (#044) to drive per-state panel resize:
@@ -200,6 +207,7 @@ public struct PillOverlayView: View {
         // trigger any SwiftUI animation (AppKit owns that morph via
         // setFrame animate); only the pill↔cancel flip does.
         .animation(.easeInOut(duration: 0.2), value: model.visibility == .cancelled)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.contentAlignment)
     }
 
     // MARK: - Idle
