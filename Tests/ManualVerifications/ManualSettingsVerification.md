@@ -20,6 +20,8 @@
 
 - [ ] **MV-SETT-10 — Re-launch shows the main window:** with Ninimma running and its window closed (Background mode on and off), launch it again from Finder / Spotlight (`open /Applications/Ninimma.app`) and via `open -n`: the main window appears, still one process.
 
+- [ ] **MV-SETT-11 — About keeps the sidebar:** click About in the sidebar footer at the default window size: the About card shows and the sidebar (logo, tabs, mic, About) stays visible; clicking any tab navigates away.
+
 ## Clipboard restore delay
 
 - Slider reflects current delay: open `General`, confirm the `Clipboard restore delay` control matches the current setting value, and confirm the helper text reads `After paste, wait Ns before restoring your clipboard` with the same value.
