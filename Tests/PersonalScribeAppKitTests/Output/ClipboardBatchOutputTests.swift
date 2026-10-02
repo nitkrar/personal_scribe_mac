@@ -112,7 +112,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "hello world", sinks: Self.sinks())
@@ -142,7 +142,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "already trusted", sinks: Self.sinks())
@@ -168,7 +168,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "already trusted", sinks: Self.sinks())
@@ -205,7 +205,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "clipboard only", sinks: Self.sinks(autoPaste: false))
@@ -238,7 +238,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "new value", sinks: Self.sinks(autoPaste: false))
@@ -281,7 +281,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { false },
             requestAccessibilityPrompt: { promptCount += 1 },
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "hello world", sinks: Self.sinks())
@@ -327,7 +327,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "clipboard only", sinks: Self.sinks(autoPaste: false))
@@ -360,7 +360,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "self frontmost but cursor present", sinks: Self.sinks())
@@ -391,7 +391,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "", sinks: Self.sinks())
@@ -421,7 +421,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         pasteboard.clearContents()
@@ -472,7 +472,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         pasteboard.clearContents()
@@ -508,7 +508,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         pasteboard.clearContents()
@@ -557,7 +557,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return false
             },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "shortcut fallback", sinks: Self.sinks())
@@ -587,7 +587,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "new value", sinks: Self.sinks(autoPaste: false))
@@ -618,9 +618,9 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementIsInAnotherApp: {
+            pasteTarget: {
                 probeCount += 1
-                return true
+                return .frontmost(bundleID: "com.example.target", pid: 4242)
             }
         )
 
@@ -651,9 +651,9 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementIsInAnotherApp: {
+            pasteTarget: {
                 probeCount += 1
-                return false
+                return .frontmost(bundleID: "com.nitkrar.personal_scribe", pid: 1)
             }
         )
 
@@ -679,7 +679,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: { false }
+            pasteTarget: { .frontmost(bundleID: "com.nitkrar.personal_scribe", pid: 1) }
         )
 
         let result = await service.deliverBatch(text: "written regardless", sinks: Self.sinks())
@@ -690,6 +690,31 @@ final class ClipboardBatchOutputTests: XCTestCase {
             "written regardless",
             "clipboard must always receive the transcript, even when paste is skipped"
         )
+    }
+
+    /// Slack (Electron) hides its AX focused element; with another app
+    /// frontmost the transcript must still be pasted via Cmd+V.
+    func testDeliverBatchPastesWhenFocusUnreadableInAnotherFrontmostApp() async {
+        let pasteboard = makePasteboard()
+        var pasteCount = 0
+        let service = ClipboardBatchOutput(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
+            defaults: isolatedDefaults(),
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.tinyspeck.slackmacgap"
+            ),
+            snapshotService: makeSnapshotService(for: pasteboard),
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            requestAccessibilityPrompt: {},
+            pasteShortcutPoster: { _ in pasteCount += 1; return true },
+            pasteTarget: { .frontmost(bundleID: "com.tinyspeck.slackmacgap", pid: 42) }
+        )
+
+        let result = await service.deliverBatch(text: "hello slack", sinks: Self.sinks())
+
+        XCTAssertEqual(pasteCount, 1)
+        XCTAssertNotEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
     }
 
     func testFocusedElementCheckIsNotConsultedWhenAutoPasteDisabled() async {
@@ -707,9 +732,9 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: {
+            pasteTarget: {
                 probeCount += 1
-                return true
+                return .frontmost(bundleID: "com.example.target", pid: 4242)
             }
         )
 
@@ -736,9 +761,9 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { false },
             requestAccessibilityPrompt: { promptCount += 1 },
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: {
+            pasteTarget: {
                 probeCount += 1
-                return true
+                return .frontmost(bundleID: "com.example.target", pid: 4242)
             }
         )
 
@@ -778,7 +803,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 shortcutPostCount += 1
                 return true
             },
-            focusedElementIsInAnotherApp: { true }
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(
@@ -800,32 +825,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
                        "Paste must not fire when there's no clipboard write to follow")
     }
 
-    // MARK: - Pure PID-comparison helper (#042)
-
-    func testFocusedElementIsInAnotherApp_returnsTrueWhenForeignPID() {
-        let result = ClipboardBatchOutput.focusedElementIsInAnotherApp(
-            systemWideFocusedPID: { pid_t(12345) },
-            currentProcessPID: { pid_t(99999) }
-        )
-        XCTAssertTrue(result)
-    }
-
-    func testFocusedElementIsInAnotherApp_returnsFalseWhenSelfPID() {
-        let result = ClipboardBatchOutput.focusedElementIsInAnotherApp(
-            systemWideFocusedPID: { pid_t(12345) },
-            currentProcessPID: { pid_t(12345) }
-        )
-        XCTAssertFalse(result)
-    }
-
-    func testFocusedElementIsInAnotherApp_returnsFalseWhenNoFocusedElement() {
-        let result = ClipboardBatchOutput.focusedElementIsInAnotherApp(
-            systemWideFocusedPID: { nil },
-            currentProcessPID: { pid_t(99999) }
-        )
-        XCTAssertFalse(result)
-    }
-
     // MARK: - #098 newline-before-final-paste
 
     func testFinalPastePrependsNewlineWhenLiveCursorDidPaste() async {
@@ -845,7 +844,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: { true },
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) },
             liveCursorPasteSnapshot: { 3 }
         )
 
@@ -871,7 +870,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: { true },
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) },
             liveCursorPasteSnapshot: { 0 }
         )
 
@@ -898,7 +897,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
             isAccessibilityTrusted: { true },
             requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
-            focusedElementIsInAnotherApp: { true },
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) },
             liveCursorPasteSnapshot: { 3 }
         )
 

@@ -38,14 +38,15 @@ import PersonalScribeSession
 /// end will recover it).
 @MainActor
 public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
-    typealias FocusedElementExternalityProbe = @MainActor () -> Bool
+    typealias PasteTargetProbe = @MainActor () -> PasteTarget
     typealias PasteShortcutPoster = @MainActor () -> Bool
 
     private let logger: PersonalScribeLogger
     private let snapshotService: PasteboardSnapshotService
     private let isAccessibilityTrusted: @MainActor () -> Bool
     private let pasteShortcutPoster: PasteShortcutPoster
-    private let focusedElementIsInAnotherApp: FocusedElementExternalityProbe
+    private let pasteTarget: PasteTargetProbe
+    private let selfBundleIdentifier: String
 
     private var sessionSnapshotHandle: PasteboardSnapshotService.Handle?
     private var didWriteChunkThisSession = false
@@ -65,14 +66,15 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         snapshotService: PasteboardSnapshotService = PasteboardSnapshotService(),
         isAccessibilityTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
         pasteShortcutPoster: @escaping PasteShortcutPoster = LiveCursorOutput.postPasteShortcut,
-        focusedElementIsInAnotherApp: @escaping FocusedElementExternalityProbe
-            = LiveCursorOutput.liveFocusedElementIsInAnotherApp
+        pasteTarget: @escaping PasteTargetProbe = { PasteTarget.live() },
+        selfBundleIdentifier: String = AppBrand.bundleIdentifier
     ) {
         self.logger = logger
         self.snapshotService = snapshotService
         self.isAccessibilityTrusted = isAccessibilityTrusted
         self.pasteShortcutPoster = pasteShortcutPoster
-        self.focusedElementIsInAnotherApp = focusedElementIsInAnotherApp
+        self.pasteTarget = pasteTarget
+        self.selfBundleIdentifier = selfBundleIdentifier
     }
 
     public func deliverPartial(_ revision: TranscriptProgress) async throws {
@@ -113,10 +115,11 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         }
         didLogAccessibilityTrustSkipThisCycle = false
 
-        guard focusedElementIsInAnotherApp() else {
+        let target = pasteTarget()
+        guard target.permitsPaste(selfBundleID: selfBundleIdentifier) else {
             pasteAccumulator.recordLiveClipboardWrite(chars: chunkToWrite.count)
             pasteAccumulator.recordLiveSkipped()
-            logger.info("LiveCursorOutput: focused element is in self; chunk left on clipboard, skipping ⌘V")
+            logger.info("LiveCursorOutput: not pasting (\(target.logDescription)); chunk left on clipboard, skipping ⌘V")
             return
         }
 
@@ -140,7 +143,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         }
 
         pasteAccumulator.recordLiveSucceeded(chars: chunkToWrite.count)
-        recordObservedTargetIfAvailable()
+        recordObservedTarget(target)
     }
 
     public func deliverFinal(_ result: TranscriptionResult) async throws {
@@ -222,16 +225,9 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         return pasteSessionID ?? "unknown"
     }
 
-    private func recordObservedTargetIfAvailable() {
-        guard let focusedPID = Self.liveSystemWideFocusedPID(),
-              focusedPID != ProcessInfo.processInfo.processIdentifier else {
-            return
-        }
-
-        pasteAccumulator.recordTarget(
-            pid: focusedPID,
-            bundleID: NSRunningApplication(processIdentifier: focusedPID)?.bundleIdentifier
-        )
+    private func recordObservedTarget(_ target: PasteTarget) {
+        guard case .frontmost(let bundleID, let pid) = target else { return }
+        pasteAccumulator.recordTarget(pid: pid, bundleID: bundleID)
     }
 
     private func pasteFailedLogLine(
@@ -246,35 +242,6 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
 
     // MARK: - Live AX probe + paste poster
 
-    /// Mirrors `ClipboardBatchOutput.liveFocusedElementIsInAnotherApp`
-    /// — the same PID-based externality check the stop-time path uses.
-    /// Reuses `ClipboardBatchOutput.focusedElementIsInAnotherApp(...)`
-    /// pure helper so the comparison logic stays single-sourced.
-    static func liveFocusedElementIsInAnotherApp() -> Bool {
-        ClipboardBatchOutput.focusedElementIsInAnotherApp(
-            systemWideFocusedPID: liveSystemWideFocusedPID
-        )
-    }
-
-    private static func liveSystemWideFocusedPID() -> pid_t? {
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedRef: CFTypeRef?
-        let status = AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedUIElementAttribute as CFString,
-            &focusedRef
-        )
-        guard status == .success, let focusedRef else {
-            return nil
-        }
-        // swiftlint:disable:next force_cast
-        let focused = focusedRef as! AXUIElement
-        var focusedPID: pid_t = 0
-        guard AXUIElementGetPid(focused, &focusedPID) == .success else {
-            return nil
-        }
-        return focusedPID
-    }
 
     static func postPasteShortcut() -> Bool {
         guard let source = CGEventSource(stateID: .combinedSessionState) else {

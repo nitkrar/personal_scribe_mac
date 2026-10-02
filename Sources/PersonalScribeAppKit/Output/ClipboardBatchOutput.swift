@@ -7,7 +7,7 @@ import PersonalScribeCore
 /// by a different process (another app). Paste is safe when focus is outside
 /// Ninimma. Injected as a dependency so tests can stub the result without
 /// touching the real AX APIs.
-typealias FocusedElementExternalityProbe = @MainActor () -> Bool
+typealias PasteTargetProbe = @MainActor () -> PasteTarget
 
 @MainActor
 public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
@@ -26,7 +26,7 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
     private let isAccessibilityTrusted: @MainActor () -> Bool
     private let requestAccessibilityPrompt: @MainActor () -> Void
     private let pasteShortcutPoster: @MainActor () -> Bool
-    private let focusedElementIsInAnotherApp: FocusedElementExternalityProbe
+    private let pasteTarget: PasteTargetProbe
     /// #098: Closure that reports how many chunks the live-cursor sink
     /// pasted in the most-recently-completed streaming session. When
     /// the value is `> 0` AND `.frontmostPaste(enabled: true)` is in
@@ -56,8 +56,7 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
             _ = AXIsProcessTrustedWithOptions(options)
         },
         pasteShortcutPoster: @escaping PasteShortcutPoster = ClipboardBatchOutput.postPasteShortcut,
-        focusedElementIsInAnotherApp: @escaping FocusedElementExternalityProbe
-            = ClipboardBatchOutput.liveFocusedElementIsInAnotherApp,
+        pasteTarget: @escaping PasteTargetProbe = { PasteTarget.live() },
         liveCursorPasteSnapshot: @escaping @MainActor () -> Int = { 0 }
     ) {
         self.logger = logger
@@ -71,7 +70,7 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         self.pasteShortcutPoster = {
             pasteShortcutPoster(logger)
         }
-        self.focusedElementIsInAnotherApp = focusedElementIsInAnotherApp
+        self.pasteTarget = pasteTarget
         self.liveCursorPasteSnapshot = liveCursorPasteSnapshot
     }
 
@@ -202,7 +201,8 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
             return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
         }
 
-        guard focusedElementIsInAnotherApp() else {
+        let target = pasteTarget()
+        guard target.permitsPaste(selfBundleID: selfBundleIdentifier) else {
             pasteAccumulator.recordFinalFailed(reason: .noTargetCursor)
             logger.error(
                 pasteFailedLogLine(
@@ -213,12 +213,13 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
                     sessionID: sessionID
                 )
             )
-            logger.info("ClipboardBatchOutput: AX focused element is owned by Ninimma (or not readable); leaving transcript on clipboard")
+            logger.info("ClipboardBatchOutput: not pasting (\(target.logDescription)); leaving transcript on clipboard")
             maybeScheduleRestore()
             return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
         }
 
-        recordObservedTargetIfAvailable(into: &pasteAccumulator)
+        logger.info("ClipboardBatchOutput: pasting into \(target.logDescription)")
+        recordObservedTarget(target, into: &pasteAccumulator)
 
         guard pasteShortcutPoster() else {
             pasteAccumulator.recordFinalFailed(reason: .eventPostFailed)
@@ -261,41 +262,9 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         return true
     }
 
-    /// Pure PID-comparison helper. Returns `true` iff the closure-supplied
-    /// focused-element PID is non-nil AND differs from the current-process PID.
-    /// Used by the live probe and directly by unit tests.
-    static func focusedElementIsInAnotherApp(
-        systemWideFocusedPID: () -> pid_t?,
-        currentProcessPID: () -> pid_t = { ProcessInfo.processInfo.processIdentifier }
-    ) -> Bool {
-        guard let focusedPID = systemWideFocusedPID() else {
-            return false
-        }
-        return focusedPID != currentProcessPID()
-    }
-
-    /// Live AX-based externality probe. Queries the system-wide focused UI
-    /// element, reads its owning process PID via `AXUIElementGetPid`, and
-    /// returns `true` when that PID is not this process. Any AX failure
-    /// (untrusted process, missing focused element, PID read error) returns
-    /// `false` — the safe default is to skip paste and leave the transcript
-    /// on the clipboard.
-    private static func liveFocusedElementIsInAnotherApp() -> Bool {
-        focusedElementIsInAnotherApp(
-            systemWideFocusedPID: liveSystemWideFocusedPID
-        )
-    }
-
-    private func recordObservedTargetIfAvailable(into accumulator: inout PasteSessionAccumulator) {
-        guard let focusedPID = Self.liveSystemWideFocusedPID(),
-              focusedPID != ProcessInfo.processInfo.processIdentifier else {
-            return
-        }
-
-        accumulator.recordTarget(
-            pid: focusedPID,
-            bundleID: NSRunningApplication(processIdentifier: focusedPID)?.bundleIdentifier
-        )
+    private func recordObservedTarget(_ target: PasteTarget, into accumulator: inout PasteSessionAccumulator) {
+        guard case .frontmost(let bundleID, let pid) = target else { return }
+        accumulator.recordTarget(pid: pid, bundleID: bundleID)
     }
 
     private func pasteFailedLogLine(
@@ -308,23 +277,4 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         "paste_failed — sink=\(sink.rawValue) stage=\(stage) reason=\(reason.rawValue) attemptedChars=\(attemptedChars) sessionID=\(sessionID)"
     }
 
-    private static func liveSystemWideFocusedPID() -> pid_t? {
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedRef: CFTypeRef?
-        let status = AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedUIElementAttribute as CFString,
-            &focusedRef
-        )
-        guard status == .success, let focusedRef else {
-            return nil
-        }
-        // swiftlint:disable:next force_cast
-        let focused = focusedRef as! AXUIElement
-        var focusedPID: pid_t = 0
-        guard AXUIElementGetPid(focused, &focusedPID) == .success else {
-            return nil
-        }
-        return focusedPID
-    }
 }

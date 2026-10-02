@@ -49,14 +49,14 @@ final class LiveCursorOutputTests: XCTestCase {
         snapshotService: PasteboardSnapshotService? = nil,
         isAccessibilityTrusted: @escaping @MainActor () -> Bool = { true },
         pasteShortcutPoster: @escaping @MainActor () -> Bool = { true },
-        focusedElementIsInAnotherApp: @escaping @MainActor () -> Bool = { true }
+        pasteTarget: @escaping @MainActor () -> PasteTarget = { .frontmost(bundleID: "com.example.target", pid: 4242) }
     ) -> LiveCursorOutput {
         LiveCursorOutput(
             logger: logger,
             snapshotService: snapshotService ?? makeSnapshotService(for: pasteboard),
             isAccessibilityTrusted: isAccessibilityTrusted,
             pasteShortcutPoster: pasteShortcutPoster,
-            focusedElementIsInAnotherApp: focusedElementIsInAnotherApp
+            pasteTarget: pasteTarget
         )
     }
 
@@ -299,7 +299,7 @@ final class LiveCursorOutputTests: XCTestCase {
         let output = makeOutput(
             pasteboard: pasteboard,
             logger: logger,
-            focusedElementIsInAnotherApp: { false }
+            pasteTarget: { .frontmost(bundleID: "com.nitkrar.personal_scribe", pid: 1) }
         )
 
         await output.resetForNewSession()
@@ -376,7 +376,7 @@ final class LiveCursorOutputTests: XCTestCase {
                 pasteCount += 1
                 return true
             },
-            focusedElementIsInAnotherApp: { false }
+            pasteTarget: { .frontmost(bundleID: "com.nitkrar.personal_scribe", pid: 1) }
         )
 
         try await output.deliverPartial(makeProgress("hello"))
