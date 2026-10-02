@@ -215,6 +215,31 @@ public enum AppComposition {
         logger: makeLogger(PersonalScribeLogCategory.ui)
     )
 
+    /// Shared clipboard snapshot service: batch delivery (restore-after-
+    /// paste) and the pill's Cancel Card Undo use the same instance (#072).
+    @MainActor
+    public static let pasteboardSnapshotService = PasteboardSnapshotService()
+
+    /// The pipeline's output stage (recipe's last step): live cursor
+    /// streaming + final batch delivery to the recipe's sinks. Passed to
+    /// the coordinator as its `outputSink`; the orchestrator runs it only
+    /// for sessions that produced a result.
+    @MainActor
+    public static let sessionOutputStage = SessionOutputStage(
+        live: liveCursorOutput,
+        batch: ClipboardBatchOutput(
+            logger: makeLogger(PersonalScribeLogCategory.ui),
+            defaults: .standard,
+            snapshotService: pasteboardSnapshotService,
+            liveCursorPasteSnapshot: {
+                // #098: live paste count from the just-ended streaming
+                // session; the final paste prepends "\n" when > 0.
+                liveCursorOutput.lastSessionLivePasteAttempts
+            }
+        ),
+        logger: makeLogger(PersonalScribeLogCategory.ui)
+    )
+
     public static let sessionCoordinator: SessionCoordinator = {
         let logger = makeLogger(PersonalScribeLogCategory.session)
         let capture = AVAudioCaptureService(
@@ -234,7 +259,7 @@ public enum AppComposition {
         // so `ClipboardBatchOutput` can read `lastSessionLivePasteAttempts`
         // when deciding whether to prepend a newline before the final
         // paste.
-        let liveCursorOutput = Self.liveCursorOutput
+        let sessionOutputStage = Self.sessionOutputStage
 
         let coordinator = SessionCoordinator(
             capture: capture,
@@ -250,7 +275,7 @@ public enum AppComposition {
             availableKindsProvider: {
                 Set(ModelKind.allCases.filter(\.isEnabled))
             },
-            outputSink: liveCursorOutput
+            outputSink: sessionOutputStage
         )
 
         wirePostSetActivePrewarm(modelService: modelService, coordinator: coordinator)

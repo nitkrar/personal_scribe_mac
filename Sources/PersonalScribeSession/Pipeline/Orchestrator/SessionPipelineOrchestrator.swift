@@ -1141,7 +1141,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
     private func deliverFinal(_ result: TranscriptionResult) async throws {
         do {
-            try await outputSink.deliverFinal(result)
+            try await outputSink.deliverFinal(result, sinks: activeSessionRecipe?.outputSinks ?? [])
         } catch {
             throw makeStageFailure(stage: .output, error: error, fallback: .transcriptionFailure)
         }

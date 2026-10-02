@@ -469,6 +469,59 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(observed.last?.lastCompletedResult?.text, "Hidden transcript.")
     }
 
+    /// Delivery is the recipe's last step, run by the pipeline: the
+    /// output stage receives the final transcript and the recipe's sinks.
+    func testCompletedSessionRunsOutputStageWithRecipeSinks() async throws {
+        let outputSink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(text: "deliver me", audioDuration: .seconds(1), processingDuration: .zero)
+            ),
+            outputSink: outputSink
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().lastCompletedResult == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let finals = await outputSink.finalDeliveries()
+        XCTAssertEqual(finals.count, 1)
+        XCTAssertEqual(finals.first?.text.lowercased().hasPrefix("deliver me"), true)
+        let sinks = await outputSink.finalDeliverySinks()
+        XCTAssertEqual(sinks, [[.frontmostPaste(enabled: true)]])
+    }
+
+    /// Esc cancel: the session never reaches the output stage, so nothing
+    /// is delivered (the old UI-driven paste re-pasted the previous text).
+    func testCancelledSessionNeverReachesOutputStage() async throws {
+        let outputSink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(text: "should not deliver", audioDuration: .seconds(1), processingDuration: .zero)
+            ),
+            outputSink: outputSink
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.cancelCapture()
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().sessionState != .idle {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let finals = await outputSink.finalDeliveries()
+        XCTAssertTrue(finals.isEmpty)
+        let endSessions = await outputSink.endSessionCount()
+        XCTAssertGreaterThanOrEqual(endSessions, 1, "session-scoped sinks still release state on cancel")
+    }
+
     func testStreamingMissingFinalizedFallsBackToAccumulatorTerminalText() async throws {
         let buffers = [
             try makeBuffer(sampleCount: 1_600),
@@ -2381,6 +2434,7 @@ private actor TestPipelineOutputSink: PipelineOutputSink {
     private let failurePoint: FailurePoint?
     private var partials: [TranscriptProgress] = []
     private var finals: [TranscriptionResult] = []
+    private var finalSinks: [[BoundOutputSink]] = []
     private var resets = 0
     private var endSessions = 0
 
@@ -2392,11 +2446,16 @@ private actor TestPipelineOutputSink: PipelineOutputSink {
         partials.append(revision)
     }
 
-    func deliverFinal(_ result: TranscriptionResult) async throws {
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {
         if case .final? = failurePoint {
             throw OutputFailure.finalDeliveryFailed
         }
         finals.append(result)
+        finalSinks.append(sinks)
+    }
+
+    func finalDeliverySinks() -> [[BoundOutputSink]] {
+        finalSinks
     }
 
     func resetForNewSession() async {
@@ -2438,7 +2497,7 @@ private actor BlockingEndSessionPipelineOutputSink: PipelineOutputSink {
 
     func deliverPartial(_ revision: TranscriptProgress) async throws {}
 
-    func deliverFinal(_ result: TranscriptionResult) async throws {}
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {}
 
     func resetForNewSession() async {
         phaseState = .idle

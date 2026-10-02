@@ -546,7 +546,8 @@ final class LiveCursorOutputTests: XCTestCase {
                 text: "ignored",
                 audioDuration: .seconds(1),
                 processingDuration: .milliseconds(10)
-            )
+            ),
+            sinks: []
         )
 
         XCTAssertEqual(pasteboard.string(forType: .string), "user-pre-session")

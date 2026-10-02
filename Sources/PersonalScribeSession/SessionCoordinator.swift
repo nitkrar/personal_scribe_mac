@@ -653,7 +653,7 @@ public actor SessionCoordinator {
 private struct CoordinatorPipelineOutputSink: PipelineOutputSink {
     func deliverPartial(_ revision: TranscriptProgress) async throws {}
 
-    func deliverFinal(_ result: TranscriptionResult) async throws {}
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {}
 
     func resetForNewSession() async {}
 }

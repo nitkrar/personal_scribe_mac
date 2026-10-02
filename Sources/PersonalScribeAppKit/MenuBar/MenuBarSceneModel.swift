@@ -13,9 +13,7 @@ final class MenuBarSceneModel: ObservableObject {
     private let coordinator: SessionCoordinator
     private let permissionService: any PermissionService
     private let clipboardWriter: @MainActor (String) -> Void
-    private let outputService: any OutputService
     private let openURL: @MainActor (URL) -> Void
-    private let onClipboardOnlyCopy: @MainActor () -> Void
     private let logger: PersonalScribeLogger
     private let onObservationCancelled: (@Sendable () -> Void)?
     private var snapshotObservation: AnyCancellable?
@@ -29,10 +27,8 @@ final class MenuBarSceneModel: ObservableObject {
         appStore: AppStore,
         coordinator: SessionCoordinator,
         clipboardWriter: @escaping @MainActor (String) -> Void,
-        outputService: any OutputService,
         permissionService: any PermissionService,
         openURL: @escaping @MainActor (URL) -> Void,
-        onClipboardOnlyCopy: @escaping @MainActor () -> Void = {},
         onObservationCancelled: (@Sendable () -> Void)? = nil,
         logger: PersonalScribeLogger
     ) {
@@ -44,9 +40,7 @@ final class MenuBarSceneModel: ObservableObject {
         self.coordinator = coordinator
         self.permissionService = permissionService
         self.clipboardWriter = clipboardWriter
-        self.outputService = outputService
         self.openURL = openURL
-        self.onClipboardOnlyCopy = onClipboardOnlyCopy
         self.onObservationCancelled = onObservationCancelled
         self.logger = logger
     }
@@ -54,11 +48,9 @@ final class MenuBarSceneModel: ObservableObject {
     convenience init(
         coordinator: SessionCoordinator,
         clipboardWriter: @escaping @MainActor (String) -> Void,
-        outputService: (any OutputService)? = nil,
         openSettings: @escaping @MainActor () -> Void,
         permissionService: (any PermissionService)? = nil,
         openURL: (@MainActor (URL) -> Void)? = nil,
-        onClipboardOnlyCopy: @escaping @MainActor () -> Void = {},
         onObservationCancelled: (@Sendable () -> Void)? = nil,
         logger: PersonalScribeLogger
     ) {
@@ -78,10 +70,8 @@ final class MenuBarSceneModel: ObservableObject {
             appStore: appStore,
             coordinator: coordinator,
             clipboardWriter: clipboardWriter,
-            outputService: outputService ?? ClipboardBatchOutput(logger: logger, defaults: .standard),
             permissionService: resolvedPermissionService,
             openURL: openURL ?? { _ in openSettings() },
-            onClipboardOnlyCopy: onClipboardOnlyCopy,
             onObservationCancelled: onObservationCancelled,
             logger: logger
         )
@@ -138,46 +128,15 @@ final class MenuBarSceneModel: ObservableObject {
         openURL(permissionService.systemSettingsDeepLink(for: .microphone))
     }
 
-    private func autoPasteTranscriptIfNeeded(_ transcript: String?) {
-        guard let transcript, !transcript.isEmpty else { return }
-        let outputService = outputService
-        let onClipboardOnlyCopy = onClipboardOnlyCopy
-        let logger = logger
-        let coordinator = coordinator
-
-        Task { @MainActor in
-            // #089 L-24: drive output via the session-frozen sink list,
-            // never the live-registry recipe at delivery time. Recipe
-            // is nil only before the first session has bound — in that
-            // edge case there's nothing to deliver against, so skip.
-            guard let recipe = await coordinator.currentBoundRecipe() else {
-                return
-            }
-            switch await outputService.deliverBatch(text: transcript, sinks: recipe.outputSinks) {
-            case .delivered(let target, _):
-                if target == .clipboardOnly || target == .selfFrontmost {
-                    onClipboardOnlyCopy()
-                }
-            case .failed(let error):
-                logger.error("Auto-paste transcript delivery failed", error: error)
-            case .ignoredEmptyInput:
-                break
-            }
-        }
-    }
-
     private func applySnapshot(_ snapshot: AppStoreSnapshot) {
-        let previousState = state
         state = snapshot.sessionState
         preparationProgress = snapshot.modelDownloadProgress
 
         if snapshot.sessionState.isIdle {
-            let transcriptText = snapshot.lastTranscriptionResult?.text
-            lastResultText = transcriptText
-
-            if !previousState.isIdle {
-                autoPasteTranscriptIfNeeded(transcriptText)
-            }
+            // Delivery itself is the pipeline's output stage
+            // (SessionOutputStage); this model only tracks the latest
+            // transcript for "Copy latest transcript".
+            lastResultText = snapshot.lastTranscriptionResult?.text
         } else {
             lastResultText = nil
         }

@@ -16,11 +16,9 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
 
     func testRecordStopTranscribeIdleFlowPublishesLatestResult() async {
         let coordinator = DevelopmentComposition.makeTestingSessionCoordinator()
-        let outputService = RecordingOutputService()
         let model = MenuBarSceneModel(
             coordinator: coordinator,
             clipboardWriter: { _ in },
-            outputService: outputService,
             openSettings: {},
             permissionService: FakePermissionService(),
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
@@ -47,9 +45,6 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
         await fulfillment(of: [transitionExpectation], timeout: 1.0)
         stateCancellable.cancel()
         await waitForTranscriptText("Development transcript.", on: model)
-        await waitUntil {
-            outputService.deliveredTexts == ["Development transcript."]
-        }
 
         XCTAssertEqual(model.lastResultText, "Development transcript.")
     }
@@ -116,13 +111,10 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
             sleep: { _ in }
         )
         let defaults = makeCompletedOnboardingDefaults()
-        let outputService = RecordingOutputService()
-
         _ = PersonalScribeAppMain(
             coordinator: sessionCoordinator,
             permissionService: FakePermissionService(),
             clipboardWriter: { _ in },
-            outputService: outputService,
             openSettings: {},
             overlayPanelBuilder: NoOpPanelBuilder(),
             defaults: defaults,

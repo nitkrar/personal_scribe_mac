@@ -496,6 +496,6 @@ private struct StaticPipelineContextProvider: PipelineContextProviding {
 
 private actor TestPipelineOutputSink: PipelineOutputSink {
     func deliverPartial(_ revision: TranscriptProgress) async throws {}
-    func deliverFinal(_ result: TranscriptionResult) async throws {}
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {}
     func resetForNewSession() async {}
 }

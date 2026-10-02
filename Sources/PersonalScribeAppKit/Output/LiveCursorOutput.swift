@@ -146,7 +146,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         recordObservedTarget(target)
     }
 
-    public func deliverFinal(_ result: TranscriptionResult) async throws {
+    public func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {
         // Live cursor mode does not stop-time deliver via this sink.
         // The authoritative second-pass writes through
         // `ClipboardBatchOutput` when `.frontmostPaste` is in the

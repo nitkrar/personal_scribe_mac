@@ -36,12 +36,10 @@ final class AppEntryPointTests: XCTestCase {
             sleep: { _ in }
         )
         let defaults = makeCompletedOnboardingDefaults()
-        let outputService = RecordingOutputService()
         let entry = PersonalScribeAppMain(
             coordinator: coordinator,
             permissionService: FakePermissionService(),
             clipboardWriter: { _ in },
-            outputService: outputService,
             openSettings: {},
             overlayPanelBuilder: NoOpPanelBuilder(),
             defaults: defaults,
@@ -50,9 +48,9 @@ final class AppEntryPointTests: XCTestCase {
 
         await coordinator.toggle()
         await coordinator.toggle()
-        await waitUntil {
-            outputService.deliveredTexts == ["Development transcript."]
-        }
+        // Delivery is the coordinator's pipeline output stage now
+        // (SessionOutputStage / SessionPipelineOrchestratorTests), not
+        // the app entry point.
 
         XCTAssertTrue(entry.coordinator === coordinator)
         let state = await entry.coordinator.state()

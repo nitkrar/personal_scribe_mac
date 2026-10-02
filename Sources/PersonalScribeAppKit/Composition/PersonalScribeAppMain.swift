@@ -49,11 +49,9 @@ struct PersonalScribeAppMain: App {
         coordinator: SessionCoordinator,
         permissionService: (any PermissionService)? = nil,
         clipboardWriter: @escaping @MainActor (String) -> Void = PersonalScribeAppMain.defaultClipboardWriter,
-        outputService: (any OutputService)? = nil,
         openSettings: @escaping @MainActor () -> Void = PersonalScribeAppMain.defaultOpenSettings,
         overlayPanelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
         defaults: UserDefaults = .standard,
-        isAccessibilityTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
         startupCoordinator: AppStartupCoordinator? = nil
     ) {
         // Run the one-shot UserDefaults rename migration before any preference
@@ -74,23 +72,6 @@ struct PersonalScribeAppMain: App {
         // `PasteboardSnapshotService` instance. Previously split across
         // `PasteboardSnapshotService` (session-lifecycle) and
         // `ClipboardBatchOutput.savedItems` (output-pipeline).
-        let sharedSnapshotService = PasteboardSnapshotService()
-        let resolvedOutputService = outputService
-            ?? ClipboardBatchOutput(
-                logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui),
-                defaults: defaults,
-                snapshotService: sharedSnapshotService,
-                isAccessibilityTrusted: isAccessibilityTrusted,
-                liveCursorPasteSnapshot: {
-                    // #098: read the just-ended streaming session's live
-                    // paste count. ClipboardBatchOutput prepends "\n"
-                    // before the final paste when this is > 0 and
-                    // .frontmostPaste is enabled, so the authoritative
-                    // final lands on its own line.
-                    AppComposition.liveCursorOutput.lastSessionLivePasteAttempts
-                }
-            )
-        var clipboardOnlyNotice: (@MainActor () -> Void)?
         let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
         let isOnboardingCompleteProvider: @MainActor () -> Bool = {
             onboardingCompletionPreference.resolve()
@@ -101,13 +82,9 @@ struct PersonalScribeAppMain: App {
             appStore: appStore,
             coordinator: coordinator,
             clipboardWriter: clipboardWriter,
-            outputService: resolvedOutputService,
             permissionService: appPermissionService,
             openURL: { url in
                 _ = NSWorkspace.shared.open(url)
-            },
-            onClipboardOnlyCopy: {
-                clipboardOnlyNotice?()
             },
             logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
         )
@@ -135,7 +112,9 @@ struct PersonalScribeAppMain: App {
             panelBuilder: overlayPanelBuilder,
             openVadSettingsAction: nil
         )
-        clipboardOnlyNotice = {
+        // Final delivery runs in the pipeline's output stage; it raises
+        // the clipboard-only notice when paste fell back to clipboard.
+        AppComposition.sessionOutputStage.onClipboardOnlyCopy = {
             pillController.showClipboardOnlyNotice()
         }
 
@@ -149,7 +128,7 @@ struct PersonalScribeAppMain: App {
         let pasteboardSnapshotHost = PasteboardSnapshotHost(
             appStore: appStore,
             viewModel: pillController.viewModel,
-            service: sharedSnapshotService
+            service: AppComposition.pasteboardSnapshotService
         )
         let diagnosticsOverlayController = LiveDiagnosticsOverlayController(
             store: AppComposition.diagnosticsStore
