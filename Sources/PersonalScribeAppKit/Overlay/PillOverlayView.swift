@@ -493,7 +493,6 @@ private struct PillChrome: ViewModifier {
                     style: .continuous
                 )
             )
-            .shadow(color: .black.opacity(isLight ? 0.18 : 0.35), radius: 12, y: 4)
     }
 }
 
@@ -557,7 +556,6 @@ struct CancelCardView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(borderColor, lineWidth: borderWidth)
         )
-        .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
         .accessibilityElement(children: .combine)
     }
 }
