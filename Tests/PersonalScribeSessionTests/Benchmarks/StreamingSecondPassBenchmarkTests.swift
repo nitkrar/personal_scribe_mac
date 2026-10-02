@@ -101,8 +101,8 @@ final class StreamingSecondPassBenchmarkTests: XCTestCase {
         === \(streaming.id) -> second pass \(secondPass.id) | audio \(String(format: "%.1f", audioSeconds)) s
           live:   prepare \(livePrepare) | real-time fed | first partial \(firstPartial.map { "\($0)" } ?? "none") | full stream \(liveDuration) | \(diff(liveText))
           second: prepare \(secondPrepare) | transcribe \(secondDuration) (\(String(format: "%.0f", msPerAudioSecond)) ms per audio-second) | \(diff(secondText))
-          live text:   \(liveText.prefix(160))
-          second text: \(secondText.prefix(160))
+          live text:   \(liveText)
+          second text: \(secondText)
         """
     }
 
