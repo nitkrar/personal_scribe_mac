@@ -382,6 +382,12 @@ public enum PersonalScribeTheme {
             public static let cancel = color(hex: "99999E")
         }
 
+        /// Pill surface for the resolved panel appearance. Light pill
+        /// theme inverts the whole pill (cream surface, dark ink).
+        public static func surface(for scheme: ColorScheme) -> Color {
+            scheme == .dark ? Dark.background : Light.background
+        }
+
         public enum Light {
             /// #F0EDE8 — pale-cream pill surface.
             public static let background = color(hex: "F0EDE8")

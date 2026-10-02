@@ -56,6 +56,9 @@ public final class StreamCard: NSPanel, StreamCardPresenting {
     public override var canBecomeMain: Bool { false }
 
     func show(text: String, above pillWindow: NSWindow) {
+        // Mirror the pill panel's resolved Pill theme so card and pill
+        // invert together (the card is a separate panel).
+        appearance = pillWindow.appearance
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else {
             hide()

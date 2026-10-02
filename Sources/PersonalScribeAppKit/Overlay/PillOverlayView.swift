@@ -20,12 +20,12 @@ import PersonalScribeCore
 /// * `.hidden` — `EmptyView()` (pill not rendered).
 ///
 /// ## Theme compliance
-/// The pill background is scheme-invariant (always dark navy `#1A1B2E`).
-/// All pill FOREGROUND colours therefore also use the scheme-invariant
-/// `PersonalScribeTheme.Pill.Dark.*` constants — NOT the window-palette
-/// `brandChampagne` token, which resolves to a low-contrast grey-brown
-/// in light mode. This ensures the spinner, waveform, icons, and text
-/// remain legible regardless of the user's WindowTint preference.
+/// The pill follows the Pill theme setting (Dark / Light / System) via
+/// the panel appearance set by `PillOverlayPresenter`: surface from
+/// `PersonalScribeTheme.Pill.surface(for:)` (navy / cream) and
+/// foreground from `Pill.Dark.*` / `Pill.Light.*` — NOT the window-palette
+/// `brandChampagne` token, so the pill stays legible regardless of the
+/// user's WindowTint preference.
 @MainActor
 public struct PillOverlayView: View {
     @ObservedObject private var model: PillOverlayViewModel
@@ -205,7 +205,6 @@ public struct PillOverlayView: View {
     // MARK: - Idle
 
     private var idlePill: some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
 
         return HStack {
             // Logo uses the scheme-invariant champagne fg token.
@@ -213,7 +212,7 @@ public struct PillOverlayView: View {
                 .frame(width: 14, height: 14)
         }
         .frame(width: Self.idleSize.width, height: Self.idleSize.height)
-        .modifier(PillChrome(palette: palette, borderStyle: .idle))
+        .modifier(PillChrome(borderStyle: .idle))
         .accessibilityElement()
         .accessibilityLabel("\(AppBrand.displayName) idle — double-tap right Option to record")
     }
@@ -226,7 +225,6 @@ public struct PillOverlayView: View {
     /// incoming audio level is zero the bars idle at the minimum
     /// height rather than falling to zero — keeps the visual alive).
     private var holdToRecordPill: some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
 
         return EqualizerBarsView(
             audioLevel: model.audioLevel,
@@ -235,7 +233,7 @@ public struct PillOverlayView: View {
         )
         .frame(width: 120, height: 24)
         .frame(width: Self.holdToRecordSize.width, height: Self.holdToRecordSize.height)
-        .modifier(PillChrome(palette: palette, borderStyle: .active))
+        .modifier(PillChrome(borderStyle: .active))
         .accessibilityElement()
         .accessibilityLabel("\(AppBrand.displayName) hold-to-record — release to transcribe")
     }
@@ -243,7 +241,6 @@ public struct PillOverlayView: View {
     // MARK: - Recording (spec §2c)
 
     private var recordingPill: some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
 
         return HStack(spacing: 12) {
             // Cancel glyph — dimmed secondary fg.
@@ -252,13 +249,11 @@ public struct PillOverlayView: View {
                 .foregroundColor(fgDim)
 
             // Voice-modulated waveform.
-            // Pill background is always dark navy until #102, so use the
-            // palette's dark-background shades regardless of theme.
             SineWaveView(
                 audioLevel: model.audioLevel,
                 decayMode: .animated,
                 palette: WaveformPalette(rawValue: waveformPaletteRaw) ?? .default,
-                onDarkBackground: true
+                onDarkBackground: colorScheme == .dark
             )
             .frame(width: 140, height: 34)
 
@@ -273,7 +268,7 @@ public struct PillOverlayView: View {
                 )
         }
         .frame(width: Self.recordingSize.width, height: Self.recordingSize.height)
-        .modifier(PillChrome(palette: palette, borderStyle: .active))
+        .modifier(PillChrome(borderStyle: .active))
         .accessibilityElement()
         .accessibilityLabel("\(AppBrand.displayName) recording — tap to stop")
     }
@@ -281,7 +276,6 @@ public struct PillOverlayView: View {
     // MARK: - Transcribing (spec §2d)
 
     private var transcribingPill: some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
 
         return HStack(spacing: 8) {
             ProgressView()
@@ -293,7 +287,7 @@ public struct PillOverlayView: View {
                 .foregroundColor(fg)
         }
         .frame(width: Self.transcribingSize.width, height: Self.transcribingSize.height)
-        .modifier(PillChrome(palette: palette, borderStyle: .transcribing))
+        .modifier(PillChrome(borderStyle: .transcribing))
         .accessibilityElement()
         .accessibilityLabel("\(AppBrand.displayName) transcribing")
     }
@@ -301,14 +295,13 @@ public struct PillOverlayView: View {
     // MARK: - Done (spec §2e)
 
     private var donePill: some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
         let green = PersonalScribeTheme.Pill.Border.doneColor
 
         return Image(systemName: "checkmark")
             .font(.system(size: 13, weight: .semibold))
             .foregroundColor(green)
             .frame(width: Self.doneSize.width, height: Self.doneSize.height)
-            .modifier(PillChrome(palette: palette, borderStyle: .done))
+            .modifier(PillChrome(borderStyle: .done))
             .accessibilityElement()
             .accessibilityLabel("Transcription copied to clipboard")
     }
@@ -316,7 +309,6 @@ public struct PillOverlayView: View {
     // MARK: - Downloading
 
     private func downloadingPill(fraction: Double) -> some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
         let percent = Int((fraction * 100).rounded())
 
         return HStack(spacing: 8) {
@@ -337,13 +329,12 @@ public struct PillOverlayView: View {
         }
         .padding(.horizontal, 12)
         .frame(width: Self.downloadingSize.width, height: Self.downloadingSize.height)
-        .modifier(PillChrome(palette: palette))
+        .modifier(PillChrome())
     }
 
     // MARK: - Loading
 
     private var loadingPill: some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
 
         return HStack(spacing: 8) {
             ProgressView()
@@ -355,13 +346,12 @@ public struct PillOverlayView: View {
                 .foregroundColor(fg)
         }
         .frame(width: Self.loadingSize.width, height: Self.loadingSize.height)
-        .modifier(PillChrome(palette: palette))
+        .modifier(PillChrome())
     }
 
     // MARK: - Error
 
     private func errorPill(message: String) -> some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
 
         return HStack(spacing: 8) {
             Image(systemName: "exclamationmark.circle.fill")
@@ -376,7 +366,7 @@ public struct PillOverlayView: View {
         }
         .padding(.horizontal, 12)
         .frame(width: Self.errorSize.width, height: Self.errorSize.height)
-        .modifier(PillChrome(palette: palette))
+        .modifier(PillChrome())
         .accessibilityElement()
         .accessibilityLabel("\(AppBrand.displayName) error: \(message)")
     }
@@ -445,16 +435,19 @@ struct PillBorderStyle: Equatable {
 /// NSPanel shadow disabled at the panel layer; `.clipShape` applied
 /// BEFORE `.shadow` so the shadow composites on a clean pixel boundary.
 private struct PillChrome: ViewModifier {
-    let palette: PersonalScribeTheme.Palette
     let borderStyle: PillBorderStyle
+    @Environment(\.colorScheme) private var colorScheme
 
-    init(palette: PersonalScribeTheme.Palette, borderStyle: PillBorderStyle = .idle) {
-        self.palette = palette
+    init(borderStyle: PillBorderStyle = .idle) {
         self.borderStyle = borderStyle
     }
 
     func body(content: Content) -> some View {
-        let base = palette.pillBackground
+        let base = PersonalScribeTheme.Pill.surface(for: colorScheme)
+        let isLight = colorScheme == .light
+        // The idle hairline is white-on-navy; on the cream pill use a
+        // dark hairline so the edge stays visible.
+        let strokeColor = (isLight && borderStyle == .idle) ? Color.black.opacity(0.1) : borderStyle.strokeColor
         let radius = borderStyle.cornerRadius
         content
             .background {
@@ -483,7 +476,7 @@ private struct PillChrome: ViewModifier {
                         cornerRadius: radius,
                         style: .continuous
                     )
-                    .stroke(borderStyle.strokeColor, lineWidth: borderStyle.lineWidth)
+                    .stroke(strokeColor, lineWidth: borderStyle.lineWidth)
                 }
             }
             .clipShape(
@@ -492,7 +485,7 @@ private struct PillChrome: ViewModifier {
                     style: .continuous
                 )
             )
-            .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
+            .shadow(color: .black.opacity(isLight ? 0.18 : 0.35), radius: 12, y: 4)
     }
 }
 

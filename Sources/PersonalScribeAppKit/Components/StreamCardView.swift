@@ -24,7 +24,7 @@ struct StreamCardView: View {
 
             transcriptBody
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(PersonalScribeTheme.Pill.Dark.waveform)
+                .foregroundColor(inkColor)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 14)
@@ -35,16 +35,21 @@ struct StreamCardView: View {
         .shadow(color: .black.opacity(0.3), radius: 14, y: 5)
     }
 
+    /// Follows the pill theme: `StreamCard` mirrors the pill panel's
+    /// appearance, so `colorScheme` matches the pill.
+    private var inkColor: Color {
+        colorScheme == .dark ? PersonalScribeTheme.Pill.Dark.waveform : PersonalScribeTheme.Pill.Light.waveform
+    }
+
     private var background: some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
-        return RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(palette.pillBackground.opacity(0.95))
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(PersonalScribeTheme.Pill.surface(for: colorScheme).opacity(0.95))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .strokeBorder(
                         LinearGradient(
                             colors: [
-                                PersonalScribeTheme.Pill.Dark.waveform.opacity(0.3),
+                                inkColor.opacity(0.3),
                                 Color.clear
                             ],
                             startPoint: .leading,

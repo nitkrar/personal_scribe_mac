@@ -16,6 +16,8 @@
 
 - [ ] **MV-SETT-8 — Waveform colors:** Settings → General → Appearance → Waveform colors shows six chips in one row (Siri default). Pick another, start a recording: the pill's three strands use the new colors without relaunch; the choice persists across relaunch.
 
+- [ ] **MV-SETT-9 — Light pill theme inverts the pill:** Pill theme → Light: pill surface is cream with dark logo/icons/text, waveform uses the palette's deeper shades, and the streaming live-transcript card is cream with dark text. System matches Light while macOS is light; Dark unchanged.
+
 ## Clipboard restore delay
 
 - Slider reflects current delay: open `General`, confirm the `Clipboard restore delay` control matches the current setting value, and confirm the helper text reads `After paste, wait Ns before restoring your clipboard` with the same value.
