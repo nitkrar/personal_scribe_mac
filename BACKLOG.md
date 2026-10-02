@@ -926,6 +926,21 @@ Decided (2026-10-02): opening from the menu bar while in a full-screen app may s
 
 ---
 
+### #102 — Pill refactor: edge-aware shape, wire Style + Theme for real
+
+`feature` · `bug` · `P2` · `open` · `area: pill, overlay, settings`
+*Opened 2026-10-02*
+
+User request + findings (2026-10-02):
+
+1. **Edge-aware layout (feature).** When the pill is dragged to a screen edge it should adapt: horizontal along the top/bottom edges, vertical along the left/right edges. The user expects a vertical capsule may look clunky — a round (circular) pill on the sides is the alternative to evaluate.
+2. **Style setting does nothing (bug, by omission).** Settings → Recording window → Style (Classic / Mini / None) only persists `PillStyle` and drives the Settings preview cards; nothing in `PillOverlayView` / `PillOverlayPresenter` reads it (documented as deferred in `PillStyle.swift` / mockup-gaps D.1). Also define what **None** means vs. the separate pill Visibility "Hidden" setting (`PillStyle.none` = "pill hidden regardless of PillVisibility") — likely redundant; merge or drop.
+3. **Light theme hides the logo (bug).** `PillOverlayPresenter.applyResolvedAppearance()` applies Light/Dark to the panel, so foreground tokens switch to `Pill.Light.*` (dark ink), but the pill background in `PillOverlayView` is hardcoded dark navy ("scheme-invariant") → dark-on-dark, logo/waveform invisible. System behaves the same whenever macOS is in light mode. Fix: make the background follow the resolved appearance (light bg `#F0EDE8` already used by the Settings preview), or drop the theme option and make the pill dark-only.
+
+Scope note: 2 and 3 are independent quick fixes; 1 is the actual refactor (layout per edge, snapping, transitions for recording/transcribing/done states, stream card placement on vertical/round variants).
+
+---
+
 
 
 `refactor` · `P2` · `open` · `area: transcription, models, modes, recipes`
