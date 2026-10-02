@@ -487,20 +487,20 @@ public final class PillOverlayPresenter {
         let involvesCancelCrossfade = wasCancelled || becomingCancelled
         let shouldAnimate = !isFirstSizing && !involvesCancelCrossfade
 
+        let isShrinking = newSize.width < panel.frame.width || newSize.height < panel.frame.height
         lastSizedVisibility = visibility
+        pendingShrink?.cancel()
+        pendingShrink = nil
         if wasCancelled && !isFirstSizing {
             // Keep the panel at card size until SwiftUI's card-to-pill
             // crossfade completes.
-            pendingShrink?.cancel()
-            let work = DispatchWorkItem { [weak self, weak panel] in
-                guard let self, let panel, self.lastSizedVisibility == visibility else { return }
-                panel.setFrame(newFrame, animate: false)
-            }
-            pendingShrink = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.cancelCrossfadeDuration, execute: work)
+            deferResize(to: newFrame, for: visibility, animate: false, after: Self.cancelCrossfadeDuration)
+        } else if isShrinking && shouldAnimate {
+            // AppKit's animated resize blocks SwiftUI updates until it
+            // ends; shrink after the smaller content has rendered so the
+            // old, wider content isn't clipped by the shrinking panel.
+            deferResize(to: newFrame, for: visibility, animate: true, after: 0)
         } else {
-            pendingShrink?.cancel()
-            pendingShrink = nil
             panel.setFrame(newFrame, animate: shouldAnimate)
         }
 
@@ -585,6 +585,20 @@ public final class PillOverlayPresenter {
         diagnosticLogger.info("PillOverlayPresenter.userDidMovePanel — frame=\(settled)")
         reanchorResponseCard(pillFrame: settled)
         reanchorStreamCard(pillFrame: settled)
+    }
+
+    private func deferResize(
+        to frame: NSRect,
+        for visibility: PillOverlayViewModel.Visibility,
+        animate: Bool,
+        after delay: TimeInterval
+    ) {
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let panel = self.panel, self.lastSizedVisibility == visibility else { return }
+            panel.setFrame(frame, animate: animate)
+        }
+        pendingShrink = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func reanchorResponseCard(pillFrame: NSRect) {

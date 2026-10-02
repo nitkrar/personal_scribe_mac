@@ -442,6 +442,26 @@ public struct GeneralTab: View {
                     )
                 )
             }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                Text("Cancel card duration")
+                    .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+
+                Text(viewModel.cancelCardDurationDescription)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+
+                Slider(
+                    value: Binding(
+                        get: { viewModel.cancelCardDuration.seconds },
+                        set: { viewModel.setCancelCardDurationSeconds($0) }
+                    ),
+                    in: CancelCardDuration.minimumSeconds...CancelCardDuration.maximumSeconds,
+                    step: 1
+                )
+            }
         }
     }
 
@@ -495,26 +515,6 @@ public struct GeneralTab: View {
             ) {
                 Text("Immediate").tag(WaveformDecayMode.immediate)
                 Text("Animated").tag(WaveformDecayMode.animated)
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
-                Text("Cancel card duration")
-                    .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
-
-                Text(viewModel.cancelCardDurationDescription)
-                    .font(PersonalScribeTheme.Typography.caption.font)
-                    .foregroundStyle(.secondary)
-
-                Slider(
-                    value: Binding(
-                        get: { viewModel.cancelCardDuration.seconds },
-                        set: { viewModel.setCancelCardDurationSeconds($0) }
-                    ),
-                    in: CancelCardDuration.minimumSeconds...CancelCardDuration.maximumSeconds,
-                    step: 1
-                )
             }
 
             Divider()

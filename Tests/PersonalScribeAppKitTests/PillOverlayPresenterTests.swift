@@ -487,7 +487,7 @@ final class PillOverlayPresenterTests: XCTestCase {
 
     /// After an edge-clamped grow, shrinking back returns the pill to
     /// where the user left it rather than the shifted center.
-    func testPillReturnsToItsEdgeSpotAfterRecording() {
+    func testPillReturnsToItsEdgeSpotAfterRecording() async {
         let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
         let viewModel = PillOverlayViewModel(visibility: .idle, visibilityMode: .alwaysOn)
         let panelBuilder = RecordingPanelBuilder()
@@ -503,6 +503,7 @@ final class PillOverlayPresenterTests: XCTestCase {
 
         viewModel.apply(visibility: PillVisibilityState.recording)
         viewModel.apply(visibility: PillVisibilityState.idle)
+        try? await Task.sleep(for: .milliseconds(50))
 
         XCTAssertEqual(panelBuilder.panel.frame, idleFrame)
     }
@@ -523,6 +524,26 @@ final class PillOverlayPresenterTests: XCTestCase {
 
         try await Task.sleep(for: .milliseconds(Int(PillOverlayPresenter.cancelCrossfadeDuration * 1000) + 150))
         XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.idleSize)
+    }
+
+    /// Shrinking waits one run-loop turn so the smaller content renders
+    /// before AppKit's (blocking) resize animation; otherwise the old,
+    /// wider content is clipped while the panel shrinks. Growing resizes
+    /// at once.
+    func testShrinkResizesAfterContentUpdatesGrowResizesImmediately() async {
+        let viewModel = PillOverlayViewModel(visibility: .idle, visibilityMode: .alwaysOn)
+        let panelBuilder = RecordingPanelBuilder()
+        let presenter = PillOverlayPresenter(model: viewModel, panelBuilder: panelBuilder)
+        _ = presenter
+
+        viewModel.apply(visibility: PillVisibilityState.transcribing)
+        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.transcribingSize, "grow is immediate")
+
+        viewModel.apply(visibility: PillVisibilityState.done)
+        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.transcribingSize, "shrink waits for the content")
+        for _ in 0..<5 { await Task.yield() }
+        try? await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.doneSize)
     }
 
     /// Near the left edge the pill keeps its left side and grows right.
