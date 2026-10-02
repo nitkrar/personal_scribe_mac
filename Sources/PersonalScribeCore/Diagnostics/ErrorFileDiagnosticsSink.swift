@@ -6,14 +6,12 @@ public struct ErrorFileDiagnosticsSink: DiagnosticsSink {
 
     public init(
         storageLocatorProvider: @escaping @Sendable () -> any StorageLocator = { AppConfig.liveStorageLocator() },
-        atomicFileWriter: any AtomicFileWriter = FileManagerAtomicFileWriter(),
-        maxLogSizeBytes: Int = 1_000_000
+        options: DiagnosticsLogFileOptions = DiagnosticsLogFileOptions()
     ) {
         writer = DiagnosticsFileWriter(
             fileName: "errors.log",
             storageLocatorProvider: storageLocatorProvider,
-            atomicFileWriter: atomicFileWriter,
-            maxLogSizeBytes: maxLogSizeBytes
+            options: options
         )
     }
 
@@ -29,23 +27,20 @@ public struct ErrorFileDiagnosticsSink: DiagnosticsSink {
 actor DiagnosticsFileWriter {
     private let fileName: String
     private let storageLocatorProvider: @Sendable () -> any StorageLocator
-    private let atomicFileWriter: any AtomicFileWriter
+    private let options: DiagnosticsLogFileOptions
     private let fileManager: FileManager
-    private let maxLogSizeBytes: Int
     private let fallbackLogger: Logger
 
     init(
         fileName: String,
         storageLocatorProvider: @escaping @Sendable () -> any StorageLocator,
-        atomicFileWriter: any AtomicFileWriter,
-        fileManager: FileManager = .default,
-        maxLogSizeBytes: Int
+        options: DiagnosticsLogFileOptions,
+        fileManager: FileManager = .default
     ) {
         self.fileName = fileName
         self.storageLocatorProvider = storageLocatorProvider
-        self.atomicFileWriter = atomicFileWriter
+        self.options = options
         self.fileManager = fileManager
-        self.maxLogSizeBytes = maxLogSizeBytes
         fallbackLogger = Logger(subsystem: AppBrand.logSubsystem, category: PersonalScribeLogCategory.app)
     }
 
@@ -55,34 +50,48 @@ actor DiagnosticsFileWriter {
             .url(for: .logs)
             .appendingPathComponent(fileName)
             .standardizedFileURL
-        let line = DiagnosticsLineRenderer.render(event) + "\n"
+        let line = Data((DiagnosticsLineRenderer.render(event) + "\n").utf8)
 
         do {
             try locator.ensureDirectoriesExist()
-
-            let existingContents = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
-            let updatedContents = truncateIfNeeded(existingContents + line)
-
-            try atomicFileWriter.replaceItem(at: logURL, permissions: 0o600) { temporaryURL in
-                try updatedContents.write(to: temporaryURL, atomically: false, encoding: .utf8)
+            try fileManager.createDirectory(
+                at: logURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try rollOverIfFull(logURL, adding: line.count)
+            if !fileManager.fileExists(atPath: logURL.path) {
+                guard fileManager.createFile(
+                    atPath: logURL.path,
+                    contents: nil,
+                    attributes: [.posixPermissions: 0o600]
+                ) else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
             }
+
+            let handle = try FileHandle(forWritingTo: logURL)
+            defer { try? handle.close() }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: line)
         } catch {
             fallbackLogger.error("Failed to append diagnostics log line \(self.fileName, privacy: .public)")
         }
     }
 
-    private func truncateIfNeeded(_ contents: String) -> String {
-        let data = Data(contents.utf8)
-        guard data.count > maxLogSizeBytes else {
-            return contents
+    private func rollOverIfFull(_ logURL: URL, adding byteCount: Int) throws {
+        let attributes = try? fileManager.attributesOfItem(atPath: logURL.path)
+        let size = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+        guard size > 0, size + byteCount > options.maxLogSizeBytes else {
+            return
         }
 
-        let suffix = data.suffix(maxLogSizeBytes)
-        if let newlineIndex = suffix.firstIndex(of: 0x0A) {
-            let trimmed = suffix[suffix.index(after: newlineIndex)...]
-            return String(decoding: trimmed, as: UTF8.self)
-        }
-
-        return String(decoding: suffix, as: UTF8.self)
+        let archiveURL = DiagnosticsLogArchiveName.nextURL(
+            forActiveLog: logURL,
+            day: options.calendar.startOfDay(for: options.now()),
+            calendar: options.calendar,
+            fileManager: fileManager
+        )
+        try fileManager.moveItem(at: logURL, to: archiveURL)
+        options.onRollover()
     }
 }

@@ -6,6 +6,7 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
 
     private let storageLocatorProvider: @Sendable () -> any StorageLocator
     private let retentionDaysProvider: @Sendable () -> Int
+    private let maxArchivedFilesProvider: @Sendable () -> Int
     private let calendar: Calendar
     private let fileManager: FileManager
     private let atomicFileWriter: any AtomicFileWriter
@@ -16,12 +17,16 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
         retentionDaysProvider: @escaping @Sendable () -> Int = {
             LogRetentionDaysPreference.resolve()
         },
+        maxArchivedFilesProvider: @escaping @Sendable () -> Int = {
+            LogMaxFilesPreference.resolve()
+        },
         calendar: Calendar = .autoupdatingCurrent,
         fileManager: FileManager = .default,
         atomicFileWriter: any AtomicFileWriter = FileManagerAtomicFileWriter()
     ) {
         self.storageLocatorProvider = storageLocatorProvider
         self.retentionDaysProvider = retentionDaysProvider
+        self.maxArchivedFilesProvider = maxArchivedFilesProvider
         self.calendar = calendar
         self.fileManager = fileManager
         self.atomicFileWriter = atomicFileWriter
@@ -53,6 +58,16 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
         }
     }
 
+    /// Applies retention and the max-files limit to archives only, without
+    /// rotating active logs. Safe to call while sinks are writing.
+    public func pruneArchives() {
+        do {
+            try pruneArchivedLogs(in: storageLocatorProvider().url(for: .logs))
+        } catch {
+            fallbackLogger.error("Failed to prune diagnostics log archives")
+        }
+    }
+
     private func rotateStaleCurrentLogs(
         in logsDirectory: URL,
         currentDayStart: Date
@@ -64,17 +79,13 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
             }
 
             if activeLog.sizeInBytes > 0 {
-                // Archive shape `<basename>.<YYYY-MM-DD>.log` so Finder and
-                // text editors recognize the extension; the previous
-                // `<basename>.log.<date>` form left files without a .log
-                // suffix.
-                let baseName = activeLog.url.deletingPathExtension().lastPathComponent
-                let dateString = archiveDateString(for: modificationDayStart)
-                let archiveURL = logsDirectory.appendingPathComponent(
-                    "\(baseName).\(dateString).log",
-                    isDirectory: false
+                let archiveURL = DiagnosticsLogArchiveName.nextURL(
+                    forActiveLog: activeLog.url,
+                    day: modificationDayStart,
+                    calendar: calendar,
+                    fileManager: fileManager
                 )
-                try archive(activeLog.url, to: archiveURL)
+                try fileManager.moveItem(at: activeLog.url, to: archiveURL)
             }
 
             try touchEmptyLog(at: activeLog.url)
@@ -123,21 +134,24 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
 
     private func pruneArchivedLogs(in logsDirectory: URL) throws {
         let mainLogRetentionDays = LogRetentionDaysPreference.sanitized(retentionDaysProvider())
+        let maxArchivedFiles = LogMaxFilesPreference.sanitized(maxArchivedFilesProvider())
         let groupedArchives = Dictionary(grouping: try archivedLogs(in: logsDirectory)) { $0.baseLogName }
         for (baseLogName, archives) in groupedArchives {
+            var kept = archives.sorted { lhs, rhs in
+                (lhs.archiveDate, lhs.index) > (rhs.archiveDate, rhs.index)
+            }
+            // 0 disables either limit.
             let retentionDays = retentionDays(for: baseLogName, mainLogRetentionDays: mainLogRetentionDays)
-            guard retentionDays > 0 else {
-                continue
+            if retentionDays > 0 {
+                let keptDates = Set(kept.map(\.archiveDate).uniqued().prefix(retentionDays))
+                kept = kept.filter { keptDates.contains($0.archiveDate) }
+            }
+            if maxArchivedFiles > 0 {
+                kept = Array(kept.prefix(maxArchivedFiles))
             }
 
-            let sorted = archives.sorted { lhs, rhs in
-                if lhs.archiveDate == rhs.archiveDate {
-                    return lhs.url.lastPathComponent > rhs.url.lastPathComponent
-                }
-                return lhs.archiveDate > rhs.archiveDate
-            }
-
-            for staleArchive in sorted.dropFirst(retentionDays) {
+            let keptURLs = Set(kept.map(\.url))
+            for staleArchive in archives where !keptURLs.contains(staleArchive.url) {
                 try? fileManager.removeItem(at: staleArchive.url)
             }
         }
@@ -198,57 +212,16 @@ public struct DiagnosticsLogMaintenanceService: @unchecked Sendable {
     }
 
     private func archivedLog(for url: URL) -> ArchivedLogFile? {
-        let fileName = url.lastPathComponent
-        guard fileName.hasSuffix(".log") else {
+        guard let name = DiagnosticsLogArchiveName.parse(url.lastPathComponent, calendar: calendar) else {
             return nil
         }
-
-        let withoutExtension = String(fileName.dropLast(4))
-        // Archive shape: `<basename>.<YYYY-MM-DD>.log`. Require the 10-char
-        // date suffix on what remains after stripping `.log`. Files that
-        // don't fit this shape (e.g. the current `errors.log`, or a custom
-        // sidecar) are not classified as archives.
-        guard withoutExtension.count > 11 else {
-            return nil
-        }
-
-        let archiveDateSuffix = String(withoutExtension.suffix(10))
-        guard let archiveDate = archiveDate(from: archiveDateSuffix) else {
-            return nil
-        }
-
-        // baseName is `<basename>.log` (drops the `.<date>` middle), matching
-        // the active-log filename so retention grouping pairs `errors.log`
-        // current with `errors.<date>.log` archives.
-        let baseNameStem = String(withoutExtension.dropLast(11))
-        guard !baseNameStem.isEmpty else {
-            return nil
-        }
-        let baseName = "\(baseNameStem).log"
 
         return ArchivedLogFile(
             url: url,
-            baseLogName: baseName,
-            archiveDate: archiveDate
+            baseLogName: name.baseLogName,
+            archiveDate: name.date,
+            index: name.index
         )
-    }
-
-    private func archive(_ currentLogURL: URL, to archiveURL: URL) throws {
-        if fileManager.fileExists(atPath: archiveURL.path) {
-            let existingContents = (try? String(contentsOf: archiveURL, encoding: .utf8)) ?? ""
-            let currentContents = (try? String(contentsOf: currentLogURL, encoding: .utf8)) ?? ""
-            try atomicFileWriter.replaceItem(at: archiveURL, permissions: 0o600) { temporaryURL in
-                try (existingContents + currentContents).write(
-                    to: temporaryURL,
-                    atomically: false,
-                    encoding: .utf8
-                )
-            }
-            try? fileManager.removeItem(at: currentLogURL)
-            return
-        }
-
-        try fileManager.moveItem(at: currentLogURL, to: archiveURL)
     }
 
     private func touchEmptyLog(at url: URL) throws {
@@ -384,4 +357,13 @@ private struct ArchivedLogFile {
     let url: URL
     let baseLogName: String
     let archiveDate: Date
+    let index: Int
+}
+
+private extension Sequence where Element: Hashable {
+    /// Elements in order, dropping repeats.
+    func uniqued() -> [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
+    }
 }

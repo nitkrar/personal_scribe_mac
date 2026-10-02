@@ -2,21 +2,18 @@ import Foundation
 
 /// Writes info + notice events to diagnostics.log. Always on, per
 /// docs/INSTRUMENTATION_PRINCIPLES.md: this is the production evidence
-/// trail (OSLog keeps info only in memory). Size is bounded by the
-/// per-file cap plus daily rotation and retention.
+/// trail (OSLog keeps info only in memory).
 public struct VerboseFileDiagnosticsSink: DiagnosticsSink {
     private let writer: DiagnosticsFileWriter
 
     public init(
         storageLocatorProvider: @escaping @Sendable () -> any StorageLocator = { AppConfig.liveStorageLocator() },
-        atomicFileWriter: any AtomicFileWriter = FileManagerAtomicFileWriter(),
-        maxLogSizeBytes: Int = 1_000_000
+        options: DiagnosticsLogFileOptions = DiagnosticsLogFileOptions()
     ) {
         writer = DiagnosticsFileWriter(
             fileName: "diagnostics.log",
             storageLocatorProvider: storageLocatorProvider,
-            atomicFileWriter: atomicFileWriter,
-            maxLogSizeBytes: maxLogSizeBytes
+            options: options
         )
     }
 

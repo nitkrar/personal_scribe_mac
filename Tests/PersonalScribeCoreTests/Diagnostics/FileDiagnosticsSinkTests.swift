@@ -6,8 +6,7 @@ final class FileDiagnosticsSinkTests: XCTestCase {
     func testDebugFileDiagnosticsSinkAcceptsDebugEvents() async throws {
         let tempDirectory = try makeTemporaryDirectory()
         let sink = DebugFileDiagnosticsSink(
-            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-            atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
+            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) }
         )
 
         await sink.record(makeEvent(level: .debug, message: "debug-event"))
@@ -20,8 +19,7 @@ final class FileDiagnosticsSinkTests: XCTestCase {
     func testDebugFileDiagnosticsSinkIgnoresNonDebugEvents() async throws {
         let tempDirectory = try makeTemporaryDirectory()
         let sink = DebugFileDiagnosticsSink(
-            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-            atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
+            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) }
         )
 
         await sink.record(makeEvent(level: .info, message: "info-event"))
@@ -34,8 +32,7 @@ final class FileDiagnosticsSinkTests: XCTestCase {
     func testDebugFileDiagnosticsSinkAppendsToCorrectFile() async throws {
         let tempDirectory = try makeTemporaryDirectory()
         let sink = DebugFileDiagnosticsSink(
-            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-            atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
+            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) }
         )
 
         await sink.record(makeEvent(level: .debug, message: "first-debug-event"))
@@ -51,8 +48,7 @@ final class FileDiagnosticsSinkTests: XCTestCase {
     func testVerboseFileDiagnosticsSinkAcceptsInfoEvents() async throws {
         let tempDirectory = try makeTemporaryDirectory()
         let sink = VerboseFileDiagnosticsSink(
-            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-            atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
+            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) }
         )
 
         await sink.record(makeEvent(level: .info, message: "info-event"))
@@ -65,8 +61,7 @@ final class FileDiagnosticsSinkTests: XCTestCase {
     func testVerboseFileDiagnosticsSinkAcceptsNoticeEvents() async throws {
         let tempDirectory = try makeTemporaryDirectory()
         let sink = VerboseFileDiagnosticsSink(
-            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-            atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
+            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) }
         )
 
         await sink.record(makeEvent(level: .notice, message: "notice-event"))
@@ -79,8 +74,7 @@ final class FileDiagnosticsSinkTests: XCTestCase {
     func testVerboseFileDiagnosticsSinkIgnoresDebugEvents() async throws {
         let tempDirectory = try makeTemporaryDirectory()
         let sink = VerboseFileDiagnosticsSink(
-            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-            atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
+            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) }
         )
 
         await sink.record(makeEvent(level: .debug, message: "debug-event"))
@@ -91,13 +85,73 @@ final class FileDiagnosticsSinkTests: XCTestCase {
     func testVerboseFileDiagnosticsSinkIgnoresErrorEvents() async throws {
         let tempDirectory = try makeTemporaryDirectory()
         let sink = VerboseFileDiagnosticsSink(
-            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-            atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
+            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) }
         )
 
         await sink.record(makeEvent(level: .error, message: "error-event"))
 
         XCTAssertNil(logContentsIfPresent(named: "diagnostics.log", in: tempDirectory))
+    }
+
+    func testAppendWritesToTheExistingFileInsteadOfReplacingIt() async throws {
+        let tempDirectory = try makeTemporaryDirectory()
+        let logURL = try makeLogsDirectory(in: tempDirectory).appendingPathComponent("diagnostics.log")
+        try "earlier-line\n".write(to: logURL, atomically: true, encoding: .utf8)
+        let inodeBefore = try inode(of: logURL)
+        let sink = VerboseFileDiagnosticsSink(
+            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) }
+        )
+
+        await sink.record(makeEvent(level: .info, message: "appended-event"))
+
+        let contents = try String(contentsOf: logURL, encoding: .utf8)
+        XCTAssertTrue(contents.hasPrefix("earlier-line\n"))
+        XCTAssertTrue(contents.contains("message=\"appended-event\""))
+        XCTAssertEqual(try inode(of: logURL), inodeBefore)
+    }
+
+    func testReachingTheSizeCapArchivesTheFileAndStartsANewOne() async throws {
+        let tempDirectory = try makeTemporaryDirectory()
+        let logsDirectory = try makeLogsDirectory(in: tempDirectory)
+        let lineLength = DiagnosticsLineRenderer.render(makeEvent(level: .info, message: "event-1")).utf8.count + 1
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let rollovers = RolloverCounter()
+        let sink = VerboseFileDiagnosticsSink(
+            storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
+            options: DiagnosticsLogFileOptions(
+                maxLogSizeBytes: lineLength + lineLength / 2,
+                now: { Date(timeIntervalSince1970: 1_790_000_000) }, // 2026-09-21 UTC
+                calendar: calendar,
+                onRollover: { rollovers.increment() }
+            )
+        )
+
+        for index in 1...3 {
+            await sink.record(makeEvent(level: .info, message: "event-\(index)"))
+        }
+
+        let files = try FileManager.default.contentsOfDirectory(atPath: logsDirectory.path).sorted()
+        XCTAssertEqual(files, ["diagnostics.2026-09-21.1.log", "diagnostics.2026-09-21.log", "diagnostics.log"])
+        func contents(_ name: String) throws -> String {
+            try String(contentsOf: logsDirectory.appendingPathComponent(name), encoding: .utf8)
+        }
+        XCTAssertTrue(try contents("diagnostics.2026-09-21.log").contains("message=\"event-1\""))
+        XCTAssertTrue(try contents("diagnostics.2026-09-21.1.log").contains("message=\"event-2\""))
+        XCTAssertTrue(try contents("diagnostics.log").contains("message=\"event-3\""))
+        XCTAssertEqual(rollovers.count, 2)
+    }
+
+    private func makeLogsDirectory(in baseDirectory: URL) throws -> URL {
+        let logsDirectory = baseDirectory
+            .appendingPathComponent(ManagedDirectory.logs.pathComponent, isDirectory: true)
+        try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
+        return logsDirectory
+    }
+
+    private func inode(of url: URL) throws -> Int {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        return try XCTUnwrap(attributes[.systemFileNumber] as? Int)
     }
 
     private func makeEvent(level: DiagnosticsLevel, message: String) -> RedactedDiagnosticsEvent {
@@ -130,5 +184,18 @@ final class FileDiagnosticsSinkTests: XCTestCase {
             .appendingPathComponent(fileName)
 
         return try? String(contentsOf: logURL, encoding: .utf8)
+    }
+}
+
+private final class RolloverCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    var count: Int {
+        lock.withLock { value }
+    }
+
+    func increment() {
+        lock.withLock { value += 1 }
     }
 }

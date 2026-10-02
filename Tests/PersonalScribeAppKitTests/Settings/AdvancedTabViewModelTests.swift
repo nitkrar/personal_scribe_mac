@@ -243,6 +243,28 @@ final class AdvancedTabViewModelTests: XCTestCase {
         XCTAssertEqual(LogRetentionDaysPreference.resolve(from: defaults), 0)
     }
 
+    func testLogMaxFilesDefaultsToThirtyAndPersistsClampedUpdates() {
+        let defaults = isolatedDefaults()
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            defaults: defaults,
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            selectDirectory: { _ in nil }
+        )
+
+        XCTAssertEqual(viewModel.logMaxFiles, 30)
+
+        viewModel.setLogMaxFiles(5)
+
+        XCTAssertEqual(viewModel.logMaxFiles, 5)
+        XCTAssertEqual(LogMaxFilesPreference.resolve(from: defaults), 5)
+
+        viewModel.setLogMaxFiles(10_000)
+
+        XCTAssertEqual(viewModel.logMaxFiles, LogMaxFilesPreference.maximum)
+        XCTAssertEqual(LogMaxFilesPreference.resolve(from: defaults), LogMaxFilesPreference.maximum)
+    }
+
     func testWhisperAdapterFilterMirrorsModelServiceAndPersistsUpdates() {
         let defaults = isolatedDefaults()
         let modelService = ActiveModelService(

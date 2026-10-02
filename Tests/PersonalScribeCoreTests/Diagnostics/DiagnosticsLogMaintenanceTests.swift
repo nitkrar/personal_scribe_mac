@@ -22,6 +22,7 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
         let service = DiagnosticsLogMaintenanceService(
             storageLocatorProvider: { locator },
             retentionDaysProvider: { 14 },
+            maxArchivedFilesProvider: { 0 },
             calendar: calendar,
             fileManager: FileManager.default,
             atomicFileWriter: FileManagerAtomicFileWriter(fileManager: FileManager.default)
@@ -262,6 +263,91 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
         XCTAssertEqual(canonical, "canonical-contents\n", "Canonical file's contents must not be overwritten by the legacy duplicate.")
     }
 
+    func testNumberedArchivesAreNotRotatedAsActiveLogs() throws {
+        let tempDirectory = try makeTemporaryDirectory()
+        let locator = FixedStorageLocator(baseDirectory: tempDirectory)
+        let logsDirectory = locator.url(for: .logs)
+        try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
+        let numberedArchive = logsDirectory.appendingPathComponent("diagnostics.2026-05-17.1.log")
+        try "rolled-over\n".write(to: numberedArchive, atomically: true, encoding: .utf8)
+        try setModificationDate(date("2026-05-17T20:30:00Z"), for: [numberedArchive])
+
+        makeService(locator: locator, retentionDays: 14).performMaintenance(now: date("2026-05-18T12:00:00Z"))
+
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: logsDirectory.path), ["diagnostics.2026-05-17.1.log"])
+        XCTAssertEqual(try String(contentsOf: numberedArchive, encoding: .utf8), "rolled-over\n")
+    }
+
+    func testRotationAfterARolloverTheSameDayTakesTheNextNumber() throws {
+        let tempDirectory = try makeTemporaryDirectory()
+        let locator = FixedStorageLocator(baseDirectory: tempDirectory)
+        let logsDirectory = locator.url(for: .logs)
+        try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
+        let rolledOver = logsDirectory.appendingPathComponent("diagnostics.2026-05-17.log")
+        let currentLog = logsDirectory.appendingPathComponent("diagnostics.log")
+        try "rolled-over\n".write(to: rolledOver, atomically: true, encoding: .utf8)
+        try "rest-of-day\n".write(to: currentLog, atomically: true, encoding: .utf8)
+        try setModificationDate(date("2026-05-17T20:30:00Z"), for: [rolledOver, currentLog])
+
+        makeService(locator: locator, retentionDays: 14).performMaintenance(now: date("2026-05-18T12:00:00Z"))
+
+        XCTAssertEqual(try String(contentsOf: rolledOver, encoding: .utf8), "rolled-over\n")
+        XCTAssertEqual(
+            try String(contentsOf: logsDirectory.appendingPathComponent("diagnostics.2026-05-17.1.log"), encoding: .utf8),
+            "rest-of-day\n"
+        )
+        XCTAssertEqual(try String(contentsOf: currentLog, encoding: .utf8), "")
+    }
+
+    func testRetentionCountsArchiveDaysNotFiles() throws {
+        let tempDirectory = try makeTemporaryDirectory()
+        let locator = FixedStorageLocator(baseDirectory: tempDirectory)
+        let logsDirectory = locator.url(for: .logs)
+        try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
+        for name in [
+            "errors.2026-05-15.log",
+            "errors.2026-05-16.log",
+            "errors.2026-05-17.log",
+            "errors.2026-05-17.1.log",
+            "errors.2026-05-17.2.log",
+        ] {
+            try "x\n".write(to: logsDirectory.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+
+        makeService(locator: locator, retentionDays: 2).performMaintenance(now: date("2026-05-18T12:00:00Z"))
+
+        XCTAssertEqual(existingArchiveNames(for: "errors.log", in: logsDirectory), [
+            "errors.2026-05-16.log",
+            "errors.2026-05-17.1.log",
+            "errors.2026-05-17.2.log",
+            "errors.2026-05-17.log",
+        ])
+    }
+
+    func testMaxFilesKeepsOnlyTheNewestArchivesPerLog() throws {
+        let tempDirectory = try makeTemporaryDirectory()
+        let locator = FixedStorageLocator(baseDirectory: tempDirectory)
+        let logsDirectory = locator.url(for: .logs)
+        try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
+        for name in [
+            "errors.2026-05-16.log",
+            "errors.2026-05-17.log",
+            "errors.2026-05-17.1.log",
+            "debug.2026-05-17.log",
+        ] {
+            try "x\n".write(to: logsDirectory.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+
+        makeService(locator: locator, retentionDays: 0, maxArchivedFiles: 2)
+            .performMaintenance(now: date("2026-05-18T12:00:00Z"))
+
+        XCTAssertEqual(existingArchiveNames(for: "errors.log", in: logsDirectory), [
+            "errors.2026-05-17.1.log",
+            "errors.2026-05-17.log",
+        ])
+        XCTAssertEqual(existingArchiveNames(for: "debug.log", in: logsDirectory), ["debug.2026-05-17.log"])
+    }
+
     private func fixedCalendar() -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -287,11 +373,13 @@ final class DiagnosticsLogMaintenanceTests: XCTestCase {
 
     private func makeService(
         locator: FixedStorageLocator,
-        retentionDays: Int
+        retentionDays: Int,
+        maxArchivedFiles: Int = 0
     ) -> DiagnosticsLogMaintenanceService {
         DiagnosticsLogMaintenanceService(
             storageLocatorProvider: { locator },
             retentionDaysProvider: { retentionDays },
+            maxArchivedFilesProvider: { maxArchivedFiles },
             calendar: fixedCalendar(),
             fileManager: FileManager.default,
             atomicFileWriter: FileManagerAtomicFileWriter(fileManager: FileManager.default)

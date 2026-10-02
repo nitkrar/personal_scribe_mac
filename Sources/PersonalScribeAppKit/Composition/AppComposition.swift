@@ -36,12 +36,14 @@ public enum AppComposition {
         diagnosticLoggingModeProvider: @escaping @Sendable () -> DiagnosticLoggingMode = { DiagnosticLoggingMode.resolve() },
         diagnosticsStore: DiagnosticsStore = AppComposition.diagnosticsStore
     ) -> DiagnosticsReporter {
-        DiagnosticsReporter(
+        let maintenance = DiagnosticsLogMaintenanceService(storageLocatorProvider: storageLocatorProvider)
+        let fileOptions = DiagnosticsLogFileOptions(onRollover: { maintenance.pruneArchives() })
+        return DiagnosticsReporter(
             sinks: [
                 OSLogDiagnosticsSink(),
-                ErrorFileDiagnosticsSink(storageLocatorProvider: storageLocatorProvider),
-                DebugFileDiagnosticsSink(storageLocatorProvider: storageLocatorProvider),
-                VerboseFileDiagnosticsSink(storageLocatorProvider: storageLocatorProvider),
+                ErrorFileDiagnosticsSink(storageLocatorProvider: storageLocatorProvider, options: fileOptions),
+                DebugFileDiagnosticsSink(storageLocatorProvider: storageLocatorProvider, options: fileOptions),
+                VerboseFileDiagnosticsSink(storageLocatorProvider: storageLocatorProvider, options: fileOptions),
                 RingBufferDiagnosticsSink(
                     store: diagnosticsStore,
                     minimumLevelProvider: {

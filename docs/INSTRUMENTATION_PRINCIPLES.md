@@ -22,9 +22,13 @@
 
 | File | Levels routed here | Retention | Rotation |
 |---|---|---|---|
-| `errors.log` | `.error` only | 14 days | Daily at local midnight (or first launch after midnight) |
+| `errors.log` | `.error` only | 14 days | At local midnight (or first launch after midnight), and when the file reaches 1 MB |
 | `diagnostics.log` | `.info` + `.notice` (NOT debug) | 14 days | Same as above |
 | `debug.log` | `.debug` only | 3 days | Same as above |
+
+Lines are appended; a file is never rewritten. Rotation renames the active file to `<base>.<yyyy-MM-dd>.log`, then `<base>.<yyyy-MM-dd>.<n>.log` for further archives the same day, and starts a new active file.
+
+Pruning (`DiagnosticsLogMaintenanceService`) runs at launch, at local midnight, and after every size rollover. Per log it keeps archives from the most recent N archive dates (`Settings → Advanced → Log retention`, 14 by default; `debug.log` is fixed at 3), then at most M files, newest first (`Max log files`, 30 by default). 0 disables either limit.
 
 Path: `~/Library/Application Support/personal_scribe/logs/`
 
@@ -153,4 +157,4 @@ Privacy reminder for paste logs:
 ## What's NOT enforced (yet)
 
 - No automated lint / build check for log-level discipline (would need to AST-parse the logger surface and count callsites in known hot paths). Could be added later if violations recur.
-- No per-file size cap or alerting. Daily rotation + 14d / 3d retention is the only quantitative gate.
+- No alerting on log volume. The 1 MB file size, retention days and max-files limits bound disk use; nothing reports when a log grows unusually fast.

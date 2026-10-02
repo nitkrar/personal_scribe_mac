@@ -213,6 +213,35 @@ public struct AdvancedTab: View {
             Divider()
 
             VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Max log files")
+                        .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+
+                    Spacer()
+
+                    Text(viewModel.logMaxFilesDescription)
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
+                }
+
+                Stepper(
+                    "Archived files per log",
+                    value: Binding(
+                        get: { viewModel.logMaxFiles },
+                        set: { viewModel.setLogMaxFiles($0) }
+                    ),
+                    in: LogMaxFilesPreference.minimum...LogMaxFilesPreference.maximum
+                )
+
+                Text(viewModel.logMaxFilesSummary)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
                 Button("Open Diagnostics Window") {
                     viewModel.openDiagnosticsWindow()
                 }
@@ -348,6 +377,7 @@ final class AdvancedTabViewModel: ObservableObject {
     @Published private(set) var feedback: Feedback?
     @Published private(set) var diagnosticLoggingMode: DiagnosticLoggingMode
     @Published private(set) var logRetentionDays: Int
+    @Published private(set) var logMaxFiles: Int
     @Published private(set) var whisperAdapterFilter: WhisperAdapterFilter
     @Published private(set) var recordAudioEnabled: Bool
     @Published private(set) var audioRetentionDays: Int
@@ -386,6 +416,7 @@ final class AdvancedTabViewModel: ObservableObject {
         let diagnosticLoggingMode = DiagnosticLoggingMode.resolve(from: defaults)
         self.diagnosticLoggingMode = diagnosticLoggingMode
         logRetentionDays = LogRetentionDaysPreference.resolve(from: defaults)
+        logMaxFiles = LogMaxFilesPreference.resolve(from: defaults)
         whisperAdapterFilter = modelService.whisperAdapterFilter
         recordAudioEnabled = RecordAudioEnabledPreference.resolve(from: defaults)
         audioRetentionDays = AudioRecordingRetentionDaysPreference.resolve(from: defaults)
@@ -418,13 +449,34 @@ final class AdvancedTabViewModel: ObservableObject {
     }
 
     var logRetentionSummary: String {
+        let rotation = "Logs start a new file at local midnight and whenever one reaches 1 MB."
         switch logRetentionDays {
         case 0:
-            return "Current logs still rotate daily at local midnight. Archived logs are not pruned automatically."
+            return "\(rotation) Archived logs are not pruned by age."
         case 1:
-            return "Current logs rotate daily at local midnight. Keep the most recent 1 day of archived logs."
+            return "\(rotation) Keep archives from the most recent 1 day."
         default:
-            return "Current logs rotate daily at local midnight. Keep the most recent \(logRetentionDays) days of archived logs."
+            return "\(rotation) Keep archives from the most recent \(logRetentionDays) days."
+        }
+    }
+
+    var logMaxFilesDescription: String {
+        switch logMaxFiles {
+        case 0:
+            return "No limit"
+        case 1:
+            return "1 file"
+        default:
+            return "\(logMaxFiles) files"
+        }
+    }
+
+    var logMaxFilesSummary: String {
+        switch logMaxFiles {
+        case 0:
+            return "Archived files are not limited by count."
+        default:
+            return "Errors, diagnostics and debug logs each keep their newest \(logMaxFiles) archived files, up to about \(logMaxFiles) MB per log."
         }
     }
 
@@ -458,6 +510,12 @@ final class AdvancedTabViewModel: ObservableObject {
         let sanitized = LogRetentionDaysPreference.sanitized(days)
         logRetentionDays = sanitized
         LogRetentionDaysPreference.persist(sanitized, to: defaults)
+    }
+
+    func setLogMaxFiles(_ count: Int) {
+        let sanitized = LogMaxFilesPreference.sanitized(count)
+        logMaxFiles = sanitized
+        LogMaxFilesPreference.persist(sanitized, to: defaults)
     }
 
     func setWhisperAdapterFilter(_ filter: WhisperAdapterFilter) {

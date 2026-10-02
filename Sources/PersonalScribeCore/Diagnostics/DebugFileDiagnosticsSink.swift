@@ -5,14 +5,12 @@ public struct DebugFileDiagnosticsSink: DiagnosticsSink {
 
     public init(
         storageLocatorProvider: @escaping @Sendable () -> any StorageLocator = { AppConfig.liveStorageLocator() },
-        atomicFileWriter: any AtomicFileWriter = FileManagerAtomicFileWriter(),
-        maxLogSizeBytes: Int = 1_000_000
+        options: DiagnosticsLogFileOptions = DiagnosticsLogFileOptions()
     ) {
         writer = DiagnosticsFileWriter(
             fileName: "debug.log",
             storageLocatorProvider: storageLocatorProvider,
-            atomicFileWriter: atomicFileWriter,
-            maxLogSizeBytes: maxLogSizeBytes
+            options: options
         )
     }
 

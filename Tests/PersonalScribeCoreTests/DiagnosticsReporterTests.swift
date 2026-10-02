@@ -10,8 +10,7 @@ final class DiagnosticsReporterTests: XCTestCase {
             sinks: [
                 sink,
                 ErrorFileDiagnosticsSink(
-                    storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-                    atomicFileWriter: FileManagerAtomicFileWriter(fileManager: .default)
+                    storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) }
                 ),
             ],
             now: { fixedDate }
@@ -66,11 +65,13 @@ final class DiagnosticsReporterTests: XCTestCase {
 
     func testErrorEmissionStillReturnsPayloadWhenLogWriteFails() async throws {
         let tempDirectory = try makeTemporaryDirectory()
+        // A regular file where the logs directory should be makes every write fail.
+        let logsPath = tempDirectory.appendingPathComponent(ManagedDirectory.logs.pathComponent)
+        try Data().write(to: logsPath)
         let reporter = DiagnosticsReporter(
             sinks: [
                 ErrorFileDiagnosticsSink(
-                    storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) },
-                    atomicFileWriter: FailingAtomicFileWriter()
+                    storageLocatorProvider: { FixedStorageLocator(baseDirectory: tempDirectory) }
                 ),
             ],
             now: { Date(timeIntervalSince1970: 123) }
