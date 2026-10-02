@@ -114,8 +114,8 @@ struct PersonalScribeAppMain: App {
         )
         // Final delivery runs in the pipeline's output stage; it raises
         // the clipboard-only notice when paste fell back to clipboard.
-        AppComposition.sessionOutputStage.onClipboardOnlyCopy = {
-            pillController.showClipboardOnlyNotice()
+        AppComposition.sessionOutputStage.onClipboardOnlyCopy = { notice in
+            pillController.showClipboardOnlyNotice(notice)
         }
 
         // Pill UX Phase 5: snapshot the user's pre-recording clipboard

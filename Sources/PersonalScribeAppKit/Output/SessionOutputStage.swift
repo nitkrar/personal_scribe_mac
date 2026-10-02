@@ -20,9 +20,10 @@ public final class SessionOutputStage: PipelineOutputSink, @unchecked Sendable {
     private let logger: PersonalScribeLogger
 
     /// Raised when final delivery fell back to clipboard-only (e.g. Ninimma
-    /// frontmost) so the UI can show "Copied to clipboard · ⌘V to paste".
-    /// Set by the app after construction.
-    @MainActor public var onClipboardOnlyCopy: @MainActor () -> Void = {}
+    /// frontmost, or Accessibility not granted) so the UI can tell the user
+    /// the transcript is on the clipboard and why. Set by the app after
+    /// construction.
+    @MainActor public var onClipboardOnlyCopy: @MainActor (ClipboardNotice) -> Void = { _ in }
 
     public init(
         live: any PipelineOutputSink,
@@ -49,8 +50,8 @@ public final class SessionOutputStage: PipelineOutputSink, @unchecked Sendable {
         let outcome = await batch.deliverBatch(text: result.text, sinks: sinks)
         switch outcome {
         case .delivered(let target, _):
-            if target == .clipboardOnly || target == .selfFrontmost {
-                await MainActor.run { onClipboardOnlyCopy() }
+            if let notice = ClipboardNotice(target: target) {
+                await MainActor.run { onClipboardOnlyCopy(notice) }
             }
         case .failed(let error):
             logger.error("Final transcript delivery failed", error: error)
@@ -65,5 +66,22 @@ public final class SessionOutputStage: PipelineOutputSink, @unchecked Sendable {
 
     public func endSession() async {
         await live.endSession()
+    }
+}
+
+/// Which "transcript is on the clipboard" notice to show after delivery.
+public enum ClipboardNotice: Equatable, Sendable {
+    case copied
+    case needsAccessibility
+
+    init?(target: OutputTarget) {
+        switch target {
+        case .clipboardOnly, .selfFrontmost:
+            self = .copied
+        case .clipboardNeedsAccessibility:
+            self = .needsAccessibility
+        case .frontmostApp:
+            return nil
+        }
     }
 }

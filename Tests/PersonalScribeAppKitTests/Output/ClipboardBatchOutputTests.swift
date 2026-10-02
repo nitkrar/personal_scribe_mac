@@ -93,10 +93,9 @@ final class ClipboardBatchOutputTests: XCTestCase {
         await sink.snapshot().filter { $0.message.contains(fragment) }
     }
 
-    func testPromptsAccessibilityWhenNotTrustedAndLeavesTranscriptOnClipboard() async {
+    func testUntrustedAccessibilityLeavesTranscriptOnClipboardWithoutPrompting() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
-        var promptCount = 0
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
@@ -107,7 +106,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { false },
-            requestAccessibilityPrompt: { promptCount += 1 },
             pasteShortcutPoster: { _ in
                 shortcutPostCount += 1
                 return true
@@ -117,8 +115,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         let result = await service.deliverBatch(text: "hello world", sinks: Self.sinks())
 
-        XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
-        XCTAssertEqual(promptCount, 1)
+        XCTAssertEqual(result, .delivered(target: .clipboardNeedsAccessibility, delivery: .clipboardOnly))
         XCTAssertEqual(shortcutPostCount, 0)
         XCTAssertEqual(pasteboard.string(forType: .string), "hello world")
     }
@@ -126,7 +123,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
     func testDeliversPasteWhenAccessibilityIsTrusted() async {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
-        var promptCount = 0
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
@@ -137,7 +133,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: { promptCount += 1 },
             pasteShortcutPoster: { _ in
                 shortcutPostCount += 1
                 return true
@@ -148,7 +143,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let result = await service.deliverBatch(text: "already trusted", sinks: Self.sinks())
 
         XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
-        XCTAssertEqual(promptCount, 0)
         XCTAssertEqual(shortcutPostCount, 1)
     }
 
@@ -166,7 +160,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
             pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
@@ -203,7 +196,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
             pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
@@ -236,7 +228,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard, failStringWrite: true),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
             pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
@@ -269,7 +260,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let defaults = isolatedDefaults()
         let sink = InMemoryTestSink()
         let logger = makeLogger(sink: sink)
-        var promptCount = 0
         let service = ClipboardBatchOutput(
             logger: logger,
             defaults: defaults,
@@ -279,15 +269,13 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { false },
-            requestAccessibilityPrompt: { promptCount += 1 },
             pasteShortcutPoster: { _ in true },
             pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
 
         let result = await service.deliverBatch(text: "hello world", sinks: Self.sinks())
 
-        XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
-        XCTAssertEqual(promptCount, 1)
+        XCTAssertEqual(result, .delivered(target: .clipboardNeedsAccessibility, delivery: .clipboardOnly))
         let failureMessages = await waitForLogMessages(
             in: sink,
             containing: "paste_failed — sink=batch stage=final reason=accessibilityNotTrusted attemptedChars=11",
@@ -322,7 +310,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in
                 shortcutPostCount += 1
                 return true
@@ -355,7 +342,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in
                 shortcutPostCount += 1
                 return true
@@ -375,7 +361,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let defaults = isolatedDefaults()
         pasteboard.clearContents()
         _ = pasteboard.setString("prior", forType: .string)
-        var promptCount = 0
         var shortcutPostCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
@@ -386,7 +371,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { false },
-            requestAccessibilityPrompt: { promptCount += 1 },
             pasteShortcutPoster: { _ in
                 shortcutPostCount += 1
                 return true
@@ -397,7 +381,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let result = await service.deliverBatch(text: "", sinks: Self.sinks())
 
         XCTAssertEqual(result, .ignoredEmptyInput)
-        XCTAssertEqual(promptCount, 0)
         XCTAssertEqual(shortcutPostCount, 0)
         XCTAssertEqual(pasteboard.string(forType: .string), "prior")
     }
@@ -419,7 +402,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 scheduledRestores.append((delay: delay, action: action))
             },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
             pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
@@ -470,7 +452,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 scheduledRestores.append((delay: delay, action: action))
             },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
             pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
@@ -506,7 +487,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
                 scheduledRestores.append((delay: delay, action: action))
             },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
             pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
         )
@@ -552,7 +532,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in
                 shortcutPostCount += 1
                 return false
@@ -582,7 +561,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard, failStringWrite: true),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in
                 shortcutPostCount += 1
                 return true
@@ -613,7 +591,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in
                 shortcutPostCount += 1
                 return true
@@ -646,7 +623,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in
                 shortcutPostCount += 1
                 return true
@@ -677,7 +653,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
             pasteTarget: { .frontmost(bundleID: "com.nitkrar.personal_scribe", pid: 1) }
         )
@@ -706,7 +681,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in pasteCount += 1; return true },
             pasteTarget: { .frontmost(bundleID: "com.tinyspeck.slackmacgap", pid: 42) }
         )
@@ -730,7 +704,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
             pasteTarget: {
                 probeCount += 1
@@ -749,7 +722,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
         let pasteboard = makePasteboard()
         let defaults = isolatedDefaults()
         var probeCount = 0
-        var promptCount = 0
         let service = ClipboardBatchOutput(
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
             defaults: defaults,
@@ -759,7 +731,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { false },
-            requestAccessibilityPrompt: { promptCount += 1 },
             pasteShortcutPoster: { _ in true },
             pasteTarget: {
                 probeCount += 1
@@ -769,9 +740,8 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         let result = await service.deliverBatch(text: "ax denied", sinks: Self.sinks())
 
-        XCTAssertEqual(result, .delivered(target: .clipboardOnly, delivery: .clipboardOnly))
+        XCTAssertEqual(result, .delivered(target: .clipboardNeedsAccessibility, delivery: .clipboardOnly))
         XCTAssertEqual(probeCount, 0, "focused-element probe must be skipped when Accessibility is not trusted")
-        XCTAssertEqual(promptCount, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "ax denied")
     }
 
@@ -798,7 +768,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in scheduledRestores += 1 },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in
                 shortcutPostCount += 1
                 return true
@@ -842,7 +811,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
             pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) },
             liveCursorPasteSnapshot: { 3 }
@@ -868,7 +836,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
             pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) },
             liveCursorPasteSnapshot: { 0 }
@@ -895,7 +862,6 @@ final class ClipboardBatchOutputTests: XCTestCase {
             snapshotService: makeSnapshotService(for: pasteboard),
             scheduleRestore: { _, _ in },
             isAccessibilityTrusted: { true },
-            requestAccessibilityPrompt: {},
             pasteShortcutPoster: { _ in true },
             pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) },
             liveCursorPasteSnapshot: { 3 }

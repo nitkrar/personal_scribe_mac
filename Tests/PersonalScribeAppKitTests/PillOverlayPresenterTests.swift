@@ -295,7 +295,7 @@ final class PillOverlayPresenterTests: XCTestCase {
             responseCardBuilder: responseCardBuilder
         )
 
-        presenter.showClipboardOnlyNotice()
+        presenter.showClipboardOnlyNotice(.copied)
 
         XCTAssertEqual(responseCardBuilder.makeResponseCardCallCount, 1)
         XCTAssertEqual(
@@ -306,6 +306,24 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(
             responseCardBuilder.card.lastAnchorWindow,
             panelBuilder.panel.anchorWindow
+        )
+    }
+
+    func testAccessibilityNoticeExplainsWhyPasteWasSkipped() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
+        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
+        let responseCardBuilder = RecordingResponseCardBuilder()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: RecordingPanelBuilder(),
+            responseCardBuilder: responseCardBuilder
+        )
+
+        presenter.showClipboardOnlyNotice(.needsAccessibility)
+
+        XCTAssertEqual(
+            responseCardBuilder.card.lastText,
+            "Copied · enable Accessibility to auto-paste"
         )
     }
 

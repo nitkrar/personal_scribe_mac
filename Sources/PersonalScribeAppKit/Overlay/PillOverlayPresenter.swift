@@ -300,6 +300,7 @@ public final class PillOverlayPresenter {
     /// clamped into it (see `OverlayPlacement`).
     private let screenBounds: @MainActor (NSRect) -> NSRect
     private static let clipboardOnlyNoticeText = "Copied to clipboard · ⌘V to paste"
+    private static let needsAccessibilityNoticeText = "Copied · enable Accessibility to auto-paste"
     private static let clipboardOnlyNoticeDismissAfter: TimeInterval = 3.0
 
     /// Whether the presenter last asked the panel to show itself. Exposed
@@ -549,7 +550,7 @@ public final class PillOverlayPresenter {
         streamCard?.reanchor(abovePillFrame: pillFrame)
     }
 
-    func showClipboardOnlyNotice() {
+    func showClipboardOnlyNotice(_ notice: ClipboardNotice) {
         guard let anchorWindow = panel?.anchorWindow else {
             diagnosticLogger.info("PillOverlayPresenter.showClipboardOnlyNotice — skipped because no anchor window is available")
             return
@@ -559,7 +560,7 @@ public final class PillOverlayPresenter {
         let responseCard = responseCard ?? responseCardBuilder.makeResponseCard()
         self.responseCard = responseCard
         responseCard.show(
-            text: Self.clipboardOnlyNoticeText,
+            text: notice == .needsAccessibility ? Self.needsAccessibilityNoticeText : Self.clipboardOnlyNoticeText,
             above: anchorWindow,
             autoDismissAfter: Self.clipboardOnlyNoticeDismissAfter
         )

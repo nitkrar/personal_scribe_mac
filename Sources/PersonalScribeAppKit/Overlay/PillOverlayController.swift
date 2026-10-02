@@ -190,8 +190,8 @@ public final class PillOverlayController: ObservableObject {
         mode.persist(to: defaults)
     }
 
-    public func showClipboardOnlyNotice() {
-        presenter.showClipboardOnlyNotice()
+    public func showClipboardOnlyNotice(_ notice: ClipboardNotice) {
+        presenter.showClipboardOnlyNotice(notice)
     }
 
     /// Late-binding install for the Settings-deep-link closure. Called by

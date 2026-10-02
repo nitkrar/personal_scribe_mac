@@ -36,15 +36,38 @@ final class SessionOutputStageTests: XCTestCase {
             batch: FakeBatchOutput(events: events, result: .delivered(target: .clipboardOnly, delivery: .clipboardOnly)),
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
         )
-        var notices = 0
-        stage.onClipboardOnlyCopy = { notices += 1 }
+        var notices: [ClipboardNotice] = []
+        stage.onClipboardOnlyCopy = { notices.append($0) }
 
         try await stage.deliverFinal(
             TranscriptionResult(text: "copied", audioDuration: .seconds(1), processingDuration: .zero),
             sinks: [.clipboard(restoreEnabled: false)]
         )
 
-        XCTAssertEqual(notices, 1)
+        XCTAssertEqual(notices, [.copied])
+    }
+
+    /// No Accessibility: paste is skipped, nothing blocks, and the notice
+    /// says why so the user knows how to get auto-paste back.
+    func testClipboardDeliveryWithoutAccessibilityRaisesAccessibilityNotice() async throws {
+        let events = EventLog()
+        let stage = SessionOutputStage(
+            live: FakeLiveOutput(events: events),
+            batch: FakeBatchOutput(
+                events: events,
+                result: .delivered(target: .clipboardNeedsAccessibility, delivery: .clipboardOnly)
+            ),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
+        )
+        var notices: [ClipboardNotice] = []
+        stage.onClipboardOnlyCopy = { notices.append($0) }
+
+        try await stage.deliverFinal(
+            TranscriptionResult(text: "copied", audioDuration: .seconds(1), processingDuration: .zero),
+            sinks: [.clipboard(restoreEnabled: false)]
+        )
+
+        XCTAssertEqual(notices, [.needsAccessibility])
     }
 }
 

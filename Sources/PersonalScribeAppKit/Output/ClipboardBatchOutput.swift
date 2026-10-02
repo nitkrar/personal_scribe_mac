@@ -24,7 +24,6 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
     private let snapshotService: PasteboardSnapshotService
     private let scheduleRestore: RestoreScheduler
     private let isAccessibilityTrusted: @MainActor () -> Bool
-    private let requestAccessibilityPrompt: @MainActor () -> Void
     private let pasteShortcutPoster: @MainActor () -> Bool
     private let pasteTarget: PasteTargetProbe
     /// #098: Closure that reports how many chunks the live-cursor sink
@@ -51,10 +50,6 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
             }
         },
         isAccessibilityTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
-        requestAccessibilityPrompt: @escaping @MainActor () -> Void = {
-            let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-            _ = AXIsProcessTrustedWithOptions(options)
-        },
         pasteShortcutPoster: @escaping PasteShortcutPoster = ClipboardBatchOutput.postPasteShortcut,
         pasteTarget: @escaping PasteTargetProbe = { PasteTarget.live() },
         liveCursorPasteSnapshot: @escaping @MainActor () -> Int = { 0 }
@@ -66,7 +61,6 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         self.snapshotService = snapshotService
         self.scheduleRestore = scheduleRestore
         self.isAccessibilityTrusted = isAccessibilityTrusted
-        self.requestAccessibilityPrompt = requestAccessibilityPrompt
         self.pasteShortcutPoster = {
             pasteShortcutPoster(logger)
         }
@@ -195,10 +189,12 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
                     sessionID: sessionID
                 )
             )
-            logger.info("ClipboardBatchOutput: Accessibility permission not granted; triggering system prompt and leaving transcript on clipboard for manual Cmd+V")
-            requestAccessibilityPrompt()
+            // No prompt here: asking for permission belongs to Settings /
+            // onboarding. Delivery just falls back to the clipboard and
+            // the notice tells the user why.
+            logger.info("ClipboardBatchOutput: Accessibility permission not granted; leaving transcript on clipboard for manual Cmd+V")
             maybeScheduleRestore()
-            return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
+            return .delivered(target: .clipboardNeedsAccessibility, delivery: .clipboardOnly)
         }
 
         let target = pasteTarget()

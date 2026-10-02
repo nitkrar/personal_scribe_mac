@@ -8,7 +8,7 @@ final class OutputContractsTests: XCTestCase {
     }
 
     func testOutputTargetCasesStayLocked() {
-        XCTAssertEqual(OutputTarget.allCases, [.frontmostApp, .clipboardOnly, .selfFrontmost])
+        XCTAssertEqual(OutputTarget.allCases, [.frontmostApp, .clipboardOnly, .selfFrontmost, .clipboardNeedsAccessibility])
     }
 
     func testOutputDeliveryCasesStayLocked() {
