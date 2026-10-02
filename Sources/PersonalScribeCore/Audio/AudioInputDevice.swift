@@ -53,8 +53,19 @@ public protocol AudioInputDeviceProviding: AnyObject, Sendable {
     /// still defend against that when rendering the current selection.
     var selectedDeviceID: String? { get }
 
+    /// ID of the macOS system default input device (what capture uses
+    /// when nothing is selected or the selection is gone), or `nil` if
+    /// unknown. Same ID space as `availableDevices()`.
+    var systemDefaultDeviceID: String? { get }
+
     /// Persist a new selection. Passing `nil` clears the preference
     /// and the next capture session falls back to the macOS system
     /// default input device.
     func selectDevice(id: String?)
+}
+
+public extension AudioInputDeviceProviding {
+    /// Conformers that can't resolve the system default report `nil`;
+    /// UI then falls back to its generic label.
+    var systemDefaultDeviceID: String? { nil }
 }

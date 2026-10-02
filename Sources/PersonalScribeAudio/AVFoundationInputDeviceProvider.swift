@@ -47,6 +47,12 @@ public final class AVFoundationInputDeviceProvider: AudioInputDeviceProviding, @
         defaults.string(forKey: Self.userDefaultsKey)
     }
 
+    /// `AVCaptureDevice.default(for: .audio)` is the macOS default input;
+    /// its `uniqueID` matches the IDs from `availableDevices()`.
+    public var systemDefaultDeviceID: String? {
+        AVCaptureDevice.default(for: .audio)?.uniqueID
+    }
+
     public func selectDevice(id: String?) {
         if let id, !id.isEmpty {
             defaults.set(id, forKey: Self.userDefaultsKey)

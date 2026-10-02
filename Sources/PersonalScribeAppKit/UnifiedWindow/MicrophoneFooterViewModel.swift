@@ -110,8 +110,14 @@ public final class MicrophoneFooterViewModel: ObservableObject {
     private static func resolveCurrentDeviceName(
         provider: any AudioInputDeviceProviding
     ) -> String? {
-        guard let selectedID = provider.selectedDeviceID else { return nil }
         let devices = provider.availableDevices()
-        return devices.first(where: { $0.id == selectedID })?.name
+        if let selectedID = provider.selectedDeviceID,
+           let selected = devices.first(where: { $0.id == selectedID }) {
+            return selected.name
+        }
+        // Nothing selected, or the selected device is gone: capture uses
+        // the macOS default input, so name that device.
+        guard let defaultID = provider.systemDefaultDeviceID else { return nil }
+        return devices.first(where: { $0.id == defaultID })?.name
     }
 }

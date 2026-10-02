@@ -21,17 +21,21 @@ final class MicrophoneFooterViewModelTests: XCTestCase {
     final class FakeProvider: AudioInputDeviceProviding, @unchecked Sendable {
         var availableDevicesValue: [AudioInputDevice]
         var selectedDeviceIDValue: String?
+        var systemDefaultDeviceIDValue: String?
 
         init(
             devices: [AudioInputDevice] = [],
-            selectedID: String? = nil
+            selectedID: String? = nil,
+            systemDefaultID: String? = nil
         ) {
             self.availableDevicesValue = devices
             self.selectedDeviceIDValue = selectedID
+            self.systemDefaultDeviceIDValue = systemDefaultID
         }
 
         func availableDevices() -> [AudioInputDevice] { availableDevicesValue }
         var selectedDeviceID: String? { selectedDeviceIDValue }
+        var systemDefaultDeviceID: String? { systemDefaultDeviceIDValue }
         func selectDevice(id: String?) { selectedDeviceIDValue = id }
     }
 
@@ -69,38 +73,30 @@ final class MicrophoneFooterViewModelTests: XCTestCase {
         XCTAssertNil(model.currentDeviceName)
     }
 
-    func testCurrentDeviceNameFallsBackToSystemDefaultLabelWhenSelectionMissingButDevicesPresent() {
-        // No persisted selection — user is on macOS default input, which
-        // the provider's `availableDevices()` surfaces as the first entry
-        // returned by the AV discovery session. The view model cannot
-        // distinguish "system default" from "first available" with the
-        // pull-only protocol, so it reports nil and the view falls back
-        // to a generic label.
+    /// No persisted selection — capture uses the macOS default input,
+    /// so the footer must name it (it used to show "No input device"
+    /// while recording worked).
+    func testShowsSystemDefaultDeviceNameWhenNothingSelected() {
         let devices = [
+            AudioInputDevice(id: "uid-usb", name: "USB Mic"),
             AudioInputDevice(id: "uid-built-in", name: "MacBook Pro Microphone"),
         ]
-        let provider = FakeProvider(devices: devices, selectedID: nil)
-        let model = MicrophoneFooterViewModel(
-            provider: provider,
-            defaults: makeDefaults()
-        )
+        let provider = FakeProvider(devices: devices, selectedID: nil, systemDefaultID: "uid-built-in")
+        let model = MicrophoneFooterViewModel(provider: provider, defaults: makeDefaults())
 
-        XCTAssertNil(model.currentDeviceName)
+        XCTAssertEqual(model.currentDeviceName, "MacBook Pro Microphone")
     }
 
-    func testCurrentDeviceNameIsNilWhenSelectedDeviceDisappeared() {
-        // User previously picked a USB mic; device has been unplugged.
-        // availableDevices() no longer contains the persisted ID.
+    /// Selected device unplugged — capture falls back to the system
+    /// default, so the footer shows that device.
+    func testShowsSystemDefaultWhenSelectedDeviceDisappeared() {
         let devices = [
             AudioInputDevice(id: "uid-built-in", name: "MacBook Pro Microphone"),
         ]
-        let provider = FakeProvider(devices: devices, selectedID: "uid-airpods-gone")
-        let model = MicrophoneFooterViewModel(
-            provider: provider,
-            defaults: makeDefaults()
-        )
+        let provider = FakeProvider(devices: devices, selectedID: "uid-airpods-gone", systemDefaultID: "uid-built-in")
+        let model = MicrophoneFooterViewModel(provider: provider, defaults: makeDefaults())
 
-        XCTAssertNil(model.currentDeviceName)
+        XCTAssertEqual(model.currentDeviceName, "MacBook Pro Microphone")
     }
 
     // MARK: - Live updates via UserDefaults.didChangeNotification
