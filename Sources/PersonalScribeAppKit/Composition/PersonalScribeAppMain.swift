@@ -335,7 +335,10 @@ struct PersonalScribeAppMain: App {
             wrappedValue: pasteboardSnapshotHost
         )
         _escapeKeyMonitorHost = StateObject(
-            wrappedValue: EscapeKeyMonitorHost(monitor: escapeKeyMonitor)
+            wrappedValue: EscapeKeyMonitorHost(
+                monitor: escapeKeyMonitor,
+                visibility: pillController.viewModel.$visibility.eraseToAnyPublisher()
+            )
         )
         _diagnosticsOverlayController = StateObject(
             wrappedValue: diagnosticsOverlayController
@@ -525,10 +528,17 @@ final class StatusItemControllerHost: ObservableObject {
 @MainActor
 final class EscapeKeyMonitorHost: ObservableObject {
     let monitor: EscapeKeyMonitor
+    private var visibilityCancellable: AnyCancellable?
 
-    init(monitor: EscapeKeyMonitor) {
+    /// Esc is armed (registered as a hot key) only while the pill is
+    /// recording, so it behaves normally in every app otherwise.
+    init(monitor: EscapeKeyMonitor, visibility: AnyPublisher<PillOverlayViewModel.Visibility, Never>) {
         self.monitor = monitor
         monitor.start()
+        visibilityCancellable = visibility
+            .map { $0 == .recording || $0 == .holdToRecord }
+            .removeDuplicates()
+            .sink { [weak monitor] armed in monitor?.setArmed(armed) }
     }
 
     deinit {

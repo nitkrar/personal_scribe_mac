@@ -192,10 +192,20 @@ public enum AppComposition {
     /// closure; never stopped during the app's lifetime. Subscribers
     /// (`EscapeKeyMonitor`, `GlobalHotkeyMonitor`, `HotkeyRecorder`)
     /// register deciders/observers that auto-unregister via RAII tokens.
+    ///
+    /// Backend: shortcuts registered with macOS (`registeredChords`) by
+    /// default; `defaults write <bundle-id> HotkeyBackend tap` switches
+    /// back to the keyboard tap while the new path is being verified.
     @MainActor
-    public static let keyEventRouter: KeyEventRouter = KeyEventRouter(
-        logger: makeLogger(PersonalScribeLogCategory.ui)
-    )
+    public static let keyEventRouter: KeyEventRouter = {
+        let logger = makeLogger(PersonalScribeLogCategory.ui)
+        let useTap = UserDefaults.standard.string(forKey: "HotkeyBackend") == "tap"
+        logger.info("hotkey_backend — \(useTap ? "keyboardTap" : "registeredChords")")
+        return KeyEventRouter(
+            logger: logger,
+            backend: useTap ? .keyboardTap : .registeredChords(CarbonHotkeyRegistrar(logger: logger))
+        )
+    }()
 
     /// #033 — live cursor stream output for streaming-with-liveCursorEnabled
     /// sessions. Routed through the orchestrator's `PipelineOutputSink`

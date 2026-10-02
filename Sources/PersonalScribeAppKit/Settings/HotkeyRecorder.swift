@@ -441,6 +441,7 @@ private struct HotkeyRecorderEventMonitor: View {
     let onEvent: (HotkeyEvent) -> Bool
 
     @State private var token: KeyEventRouterToken?
+    @State private var chordSuspension: KeyEventRouterToken?
 
     var body: some View {
         Color.clear
@@ -459,9 +460,14 @@ private struct HotkeyRecorderEventMonitor: View {
                     { event in onEvent(event) },
                     position: .first
                 )
+                // Registered shortcuts are intercepted by macOS before
+                // our local monitor; release them so the recorder can
+                // capture an existing chord instead of triggering it.
+                chordSuspension = AppComposition.keyEventRouter.suspendGlobalChords()
             }
             .onDisappear {
                 token = nil
+                chordSuspension = nil
             }
     }
 }

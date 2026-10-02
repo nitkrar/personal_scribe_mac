@@ -76,6 +76,10 @@ public final class GlobalHotkeyMonitor {
     /// the CG tap (swallow on match — fixes the `÷÷÷÷` leak).
     private var localToken: KeyEventRouterToken?
     private var globalToken: KeyEventRouterToken?
+    /// The recording + per-mode chords, registered with the router so
+    /// they reach `globalToken`'s decider from other apps (no-op for the
+    /// keyboard-tap backend). Rebuilt whenever a binding changes.
+    private var chordRegistrations: [KeyEventRouterChordRegistration] = []
     private var keyDownTimestamp: TimeInterval?
     private var hotkeyKeyDownSwallowed = false
     private var isHolding = false
@@ -171,7 +175,7 @@ public final class GlobalHotkeyMonitor {
         // Ninimma itself (local NSEvent path; needed so the hotkey
         // works when our window is frontmost). Both share the same
         // gesture-machine + swallow logic.
-        if !router.isTapActive {
+        if router.needsAccessibilityForHotkeys && !router.isTapActive {
             // Router's tap install failed (Accessibility missing, or
             // transient OS failure). Surface the
             // warning so the menu bar can prompt the user, then keep
@@ -189,6 +193,23 @@ public final class GlobalHotkeyMonitor {
         }
         localToken = router.registerLocalDecider(decider)
         globalToken = router.registerGlobalDecider(decider)
+        registerChords()
+    }
+
+    /// Register the current bindings; builds the new set before dropping
+    /// the old one so unchanged chords stay registered throughout.
+    private func registerChords() {
+        guard isActive else { return }
+        let chords = [HotkeyChord(recordingHotkey)] + perModeHotkeys.map { HotkeyChord($0.preference) }
+        chordRegistrations = chords.map { chord in
+            let registration = router.registerGlobalChord(chord)
+            if !registration.isRegistered {
+                let message = "Hotkey \(chord) could not be registered — another app may be using it"
+                logger.error(message)
+                logSink?("error", message)
+            }
+            return registration
+        }
     }
 
     static let tapRetryInterval: TimeInterval = 1.0
@@ -246,6 +267,7 @@ public final class GlobalHotkeyMonitor {
         // unregister. Setting to nil drops our strong refs.
         localToken = nil
         globalToken = nil
+        chordRegistrations = []
         resetState()
     }
 
@@ -259,6 +281,7 @@ public final class GlobalHotkeyMonitor {
     public func updateRecordingHotkey(_ preference: HotkeyPreference) {
         recordingHotkey = preference
         resetState()
+        registerChords()
     }
 
     /// #089 L-22 — replace the per-mode hotkey table from the current
@@ -270,6 +293,7 @@ public final class GlobalHotkeyMonitor {
             guard let hotkey = mode.hotkey else { return nil }
             return PerModeBinding(preference: hotkey, modeID: mode.id)
         }
+        registerChords()
     }
 
     /// #089 L-22 — wire the side-effect closure that fires when a

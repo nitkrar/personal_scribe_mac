@@ -61,6 +61,9 @@ public final class EscapeKeyMonitor {
     private var localToken: KeyEventRouterToken?
     private var globalDeciderToken: KeyEventRouterToken?
     private var globalToken: KeyEventRouterToken?
+    /// Esc registered with macOS while armed (recording), so it's
+    /// swallowed for other apps only then. Nil when disarmed.
+    private var escapeRegistration: KeyEventRouterChordRegistration?
 
     public init(
         router: KeyEventRouter,
@@ -90,9 +93,21 @@ public final class EscapeKeyMonitor {
         // the observe-only monitor still cancels, but can't swallow. Quiet
         // while the tap is live so one Esc doesn't cancel twice.
         globalToken = router.registerGlobalObserver { [weak self] event in
-            guard let self, !self.router.isTapActive else { return }
+            guard let self, !self.router.isTapActive,
+                  self.escapeRegistration?.isRegistered != true
+            else { return }
             _ = self.handle(event: event)
         }
+    }
+
+    /// Arm while a recording is active: registers Esc as a hot key so it
+    /// cancels and is swallowed; disarming releases it immediately so Esc
+    /// behaves normally in every app again.
+    public func setArmed(_ armed: Bool) {
+        guard armed != (escapeRegistration != nil) else { return }
+        escapeRegistration = armed
+            ? router.registerGlobalChord(HotkeyChord(keyCode: Self.escapeKeyCode, modifiers: []))
+            : nil
     }
 
     public func stop() {
@@ -102,6 +117,7 @@ public final class EscapeKeyMonitor {
         localToken = nil
         globalDeciderToken = nil
         globalToken = nil
+        escapeRegistration = nil
     }
 
     @discardableResult

@@ -44,6 +44,19 @@ public final class KeyEventRouter {
         case last
     }
 
+    /// How shortcuts bound for other apps reach Ninimma.
+    /// * `keyboardTap` — the active `CGEventTap`: every keystroke passes
+    ///   through the global deciders, which may swallow it. Needs
+    ///   Accessibility, and a stalled tap or a permission change can hold
+    ///   up all typing.
+    /// * `registeredChords` — each shortcut is registered with macOS
+    ///   (`registerGlobalChord`); the OS delivers only those chords, already
+    ///   swallowed, to the global deciders. Nothing else passes through.
+    public enum Backend {
+        case keyboardTap
+        case registeredChords(any HotkeyChordRegistering)
+    }
+
     public typealias Decider = @MainActor (HotkeyEvent) -> Bool
     public typealias Observer = @MainActor (HotkeyEvent) -> Void
 
@@ -76,6 +89,16 @@ public final class KeyEventRouter {
     private var localMonitor: Any?
     private var globalMonitor: Any?
 
+    private let backend: Backend
+    private struct ChordEntry {
+        let chord: HotkeyChord
+        var refCount: Int
+        var isRegistered: Bool
+    }
+    private var chordEntries: [UInt32: ChordEntry] = [:]
+    private var nextChordID: UInt32 = 1
+    private var chordSuspensionCount = 0
+
     public init(
         tapFactory: TapFactory? = nil,
         installLocal: @escaping LocalInstaller = { mask, handler in
@@ -87,8 +110,10 @@ public final class KeyEventRouter {
         uninstall: @escaping Uninstaller = { handle in
             NSEvent.removeMonitor(handle)
         },
-        logger: PersonalScribeLogger
+        logger: PersonalScribeLogger,
+        backend: Backend = .keyboardTap
     ) {
+        self.backend = backend
         self.tapFactory = tapFactory ?? { decider in
             HotkeyEventTap(
                 decider: decider,
@@ -98,6 +123,17 @@ public final class KeyEventRouter {
         self.installLocal = installLocal
         self.installGlobal = installGlobal
         self.uninstall = uninstall
+        if case .registeredChords(let registrar) = backend {
+            registrar.onEvent = { [weak self] id, pressed, timestamp in
+                self?.dispatchChord(id: id, pressed: pressed, timestamp: timestamp)
+            }
+        }
+    }
+
+    /// Only the keyboard-tap backend depends on Accessibility for hotkeys.
+    public var needsAccessibilityForHotkeys: Bool {
+        if case .keyboardTap = backend { return true }
+        return false
     }
 
     /// True when at least one of the three monitors is live. The CG
@@ -125,15 +161,18 @@ public final class KeyEventRouter {
     @discardableResult
     public func start() -> Bool {
         guard tap == nil, localMonitor == nil, globalMonitor == nil else {
-            return tap?.isActive == true
+            return tap?.isActive == true || !needsAccessibilityForHotkeys
         }
 
-        let tap = tapFactory({ [weak self] event in
-            self?.dispatchGlobalDeciders(event) ?? false
-        })
-        let tapStarted = tap.start()
-        if tapStarted {
-            self.tap = tap
+        var tapStarted = true
+        if needsAccessibilityForHotkeys {
+            let tap = tapFactory({ [weak self] event in
+                self?.dispatchGlobalDeciders(event) ?? false
+            })
+            tapStarted = tap.start()
+            if tapStarted {
+                self.tap = tap
+            }
         }
 
         let mask: NSEvent.EventTypeMask = [.keyDown, .keyUp, .flagsChanged]
@@ -164,7 +203,7 @@ public final class KeyEventRouter {
     /// is already live, so callers can invoke it freely.
     @discardableResult
     public func retryTapIfNeeded() -> Bool {
-        if tap?.isActive == true {
+        if tap?.isActive == true || !needsAccessibilityForHotkeys {
             return true
         }
         let tap = tapFactory({ [weak self] event in
@@ -248,6 +287,84 @@ public final class KeyEventRouter {
         }
     }
 
+    // MARK: - Registered chords
+
+    /// Declare a shortcut that should reach the global deciders while
+    /// another app is frontmost. With `registeredChords` the chord is
+    /// registered with macOS for as long as the returned registration
+    /// lives (released synchronously when dropped); with `keyboardTap`
+    /// the tap already sees every key, so this is a no-op.
+    public func registerGlobalChord(_ chord: HotkeyChord) -> KeyEventRouterChordRegistration {
+        guard case .registeredChords(let registrar) = backend else {
+            return KeyEventRouterChordRegistration(router: nil, id: 0)
+        }
+        if let (id, entry) = chordEntries.first(where: { $0.value.chord == chord }) {
+            chordEntries[id]?.refCount = entry.refCount + 1
+            return KeyEventRouterChordRegistration(router: self, id: id)
+        }
+        let id = nextChordID
+        nextChordID += 1
+        let isRegistered = chordSuspensionCount == 0 && registrar.register(chord, id: id)
+        chordEntries[id] = ChordEntry(chord: chord, refCount: 1, isRegistered: isRegistered)
+        return KeyEventRouterChordRegistration(router: self, id: id)
+    }
+
+    /// Release every registered chord until the token is dropped — used by
+    /// the shortcut recorder so pressing an existing shortcut is captured
+    /// instead of triggering it.
+    public func suspendGlobalChords() -> KeyEventRouterToken {
+        chordSuspensionCount += 1
+        if chordSuspensionCount == 1, case .registeredChords(let registrar) = backend {
+            for (id, entry) in chordEntries where entry.isRegistered {
+                registrar.unregister(id: id)
+                chordEntries[id]?.isRegistered = false
+            }
+        }
+        return KeyEventRouterToken { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.resumeGlobalChords()
+            }
+        }
+    }
+
+    fileprivate func isChordRegistered(id: UInt32) -> Bool {
+        chordEntries[id]?.isRegistered ?? false
+    }
+
+    fileprivate func releaseChord(id: UInt32) {
+        guard var entry = chordEntries[id] else { return }
+        entry.refCount -= 1
+        guard entry.refCount == 0 else {
+            chordEntries[id] = entry
+            return
+        }
+        chordEntries[id] = nil
+        if entry.isRegistered, case .registeredChords(let registrar) = backend {
+            registrar.unregister(id: id)
+        }
+    }
+
+    private func resumeGlobalChords() {
+        chordSuspensionCount -= 1
+        guard chordSuspensionCount == 0, case .registeredChords(let registrar) = backend else { return }
+        for (id, entry) in chordEntries where !entry.isRegistered {
+            chordEntries[id]?.isRegistered = registrar.register(entry.chord, id: id)
+        }
+    }
+
+    private func dispatchChord(id: UInt32, pressed: Bool, timestamp: TimeInterval) {
+        guard let chord = chordEntries[id]?.chord else { return }
+        let event = HotkeyEvent(
+            type: pressed ? .keyDown : .keyUp,
+            keyCode: chord.keyCode,
+            modifierFlags: chord.modifiers,
+            timestamp: timestamp,
+            isARepeat: false
+        )
+        // The OS already swallowed the chord; decider verdicts don't matter.
+        _ = dispatchGlobalDeciders(event)
+    }
+
     // MARK: - Test seams
 
     /// Synthesize an NSEvent-shape event into the local-decider chain.
@@ -322,5 +439,31 @@ public final class KeyEventRouterToken: @unchecked Sendable {
 
     deinit {
         cleanup()
+    }
+}
+
+/// Live registration of one chord with `KeyEventRouter`. Dropping it
+/// unregisters the chord synchronously (on the main actor), so a quick
+/// disarm → re-arm can't race a deferred cleanup.
+@MainActor
+public final class KeyEventRouterChordRegistration {
+    private weak var router: KeyEventRouter?
+    private let id: UInt32
+
+    fileprivate init(router: KeyEventRouter?, id: UInt32) {
+        self.router = router
+        self.id = id
+    }
+
+    /// False when macOS refused the chord (or while suspended). Always
+    /// true for the keyboard-tap backend, which needs no registration.
+    public var isRegistered: Bool {
+        guard id != 0 else { return true }
+        return router?.isChordRegistered(id: id) ?? false
+    }
+
+    isolated deinit {
+        guard id != 0 else { return }
+        router?.releaseChord(id: id)
     }
 }
