@@ -166,12 +166,13 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     override func mouseDragged(with event: NSEvent) {
         let localPoint = convert(event.locationInWindow, from: nil)
         let startedDragging = interactionState.drag(to: localPoint)
-        if startedDragging {
-            onMouseDragged?()
-        }
-
         if interactionState.isDragging {
+            // `performDrag` runs AppKit's move loop until mouse-up, so
+            // the callback below sees the panel's final, dropped frame.
             window?.performDrag(with: event)
+            if startedDragging {
+                onMouseDragged?()
+            }
         }
     }
 
@@ -295,6 +296,9 @@ public final class PillOverlayPresenter {
     private var streamCard: (any StreamCardPresenting)?
     private var visibilityCancellable: AnyCancellable?
     private let diagnosticLogger: PersonalScribeLogger
+    /// Visible screen area for a given pill frame; every pill frame is
+    /// clamped into it (see `OverlayPlacement`).
+    private let screenBounds: @MainActor (NSRect) -> NSRect
     private static let clipboardOnlyNoticeText = "Copied to clipboard · ⌘V to paste"
     private static let clipboardOnlyNoticeDismissAfter: TimeInterval = 3.0
 
@@ -342,7 +346,8 @@ public final class PillOverlayPresenter {
         streamCardBuilder: any StreamCardBuilding = LiveStreamCardBuilder(),
         diagnosticLogger: PersonalScribeLogger = PersonalScribeLogger.testing(
             category: PersonalScribeLogCategory.ui
-        )
+        ),
+        screenBounds: @escaping @MainActor (NSRect) -> NSRect = OverlayPlacement.visibleFrame(containing:)
     ) {
         self.model = model
         self.onTap = onTap
@@ -350,6 +355,7 @@ public final class PillOverlayPresenter {
         self.responseCardBuilder = responseCardBuilder
         self.streamCardBuilder = streamCardBuilder
         self.diagnosticLogger = diagnosticLogger
+        self.screenBounds = screenBounds
         visibilityCancellable = model.$visibility.sink { [weak self] visibility in
             guard let self else {
                 return
@@ -426,12 +432,17 @@ public final class PillOverlayPresenter {
         // screen.midX / screen.minY + 64; for subsequent transitions
         // the panel's own frame carries the (possibly user-dragged)
         // anchor forward.
+        // A pill near a screen edge that grows (idle → recording) is
+        // shifted back on-screen rather than spilling past the edge.
         let previousFrame = panel.frame
         let newOrigin = NSPoint(
             x: previousFrame.midX - newSize.width / 2,
             y: previousFrame.minY
         )
-        let newFrame = NSRect(origin: newOrigin, size: newSize)
+        let newFrame = OverlayPlacement.clamp(
+            NSRect(origin: newOrigin, size: newSize),
+            within: screenBounds(previousFrame)
+        )
 
         // Animation policy:
         // - first sizing after show (`lastSizedVisibility == nil`): no
@@ -491,7 +502,7 @@ public final class PillOverlayPresenter {
             panelSize: panelSize,
             onTap: onTap,
             onMouseDragged: { [weak self] in
-                self?.hasUserRepositioned = true
+                self?.userDidMovePanel()
             },
             isTapEnabled: { [weak self] in
                 self?.supportsTap ?? false
@@ -512,6 +523,22 @@ public final class PillOverlayPresenter {
 
         panel.orderFrontRegardless()
         diagnosticLogger.info("PillOverlayPresenter.show — panelExisted=\(panelExisted) frame=\(panel.frame) isVisible=\(panel.isVisible)")
+    }
+
+    /// Called once the user drops the pill after a drag. A pill dragged
+    /// partly off-screen is pulled back inside, and the cards follow.
+    private func userDidMovePanel() {
+        hasUserRepositioned = true
+        guard let panel else {
+            return
+        }
+        let settled = OverlayPlacement.clamp(panel.frame, within: screenBounds(panel.frame))
+        if settled != panel.frame {
+            panel.setFrame(settled, animate: true)
+        }
+        diagnosticLogger.info("PillOverlayPresenter.userDidMovePanel — frame=\(settled)")
+        reanchorResponseCard(pillFrame: settled)
+        reanchorStreamCard(pillFrame: settled)
     }
 
     private func reanchorResponseCard(pillFrame: NSRect) {

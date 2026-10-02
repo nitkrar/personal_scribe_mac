@@ -370,6 +370,26 @@ recording). #044 makes the panel resize per visibility so panel frame
   recording (220) back to done (100). If user drags the pill, the
   card follows.
 
+## Edge-aware placement (2026-10-02)
+
+Pill and cards go through `OverlayPlacement`: the pill stays inside the
+screen's visible area (8pt margin), and cards stay centered on the pill
+where they fit, slide sideways at the left/right edges, and flip below
+the pill at the top edge. Exception to MV-PILL-RESIZE-1: next to an
+edge, a growing pill shifts inward instead of keeping its center fixed.
+
+- [ ] **MV-PILL-EDGE-1 (left edge)** Drag the idle pill partly off the
+  left edge and let go — it slides back fully on-screen. Start a
+  dictation and speak: neither the recording pill nor the streaming
+  card is cut off at the left edge.
+- [ ] **MV-PILL-EDGE-2 (right edge)** Same as EDGE-1 at the right edge.
+- [ ] **MV-PILL-EDGE-3 (top edge)** Drag the pill to the top of the
+  screen (under the menu bar). Dictate: the streaming card appears
+  BELOW the pill, not on top of it. Same for the `Copied to clipboard`
+  card.
+- [ ] **MV-PILL-EDGE-4 (default spot unchanged)** On a fresh launch the
+  pill sits bottom-center and the cards appear above it, as before.
+
 ## AX externality probe (#042 — 2026-04-22)
 
 Repro baseline: before the fix, dictation into Sublime Text landed on the

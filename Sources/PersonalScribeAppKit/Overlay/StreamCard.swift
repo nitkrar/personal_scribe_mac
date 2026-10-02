@@ -124,15 +124,12 @@ public final class StreamCard: NSPanel, StreamCardPresenting {
         hostingView.rootView = StreamCardView(text: text)
 
         let cardWidth = Self.estimatedWidth(for: text, pillWidth: pillFrame.width)
-        let x = pillFrame.midX - cardWidth / 2
-        let y = pillFrame.maxY + Self.gapAbovePill
-
         setFrame(
-            NSRect(
-                x: x,
-                y: y,
-                width: cardWidth,
-                height: Self.height
+            OverlayPlacement.cardFrame(
+                size: NSSize(width: cardWidth, height: Self.height),
+                pillFrame: pillFrame,
+                within: OverlayPlacement.visibleFrame(containing: pillFrame),
+                gap: Self.gapAbovePill
             ),
             display: display
         )

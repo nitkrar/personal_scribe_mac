@@ -85,6 +85,7 @@ struct LiveResponseCardBuilder: ResponseCardBuilding {
 public final class ResponseCard: NSPanel, ResponseCardPresenting {
     private let hostingView: NSHostingView<ResponseCardView>
     private var dismissTimer: Timer?
+    private var lastPillFrame: NSRect = .zero
 
     /// Horizontal padding (each side) that the owning SwiftUI view
     /// applies. Used to estimate layout height.
@@ -173,11 +174,9 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
         )
         let cardHeight = Self.estimatedHeight(for: text, width: cardWidth)
 
-        let x = pillFrame.midX - cardWidth / 2
-        let y = pillFrame.maxY + Self.gapAbovePill
-
+        lastPillFrame = pillFrame
         setFrame(
-            NSRect(x: x, y: y, width: cardWidth, height: cardHeight),
+            Self.placedFrame(size: NSSize(width: cardWidth, height: cardHeight), pillFrame: pillFrame),
             display: false
         )
 
@@ -225,12 +224,7 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
         let currentWidth = frame.width
         let newHeight = Self.estimatedHeight(for: text, width: currentWidth)
         setFrame(
-            NSRect(
-                x: frame.origin.x,
-                y: frame.maxY - newHeight,
-                width: currentWidth,
-                height: newHeight
-            ),
+            Self.placedFrame(size: NSSize(width: currentWidth, height: newHeight), pillFrame: lastPillFrame),
             display: true
         )
     }
@@ -245,13 +239,17 @@ public final class ResponseCard: NSPanel, ResponseCardPresenting {
         guard isVisible else {
             return
         }
-        let currentWidth = frame.width
-        let currentHeight = frame.height
-        let newX = pillFrame.midX - currentWidth / 2
-        let newY = pillFrame.maxY + Self.gapAbovePill
-        setFrame(
-            NSRect(x: newX, y: newY, width: currentWidth, height: currentHeight),
-            display: true
+        lastPillFrame = pillFrame
+        setFrame(Self.placedFrame(size: frame.size, pillFrame: pillFrame), display: true)
+    }
+
+    /// Above the pill when it fits, below otherwise; kept on-screen.
+    private static func placedFrame(size: NSSize, pillFrame: NSRect) -> NSRect {
+        OverlayPlacement.cardFrame(
+            size: size,
+            pillFrame: pillFrame,
+            within: OverlayPlacement.visibleFrame(containing: pillFrame),
+            gap: gapAbovePill
         )
     }
 
