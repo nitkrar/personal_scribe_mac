@@ -210,3 +210,14 @@ mode-list event or app restart. Acceptable trade-off for V1.
   toggle stays off and an orange caption reads "Realtime requires a
   streaming ASR model…" (nothing downloaded) or "Realtime ASR model not
   active…" (downloaded but inactive).
+
+- [ ] **MV-MODES-21 — Swipe to delete:** in Modes, two-finger swipe left
+  on a row. A red Delete action appears; clicking it (or a full swipe)
+  asks "Delete "<name>"?" and only removes the mode on confirm. Cancel
+  leaves it.
+- [ ] **MV-MODES-22 — Right-click menu:** right-click a row → "Set as
+  Default" stars it (disabled on the current default); "Delete…" shows
+  the same confirmation as swipe.
+- [ ] **MV-MODES-23 — Drag reorder drives menu order:** drag a row to a
+  new position, open the menu bar mode submenu: modes appear in the new
+  order. The global hotkey still starts the starred mode, not the top row.

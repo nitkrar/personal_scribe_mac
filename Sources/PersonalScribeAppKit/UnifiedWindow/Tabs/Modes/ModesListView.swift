@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 import PersonalScribeCore
 import PersonalScribeSession
 
@@ -8,11 +7,8 @@ struct ModesListView: View {
     @ObservedObject var viewModel: ModesListViewModel
     @State private var showPresetPicker = false
     @State private var detailPath: [String] = []
-    @State private var draggedModeID: String? = nil
-    @State private var dragBaseModeIDs: [String] = []
-    @State private var previewModeIDs: [String]? = nil
-    @State private var isListDropTargeted = false
-    @Environment(\.colorScheme) private var colorScheme
+    @State private var pendingDelete: WorkflowMode? = nil
+    @State private var selectedModeID: String? = nil
 
     private let modelService: ActiveModelService
     private let registry: WorkflowModeRegistry
@@ -62,11 +58,6 @@ struct ModesListView: View {
                     }
                 }
         }
-        .onChange(of: isListDropTargeted) { _, isTargeted in
-            if !isTargeted, draggedModeID != nil {
-                cancelDragPreview()
-            }
-        }
     }
 
     @ViewBuilder
@@ -74,7 +65,13 @@ struct ModesListView: View {
         if viewModel.customModes.isEmpty {
             emptyState
         } else {
-            modesList
+            VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.sm) {
+                Text("Two-finger swipe or right-click a mode for options. Double-click to open. Drag to reorder the menu bar list.")
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, PersonalScribeTheme.Spacing.md)
+                modesList
+            }
         }
     }
 
@@ -100,193 +97,70 @@ struct ModesListView: View {
         .padding(PersonalScribeTheme.Spacing.windowPadding)
     }
 
+    /// Native `List` so macOS supplies drag-to-reorder (`.onMove`),
+    /// trackpad swipe actions, and the context menu. Order only drives
+    /// the menu bar's mode submenu; the star picks the hotkey's default.
+    /// Rows carry no gestures (they block drag/swipe); single click
+    /// selects, double-click / Return opens via the primary action.
     private var modesList: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(displayedModes, id: \.id) { mode in
-                    VStack(spacing: 0) {
-                        draggableModeRow(for: mode)
-
-                        if mode.id != displayedModes.last?.id {
-                            Divider()
-                                .padding(.leading, PersonalScribeTheme.Spacing.md)
-                        }
+        List(selection: $selectedModeID) {
+            ForEach(viewModel.customModes, id: \.id) { mode in
+                ModeRowView(
+                    mode: mode,
+                    isCurrent: viewModel.currentModeID == mode.id,
+                    isDefault: viewModel.defaultModeID == mode.id,
+                    validity: viewModel.validityByID[mode.id] ?? .valid,
+                    onTapBody: { detailPath.append(mode.id) },
+                    onTapStar: { viewModel.setDefault(mode) }
+                )
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        pendingDelete = mode
+                    } label: {
+                        Label("Delete", systemImage: "trash")
                     }
                 }
+                .listRowBackground(Color.clear)
+                .tag(mode.id)
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .onMove { source, destination in
+                viewModel.reorder(from: source, to: destination)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.clear)
-        // Track whether the drag is still inside the list so a
-        // cancelled / abandoned drag doesn't leave the preview order
-        // stuck on screen.
-        .onDrop(of: [UTType.plainText], isTargeted: $isListDropTargeted) { _, _ in
-            false
+        .contextMenu(forSelectionType: String.self) { ids in
+            if let mode = mode(for: ids) {
+                Button("Open") { detailPath.append(mode.id) }
+                Button("Set as Default") { viewModel.setDefault(mode) }
+                    .disabled(viewModel.defaultModeID == mode.id)
+                Divider()
+                Button("Delete…", role: .destructive) { pendingDelete = mode }
+            }
+        } primaryAction: { ids in
+            if let mode = mode(for: ids) {
+                detailPath.append(mode.id)
+            }
         }
-    }
-
-    private var displayedModes: [WorkflowMode] {
-        guard let previewModeIDs else {
-            return viewModel.customModes
-        }
-
-        let modesByID = Dictionary(uniqueKeysWithValues: viewModel.customModes.map { ($0.id, $0) })
-        let reordered = previewModeIDs.compactMap { modesByID[$0] }
-        guard reordered.count == viewModel.customModes.count else {
-            return viewModel.customModes
-        }
-        return reordered
-    }
-
-    private var rowDragHighlight: Color {
-        PersonalScribeTheme.Palette.for(scheme: colorScheme)
-            .hoverState
-            .opacity(0.45)
-    }
-
-    private func draggableModeRow(for mode: WorkflowMode) -> some View {
-        let isDragged = draggedModeID == mode.id
-
-        return ModeRowView(
-            mode: mode,
-            isCurrent: viewModel.currentModeID == mode.id,
-            isDefault: viewModel.defaultModeID == mode.id,
-            validity: viewModel.validityByID[mode.id] ?? .valid,
-            onTapBody: { detailPath.append(mode.id) },
-            onTapStar: { viewModel.setDefault(mode) }
-        )
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            RoundedRectangle(
-                cornerRadius: PersonalScribeTheme.Radius.row,
-                style: .continuous
-            )
-            .fill(isDragged ? rowDragHighlight : .clear)
-        }
-        .opacity(isDragged ? 0.95 : 1.0)
-        .onDrag {
-            beginDrag(modeID: mode.id)
-            return NSItemProvider(object: NSString(string: mode.id))
-        }
-        .onDrop(
-            of: [UTType.plainText],
-            delegate: ModeRowDropDelegate(
-                targetID: mode.id,
-                resolveDraggedModeID: { draggedModeID },
-                updatePreview: updatePreview(dragging:over:),
-                commit: commitDragPreview
-            )
-        )
-    }
-
-    private func beginDrag(modeID: String) {
-        draggedModeID = modeID
-        dragBaseModeIDs = viewModel.customModes.map(\.id)
-        previewModeIDs = dragBaseModeIDs
-    }
-
-    private func updatePreview(dragging draggedID: String, over targetID: String) {
-        let currentIDs = previewModeIDs ?? dragBaseModeIDs
-        let updated = ModesListReorder.previewIDs(
-            dragging: draggedID,
-            over: targetID,
-            in: currentIDs
-        )
-        if updated != previewModeIDs {
-            previewModeIDs = updated
+        .listStyle(.plain)
+        // Let the window tint show through, matching the other tabs
+        // (the default List background drew a white card).
+        .scrollContentBackground(.hidden)
+        .confirmationDialog(
+            "Delete \"\(pendingDelete?.name ?? "")\"?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            presenting: pendingDelete
+        ) { mode in
+            Button("Delete", role: .destructive) { viewModel.delete(mode) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("This can't be undone.")
         }
     }
 
-    private func commitDragPreview() {
-        defer { cancelDragPreview() }
-
-        guard let draggedModeID, let previewModeIDs else {
-            return
-        }
-        guard let move = ModesListReorder.commitMove(
-            dragging: draggedModeID,
-            from: dragBaseModeIDs,
-            to: previewModeIDs
-        ) else {
-            return
-        }
-        viewModel.reorder(from: move.source, to: move.destination)
-    }
-
-    private func cancelDragPreview() {
-        draggedModeID = nil
-        dragBaseModeIDs = []
-        previewModeIDs = nil
-    }
-}
-
-struct ModesListReorder {
-    static func previewIDs(
-        dragging draggedID: String,
-        over targetID: String,
-        in ids: [String]
-    ) -> [String] {
-        guard
-            let sourceIndex = ids.firstIndex(of: draggedID),
-            let targetIndex = ids.firstIndex(of: targetID),
-            sourceIndex != targetIndex
-        else {
-            return ids
-        }
-
-        var updated = ids
-        let movedID = updated.remove(at: sourceIndex)
-        updated.insert(movedID, at: targetIndex)
-        return updated
-    }
-
-    static func commitMove(
-        dragging draggedID: String,
-        from originalIDs: [String],
-        to previewIDs: [String]
-    ) -> (source: IndexSet, destination: Int)? {
-        guard originalIDs != previewIDs else {
-            return nil
-        }
-        guard
-            let sourceIndex = originalIDs.firstIndex(of: draggedID),
-            let targetIndex = previewIDs.firstIndex(of: draggedID)
-        else {
-            return nil
-        }
-
-        let destination = targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
-        return (source: IndexSet(integer: sourceIndex), destination: destination)
-    }
-}
-
-private struct ModeRowDropDelegate: DropDelegate {
-    let targetID: String
-    let resolveDraggedModeID: () -> String?
-    let updatePreview: (String, String) -> Void
-    let commit: () -> Void
-
-    func validateDrop(info: DropInfo) -> Bool {
-        resolveDraggedModeID() != nil
-    }
-
-    func dropEntered(info: DropInfo) {
-        guard let draggedModeID = resolveDraggedModeID() else {
-            return
-        }
-        guard draggedModeID != targetID else {
-            return
-        }
-        updatePreview(draggedModeID, targetID)
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        commit()
-        return true
+    private func mode(for ids: Set<String>) -> WorkflowMode? {
+        guard let id = ids.first else { return nil }
+        return viewModel.customModes.first { $0.id == id }
     }
 }
