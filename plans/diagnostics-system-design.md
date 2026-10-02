@@ -4,8 +4,6 @@ Design note for the 2026-04-30 discussion about consolidating error logging and 
 
 This is an architecture note, not an implementation plan. It records the ask, the follow-up decisions, and the target model for future refactors.
 
-Implementation plan: `plans/diagnostics-system-implementation.md`
-
 ---
 
 ## Why this exists

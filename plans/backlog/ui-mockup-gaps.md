@@ -26,7 +26,7 @@ Scope excludes the floating pill overlay (separate workstream).
 - [x] **Row renders `entry.text` as both title AND preview** — same text drawn twice in one row. Tab passes `title: entry.text, preview: entry.text` to `TranscriptRow`. Pick one surface and drop the other. → `050d46b` (mockup-gaps A.1). `TranscriptRow` gained a `DisplayStyle` enum with a `.detail` variant that drops the title slot; Home-tab callers stay on `.summary` default.
 - [x] Date grouping emits `APRIL 17, 2026` (`MMMM d, yyyy` uppercased); mockup uses compact `APR 18`. → `7f42970` (mockup-gaps A.2).
 - [x] Row height not constrained to `PersonalScribeTheme.RowHeight.tall` (56). → `5d75d40` (mockup-gaps A.3).
-- [ ] Mockup shows a mode pill ("Dictation Mode" / "Command Mode") on each row's trailing edge. Not present. **Deferred** — requires schema change to `TranscriptEntry`; scope captured in `plans/backlog/transcript-trigger-context.md` (park until Command Mode lands).
+- [ ] Mockup shows a mode pill ("Dictation Mode" / "Command Mode") on each row's trailing edge. Not present. **Deferred** — requires schema change to `TranscriptEntry`; scope captured in #027 (closed; see `BACKLOG_ARCHIVE.md`).
 - [x] Mockup timestamps are wall-clock (`2:34 PM`); code uses relative (`5m ago`). → `0bb8084` (mockup-gaps A.4) + `e9c9481` (NBSP test fix).
 - [x] No `WindowTint.primaryBackground` on the tab root — inherits from ancestor. → `7d460cf` (mockup-gaps A.5).
 

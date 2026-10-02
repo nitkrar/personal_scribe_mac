@@ -73,7 +73,7 @@ The shared vocabulary for talking about Ninimma — between contributors, agents
 | Term                       | Definition                                                                              | Aliases to avoid                          |
 | -------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------- |
 | **Pipeline**               | The ordered sequence of steps that turns captured audio into delivered text             | Flow, chain, processing graph             |
-| **Pipeline step**          | One named segment of the pipeline (`PipelineStepID`: `capture`/`transcription`/`postProcessing`/`persistence`/`output`) | Stage (reserved for central-layers refactor — `plans/central/STAGE_*.md`), phase |
+| **Pipeline step**          | One named segment of the pipeline (`PipelineStepID`: `capture`/`transcription`/`postProcessing`/`persistence`/`output`) | Stage (reserved for central-layers refactor work-units), phase |
 | **Pipeline shape**         | The flow type — `batch` or `streaming`. Type: `PipelineShape`                           | `OutputMode` (old name, removed)          |
 | **Session coordinator**    | The actor (`SessionCoordinator`) that owns the pipeline, exposes mode-specific entry points, and serialises state transitions | Controller, manager, session manager      |
 | **Orchestrator**           | The pipeline actor (`SessionPipelineOrchestrator`) that drives steps + holds the snapshot stream | Pipeline, runner                          |
@@ -177,13 +177,13 @@ The shared vocabulary for talking about Ninimma — between contributors, agents
 
 - **Active mode vs Active model** — separate services. **Active model** = currently selected `ModelDescriptor` per `ModelKind` (`ActiveModelService`). **Active mode** = currently selected `WorkflowMode` (today via `AppStoreActiveModeProviding`; will become a dedicated `WorkflowModeRegistry` under #078 per CHECKLIST L6+L14). Never share "active" framing without the noun.
 
-- **"Step" vs "Stage" vs "Phase"** — three textually similar concepts in this project, kept disjoint: **Step** = pipeline-internal segmentation (`PipelineStepID`). **Stage** = central-layers refactor work-units (`plans/central/STAGE_*.md`). **Phase** = product-milestone roadmap (Phase 1/2/3/4) AND commit-tag prefix (`phase-N step N.M:`). Don't cross them.
+- **"Step" vs "Stage" vs "Phase"** — three textually similar concepts in this project, kept disjoint: **Step** = pipeline-internal segmentation (`PipelineStepID`). **Stage** = central-layers refactor work-units. **Phase** = product-milestone roadmap (Phase 1/2/3/4) AND commit-tag prefix (`phase-N step N.M:`). Don't cross them.
 
 - **"Transcribing"** can refer to (a) the `SessionState.transcribing` case, (b) the `Transcription` pipeline step, (c) the user-visible status caption ("Transcribing…"). Same word, three load-bearing meanings — disambiguate by context (state machine / pipeline / UI).
 
 ## Target vocabulary (not yet in code)
 
-These are #078-locked terms that **describe planned types and modules from `plans/078_adapter_layer/CHECKLIST.md`**. They are not in the current codebase. When #078 implementation lands, this section migrates upward into the live tables and this section either empties or hosts the next batch of design vocab.
+These are #078-locked terms that **describe planned types and modules from the #078 checklist** (deleted; `git show 8755ff7:plans/078_adapter_layer/CHECKLIST.md`). They are not in the current codebase. When #078 implementation lands, this section migrates upward into the live tables and this section either empties or hosts the next batch of design vocab.
 
 | Term                       | Planned type / location                                                                  | Definition (per #078 CHECKLIST)                                                |
 | -------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |

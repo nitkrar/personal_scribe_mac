@@ -21,6 +21,12 @@ This doc complements (does not replace):
 
 ---
 
+## Split test authorship
+
+For non-trivial logic a brief may assign tests to a separate agent. Implementer: work from the spec and don't write those tests. Test author: write from the spec and public interfaces without reading the implementation. Either way, report spec ambiguities instead of guessing.
+
+---
+
 ## The full-suite gate (before DONE)
 
 ### Why
@@ -41,7 +47,7 @@ Before sending a `DONE` message in any agent-broker request:
 3. Classify each failure:
    - **New failure caused by my work** → BLOCKER. Do not mark DONE. Fix or surface.
    - **Pre-existing failure my work didn't touch** → Note in DONE message: `Pre-existing failures (not introduced): <test name(s)>`. Atlas tracks separately.
-   - **Skipped tests** → Note count; usually benign (`AppEntryPointTests` has a deliberately skipped test).
+   - **Skipped tests** → Note count; usually benign (a few tests are deliberately skipped).
 4. DONE message MUST include the full-suite outcome (test count + failure count + skipped count), not just the targeted filter result.
 
 Example DONE format:

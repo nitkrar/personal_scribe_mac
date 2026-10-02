@@ -2,7 +2,9 @@
 
 Closed items. Source of truth for "what was the fix for that thing I filed months ago?". Active items live in [`BACKLOG.md`](./BACKLOG.md).
 
-**Note on granularity:** items below are archived by source group rather than one-ticket-per-closed-item. Fine-grained per-item status lives in the original source doc (moved to `plans/_legacy/`) or in git history via the cited commit SHAs.
+**Note on granularity:** items below are archived by source group rather than one-ticket-per-closed-item. Fine-grained per-item status lives in the original source doc (moved to `plans/_legacy/`, since deleted) or in git history via the cited commit SHAs.
+
+**Deleted plan docs:** `plans/_legacy/`, `plans/central/` (and its prompt/phase/sequencing docs), most of `plans/investigations/`, the April review docs (`REVIEW*.md`, `CODEX_ML_REVIEW.md`, `ASSISTANT_FEASIBILITY_REVIEW.md`), `explorations/`, `plans/013_notes_window/_archived_overengineered_v1/`, the per-ticket plan folders (`plans/046_*` through `plans/101_*`, `plans/streaming_whisper/`) and `plans/seshat_stt_eval-*.md` were removed once their tickets closed. Read them with `git show 8755ff7:<path>`.
 
 ---
 
@@ -73,7 +75,7 @@ This archive was seeded by consolidating:
 - `plans/PLAN_PHASES.md` *(slim summary kept as `plans/ROADMAP.md`; full file moved to `plans/_legacy/`)*
 - `plans/central/PROGRESS.md` *(stale; deleted — `INDEX.md` is authoritative)*
 
-Original source docs moved to `plans/_legacy/` for reconciliation reference (can be deleted a few weeks after this migration once no ticket lookup ambiguity surfaces).
+Original source docs moved to `plans/_legacy/`, later deleted (`ui-mockup-gaps.md` kept at `plans/backlog/`).
 
 ---
 

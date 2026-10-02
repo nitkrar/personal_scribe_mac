@@ -22,7 +22,4 @@ scripts/__pycache__/
 # Scratch / WIP plan documents that are not yet ready to check in.
 # Force-add with `git add -f <path>` when a specific file graduates.
 plans/App UI design/
-plans/_legacy/backlog/transcript-trigger-context.md
-plans/central/STAGE3_HANDOFF.md
-plans/central/drafts/
 plans/rename/

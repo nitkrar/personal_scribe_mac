@@ -1,6 +1,6 @@
 # Ninimma — Backlog
 
-Canonical active-work registry, GitHub-issues-style. Closed items live in [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.md). Phase/roadmap context in [`plans/ROADMAP.md`](./plans/ROADMAP.md). Central-layers refactor plans stay at [`plans/central/`](./plans/central/). Pre-migration feature notes + Phase 1/2 closures archived at [`plans/_legacy/BACKLOG_pre_migration.md`](./plans/_legacy/BACKLOG_pre_migration.md).
+Canonical active-work registry, GitHub-issues-style. Closed items live in [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.md). Phase/roadmap context in [`plans/ROADMAP.md`](./plans/ROADMAP.md). Pre-migration feature notes lived in `plans/_legacy/`, now deleted; the `**Legacy:**` pointers below resolve with `git show 8755ff7:<path>`.
 
 ## Schema
 
@@ -70,6 +70,37 @@ Quick lookup when an old commit or doc cites a legacy ID.
 ## Bugs
 
 Done bugs archived 2026-04-30 → see [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.md) "Archived 2026-04-30: 9 bugs closed" for #002, #007, #039, #042, #071, #072, #073, #075, #077.
+
+### #108 — Shortcut recorder accepts unsafe bindings
+
+`bug` · `P2` · `open` · `area: settings, hotkeys`
+*Updated 2026-10-02*
+
+Found in the April Phase 3.G review, still true in `HotkeyRecorder.swift`:
+- **Plain key with no modifier is accepted.** `captureKeyPress` → `rejectionReason` never rejects empty modifiers, so binding plain "A" toggles recording on every "A" typed anywhere. Reject unless the key is a function/special key.
+- **Reserved list matches only exact ⌘.** `rejectionReason` checks `modifiers == [.command]` for Q/W/C/V/X, so ⌘⇧Q etc. pass. Match `modifiers.contains(.command)`.
+- **"Modifier-only" rejection flashes during a valid chord.** `captureModifierChange` shows the rejection between ⌘-down and the letter key-down.
+- **Left and right ⌥ render the same.** `HotkeyShortcutFormatter` maps keyCodes 58 and 61 both to `⌥`.
+
+---
+
+### #109 — WhisperKit memory over long sessions (measure first)
+
+`bug` · `P2` · `open` · `stage: investigate` · `area: transcription, performance`
+*Updated 2026-10-02*
+
+April ML reviews reported WhisperKit's CoreML path growing memory over long runs (figures quoted from ~0.8 GB to 2.4→3.3 GB over 40 min, medium model). Never measured here, and Ninimma keeps a WhisperKit model loaded in a menu-bar app. First step: record resident memory across a long session of repeated dictations (batch and streaming) with the default WhisperKit model. If it grows, options raised then were periodic model reload or the whisper.cpp Metal path.
+
+---
+
+### #110 — Bluetooth microphones: quality drop and sample-rate changes
+
+`bug` · `P3` · `open` · `stage: investigate` · `area: audio, capture`
+*Updated 2026-10-02*
+
+When a Bluetooth headset mic (e.g. AirPods) is activated, macOS switches the device from A2DP to the low-bandwidth hands-free profile: transcription quality drops and any playback degrades. The hardware sample rate can also change mid-session when devices switch. Capture doesn't handle either explicitly today (no engine configuration-change handling found in `Sources/`). Check what happens on a device switch during recording, and decide whether to warn or prefer the built-in mic when a Bluetooth input is selected. Raised in the April adversarial review.
+
+---
 
 ### #104 — Whisper.cpp streaming dedup tracker
 
@@ -653,7 +684,7 @@ inspection (#078 follow-up).
 State ownership keeps fragmenting during ostensibly-simple tasks: the same concept lives in multiple places coupled to different state machines. Recurring pattern, not tied to any single class.
 
 **Examples:**
-- **Consolidated (good precedent):** session + capture pipeline (see `plans/central/`). One coordinator, one state machine.
+- **Consolidated (good precedent):** session + capture pipeline. One coordinator, one state machine.
 - **Consolidated (good precedent):** `PasteboardSnapshotService` owns transient clipboard snapshots and guarded restore tokens for output delivery.
 
 Audit scope intentionally left open. Walk state concepts, not classes. Details filled in during the audit — not now.
