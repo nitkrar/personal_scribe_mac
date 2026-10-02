@@ -1062,7 +1062,7 @@ Active follow-ups split off as tickets: **#104** (whisper.cpp dedup tracker — 
 
 ---
 
-## Archived 2026-10-02: 15 tickets closed (shipped audit + stale-backlog merge)
+## Archived 2026-10-02: 16 tickets closed (shipped audit + stale-backlog merge)
 
 Closing evidence is on each ticket's `**Closed:**` line where the audit added one; #027 and #033 were already marked done.
 
@@ -1703,3 +1703,14 @@ V1 remains a user-created custom mode / preset (not a built-in mode). English-on
 **Legacy:** `PLAN_PHASES.md` Step 1.4b
 
 **Closed:** `c2ef752` — `PillOverlayPresenterTests.testDragPastThresholdSuppressesTapAndFiresDraggedCallback` drives real mouse events through the hosting view; already shipped when the ticket was filed.
+
+---
+
+### #103 — WhisperKit streaming hangs on finish() after a burst of audio
+
+`bug` · `P3` · `done` · `area: transcription, streaming`
+*Opened 2026-10-02 · Updated 2026-10-02*
+
+Repro with the opt-in `StreamingSecondPassBenchmarkTests` (`NINIMMA_BENCH_WAV=…`): feed a recording to `WhisperKitAdapter.transcribe(stream:)` in one burst. `LiveWhisperKitRuntimeBridge.finish()` calls `stopStreamTranscription()`, but `transcriberTask` does not end. Real-time-paced input completes. Burst delivery can occur when capture catches up after a stall; Parakeet EOU completes under the same input pattern.
+
+**Closed:** 2026-10-02 — root cause was a start race, not burst input as such: `startStreamTranscription()` awaits a mic-permission check before it marks itself recording and clears the processor buffer, but `start()` returned immediately. A stop sent in that gap was lost (the loop then ran forever), and audio appended in that gap was wiped. `start()` now waits until the processor reports recording started (or the start task ends). Verified with `NINIMMA_BENCH_PACE=burst` (hung before, finishes after) and the real-time benchmark (unchanged).

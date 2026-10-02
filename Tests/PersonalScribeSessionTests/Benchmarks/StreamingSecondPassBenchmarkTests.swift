@@ -9,6 +9,8 @@ import PersonalScribeCore
 ///   say -o /tmp/bench.aiff -f text.txt
 ///   afconvert -f WAVE -d LEF32@16000 -c 1 /tmp/bench.aiff /tmp/bench.wav
 /// Optional `NINIMMA_BENCH_TEXT` = the spoken text, for a word-diff count.
+/// `NINIMMA_BENCH_PACE=burst` feeds the whole file at once instead of in
+/// real time.
 ///
 /// Mirrors the app's second-pass rule (DECISIONS.md #24): WhisperKit
 /// re-runs itself; streaming-only Parakeet EOU falls back to Parakeet TDT.
@@ -48,16 +50,16 @@ final class StreamingSecondPassBenchmarkTests: XCTestCase {
         let (input, continuation) = AsyncThrowingStream<PCMBuffer, Error>.makeStream()
         let liveStart = clock.now
         let events = streamer.transcribe(stream: input)
+        let burst = ProcessInfo.processInfo.environment["NINIMMA_BENCH_PACE"] == "burst"
         let feeder = Task {
             var index = 0
             while index < samples.count {
                 let end = min(index + 1_600, samples.count)
                 continuation.yield(try PCMBuffer(samples: Array(samples[index..<end]), timestamp: clock.now))
                 index = end
-                // Real-time pacing, like the mic. WhisperKit's streaming
-                // loop hangs on finish() when the whole recording arrives
-                // as one burst (BACKLOG #103).
-                try await Task.sleep(for: .milliseconds(100))
+                if !burst {
+                    try await Task.sleep(for: .milliseconds(100))
+                }
             }
             continuation.finish()
         }
@@ -99,7 +101,7 @@ final class StreamingSecondPassBenchmarkTests: XCTestCase {
         return """
 
         === \(streaming.id) -> second pass \(secondPass.id) | audio \(String(format: "%.1f", audioSeconds)) s
-          live:   prepare \(livePrepare) | real-time fed | first partial \(firstPartial.map { "\($0)" } ?? "none") | full stream \(liveDuration) | \(diff(liveText))
+          live:   prepare \(livePrepare) | \(burst ? "burst fed" : "real-time fed") | first partial \(firstPartial.map { "\($0)" } ?? "none") | full stream \(liveDuration) | \(diff(liveText))
           second: prepare \(secondPrepare) | transcribe \(secondDuration) (\(String(format: "%.0f", msPerAudioSecond)) ms per audio-second) | \(diff(secondText))
           live text:   \(liveText)
           second text: \(secondText)

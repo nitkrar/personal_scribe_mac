@@ -74,7 +74,7 @@ Done bugs archived 2026-04-30 → see [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.m
 ### #104 — Whisper.cpp streaming dedup tracker
 
 `bug` · `P3` · `open` · `stage: design` · `area: transcription, streaming`
-*Updated 2026-05-25*
+*Updated 2026-10-02*
 
 `WhisperCppStableSegmentTracker.merge()` produces parallel confirmation lanes when whisper.cpp re-decodes overlapping audio with jittered word boundaries. Same segment text appears under two slightly different normalized forms, both cross the `confirmationThreshold` independently, both flush. Manifests as duplicated phrases in the live card during whisper.cpp streaming dictation.
 
@@ -90,6 +90,20 @@ Hermes recommendation: option 3 unless EoU latency is unacceptable.
 **Deferred:** revisit when product UX requires clean live card during whisper.cpp speech. Two earlier attempts at "replace-on-ingest" hit hermes review blockers (long-utterance truncation past 8.25s window; empty-decode wipes); those approaches are off the table.
 
 **Reference:** `Sources/PersonalScribeTranscription/Adapters/WhisperCppStableSegmentTracker.swift` (trunk version, post-revert).
+
+**Reproduced 2026-10-02** (whispercpp-tiny, two `say` clips, 12 runs; output byte-identical across runs and pacing — deterministic, not jitter). Rerun: `WhisperCppStreamingDuplicationBenchmarkTests` (opt-in, env `NINIMMA_WHISPERCPP_BENCH_WAV` / `_TEXT` / `_OUT` / `_RUNS` / `_PACE` / `_MODEL`; clips + per-decode timelines were in `/tmp/ws104/`).
+
+**Root cause** (`WhisperCppStableSegmentTracker.merge()`):
+- Segment identity is exact normalized text (`segmentsMatch`). When whisper.cpp re-segments the same audio across window shifts ("Okay, so … the logs." 0–3000 ms vs "Okay so … every server," 0–4720 ms), the new shape is a separate lane, reaches the confirmation threshold on its own, and the already-confirmed old shape is carried forward (`existingIndex == merged.count → merged.append`). Both flush on the next EoU → duplicated phrase in the EoU chunk, live card, and streaming final text.
+- `dropCommittedPrefixOverlap` only checks flushed text, not confirmed-but-unflushed segments.
+- Live card has a second duplication path: after an EoU, a re-decode that renders the same audio differently ("So I bought" vs "by Bought") fails the normalized-prefix overlap check and the whole tail returns as a partial for ~4 s.
+
+**Related defects in the same tracker** (same fix should cover them):
+- Lost speech: segments that slide out of the 8.25 s window before reaching 2 confirmations are dropped (~15 s missing from one clip); a confirmed segment is also dropped when `existingIndex != merged.count`.
+- Flicker: the partial is only the unconfirmed tail, so confirmed-unflushed text disappears from the card until the EoU.
+- Bogus timestamps: some segments end 30 s after they start (e.g. 36510–66510 ms), defeating any time-overlap check.
+
+Scope: live card + streaming final text for whisper.cpp only; paste uses the batch second pass (not tested). Only `tiny` tested. Suggests design option 2 (time-overlap identity) or 3 (bypass tracker) above.
 
 **Legacy:** `plans/BACKLOG.md` #039 (ID already used in `BACKLOG_ARCHIVE.md`; renumbered 2026-10-02)
 
@@ -548,15 +562,6 @@ Investigate window ordering and an early, non-activating `orderFrontRegardless` 
 3. **Style preview cards are stale.** Settings → Recording window → Style previews draw a single-line equalizer instead of the pill's three-strand waveform. Update them after defining Classic, Mini, and None.
 
 Scope: layout per edge, snapping, state transitions, stream-card placement on vertical or circular variants, and wiring the style setting into the overlay.
-
----
-
-### #103 — WhisperKit streaming hangs on finish() after a burst of audio
-
-`bug` · `P3` · `open` · `area: transcription, streaming`
-*Opened 2026-10-02*
-
-Repro with the opt-in `StreamingSecondPassBenchmarkTests` (`NINIMMA_BENCH_WAV=…`): feed a recording to `WhisperKitAdapter.transcribe(stream:)` in one burst. `LiveWhisperKitRuntimeBridge.finish()` calls `stopStreamTranscription()`, but `transcriberTask` does not end. Real-time-paced input completes. Burst delivery can occur when capture catches up after a stall; Parakeet EOU completes under the same input pattern.
 
 ---
 

@@ -7,6 +7,7 @@ final class BufferFedWhisperKitAudioProcessor: AudioProcessing, @unchecked Senda
     private let lock = NSLock()
     private let audioProcessor = AudioProcessor()
     private var streamingContinuation: AsyncThrowingStream<[Float], Error>.Continuation?
+    private var isRecording = false
 
     static func loadAudio(
         fromPath audioFilePath: String,
@@ -77,7 +78,13 @@ final class BufferFedWhisperKitAudioProcessor: AudioProcessing, @unchecked Senda
             audioProcessor.audioSamples = []
             audioProcessor.audioEnergy = []
             audioProcessor.audioBufferCallback = callback
+            isRecording = true
         }
+    }
+
+    /// True between WhisperKit's `startRecordingLive` and `stopRecording`.
+    var hasStartedRecording: Bool {
+        lock.withLock { isRecording }
     }
 
     func startStreamingRecordingLive(
@@ -94,6 +101,7 @@ final class BufferFedWhisperKitAudioProcessor: AudioProcessing, @unchecked Senda
                 continuation.yield(samples)
             }
             streamingContinuation = continuation
+            isRecording = true
         }
         return (stream, continuation)
     }
@@ -105,6 +113,7 @@ final class BufferFedWhisperKitAudioProcessor: AudioProcessing, @unchecked Senda
             let continuation = streamingContinuation
             streamingContinuation = nil
             audioProcessor.audioBufferCallback = nil
+            isRecording = false
             return continuation
         }
         continuation?.finish()

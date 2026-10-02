@@ -1,5 +1,6 @@
 @preconcurrency import WhisperKit
 import Foundation
+import os
 import PersonalScribeCore
 
 typealias WhisperKitSleep = @Sendable (Duration) async throws -> Void
@@ -900,10 +901,18 @@ private actor LiveWhisperKitRuntimeBridge {
         )
 
         self.transcriber = transcriber
+        let startEnded = OSAllocatedUnfairLock(initialState: false)
         transcriberTask = Task {
+            defer { startEnded.withLock { $0 = true } }
             try await transcriber.startStreamTranscription()
         }
-        await Task.yield()
+        // WhisperKit starts recording, which clears the processor's buffer,
+        // only after an async permission check. Audio appended or a stop
+        // sent before then would be lost, and a lost stop never ends the
+        // streaming loop.
+        while !audioProcessor.hasStartedRecording, !startEnded.withLock({ $0 }) {
+            try await Task.sleep(for: .milliseconds(2))
+        }
     }
 
     func appendAudioSamples(_ audioSamples: [Float]) async throws -> [WhisperKitStreamingState] {
