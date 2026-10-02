@@ -1113,9 +1113,8 @@ final class GeneralTabViewModel: ObservableObject {
 
 // MARK: - Waveform palette chip
 
-/// Selectable swatch for one `WaveformPalette`: the three strand colors
-/// on the pill's dark background (the pill is always dark until #102),
-/// with a champagne border when selected.
+/// Selectable swatch for one `WaveformPalette`: three strand colors on a
+/// dark preview background, with a champagne border when selected.
 @MainActor
 private struct WaveformPaletteChip: View {
     let palette: WaveformPalette

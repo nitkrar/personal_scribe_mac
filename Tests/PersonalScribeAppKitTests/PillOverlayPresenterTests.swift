@@ -49,7 +49,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(tapCount, 1)
     }
 
-    /// While the Cancel Card is up, clicks belong to its Undo button:
+    /// While the Cancel Card is up, clicks belong to its Resume button:
     /// the pill must neither treat them as a tap nor start a drag.
     func testClicksPassToContentWhileContentOwnsThem() throws {
         let (window, hostingView) = makeHostingView()
@@ -507,9 +507,8 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(panelBuilder.panel.frame, idleFrame)
     }
 
-    /// Leaving the Cancel Card, the panel keeps the card's size until
-    /// SwiftUI's card → pill crossfade ends; shrinking mid-fade froze the
-    /// pill's content (old card stuck on screen).
+    /// The panel keeps the card's size until SwiftUI's card-to-pill
+    /// crossfade ends.
     func testPanelShrinksOnlyAfterCancelCardCrossfade() async throws {
         let viewModel = PillOverlayViewModel(visibility: .recording, visibilityMode: .alwaysOn)
         let panelBuilder = RecordingPanelBuilder()

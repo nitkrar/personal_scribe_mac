@@ -113,16 +113,9 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
 
         pasteAccumulator.recordFinalAttempted(chars: text.count)
 
-        // #098: when live cursor pasted ≥1 chunk in the just-ended
-        // streaming session AND `.frontmostPaste` is enabled, prepend
-        // a newline so the authoritative final lands on its own line
-        // instead of running into the last live-pasted chunk
-        // (`"hello world" + "Final paragraph."` was landing as
-        // `"hello worldFinal paragraph."` pre-fix). The split between
-        // live-paste-only mode and live-paste + final-paste both
-        // shipping is by-design as of #098 (RecipeBuilder filter
-        // dropped). The newline only applies in the both-enabled
-        // case; clipboard-only delivery is unaffected.
+        // When live cursor pasted at least one chunk and final paste is
+        // enabled, put the authoritative final on a new line. Clipboard-
+        // only delivery is unaffected.
         let textToWrite: String =
             liveCursorPasteSnapshot() > 0 && pasteEnabled
                 ? "\n\(text)"

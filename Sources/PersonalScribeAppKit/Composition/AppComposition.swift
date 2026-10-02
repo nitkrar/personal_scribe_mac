@@ -216,8 +216,7 @@ public enum AppComposition {
         logger: makeLogger(PersonalScribeLogCategory.ui)
     )
 
-    /// Shared clipboard snapshot service: batch delivery (restore-after-
-    /// paste) and the pill's Cancel Card Undo use the same instance (#072).
+    /// Shared clipboard snapshot service for guarded restore after paste.
     @MainActor
     public static let pasteboardSnapshotService = PasteboardSnapshotService()
 

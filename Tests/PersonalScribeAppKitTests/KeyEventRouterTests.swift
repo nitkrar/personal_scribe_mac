@@ -4,9 +4,8 @@ import XCTest
 
 /// #028 — `KeyEventRouter` registration + dispatch contract. Tests use
 /// the `handleLocal` / `handleGlobal` / `handleGlobalObserved` test
-/// seams to drive the chain without installing real CGEventTap or
-/// NSEvent monitors. Lifecycle (start/stop) is covered separately
-/// using DI'd installers.
+/// seams to drive the chain without installing OS hot-key registrations
+/// or NSEvent monitors. Lifecycle is covered using injected installers.
 @MainActor
 final class KeyEventRouterTests: XCTestCase {
 

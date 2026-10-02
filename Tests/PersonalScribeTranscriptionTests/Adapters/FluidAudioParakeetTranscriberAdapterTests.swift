@@ -178,10 +178,7 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(auxCalls.first?.aux, .ctc110m)
     }
 
-    /// Launch-time prepare must not hit the network when the model is
-    /// already on disk: `DownloadUtils.downloadRepo` lists the HF repo
-    /// first (flashing "Downloading 0%" and failing offline) before it
-    /// skips existing files.
+    /// Complete local artifacts must prepare without a repository query.
     func testPrepareSkipsDownloadWhenArtifactsAlreadyOnDisk() async throws {
         let descriptor = BuiltInModelCatalog.parakeetTDT06Bv2
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())

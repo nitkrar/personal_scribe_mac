@@ -61,15 +61,14 @@ public final class GlobalHotkeyMonitor {
     private let logSink: (@Sendable (_ level: String, _ message: String) -> Void)?
     private let router: KeyEventRouter
 
-    /// #028 — RAII registrations on the shared `KeyEventRouter`.
-    /// `localToken` covers events delivered to Ninimma (swallow on
-    /// match); `globalToken` covers registered chords pressed in other
-    /// apps (macOS hot keys, already swallowed — no `÷÷÷÷` leak).
+    /// RAII registrations on the shared `KeyEventRouter`.
+    /// `localToken` covers events delivered to Ninimma; `globalToken`
+    /// covers registered chords pressed in other apps.
     private var localToken: KeyEventRouterToken?
     private var globalToken: KeyEventRouterToken?
     /// The recording + per-mode chords, registered with the router so
-    /// they reach `globalToken`'s decider from other apps (no-op for the
-    /// keyboard-tap backend). Rebuilt whenever a binding changes.
+    /// they reach `globalToken`'s decider from other apps. Rebuilt
+    /// whenever a binding changes.
     private var chordRegistrations: [KeyEventRouterChordRegistration] = []
     private var keyDownTimestamp: TimeInterval?
     private var hotkeyKeyDownSwallowed = false
@@ -147,11 +146,8 @@ public final class GlobalHotkeyMonitor {
 
         resetState()
 
-        // #028: register two deciders on the shared router — one for
-        // registered chords pressed in other apps (macOS hot keys,
-        // already swallowed — fixes the `÷÷÷÷` leak during hold) and one
-        // for events delivered to Ninimma itself (local NSEvent path).
-        // Both share the same gesture-machine + swallow logic.
+        // Registered chords and local NSEvents share the same gesture
+        // state and swallow decisions.
         let decider: @MainActor (HotkeyEvent) -> Bool = { [weak self] event in
             guard let self else { return false }
             self.handle(event: event)

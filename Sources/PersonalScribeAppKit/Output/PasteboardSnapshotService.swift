@@ -1,15 +1,10 @@
 import AppKit
 import Foundation
 
-/// Snapshot + restore of the system pasteboard for the
-/// `ClipboardBatchOutput` auto-restore timer (transient per-paste
-/// handles). The Cancel Card's clipboard-restoring Undo slot was removed
-/// once cancelled sessions stopped touching the clipboard. Replaces the pre-#072 split where `PasteboardSnapshotService`
-/// held a string-only slot for Undo and `ClipboardBatchOutput.deliverBatch`
-/// held an inline `[NSPasteboardItem]` local for auto-restore — parallel
-/// implementations of the same concept. See `plans/072_snapshot_unification/`.
+/// Snapshot and restore of the system pasteboard for
+/// `ClipboardBatchOutput`'s delayed restore.
 ///
-/// # Two-token model (Step 2 prerequisite)
+/// # Two-token model
 ///
 /// The service owns the pasteboard write boundary through
 /// `replaceContents(with:)`. A successful write returns a
@@ -17,17 +12,13 @@ import Foundation
 /// pipeline captures a transient snapshot (pre-write clipboard) *and* a
 /// write token (post-write checkpoint); when the delayed restore fires,
 /// `restoreSnapshotIfUnchanged(_:token:)` compares the current
-/// `changeCount` with the write token — only restoring if nothing
-/// else has touched the clipboard since our write landed. The guard
-/// itself ships unwired in Step 1; Step 2 flips the call site.
+/// `changeCount` with the write token, restoring only if nothing else
+/// has touched the clipboard since the transcript write.
 ///
 /// # Empty snapshots are real snapshots
 ///
 /// Capturing with nothing on the pasteboard yields a valid (empty)
-/// snapshot; restoring an empty snapshot clears the pasteboard. Matches
-/// the pre-#072 auto-restore semantic (`restorePasteboard([])` cleared
-/// and wrote nothing); the previous Undo path silently turned "no
-/// string" into a no-op — that was a scope cut, not an invariant.
+/// snapshot; restoring an empty snapshot clears the pasteboard.
 @MainActor
 public final class PasteboardSnapshotService {
     /// Opaque receipt for a transient snapshot. Must be returned to the
@@ -118,8 +109,7 @@ public final class PasteboardSnapshotService {
     /// The only sanctioned path for writing a transcript string to the
     /// pasteboard. Clears existing contents, writes `string` as `.string`,
     /// and returns a `ClipboardWriteToken` carrying the post-write
-    /// `changeCount`. Returns `nil` only when the underlying write fails
-    /// (preserves `ClipboardBatchOutput`'s pre-refactor rollback signal).
+    /// `changeCount`. Returns `nil` only when the underlying write fails.
     public func replaceContents(with string: String) -> ClipboardWriteToken? {
         guard stringWriter(string) else {
             return nil

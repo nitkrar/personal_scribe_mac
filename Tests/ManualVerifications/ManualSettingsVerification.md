@@ -58,17 +58,17 @@ these entries are guidance, not a literal checklist item.
 
 `OnboardingCompletionObserver` watches the PermissionService and
 flips the `OnboardingCompleted` UserDefault to `true` the first time
-Microphone + Accessibility are both `.granted` (Accessibility carries
-the global hotkey's event tap and paste; Input Monitoring is not
-requested — Accessibility trust implies keyboard listen access). After the first
+Microphone + Accessibility are both `.granted`. Accessibility is used
+only to post ⌘V for auto-paste; registered hotkeys require no permission.
+After the first
 flip the observer self-terminates, so a later permission revoke in
 System Settings does NOT re-trigger first-run auto-open.
 
 - [ ] **MV-ONB-1 — fresh install grants both required perms:** clean
   the TCC database for the bundle (`tccutil reset All com.nitkrar.personal_scribe`
   then quit Ninimma). Launch Ninimma. Confirm the unified window
-  auto-opens to Settings → Permissions. Grant Microphone + Input
-  Monitoring via their "Grant Access" buttons; return to Ninimma.
+  auto-opens to Settings → Permissions. Grant Microphone +
+  Accessibility via their "Grant Access" buttons; return to Ninimma.
   Quit and relaunch. Confirm the unified window does NOT auto-open
   — it stays closed behind the menu-bar icon.
 - [ ] **MV-ONB-2 — accessibility alone does not complete onboarding:**
@@ -334,12 +334,10 @@ summary caption at the bottom that adapts to toggle state.
   clipboard — not A's pre-recording snapshot, not A's transcript. The
   `changeCount` guard prevents the stale restore from overwriting newer
   content.
-- **MV-072-6 — Cancel Card Undo still works (System A unified into
-  service):** start a recording, click ✕ on the pill before transcription
-  completes (or press Esc). The Cancel Card appears briefly with an Undo
-  button. Click Undo. The clipboard returns to whatever it held
-  pre-recording — including non-string types like RTF or file URLs
-  (fidelity upgrade over pre-#072 string-only behavior).
+- **MV-072-6 — Cancel leaves the clipboard unchanged:** copy an RTF
+  selection or file URL, start a recording, then click ✕ or press Esc.
+  The Cancel Card offers Resume, and the clipboard retains the original
+  content because cancelled sessions never reach output delivery.
 - **MV-072-7 — Auto-paste OFF skips Cmd+V post:** flip Auto-paste OFF.
   Start a recording, stop with focus in TextEdit. No transcript appears
   in TextEdit; the clipboard holds the transcript; `⌘V` pastes it.

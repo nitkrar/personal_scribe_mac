@@ -10,10 +10,6 @@ import PersonalScribeSession
 /// * `live` — live cursor streaming (partials during the session; its
 ///   `endSession` restores the clipboard it borrowed).
 /// * `batch` — final delivery to the recipe's sinks (clipboard, paste).
-///
-/// Replaces the former UI-side auto-paste in `MenuBarSceneModel`, which
-/// fired on every return to idle and re-pasted the previous transcript
-/// after an Esc cancel.
 public final class SessionOutputStage: PipelineOutputSink, @unchecked Sendable {
     private let live: any PipelineOutputSink
     private let batch: any OutputService

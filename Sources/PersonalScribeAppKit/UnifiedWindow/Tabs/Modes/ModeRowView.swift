@@ -19,9 +19,9 @@ struct ModeRowView: View {
     let onTapStar: () -> Void
 
     var body: some View {
-        // No gesture on the row itself: in a macOS `List` any row-level
-        // Button / tap gesture captures the mouse-down, which broke
-        // `.onMove` drags and swipe actions. The list's selection +
+        // No gesture on the row itself: in a macOS `List`, row-level
+        // buttons and tap gestures intercept `.onMove` and swipe input.
+        // The list's selection and
         // primary action (double-click / Return) opens the mode; the
         // small chevron and star buttons own only their own frames.
         HStack(spacing: PersonalScribeTheme.Spacing.md) {

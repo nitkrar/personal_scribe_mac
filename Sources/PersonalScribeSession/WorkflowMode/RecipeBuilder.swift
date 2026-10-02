@@ -174,7 +174,7 @@ public final class RecipeBuilder {
             return nil
         }
 
-        // Decision (2026-10-02, DECISIONS.md #24): the second pass re-runs
+        // DECISIONS #24: the second pass re-runs
         // the *same* model as the live pass over the full recording — one
         // model in memory, no extra load. Its value is full-recording
         // context, not a different model. Not a WhisperKit special case:

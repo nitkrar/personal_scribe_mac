@@ -48,9 +48,8 @@ final class AppEntryPointTests: XCTestCase {
 
         await coordinator.toggle()
         await coordinator.toggle()
-        // Delivery is the coordinator's pipeline output stage now
-        // (SessionOutputStage / SessionPipelineOrchestratorTests), not
-        // the app entry point.
+        // Delivery belongs to the coordinator's pipeline output stage,
+        // not the app entry point.
 
         XCTAssertTrue(entry.coordinator === coordinator)
         let state = await entry.coordinator.state()

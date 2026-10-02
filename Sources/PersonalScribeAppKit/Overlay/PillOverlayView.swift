@@ -494,9 +494,8 @@ private struct PillChrome: ViewModifier {
 /// anchor. Not a pill — its own cooler-navy background, red border, and
 /// right-aligned Resume button.
 ///
-/// Auto-dismiss + clipboard restore are managed on the view model side
-/// (`PillOverlayViewModel.cancel(...)` + `.undoCancel()`); this view is
-/// purely presentational.
+/// Auto-dismiss and Resume are managed by `PillOverlayViewModel`; this
+/// view is purely presentational.
 @MainActor
 struct CancelCardView: View {
     let onResume: @MainActor () -> Void

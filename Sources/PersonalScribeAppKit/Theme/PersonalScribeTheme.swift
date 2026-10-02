@@ -473,7 +473,7 @@ public enum PersonalScribeTheme {
             /// the pill's #1A1B2E — lets the card read as a sibling,
             /// not a continuation of the same surface).
             public static let background = color(hex: "1E2032")
-            /// #C9A96E on #281E0F — Undo button, matches the clay
+            /// #C9A96E on #281E0F — Resume button, matches the clay
             /// border family.
             public static let undoText = color(hex: "C9A96E")
             public static let undoFill = color(hex: "281E0F")

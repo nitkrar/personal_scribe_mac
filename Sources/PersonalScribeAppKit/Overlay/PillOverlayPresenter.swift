@@ -155,8 +155,8 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     var onMouseDragged: (() -> Void)?
     var onTap: (() -> Void)?
     var isTapEnabled: (() -> Bool)?
-    /// When true (Cancel Card up), clicks go to the SwiftUI content — its
-    /// Undo button — instead of the pill's tap / drag handling.
+    /// When true, clicks go to the Cancel Card's SwiftUI content instead
+    /// of the pill's tap and drag handling.
     var passesClicksToContent: (() -> Bool)?
     private var contentOwnsClick = false
     private var interactionState = OverlayPanelInteractionState()
@@ -187,10 +187,7 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
         }
         let localPoint = convert(event.locationInWindow, from: nil)
         _ = interactionState.drag(to: localPoint)
-        // Move the panel ourselves rather than via `performDrag`: that
-        // hands the drag to the window server and returns at once, so we
-        // never learned where the pill was dropped. Here mouse-up still
-        // reaches us with the final frame.
+        // Move the panel directly so mouse-up reports the dropped frame.
         guard interactionState.isDragging, let window, let dragAnchor else {
             return
         }
@@ -507,10 +504,8 @@ public final class PillOverlayPresenter {
 
         lastSizedVisibility = visibility
         if wasCancelled && !isFirstSizing {
-            // Leaving the Cancel Card: SwiftUI is crossfading card → pill
-            // inside the panel. Shrinking the panel mid-fade stalls the
-            // fade (old card stuck on screen, new pill invisible), so
-            // shrink once the fade has finished.
+            // Keep the panel at card size until SwiftUI's card-to-pill
+            // crossfade completes.
             pendingShrink?.cancel()
             let work = DispatchWorkItem { [weak self, weak panel] in
                 guard let self, let panel, self.lastSizedVisibility == visibility else { return }

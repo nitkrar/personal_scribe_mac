@@ -443,12 +443,7 @@ mockup:
 Input Monitoring row is a deliberate divergence: the permission isn't
 needed.)
 13. Accessibility subtitle reads **"Required to auto-paste transcripts"**
-    (or whatever the current `HotkeyPreference` formats to via
-    `HotkeyShortcutFormatter.displayString`). With the default preference
-    (option + `/`), the displayed hint is `⌥/`.
-14. Change the hotkey via Settings → Shortcuts → Change…, pick a new
-    binding, confirm, return to Permissions. The Accessibility subtitle
-    reflects the new hotkey.
+    and contains no shortcut hint.
 
 ## Settings → General — mockup-gaps D.1–D.3
 

@@ -227,8 +227,8 @@ on `DraggablePanel`, but the real-world effect is only observable at runtime.
 
 ## Pill UX redesign — 5-state interaction model (spec Claude_Pill_UX_Prompt.md, 2026-04-21)
 
-End-to-end runbook for Phases 1-6 (state machine + visuals + hotkey +
-Cancel Card + clipboard Undo + Esc monitor). Run in order after any
+End-to-end runbook for the state machine, visuals, hotkey, Cancel Card,
+and Esc monitor. Run in order after any
 rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
 `Sources/PersonalScribeAppKit/Hotkeys/`.
 
@@ -274,7 +274,7 @@ rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
   legacy). Persisted custom hotkeys from prior versions may need to
   be reset manually.
 
-### Cancel Card + Undo (spec §2f + §3 + §4)
+### Cancel Card + Resume (spec §2f + §3 + §4)
 
 - [ ] **MV-PUX-10 (Esc while recording → Cancel Card, NO transcript)**
   Start a recording and speak a phrase. Press Esc. Pill surface is
@@ -292,17 +292,14 @@ rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
   when the pill isn't active. You can still use Esc in other apps /
   dialogs.
 - [ ] **MV-PUX-13 (Cancel Card auto-dismiss)** Trigger a Cancel Card.
-  Wait 4 seconds. Card fades out and the pill returns to idle.
+  Wait for the configured Cancel card duration. Card fades out and the
+  pill returns to idle.
 - [ ] **MV-PUX-14 (Esc-cancel leaves clipboard untouched)** Copy a
   unique string (e.g., "pre-recording clipboard") into your clipboard.
   Start a recording, speak, press Esc mid-recording. Cancel Card
   appears. Confirm the clipboard **still contains your original
-  string** — no transcript paste occurred, so there's nothing to
-  undo. Clicking Undo on the Cancel Card is a visible no-op (kept
-  wired for compatibility until #070 reshapes the pill affordances).
-  Post-#002 the Undo button is semantically weakened; this runbook
-  entry will fully retire when #070 or a follow-up removes the Undo
-  UI.
+  string**. Click Resume, continue speaking, then stop; one transcript
+  containing both parts is delivered.
 
 ### Esc global monitor — regression guards
 
@@ -370,7 +367,7 @@ recording). #044 makes the panel resize per visibility so panel frame
   recording (220) back to done (100). If user drags the pill, the
   card follows.
 
-## Edge-aware placement (2026-10-02)
+## Edge-aware placement
 
 Pill and cards go through `OverlayPlacement`: the pill stays inside the
 screen's visible area (8pt margin), and cards stay centered on the pill
@@ -442,7 +439,7 @@ paste whenever the focus owner is not Ninimma's pid.
 - Light-mode parity check: flip macOS Appearance to Light and repeat
   MV-B1-1 + MV-B1-5 to confirm palette resolution.
 
-## Cancel card: Resume (2026-10-02)
+## Cancel card: Resume
 
 Esc / ✕ during a recording keeps its audio while the Cancel card is up
 (Settings → Behavior → "Cancel card duration", default 3s). Resume

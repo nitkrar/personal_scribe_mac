@@ -73,9 +73,8 @@ final class MicrophoneFooterViewModelTests: XCTestCase {
         XCTAssertNil(model.currentDeviceName)
     }
 
-    /// No persisted selection — capture uses the macOS default input,
-    /// so the footer must name it (it used to show "No input device"
-    /// while recording worked).
+    /// With no persisted selection, the footer names the macOS default
+    /// input used by capture.
     func testShowsSystemDefaultDeviceNameWhenNothingSelected() {
         let devices = [
             AudioInputDevice(id: "uid-usb", name: "USB Mic"),

@@ -66,11 +66,6 @@ struct PersonalScribeAppMain: App {
             visibilityModeSource: AppKitVisibilityModeProvider(defaults: defaults)
         )
         appStore.start()
-        // Shared snapshot service — #072 Step 1 unifies the Cancel Card Undo
-        // path and the auto-restore-after-paste path behind a single
-        // `PasteboardSnapshotService` instance. Previously split across
-        // `PasteboardSnapshotService` (session-lifecycle) and
-        // `ClipboardBatchOutput.savedItems` (output-pipeline).
         let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
         let isOnboardingCompleteProvider: @MainActor () -> Bool = {
             onboardingCompletionPreference.resolve()
@@ -121,15 +116,8 @@ struct PersonalScribeAppMain: App {
             store: AppComposition.diagnosticsStore
         )
 
-        // #002: global Esc truly discards an active recording — no
-        // transcribe, no paste. Guarded against firing outside the
-        // recording / hold-to-record states so Esc elsewhere (dialogs,
-        // text fields, other apps) stays intercept-free. The pill's
-        // Cancel Card still fires via `viewModel.cancel()` for the
-        // visual feedback; the Phase 5 pasteboard snapshot Undo
-        // restore is a no-op on this path (no paste occurred) but
-        // stays wired for compatibility. #070 will reshape the pill
-        // affordances around pause/resume.
+        // Esc cancels only an active recording. The Cancel Card retains
+        // its audio until Resume or the configured timeout.
         let escapeKeyMonitor = EscapeKeyMonitor(
             router: AppComposition.keyEventRouter
         ) { [weak pillController, weak coordinator] in
@@ -390,12 +378,9 @@ struct PersonalScribeAppMain: App {
         // Native NSStatusItem + NSMenu lives in StatusItemController
         // (owned by StatusItemControllerHost above). Per
         // plans/seshat_agent_bundle/03_Surfaces/MenuBarMenu/IMPORTANT.md
-        // the menu bar is zero-SwiftUI; we keep a never-inserted
-        // MenuBarExtra here only to satisfy SwiftUI.App's non-empty-body
-        // requirement. It owns no window, so nothing can appear at
-        // launch. (A `Settings { EmptyView() }` placeholder used to sit
-        // here; the app isn't LSUIElement, and macOS 26 presented it as
-        // a blank "Ninimma Settings" window on launch.)
+        // The menu bar is AppKit-owned. A never-inserted MenuBarExtra
+        // satisfies SwiftUI.App's non-empty-body requirement without
+        // creating a launch-time window.
         //
         // `.commands { CommandGroup(replacing: .appSettings) }` overrides
         // SwiftUI's default `⌘,` handler so the shortcut opens our real

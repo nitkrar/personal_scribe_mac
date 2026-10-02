@@ -14,8 +14,7 @@ public enum PillVisibilityState: Sendable, Equatable {
     case done
     /// Recording was discarded without transcribing (✕ button or Esc).
     /// The pill panel is replaced at the same screen anchor by the
-    /// Cancel Card (Phase 3) with an Undo affordance. Clipboard is
-    /// restored to its pre-session contents if Undo is invoked.
+    /// Cancel Card with a Resume affordance while captured audio is kept.
     case cancelled
     case error(message: String)
 }

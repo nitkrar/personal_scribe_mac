@@ -454,10 +454,8 @@ final class PillOverlayViewModelTests: XCTestCase {
     }
 
     func testCancelledStateIsStickyAgainstIncomingSessionVisibilityUpdates() {
-        // Once the view model enters `.cancelled`, session-state updates
-        // must not clobber the Cancel Card before the user sees it —
-        // including the session's own `.capturing → .idle` on cancel,
-        // which used to wipe the card ~50 ms after Esc.
+        // Session-state updates must not replace the Cancel Card before
+        // Resume or its configured timeout.
         let viewModel = PillOverlayViewModel()
         viewModel.apply(visibility: .recording)
         viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })

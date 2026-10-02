@@ -15,10 +15,7 @@ enum FastExitApplicationTerminationHandler {
 
     /// Graceful shutdown with a hard deadline. If a step hangs (e.g. a
     /// wedged session pipeline), the deadline fires off the main actor —
-    /// which may itself be the thing that's stuck — logs the step it was
-    /// waiting on, and exits anyway. Without it, a hung step left the
-    /// process alive with every later quit swallowed by the delegate's
-    /// in-flight guard.
+    /// which may itself be stuck — logs the pending step and exits.
     static func makePrequitHandler(
         stopIfActive: @escaping AsyncAction,
         shutdownPreparedWhisperCppAdapters: @escaping AsyncAction,

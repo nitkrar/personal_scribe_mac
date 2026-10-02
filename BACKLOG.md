@@ -911,18 +911,14 @@ back-to-back case. Surface the trade-off in adapter logging
 `bug` · `P2` · `open` · `area: window, spaces`
 *Opened 2026-10-02*
 
-Repro: open the Ninimma window on the desktop Space, swipe to a full-screen app (iTerm) and back. The window shows for ~1–2s during the transition, then ends up behind another app's window (it is still on the desktop Space per Mission Control). Happens with Background mode on and off; in Background mode only the menu bar recovers it.
+Repro: open the Ninimma window on a desktop Space, switch to a full-screen app, then return. The window appears during the transition but settles behind another app's window. Background mode does not affect the result.
 
-Findings (diagnostics logs, 2026-10-02):
-- `NSWorkspace.activeSpaceDidChangeNotification` arrives *before* `didResignActive`, and by resign time the window is already not key/main — so the #041 recovery (`pendingRestore` armed on key/main at resign) never arms.
-- On return macOS activates another app on that desktop (Chrome), not Ninimma, so the activation-based restore never fires either.
-- Removing `.fullScreenAuxiliary` (window `[.moveToActiveSpace]` only) did NOT help; activation policy (Background on/off) made no difference.
+Constraints:
+- `NSWorkspace.activeSpaceDidChangeNotification` arrives before `didResignActive`, when the window is no longer key or main, so #041's `pendingRestore` does not arm.
+- macOS activates another app on the destination Space, so activation-based restore does not run.
+- Raising the window after the Space change causes a visible frontmost-app flicker and can incorrectly restore Ninimma after the user switches to another app.
 
-Tried: arm on "Ninimma was active when the Space was left" and raise the window on return (`plans/backlog/101-space-return-restore.patch`, incl. `unified_window_space_changed` / `unified_window_app_resigned` diagnostics). Works, but visibly flickers (macOS raises Chrome first, then we raise Ninimma). Known gap: leaving from Ninimma then ⌘-Tab to another app on the desktop would also restore.
-
-Next ideas: find what macOS uses to pick the post-return frontmost app (window ordering / `NSWindow.isExcludedFromWindowsMenu`, `.managed` behavior, a second key window like the pill panel stealing frontmost status); raise earlier (on `NSWorkspace.activeSpaceDidChange` before the animation settles) or via `orderFrontRegardless` without app activation to cut the flicker.
-
-Decided (2026-10-02): opening from the menu bar while in a full-screen app may switch to the desktop Space — acceptable to the user.
+Investigate window ordering and an early, non-activating `orderFrontRegardless` restore. Opening Ninimma from its menu bar item may switch from a full-screen app to the desktop Space.
 
 ---
 
@@ -931,15 +927,11 @@ Decided (2026-10-02): opening from the menu bar while in a full-screen app may s
 `feature` · `bug` · `P2` · `open` · `area: pill, overlay, settings`
 *Opened 2026-10-02*
 
-User request + findings (2026-10-02):
-
-1. **Edge-aware layout (feature).** When the pill is dragged to a screen edge it should adapt: horizontal along the top/bottom edges, vertical along the left/right edges. The user expects a vertical capsule may look clunky — a round (circular) pill on the sides is the alternative to evaluate.
+1. **Edge-aware layout.** When the pill is dragged to a screen edge it should adapt: horizontal along the top/bottom edges and vertical or circular along the left/right edges.
 2. **Style setting does nothing (bug, by omission).** Settings → Recording window → Style (Classic / Mini / None) only persists `PillStyle` and drives the Settings preview cards; nothing in `PillOverlayView` / `PillOverlayPresenter` reads it (documented as deferred in `PillStyle.swift` / mockup-gaps D.1). Also define what **None** means vs. the separate pill Visibility "Hidden" setting (`PillStyle.none` = "pill hidden regardless of PillVisibility") — likely redundant; merge or drop.
-3. ~~**Light theme hides the logo (bug).**~~ **Fixed 2026-10-02 (phase-1 step 102.16):** whole pill inverts — see commit. Original report: `PillOverlayPresenter.applyResolvedAppearance()` applies Light/Dark to the panel, so foreground tokens switch to `Pill.Light.*` (dark ink), but the pill background in `PillOverlayView` is hardcoded dark navy ("scheme-invariant") → dark-on-dark, logo/waveform invisible. System behaves the same whenever macOS is in light mode. Fix: make the background follow the resolved appearance (light bg `#F0EDE8` already used by the Settings preview), or drop the theme option and make the pill dark-only.
+3. **Style preview cards are stale.** Settings → Recording window → Style previews draw a single-line equalizer instead of the pill's three-strand waveform. Update them after defining Classic, Mini, and None.
 
-4. **Settings → Recording window → Style preview cards** still draw the old single-line equalizer, not the three-strand waveform. Update them as part of this refactor (after deciding what Classic/Mini/None become) — user decision 2026-10-02: fix the pill first, then the row.
-
-Scope note: 2 and 3 are independent quick fixes; 1 is the actual refactor (layout per edge, snapping, transitions for recording/transcribing/done states, stream card placement on vertical/round variants).
+Scope: layout per edge, snapping, state transitions, stream-card placement on vertical or circular variants, and wiring the style setting into the overlay.
 
 ---
 
@@ -948,9 +940,7 @@ Scope note: 2 and 3 are independent quick fixes; 1 is the actual refactor (layou
 `bug` · `P3` · `open` · `area: transcription, streaming`
 *Opened 2026-10-02*
 
-Found by the opt-in real-model benchmark (`StreamingSecondPassBenchmarkTests`, run with `NINIMMA_BENCH_WAV=…`). Feeding 32 s of audio to `WhisperKitAdapter.transcribe(stream:)` in one burst (faster than real time) never completes: the process sits at 0% CPU inside `LiveWhisperKitRuntimeBridge.finish()` — `stopStreamTranscription()` is called but `transcriberTask` never ends. Fed at real-time pace (like the mic) it completes normally, so live dictation isn't affected today; it would bite any path that hands WhisperKit buffered audio at once (e.g. a capture stall then catch-up, or a future file-to-streaming path). Parakeet EOU handles the burst fine.
-
-Benchmark results that motivated it (31.8 s TTS audio, real-time fed): WhisperKit small.en first partial 2.2 s, second pass 2.4 s (76 ms/audio-s), 2 word errors; Parakeet EOU first partial 0.55 s + Parakeet TDT second pass 0.3 s (9 ms/audio-s), 0 word errors.
+Repro with the opt-in `StreamingSecondPassBenchmarkTests` (`NINIMMA_BENCH_WAV=…`): feed a recording to `WhisperKitAdapter.transcribe(stream:)` in one burst. `LiveWhisperKitRuntimeBridge.finish()` calls `stopStreamTranscription()`, but `transcriberTask` does not end. Real-time-paced input completes. Burst delivery can occur when capture catches up after a stall; Parakeet EOU completes under the same input pattern.
 
 ---
 
@@ -1082,7 +1072,7 @@ State ownership keeps fragmenting during ostensibly-simple tasks: the same conce
 
 **Examples:**
 - **Consolidated (good precedent):** session + capture pipeline (see `plans/central/`). One coordinator, one state machine.
-- **Previously fragmented (unified as part of #072):** clipboard snapshotting split across `PasteboardSnapshotService` (session-lifecycle) and `ClipboardBatchOutput.savedItems` (output-pipeline). Landed as one consolidated `PasteboardSnapshotService` with durable `.cancelUndo` slot + transient handles.
+- **Consolidated (good precedent):** `PasteboardSnapshotService` owns transient clipboard snapshots and guarded restore tokens for output delivery.
 
 Audit scope intentionally left open. Walk state concepts, not classes. Details filled in during the audit — not now.
 
@@ -1308,17 +1298,6 @@ Auto-archive transcripts older than N days or shorter than M chars; hide from pr
 
 ---
 
-### #055 — Full clipboard save/restore (all pasteboard types)
-
-`feature` · `P3` · `parked` · `area: output`
-*Updated 2026-04-22*
-
-Extend the Phase 5 Cancel Card Undo path from `.string`-only to all `NSPasteboard` types (RTF, images, file URLs, custom UTIs). Needed when a user dictates into a context where they had non-string clipboard contents and then discards via Cancel Card.
-
-**Legacy:** `plans/_legacy/BACKLOG_pre_migration.md` → "Full clipboard save/restore (all pasteboard types)"
-
----
-
 ### #053 — 7-stage post-processing pipeline
 
 `feature` · `P2` · `parked` · `area: post-processing, memory-learning`
@@ -1326,7 +1305,7 @@ Extend the Phase 5 Cancel Card Undo path from `.string`-only to all `NSPasteboar
 
 Extend #045 Stage A's chain-of-stages architecture with named stages that add new transformation behavior: ITN → punctuation → filler removal → personal dictionary → capitalization → disfluency repair → formatter. Each stage is additive output cleanup, not a restructuring of existing logic. ITN (Inverse Text Normalization) subsumes FluidAudio `CustomPronunciation.md` path.
 
-**User request 2026-10-02 (ITN first):** dictation currently writes spoken forms verbatim in English words. Competing apps convert to written forms — "one dollar" → "$1", "twenty percent" → "20%", "march third" → "March 3", "five thirty pm" → "5:30 PM", "one two three main street" → "123 Main Street". ITN is the stage the user notices most; consider shipping it ahead of the other six. Must run after `NonSpeechMarkerFilter` (phase-1 step 102.9) and apply to the final text and live EOU chunks alike.
+**Priority: ITN first.** Convert spoken forms such as "one dollar", "twenty percent", dates, times, and addresses into written forms. Run after `NonSpeechMarkerFilter` and apply to final text and live EOU chunks.
 
 **Depends on:** #045 Stage A (the chain architecture must exist first)
 **Legacy:** `plans/_legacy/BACKLOG_pre_migration.md` → "7-stage post-processing pipeline"

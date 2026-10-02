@@ -21,14 +21,8 @@ public final class PillOverlayViewModel: ObservableObject {
     /// Latest session-driven visibility received while the Cancel Card
     /// was up; shown when the card closes.
     private var heldVisibility: Visibility?
-    /// Override that suppresses incoming `apply(visibility:)` calls from
-    /// the AppStore session-state mapping while `.cancelled` is
-    /// "sticky". Without this, the session's normal
-    /// `.capturing → .idle` transition on cancel would immediately
-    /// clobber `.cancelled` before the user sees the Cancel Card.
-    /// Phase 3 uses `isShowingCancelCard` to gate those updates; Phase 5
-    /// inspects the same flag when deciding whether to restore
-    /// clipboard on Undo.
+    /// Whether the Cancel Card owns presentation. Incoming session state
+    /// is held until the card closes.
     public var isShowingCancelCard: Bool {
         visibility == .cancelled
     }
@@ -65,11 +59,8 @@ public final class PillOverlayViewModel: ObservableObject {
             self.visibilityMode = visibilityMode
         }
 
-        // Sticky Cancel Card: once `.cancelled` has been entered,
-        // external session-driven visibility updates are held off until
-        // the 4s auto-dismiss fires or the user clicks Undo. Prevents
-        // the session's own `.capturing → .idle` cancel transition
-        // from wiping the Cancel Card before the user can see it.
+        // Keep the Cancel Card visible until Resume or its configured
+        // timeout, while retaining the latest session-driven state.
         if isShowingCancelCard && visibility != .cancelled {
             heldVisibility = visibility
             return

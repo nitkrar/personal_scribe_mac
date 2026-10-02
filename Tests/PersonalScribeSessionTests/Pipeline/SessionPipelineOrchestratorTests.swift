@@ -469,9 +469,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(observed.last?.lastCompletedResult?.text, "Hidden transcript.")
     }
 
-    /// Second pass enabled but nothing to run it with (streaming-only
-    /// model, no dictation model active) used to read as an unexplained
-    /// `secondPassTranscriber=nil`; the session log now says why.
+    /// A missing dictation fallback explains why second pass is skipped.
     func testSecondPassLogDescriptionExplainsSkip() {
         XCTAssertEqual(SessionPipelineOrchestrator.secondPassDescription(enabled: true, transcriberBound: true), "set")
         XCTAssertEqual(SessionPipelineOrchestrator.secondPassDescription(enabled: false, transcriberBound: false), "off")
@@ -508,8 +506,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(sinks, [[.frontmostPaste(enabled: true)]])
     }
 
-    /// Esc cancel: the session never reaches the output stage, so nothing
-    /// is delivered (the old UI-driven paste re-pasted the previous text).
+    /// A cancelled session never reaches the output stage.
     func testCancelledSessionNeverReachesOutputStage() async throws {
         let outputSink = TestPipelineOutputSink()
         let orchestrator = makeOrchestrator(

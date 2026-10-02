@@ -1,92 +1,54 @@
 # Hotkeys — Manual Verification Runbook
 
-Hotkey routing depends on global `NSEvent` monitoring and app lifecycle
-integration that XCTest cannot fully prove in-process. Run the checklist
-below after changes in `Sources/PersonalScribeAppKit/Hotkeys/` or the hotkey
-composition wiring.
+Hotkey routing depends on macOS hot-key registration, local `NSEvent`
+monitoring, and app lifecycle integration that XCTest cannot fully prove
+in-process. Run the checklist below after changes in
+`Sources/PersonalScribeAppKit/Hotkeys/` or the hotkey composition wiring.
 
-## Double-tap ⌥ recording toggle (regression baseline)
+## Tap and hold gestures
 
-- [ ] **MV-HK-1** Double-tap right Option within ~0.4s — pill enters
-  recording state (waveform animates) **immediately on the second tap,
-  no perceptible delay**. Double-tap again — pill stops and
-  transcription fires. If you notice a delay between the second tap
-  and the pill appearing, the old deferred-toggle regression is back.
-- [ ] **MV-HK-2** Single right-Option press — nothing happens. No pill,
-  no session.
-- [ ] **MV-HK-3** Two taps spaced > 0.4s apart — no toggle fires (window
-  expired, second tap starts a fresh sequence).
-- [ ] **MV-HK-4** Triple-tap right Option within ~0.4s between taps —
-  the FIRST two taps fire the toggle (recording starts); the third tap
-  alone does nothing (window reset). App does NOT quit. The
-  triple-tap emergency-quit path was removed — the last survival of
-  accidental triple-taps is "recording started" rather than "app
-  terminated".
+- [ ] **MV-HK-1** Tap ⌥+/ and release within 300ms. The pill enters
+  recording state. After 400ms, tap again; recording stops and
+  transcription runs.
+- [ ] **MV-HK-2** Hold ⌥+/ for more than 300ms. Hold-to-record starts;
+  releasing the chord stops capture and runs transcription.
+- [ ] **MV-HK-3** Tap ⌥+/ twice within 400ms. Recording starts once;
+  the second tap is absorbed instead of stopping the new session.
+- [ ] **MV-HK-4** Tap ⌥+/ twice with more than 400ms between releases.
+  The first tap starts recording and the second stops it.
 
-## Hotkey fires when Ninimma is frontmost (bug #4)
+## Hotkey fires when Ninimma is frontmost
 
-`NSEvent.addGlobalMonitorForEvents` only fires for events headed to
-*other* apps. A matching `addLocalMonitorForEvents` is now installed
-alongside, so the hotkey still works when our own window is frontmost.
-Matching events are swallowed so `÷` doesn't leak into Ninimma's text
-fields. This does NOT address `÷` leakage into *other* apps during
-hold (bug #5 — requires a CGEventTap).
+`RegisterEventHotKey` delivers configured shortcuts while another app is
+frontmost. A local `NSEvent` monitor handles the same shortcut when
+Ninimma is frontmost. Both paths suppress the matching chord.
 
 - [ ] **MV-HK-5** Open the unified window and click to make it
   frontmost. Tap ⌥+/ — the pill appears and recording starts. Tap
-  again — recording stops and transcription fires. Regression guard
-  for bug #4 (2026-04-21 dogfood) where the hotkey was dead whenever
-  Ninimma was focused.
+  again — recording stops and transcription fires.
 - [ ] **MV-HK-6** With the unified window frontmost, focus a text
   field (Shortcuts → Record field, or any Settings text input). Tap
   ⌥+/ — recording starts AND the text field must remain empty (no `÷`
   inserted). Regression guard for local-monitor swallow logic.
 - [ ] **MV-HK-7** Switch to another app (e.g. Notes) until Ninimma's
-  window is NOT frontmost. Tap ⌥+/ — recording still starts. Regression
-  guard that the original global-monitor path still works.
+  window is NOT frontmost. Tap ⌥+/ — recording still starts.
 
-## CGEventTap swallow — `÷÷÷÷` leak fix (bug #5a-v1 c2)
+## Registered shortcuts are suppressed system-wide
 
-`GlobalHotkeyMonitor`'s global path now uses a `CGEventTap` instead of
-`NSEvent.addGlobalMonitorForEvents`. The tap sits at
-`.cgSessionEventTap` + `.headInsertEventTap`, can return `nil` from its
-callback, and swallows matching ⌥+/ events system-wide — so `÷`
-keystrokes no longer leak into focused apps.
+`GlobalHotkeyMonitor` registers configured chords through
+`RegisterEventHotKey`. macOS delivers those chords only to Ninimma and
+does not deliver their key events to the focused app.
 
-- [x] **MV-HK-8** Open any other app (Notes, TextEdit, Safari address
+- [ ] **MV-HK-8** Open any other app (Notes, TextEdit, Safari address
   bar) and click into a text field so it owns focus. **Tap ⌥+/ once**
   — recording starts, and the text field stays empty (no stray `÷`
-  character). Tap again — recording stops, still no `÷`. Regression
-  guard for 5a's CGEventTap swallow on tap/double-tap.
-  Verified 2026-04-21 on DMG.
-- [x] **MV-HK-9** Same setup. **Hold ⌥+/ for ~1.5s, then release.**
+  character). Tap again — recording stops, still no `÷`.
+- [ ] **MV-HK-9** Same setup. **Hold ⌥+/ for ~1.5s, then release.**
   The text field stays empty throughout — no `÷÷÷÷` stream from auto-
-  repeat keyDowns. Pre-5a this leaked; post-5a the tap consumes each
-  repeat before it reaches the target app. Regression guard for the
-  auto-repeat swallow.
-  Verified 2026-04-21 on DMG.
-- [x] **MV-HK-10** ~~Grant Input Monitoring permission freshly (e.g.
-  remove Ninimma from the list in System Settings → Privacy & Security
-  → Input Monitoring, relaunch). The hotkey should fail silently until
-  re-granted, then start working on re-grant without a second relaunch.
-  Confirms `CGEvent.tapCreate` nil handling routes through the existing
-  permission-failure path.~~
-  **Premise stale post-5a.** `.cgSessionEventTap` + `.headInsertEventTap`
-  can be satisfied by *either* Input Monitoring or Accessibility on
-  modern macOS; our app grants Accessibility for paste synthesis
-  (`ClipboardBatchOutput.swift:54`), so removing Input Monitoring alone
-  doesn't disable the hotkey. To actually exercise the fail-open path,
-  revoke BOTH Input Monitoring AND Accessibility for Ninimma before
-  relaunch. Verified 2026-04-21: accessibility-grant path carries the
-  tap cleanly. Re-verified 2026-10-02 with no Input Monitoring entry at
-  all (hotkey works; `IOHIDCheckAccess` reports granted under
-  Accessibility trust), so the Input Monitoring permission was removed
-  from the app entirely — see MV-SHORT-7 (hotkeys need no Accessibility).
-- [x] **MV-HK-11** Press a plain `/` (no option) in another app's text
-  field. The `/` character types normally — tap swallow is scoped to
-  the matching hotkey, not all keyDowns. Regression guard for the
-  swallow-decision logic.
-  Verified 2026-04-21 on DMG.
+  repeat keyDowns.
+- [ ] **MV-HK-11** Press a plain `/` (no option) in another app's text
+  field. The `/` character types normally because only registered
+  chords are suppressed.
 
 ## Hold-to-record no longer wedges after release (bug #71)
 

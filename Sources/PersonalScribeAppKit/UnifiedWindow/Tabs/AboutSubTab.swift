@@ -103,10 +103,8 @@ struct AboutSubTab: View {
                     .multilineTextAlignment(.center)
             }
             .padding(PersonalScribeTheme.Spacing.lg)
-            // Fixed width, not `maxWidth`: the wrapping origin text reports
-            // its single-line ideal width, so a max-width card made the
-            // detail column request more width than the window has and
-            // macOS blanked the sidebar column (same class as bug #1b).
+            // Fixed width prevents wrapping text's single-line ideal size
+            // from expanding the detail column past the window width.
             .frame(width: cardWidth, alignment: .center)
             .background(
                 RoundedRectangle(

@@ -27,7 +27,7 @@ import PersonalScribeCore
 ///   stream is jumpy.
 /// * `palette` — strand colors (Settings → Waveform colors).
 /// * `onDarkBackground` — picks the palette's dark- or light-background
-///   shades; the pill background is always dark until #102.
+///   shades.
 ///
 /// ## Rendering
 /// `TimelineView(.animation(minimumInterval: 1/30))` always drives the
@@ -134,8 +134,7 @@ public struct SineWaveView: View {
         Canvas { context, size in
             let w = size.width
             let h = size.height
-            // Motion only with voice (user: constant idle motion was
-            // disorienting) — silence collapses all strands to one line.
+            // Silence collapses all strands to one line.
             // Gain on top of the sqrt curve so conversational levels give
             // visibly bigger strands; clamped so peaks stay inside the pill.
             let amplitude = min(

@@ -204,9 +204,8 @@ final class HotkeyRecorderModel: ObservableObject {
         chordSuspension = router.suspendGlobalChords()
     }
 
-    /// Stop capturing and hand the shortcuts back. Set / Cancel call this
-    /// directly: a dismissed sheet's view can outlive the dismissal, so
-    /// waiting for `onDisappear` left every hotkey suspended.
+    /// Stop capturing and restore registered shortcuts. Set / Cancel call
+    /// this directly because sheet dismissal can precede `onDisappear`.
     func detach() {
         deciderToken = nil
         chordSuspension = nil

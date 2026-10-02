@@ -2,14 +2,11 @@ import PersonalScribeCore
 import SwiftUI
 
 /// Colors for the pill's three recording-waveform strands
-/// (Settings → General → Waveform colors). Default `.siri` is the
-/// palette the strands shipped with.
+/// (Settings → General → Waveform colors).
 ///
 /// Each palette defines its hues for a dark pill background; the
 /// light-background shades are the same hues darkened so they keep
-/// contrast on the cream pill once #102 makes the pill background
-/// follow the theme. Until then the pill is always dark, so callers
-/// pass `onDarkBackground: true`.
+/// contrast on the cream pill.
 public enum WaveformPalette: String, CaseIterable, Identifiable, Codable, Sendable {
     case siri
     case champagne

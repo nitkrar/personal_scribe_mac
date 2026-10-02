@@ -277,10 +277,9 @@ extension FluidAudioParakeetTranscriberAdapter {
         let progressBroadcaster = self.progressBroadcaster
 
         do {
-            // Skip the download step entirely when the files are already
-            // on disk: `DownloadUtils.downloadRepo` lists the HF repo over
-            // the network before skipping existing files, which flashed
-            // "Downloading 0%" on every launch and failed prepare offline.
+            // `DownloadUtils.downloadRepo` queries the remote repository
+            // before checking existing files, so complete local artifacts
+            // must bypass it to support offline preparation.
             if !ModelArtifactValidation.areValid(in: modelDirectory, descriptor: descriptor) {
                 try await manager.downloadIfNeeded(
                     to: modelsRoot,
