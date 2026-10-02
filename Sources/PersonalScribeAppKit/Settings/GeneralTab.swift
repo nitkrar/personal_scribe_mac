@@ -97,6 +97,7 @@ public struct GeneralTab: View {
                     .frame(maxWidth: .infinity)
                 }
             }
+
         }
         .onAppear {
             viewModel.refreshLaunchAtLoginStatus()
@@ -560,6 +561,23 @@ public struct GeneralTab: View {
                 Text("System").tag(PillAppearance.system)
             }
             .pickerStyle(.segmented)
+
+            // Waveform colors sit with the other color choices (Style in
+            // Recording window is about the pill's shape).
+            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                Text("Waveform colors")
+                HStack(spacing: 6) {
+                    ForEach(WaveformPalette.allCases) { palette in
+                        WaveformPaletteChip(
+                            palette: palette,
+                            isSelected: viewModel.waveformPalette == palette
+                        ) {
+                            viewModel.setWaveformPalette(palette)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            }
         }
     }
 
@@ -643,6 +661,7 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var windowTint: WindowTint
     @Published private(set) var pillAppearance: PillAppearance
     @Published private(set) var pillStyle: PillStyle
+    @Published private(set) var waveformPalette: WaveformPalette
     @Published private(set) var clipboardRestoreDelay: ClipboardRestoreDelay
     @Published private(set) var visibilityError: VisibilityConfigError?
     @Published private(set) var launchAtLogin: Bool
@@ -774,6 +793,7 @@ final class GeneralTabViewModel: ObservableObject {
         self.windowTint = WindowTint.resolve(from: defaults)
         self.pillAppearance = PillAppearance.resolve(from: defaults)
         self.pillStyle = PillStyle.resolve(from: defaults)
+        self.waveformPalette = WaveformPalette.resolve(from: defaults)
         self.clipboardRestoreDelay = ClipboardRestoreDelay.resolve(from: defaults)
         // launchAtLogin seeds from the injected service. The real impl
         // (`SystemLaunchAtLoginService`) reads SMAppService.mainApp.status
@@ -974,6 +994,13 @@ final class GeneralTabViewModel: ObservableObject {
         style.persist(to: defaults)
     }
 
+    /// Persists the recording-waveform palette. The pill reads the same
+    /// key via `@AppStorage`, so the change applies live.
+    func setWaveformPalette(_ palette: WaveformPalette) {
+        waveformPalette = palette
+        palette.persist(to: defaults)
+    }
+
     /// Persists the "Background mode" preference. Does NOT apply the
     /// activation policy live — flipping `NSApp.setActivationPolicy`
     /// mid-session while a window is open produces visible weirdness
@@ -1050,6 +1077,53 @@ final class GeneralTabViewModel: ObservableObject {
 
     private static func formatSeconds(_ seconds: TimeInterval) -> String {
         String(format: "%.1f", seconds)
+    }
+}
+
+// MARK: - Waveform palette chip
+
+/// Selectable swatch for one `WaveformPalette`: the three strand colors
+/// on the pill's dark background (the pill is always dark until #102),
+/// with a champagne border when selected.
+@MainActor
+private struct WaveformPaletteChip: View {
+    let palette: WaveformPalette
+    let isSelected: Bool
+    let onSelect: @MainActor () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(spacing: 4) {
+                HStack(spacing: 3) {
+                    ForEach(Array(palette.strandColors(onDarkBackground: true).enumerated()), id: \.offset) { _, color in
+                        Capsule()
+                            .fill(color)
+                            .frame(width: 8, height: 2)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 14)
+                .background(
+                    Capsule().fill(PersonalScribeTheme.Palette.dark.pillBackground)
+                )
+                Text(palette.displayName)
+                    .font(.system(size: 10))
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .padding(4)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(
+                        isSelected ? PersonalScribeTheme.Palette.dark.brandChampagne : Color.secondary.opacity(0.25),
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(palette.displayName) waveform colors")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

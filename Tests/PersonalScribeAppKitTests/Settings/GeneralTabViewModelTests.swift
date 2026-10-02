@@ -13,6 +13,18 @@ final class GeneralTabViewModelTests: XCTestCase {
         return defaults
     }
 
+    func testSetWaveformPalettePublishesAndPersistsSelection() {
+        let defaults = isolatedDefaults()
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+        XCTAssertEqual(viewModel.waveformPalette, .siri)
+
+        viewModel.setWaveformPalette(.sunset)
+
+        XCTAssertEqual(viewModel.waveformPalette, .sunset)
+        XCTAssertEqual(WaveformPalette.resolve(from: defaults), .sunset)
+        XCTAssertEqual(GeneralTabViewModel(defaults: defaults).waveformPalette, .sunset)
+    }
+
     func test_applyVisibilityConfig_rejectsBothHidden() {
         let defaults = isolatedDefaults()
         var menuBarVisible = true

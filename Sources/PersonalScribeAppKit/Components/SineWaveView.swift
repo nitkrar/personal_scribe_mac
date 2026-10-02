@@ -25,7 +25,9 @@ import PersonalScribeCore
 ///   `WaveformView`'s smoothing shape. Default `.animated` keeps the
 ///   pill's recording wave visually continuous even when the mic RMS
 ///   stream is jumpy.
-/// * `tint` — stroke color.
+/// * `palette` — strand colors (Settings → Waveform colors).
+/// * `onDarkBackground` — picks the palette's dark- or light-background
+///   shades; the pill background is always dark until #102.
 ///
 /// ## Rendering
 /// `TimelineView(.animation(minimumInterval: 1/30))` always drives the
@@ -43,7 +45,8 @@ import PersonalScribeCore
 public struct SineWaveView: View {
     public let audioLevel: Double
     public let decayMode: WaveformDecayMode
-    public let tint: Color
+    public let palette: WaveformPalette
+    public let onDarkBackground: Bool
 
     static let loopPeriod: Double = 1.2
 
@@ -58,11 +61,13 @@ public struct SineWaveView: View {
     public init(
         audioLevel: Double,
         decayMode: WaveformDecayMode = .animated,
-        tint: Color
+        palette: WaveformPalette = .default,
+        onDarkBackground: Bool = true
     ) {
         self.audioLevel = audioLevel
         self.decayMode = decayMode
-        self.tint = tint
+        self.palette = palette
+        self.onDarkBackground = onDarkBackground
     }
 
     public var body: some View {
@@ -101,37 +106,72 @@ public struct SineWaveView: View {
         }
     }
 
+    /// J.A.R.V.I.S.-style layered strands ("a robot listening"): each
+    /// line waves with its own frequency, drift speed/direction,
+    /// amplitude share and opacity, with a tapered envelope so strands
+    /// converge at the ends. No flicker — smooth waving only. All
+    /// amplitudes scale with the smoothed mic level, so silence
+    /// collapses every strand to the midline.
+    /// Strand shapes; colors come from `palette`. Normal blending —
+    /// additive blending summed near-overlapping strands to white.
+    static let strands: [Strand] = [
+        Strand(frequency: 1.6, speed: 1.0, amplitudeShare: 1.0, lineWidth: 1.3),
+        Strand(frequency: 2.4, speed: -1.4, amplitudeShare: 0.8, lineWidth: 1.2),
+        Strand(frequency: 1.1, speed: 1.8, amplitudeShare: 0.62, lineWidth: 1.1),
+    ]
+
+    static let strandGain: CGFloat = 2.0
+
+    struct Strand {
+        let frequency: Double
+        let speed: Double
+        let amplitudeShare: CGFloat
+        let lineWidth: CGFloat
+    }
+
     @ViewBuilder
     private func waveCanvas(phase: Double, smoothedLevel: Double) -> some View {
         Canvas { context, size in
             let w = size.width
             let h = size.height
-            let amplitude = Geometry.amplitude(
-                for: smoothedLevel,
-                canvasHeight: h
+            // Motion only with voice (user: constant idle motion was
+            // disorienting) — silence collapses all strands to one line.
+            // Gain on top of the sqrt curve so conversational levels give
+            // visibly bigger strands; clamped so peaks stay inside the pill.
+            let amplitude = min(
+                Geometry.amplitude(for: smoothedLevel, canvasHeight: h) * Self.strandGain,
+                h / 2 - 1
             )
-            let frequency: CGFloat = 2.5
 
-            var path = Path()
-            path.move(to: CGPoint(x: 0, y: h / 2))
-            var x: CGFloat = 0
-            while x <= w {
-                let normalized = Double(x / w)
-                let angle: Double = normalized * Double(frequency) * 2 * .pi + phase
-                let y = h / 2 + amplitude * CGFloat(sin(angle))
-                path.addLine(to: CGPoint(x: x, y: y))
-                x += 1
-            }
+            let colors = palette.strandColors(onDarkBackground: onDarkBackground)
+            for (index, strand) in Self.strands.enumerated() {
+                let strandAmplitude = amplitude * strand.amplitudeShare
+                let strandPhase = phase * strand.speed + Double(index) * 1.3
 
-            context.stroke(
-                path,
-                with: .color(tint),
-                style: StrokeStyle(
-                    lineWidth: 1.5,
-                    lineCap: .round,
-                    lineJoin: .round
+                var path = Path()
+                path.move(to: CGPoint(x: 0, y: h / 2))
+                var x: CGFloat = 0
+                while x <= w {
+                    let normalized = Double(x / w)
+                    // Soft taper: strands pinch toward the midline only at the
+                    // very ends, so the whole width moves.
+                    let envelope = sin(.pi * normalized).squareRoot()
+                    let angle = normalized * strand.frequency * 2 * .pi + strandPhase
+                    let y = h / 2 + strandAmplitude * CGFloat(envelope * sin(angle))
+                    path.addLine(to: CGPoint(x: x, y: y))
+                    x += 1
+                }
+
+                context.stroke(
+                    path,
+                    with: .color(colors[index % colors.count]),
+                    style: StrokeStyle(
+                        lineWidth: strand.lineWidth,
+                        lineCap: .round,
+                        lineJoin: .round
+                    )
                 )
-            )
+            }
         }
     }
 
@@ -250,8 +290,7 @@ public struct SineWaveView: View {
 
 #Preview("SineWaveView — low level (0.1)") {
     SineWaveView(
-        audioLevel: 0.1,
-        tint: PersonalScribeTheme.Palette.dark.brandChampagne
+        audioLevel: 0.1
     )
     .frame(width: 120, height: 28)
     .padding()
@@ -261,8 +300,7 @@ public struct SineWaveView: View {
 
 #Preview("SineWaveView — mid level (0.5)") {
     SineWaveView(
-        audioLevel: 0.5,
-        tint: PersonalScribeTheme.Palette.dark.brandChampagne
+        audioLevel: 0.5
     )
     .frame(width: 120, height: 28)
     .padding()
@@ -272,8 +310,7 @@ public struct SineWaveView: View {
 
 #Preview("SineWaveView — high level (0.9)") {
     SineWaveView(
-        audioLevel: 0.9,
-        tint: PersonalScribeTheme.Palette.dark.brandChampagne
+        audioLevel: 0.9
     )
     .frame(width: 120, height: 28)
     .padding()
@@ -283,8 +320,7 @@ public struct SineWaveView: View {
 
 #Preview("SineWaveView — silent (0.0, flat line)") {
     SineWaveView(
-        audioLevel: 0.0,
-        tint: PersonalScribeTheme.Palette.dark.brandChampagne
+        audioLevel: 0.0
     )
     .frame(width: 120, height: 28)
     .padding()

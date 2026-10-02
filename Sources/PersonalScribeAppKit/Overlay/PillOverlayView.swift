@@ -31,6 +31,8 @@ public struct PillOverlayView: View {
     @ObservedObject private var model: PillOverlayViewModel
 
     @Environment(\.colorScheme) private var colorScheme
+    /// Live: Settings writes the raw value; the pill re-renders on change.
+    @AppStorage(WaveformPalette.userDefaultsKey) private var waveformPaletteRaw = WaveformPalette.default.rawValue
 
     // Pill dimension constants. Both width and height come from
     // `PersonalScribeTheme.Pill.Width` and `.Height` banding so future edits
@@ -250,12 +252,15 @@ public struct PillOverlayView: View {
                 .foregroundColor(fgDim)
 
             // Voice-modulated waveform.
+            // Pill background is always dark navy until #102, so use the
+            // palette's dark-background shades regardless of theme.
             SineWaveView(
                 audioLevel: model.audioLevel,
                 decayMode: .animated,
-                tint: fg
+                palette: WaveformPalette(rawValue: waveformPaletteRaw) ?? .default,
+                onDarkBackground: true
             )
-            .frame(width: 140, height: 28)
+            .frame(width: 140, height: 34)
 
             // Stop button.
             Circle()

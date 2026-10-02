@@ -193,10 +193,7 @@ final class SineWaveViewTests: XCTestCase {
     func testDefaultDecayModeIsAnimated() {
         // Callers using the pill get 500 ms smoothing out of the box —
         // the whole point of M4.1 is hiding mic-RMS jitter.
-        let view = SineWaveView(
-            audioLevel: 0.3,
-            tint: .white
-        )
+        let view = SineWaveView(audioLevel: 0.3)
         XCTAssertEqual(view.decayMode, .animated)
     }
 }

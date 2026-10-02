@@ -14,6 +14,8 @@
 
 - [ ] **MV-SETT-7 — Downloaded models warm up before first use:** in AI Models, download a model whose slot already has an active model. Its chip shows `Warming up…` after the download, then `Ready`; `diagnostics.log` has `model_warmup_after_download … durationMs=…`. Activate it and record right away: the live text starts within ~2s (no long `Warming up model…` pill).
 
+- [ ] **MV-SETT-8 — Waveform colors:** Settings → General → Appearance → Waveform colors shows six chips in one row (Siri default). Pick another, start a recording: the pill's three strands use the new colors without relaunch; the choice persists across relaunch.
+
 ## Clipboard restore delay
 
 - Slider reflects current delay: open `General`, confirm the `Clipboard restore delay` control matches the current setting value, and confirm the helper text reads `After paste, wait Ns before restoring your clipboard` with the same value.
