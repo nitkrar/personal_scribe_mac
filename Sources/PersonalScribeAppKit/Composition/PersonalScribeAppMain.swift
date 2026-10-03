@@ -31,6 +31,13 @@ struct PersonalScribeAppMain: App {
         // shared singletons resolve upgraded defaults on first launch
         // after a migration lands.
         PreferenceMigrator.migrate(defaults: defaults)
+        // Must run before anything opens files under the base directory.
+        let storageLogger = AppComposition.makeLogger(PersonalScribeLogCategory.app)
+        do {
+            try BaseDirectoryMigrator(defaults: defaults, logger: storageLogger).applyPendingMoveIfNeeded()
+        } catch {
+            storageLogger.error("Storage location move failed; staying on the current location", error: error)
+        }
         AppComposition.startDiagnosticsMaintenanceIfNeeded()
         AppComposition.startRecordingRetentionSweeperIfNeeded()
         self.init(

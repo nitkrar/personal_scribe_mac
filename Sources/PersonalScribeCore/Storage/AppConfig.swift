@@ -7,6 +7,7 @@ public enum AppConfig {
     public nonisolated(unsafe) static var testingBaseDirectoryOverride: URL?
 
     static let baseDirectoryUserDefaultsKey = "BaseDirectoryPath"
+    static let pendingBaseDirectoryUserDefaultsKey = "PendingBaseDirectoryPath"
     static let baseDirectoryEnvironmentVariableName = "PERSONAL_SCRIBE_BASE_DIR"
 
     private static let overrideLock = NSLock()
@@ -39,6 +40,18 @@ public enum AppConfig {
         defaults: UserDefaults = .standard
     ) -> Preference<String?> {
         Preference(key: baseDirectoryUserDefaultsKey, default: nil, defaults: defaults)
+    }
+
+    /// Base directory chosen in Settings, applied at next launch.
+    public static func pendingBaseDirectory(defaults: UserDefaults = .standard) -> URL? {
+        guard let path = pendingBaseDirectoryPreference(defaults: defaults).resolve(), !path.isEmpty else {
+            return nil
+        }
+        return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+    }
+
+    static func pendingBaseDirectoryPreference(defaults: UserDefaults) -> Preference<String?> {
+        Preference(key: pendingBaseDirectoryUserDefaultsKey, default: nil, defaults: defaults)
     }
 
     // MARK: - Directory accessors

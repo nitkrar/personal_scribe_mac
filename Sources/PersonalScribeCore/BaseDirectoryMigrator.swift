@@ -1,12 +1,9 @@
 import Foundation
 
 public protocol BaseDirectoryMigrating: Sendable {
-    func migrate(to newBase: URL) async throws -> MigrationReport
-}
-
-public enum MigrationReport: Sendable, Equatable {
-    case noOp
-    case migrated(movedSubdirs: [String], totalBytes: Int64)
+    /// Records `newBase` for the next launch. Returns nil when it is already
+    /// the current location.
+    func scheduleMove(to newBase: URL) throws -> URL?
 }
 
 public enum BaseDirectoryMigrationError: Error, Sendable, Equatable {
@@ -165,55 +162,51 @@ public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable
         )
     }
 
-    public func migrate(to newBase: URL) async throws -> MigrationReport {
-        let destinationBase = newBase.standardizedFileURL
-        let sourceStorageLocator = AppConfig.liveStorageLocator(
-            fileManager: fileManager,
-            defaults: defaults,
-            environment: environment
-        )
-        let destinationStorageLocator = FixedBaseDirectoryStorageLocator(
-            baseDirectory: destinationBase,
-            fileManager: fileManager
-        )
-
-        try validateWritableDestination(destinationBase)
-
-        let sourceBase = sourceStorageLocator.baseDirectory
-        if sourceBase == destinationBase {
-            return .noOp
+    public func scheduleMove(to newBase: URL) throws -> URL? {
+        let destination = newBase.standardizedFileURL
+        try validateWritableDestination(destination)
+        let pending = AppConfig.pendingBaseDirectoryPreference(defaults: defaults)
+        guard destination != currentStorageLocator().baseDirectory else {
+            pending.persist(nil)
+            return nil
         }
+        pending.persist(destination.path)
+        return destination
+    }
 
-        let presentSubdirectories = existingManagedSubdirectories(using: sourceStorageLocator)
-        let totalBytes = try totalBytes(
-            in: presentSubdirectories,
-            using: sourceStorageLocator
-        )
+    /// Applies a move recorded by `scheduleMove(to:)`. Must run at launch
+    /// before anything opens files under the base directory.
+    public func applyPendingMoveIfNeeded() throws {
+        guard let destinationBase = AppConfig.pendingBaseDirectory(defaults: defaults) else { return }
+        AppConfig.pendingBaseDirectoryPreference(defaults: defaults).persist(nil)
 
-        var movedSubdirectories: [ManagedDirectory] = []
-        for subdirectory in presentSubdirectories {
-            let sourceURL = sourceStorageLocator.url(for: subdirectory)
-            let destinationURL = destinationStorageLocator.url(for: subdirectory)
+        let sourceBase = currentStorageLocator().baseDirectory
+        guard sourceBase != destinationBase else { return }
 
+        let items = (ManagedDirectory.allCases.map(\.pathComponent) + [WorkflowModeStore.fileName])
+            .filter { fileManager.fileExists(atPath: sourceBase.appendingPathComponent($0).path) }
+
+        try fileManager.createDirectory(at: destinationBase, withIntermediateDirectories: true)
+        var moved: [String] = []
+        for item in items {
             do {
-                try fileManager.moveItem(at: sourceURL, to: destinationURL)
-                movedSubdirectories.append(subdirectory)
-            } catch {
-                rollbackMovedSubdirectories(
-                    named: movedSubdirectories,
-                    from: destinationStorageLocator,
-                    backTo: sourceStorageLocator
+                try fileManager.moveItem(
+                    at: sourceBase.appendingPathComponent(item),
+                    to: destinationBase.appendingPathComponent(item)
                 )
-                throw BaseDirectoryMigrationError.partialFailure(failedSubdir: subdirectory.pathComponent)
+                moved.append(item)
+            } catch {
+                rollback(moved, from: destinationBase, to: sourceBase)
+                throw BaseDirectoryMigrationError.partialFailure(failedSubdir: item)
             }
         }
 
-        try destinationStorageLocator.ensureDirectoriesExist()
         AppConfig.setBaseDirectoryOverride(destinationBase, defaults: defaults)
-        return .migrated(
-            movedSubdirs: presentSubdirectories.map(\.pathComponent),
-            totalBytes: totalBytes
-        )
+        logger.info("BaseDirectoryMigrator: moved \(moved) from \(sourceBase.path) to \(destinationBase.path)")
+    }
+
+    private func currentStorageLocator() -> AppStorageLocator {
+        AppConfig.liveStorageLocator(fileManager: fileManager, defaults: defaults, environment: environment)
     }
 
     private func validateWritableDestination(_ destinationBase: URL) throws {
@@ -233,46 +226,15 @@ public struct BaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable
         }
     }
 
-    private func existingManagedSubdirectories(
-        using storageLocator: any StorageLocator
-    ) -> [ManagedDirectory] {
-        ManagedDirectory.allCases.filter { directory in
-            let url = storageLocator.url(for: directory)
-            var isDirectory = ObjCBool(false)
-            let exists = fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory)
-            return exists && isDirectory.boolValue
-        }
-    }
-
-    private func totalBytes(
-        in directories: [ManagedDirectory],
-        using storageLocator: any StorageLocator
-    ) throws -> Int64 {
-        try directories.reduce(into: Int64.zero) { partialResult, directory in
-            partialResult += try ManagedDirectoryByteCounter.totalBytes(
-                in: storageLocator.url(for: directory),
-                fileManager: fileManager
-            )
-        }
-    }
-
-    private func rollbackMovedSubdirectories(
-        named movedSubdirectories: [ManagedDirectory],
-        from destinationStorageLocator: any StorageLocator,
-        backTo sourceStorageLocator: any StorageLocator
-    ) {
-        for subdirectory in movedSubdirectories.reversed() {
-            let movedURL = destinationStorageLocator.url(for: subdirectory)
-            let originalURL = sourceStorageLocator.url(for: subdirectory)
-
+    private func rollback(_ items: [String], from destinationBase: URL, to sourceBase: URL) {
+        for item in items.reversed() {
             do {
-                try fileManager.moveItem(at: movedURL, to: originalURL)
-            } catch {
-                NSLog(
-                    "BaseDirectoryMigrator rollback failed for %@: %@",
-                    subdirectory.pathComponent,
-                    error.localizedDescription
+                try fileManager.moveItem(
+                    at: destinationBase.appendingPathComponent(item),
+                    to: sourceBase.appendingPathComponent(item)
                 )
+            } catch {
+                NSLog("BaseDirectoryMigrator rollback failed for %@: %@", item, error.localizedDescription)
             }
         }
     }

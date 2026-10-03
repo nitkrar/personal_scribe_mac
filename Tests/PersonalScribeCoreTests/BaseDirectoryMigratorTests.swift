@@ -5,193 +5,117 @@ import XCTest
 final class BaseDirectoryMigratorTests: XCTestCase {
     private let fileManager = FileManager.default
 
-    func testMigrationMovesAllSubdirsAndUpdatesConfig() async throws {
-        let (suiteName, defaults) = isolatedDefaults()
-        let sourceBase = try makeTemporaryDirectory()
-        let destinationBase = try makeTemporaryDirectory()
-        defer {
-            AppConfig.setBaseDirectoryOverride(nil, defaults: defaults)
-            defaults.removePersistentDomain(forName: suiteName)
-            cleanup(sourceBase)
-            cleanup(destinationBase)
-        }
+    func testScheduleMoveRecordsPendingWithoutMovingAnything() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        try writeData(count: 17, toManagedSubdirectory: "models", named: "ggml.bin", under: fixture.sourceBase)
 
-        let previousTestingOverride = AppConfig.testingBaseDirectoryOverride
-        AppConfig.testingBaseDirectoryOverride = nil
-        defer { AppConfig.testingBaseDirectoryOverride = previousTestingOverride }
+        let scheduled = try fixture.migrator.scheduleMove(to: fixture.destinationBase)
 
-        AppConfig.setBaseDirectoryOverride(sourceBase, defaults: defaults)
-        try writeData(count: 17, toManagedSubdirectory: "models", named: "ggml.bin", under: sourceBase)
-        try writeData(count: 23, toManagedSubdirectory: "modes", named: "dictation.json", under: sourceBase)
-        try writeData(count: 29, toManagedSubdirectory: "recordings", named: "clip.wav", under: sourceBase)
-
-        let migrator = BaseDirectoryMigrator(
-            defaults: defaults,
-            environment: [:],
-            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
-        )
-
-        let report = try await migrator.migrate(to: destinationBase)
-
-        switch report {
-        case .noOp:
-            XCTFail("Expected a migration report for a different destination.")
-        case .migrated(let movedSubdirs, let totalBytes):
-            XCTAssertEqual(movedSubdirs, ["models", "modes", "recordings"])
-            XCTAssertGreaterThan(totalBytes, 0)
-        }
-
-        XCTAssertFalse(fileManager.fileExists(atPath: sourceBase.appendingPathComponent("models").path))
-        XCTAssertFalse(fileManager.fileExists(atPath: sourceBase.appendingPathComponent("modes").path))
-        XCTAssertFalse(fileManager.fileExists(atPath: sourceBase.appendingPathComponent("recordings").path))
-        XCTAssertTrue(fileManager.fileExists(atPath: destinationBase.appendingPathComponent("models").path))
-        XCTAssertTrue(fileManager.fileExists(atPath: destinationBase.appendingPathComponent("modes").path))
-        XCTAssertTrue(fileManager.fileExists(atPath: destinationBase.appendingPathComponent("recordings").path))
-        XCTAssertEqual(
-            try AppConfig.baseDirectory(defaults: defaults, environment: [:]),
-            destinationBase.standardizedFileURL
-        )
+        XCTAssertEqual(scheduled, fixture.destinationBase)
+        XCTAssertTrue(fileManager.fileExists(atPath: fixture.sourceBase.appendingPathComponent("models").path))
+        XCTAssertEqual(try fixture.currentBase(), fixture.sourceBase)
+        XCTAssertEqual(AppConfig.pendingBaseDirectory(defaults: fixture.defaults), fixture.destinationBase)
     }
 
-    func testMigrationIsNoOpWhenSourceEqualsDestination() async throws {
-        let (suiteName, defaults) = isolatedDefaults()
-        let baseDirectory = try makeTemporaryDirectory()
-        defer {
-            AppConfig.setBaseDirectoryOverride(nil, defaults: defaults)
-            defaults.removePersistentDomain(forName: suiteName)
-            cleanup(baseDirectory)
+    func testApplyPendingMoveMovesDataAndModesFileThenSwitches() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        try writeData(count: 17, toManagedSubdirectory: "models", named: "ggml.bin", under: fixture.sourceBase)
+        try writeData(count: 29, toManagedSubdirectory: "recordings", named: "clip.wav", under: fixture.sourceBase)
+        try Data("{}".utf8).write(to: fixture.sourceBase.appendingPathComponent("workflow-modes.json"))
+        _ = try fixture.migrator.scheduleMove(to: fixture.destinationBase)
+
+        try fixture.migrator.applyPendingMoveIfNeeded()
+
+        for item in ["models", "recordings", "workflow-modes.json"] {
+            XCTAssertFalse(fileManager.fileExists(atPath: fixture.sourceBase.appendingPathComponent(item).path), item)
+            XCTAssertTrue(fileManager.fileExists(atPath: fixture.destinationBase.appendingPathComponent(item).path), item)
         }
-
-        let previousTestingOverride = AppConfig.testingBaseDirectoryOverride
-        AppConfig.testingBaseDirectoryOverride = nil
-        defer { AppConfig.testingBaseDirectoryOverride = previousTestingOverride }
-
-        AppConfig.setBaseDirectoryOverride(baseDirectory, defaults: defaults)
-        try writeData(count: 11, toManagedSubdirectory: "models", named: "marker.bin", under: baseDirectory)
-
-        let migrator = BaseDirectoryMigrator(
-            defaults: defaults,
-            environment: [:],
-            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
-        )
-
-        let report = try await migrator.migrate(to: baseDirectory)
-
-        XCTAssertEqual(report, .noOp)
-        XCTAssertTrue(fileManager.fileExists(atPath: baseDirectory.appendingPathComponent("models").path))
-        XCTAssertEqual(
-            try AppConfig.baseDirectory(defaults: defaults, environment: [:]),
-            baseDirectory.standardizedFileURL
-        )
+        XCTAssertEqual(try fixture.currentBase(), fixture.destinationBase)
+        XCTAssertNil(AppConfig.pendingBaseDirectory(defaults: fixture.defaults))
     }
 
-    func testMigrationRollsBackOnMidSequenceFailure() async throws {
-        let (suiteName, defaults) = isolatedDefaults()
-        let sourceBase = try makeTemporaryDirectory()
-        let destinationBase = try makeTemporaryDirectory()
-        defer {
-            AppConfig.setBaseDirectoryOverride(nil, defaults: defaults)
-            defaults.removePersistentDomain(forName: suiteName)
-            cleanup(sourceBase)
-            cleanup(destinationBase)
+    func testApplyPendingMoveRollsBackAndStaysOnOldLocationOnFailure() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        try writeData(count: 17, toManagedSubdirectory: "models", named: "ggml.bin", under: fixture.sourceBase)
+        try writeData(count: 29, toManagedSubdirectory: "recordings", named: "clip.wav", under: fixture.sourceBase)
+        _ = try fixture.migrator.scheduleMove(to: fixture.destinationBase)
+        let conflicting = fixture.destinationBase.appendingPathComponent("recordings", isDirectory: true)
+        try fileManager.createDirectory(at: conflicting, withIntermediateDirectories: true)
+
+        XCTAssertThrowsError(try fixture.migrator.applyPendingMoveIfNeeded()) { error in
+            XCTAssertEqual(error as? BaseDirectoryMigrationError, .partialFailure(failedSubdir: "recordings"))
         }
 
+        XCTAssertTrue(fileManager.fileExists(atPath: fixture.sourceBase.appendingPathComponent("models").path))
+        XCTAssertFalse(fileManager.fileExists(atPath: fixture.destinationBase.appendingPathComponent("models").path))
+        XCTAssertEqual(try fixture.currentBase(), fixture.sourceBase)
+        XCTAssertNil(AppConfig.pendingBaseDirectory(defaults: fixture.defaults))
+    }
+
+    func testScheduleMoveToCurrentLocationClearsPending() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        _ = try fixture.migrator.scheduleMove(to: fixture.destinationBase)
+
+        let scheduled = try fixture.migrator.scheduleMove(to: fixture.sourceBase)
+
+        XCTAssertNil(scheduled)
+        XCTAssertNil(AppConfig.pendingBaseDirectory(defaults: fixture.defaults))
+    }
+
+    func testScheduleMoveRejectsNonWritableDestination() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let notADirectory = fixture.destinationBase.appendingPathComponent("file", isDirectory: false)
+        try Data([0x41]).write(to: notADirectory)
+
+        XCTAssertThrowsError(try fixture.migrator.scheduleMove(to: notADirectory)) { error in
+            XCTAssertEqual(error as? BaseDirectoryMigrationError, .destinationNotWritable)
+        }
+        XCTAssertNil(AppConfig.pendingBaseDirectory(defaults: fixture.defaults))
+    }
+
+    private struct Fixture {
+        let suiteName = "BaseDirectoryMigratorTests.\(UUID().uuidString)"
+        let defaults: UserDefaults
+        let sourceBase: URL
+        let destinationBase: URL
+        let migrator: BaseDirectoryMigrator
         let previousTestingOverride = AppConfig.testingBaseDirectoryOverride
-        AppConfig.testingBaseDirectoryOverride = nil
-        defer { AppConfig.testingBaseDirectoryOverride = previousTestingOverride }
 
-        AppConfig.setBaseDirectoryOverride(sourceBase, defaults: defaults)
-        try writeData(count: 17, toManagedSubdirectory: "models", named: "ggml.bin", under: sourceBase)
-        try writeData(count: 23, toManagedSubdirectory: "modes", named: "dictation.json", under: sourceBase)
-        try writeData(count: 29, toManagedSubdirectory: "recordings", named: "clip.wav", under: sourceBase)
-
-        let conflictingRecordingsDirectory = destinationBase.appendingPathComponent("recordings", isDirectory: true)
-        try fileManager.createDirectory(at: conflictingRecordingsDirectory, withIntermediateDirectories: true)
-        try Data(repeating: 0x7F, count: 5).write(
-            to: conflictingRecordingsDirectory.appendingPathComponent("existing.txt", isDirectory: false)
-        )
-
-        let migrator = BaseDirectoryMigrator(
-            defaults: defaults,
-            environment: [:],
-            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
-        )
-
-        do {
-            _ = try await migrator.migrate(to: destinationBase)
-            XCTFail("Expected rollback after a destination collision.")
-        } catch {
-            XCTAssertEqual(
-                error as? BaseDirectoryMigrationError,
-                .partialFailure(failedSubdir: "recordings")
+        init() throws {
+            defaults = UserDefaults(suiteName: suiteName)!
+            sourceBase = try Self.makeTemporaryDirectory()
+            destinationBase = try Self.makeTemporaryDirectory()
+            AppConfig.testingBaseDirectoryOverride = nil
+            AppConfig.setBaseDirectoryOverride(sourceBase, defaults: defaults)
+            migrator = BaseDirectoryMigrator(
+                defaults: defaults,
+                environment: [:],
+                logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
             )
         }
 
-        XCTAssertTrue(fileManager.fileExists(atPath: sourceBase.appendingPathComponent("models").path))
-        XCTAssertTrue(fileManager.fileExists(atPath: sourceBase.appendingPathComponent("modes").path))
-        XCTAssertTrue(fileManager.fileExists(atPath: sourceBase.appendingPathComponent("recordings").path))
-        XCTAssertFalse(fileManager.fileExists(atPath: destinationBase.appendingPathComponent("models").path))
-        XCTAssertFalse(fileManager.fileExists(atPath: destinationBase.appendingPathComponent("modes").path))
-        XCTAssertTrue(fileManager.fileExists(atPath: conflictingRecordingsDirectory.path))
-        XCTAssertEqual(
-            try AppConfig.baseDirectory(defaults: defaults, environment: [:]),
-            sourceBase.standardizedFileURL
-        )
-    }
+        func currentBase() throws -> URL {
+            try AppConfig.baseDirectory(defaults: defaults, environment: [:])
+        }
 
-    func testMigrationRejectsNonWritableDestination() async throws {
-        let (suiteName, defaults) = isolatedDefaults()
-        let sourceBase = try makeTemporaryDirectory()
-        let parentDirectory = try makeTemporaryDirectory()
-        let destinationFile = parentDirectory.appendingPathComponent("not-a-directory", isDirectory: false)
-        defer {
-            AppConfig.setBaseDirectoryOverride(nil, defaults: defaults)
+        func tearDown() {
+            AppConfig.testingBaseDirectoryOverride = previousTestingOverride
             defaults.removePersistentDomain(forName: suiteName)
-            cleanup(sourceBase)
-            cleanup(parentDirectory)
+            try? FileManager.default.removeItem(at: sourceBase)
+            try? FileManager.default.removeItem(at: destinationBase)
         }
 
-        let previousTestingOverride = AppConfig.testingBaseDirectoryOverride
-        AppConfig.testingBaseDirectoryOverride = nil
-        defer { AppConfig.testingBaseDirectoryOverride = previousTestingOverride }
-
-        AppConfig.setBaseDirectoryOverride(sourceBase, defaults: defaults)
-        try writeData(count: 17, toManagedSubdirectory: "models", named: "ggml.bin", under: sourceBase)
-        try Data(repeating: 0x41, count: 3).write(to: destinationFile)
-
-        let migrator = BaseDirectoryMigrator(
-            defaults: defaults,
-            environment: [:],
-            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
-        )
-
-        do {
-            _ = try await migrator.migrate(to: destinationFile)
-            XCTFail("Expected a non-writable destination error.")
-        } catch {
-            XCTAssertEqual(error as? BaseDirectoryMigrationError, .destinationNotWritable)
+        private static func makeTemporaryDirectory() throws -> URL {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            return url.standardizedFileURL
         }
-
-        XCTAssertTrue(fileManager.fileExists(atPath: sourceBase.appendingPathComponent("models").path))
-        XCTAssertEqual(
-            try AppConfig.baseDirectory(defaults: defaults, environment: [:]),
-            sourceBase.standardizedFileURL
-        )
     }
-
-    private func isolatedDefaults() -> (suiteName: String, defaults: UserDefaults) {
-        let suiteName = "BaseDirectoryMigratorTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return (suiteName, defaults)
-    }
-
-    private func makeTemporaryDirectory() throws -> URL {
-        let url = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
-        return url.standardizedFileURL
-    }
-
     private func writeData(
         count: Int,
         toManagedSubdirectory subdirectory: String,
@@ -205,7 +129,4 @@ final class BaseDirectoryMigratorTests: XCTestCase {
         )
     }
 
-    private func cleanup(_ url: URL) {
-        try? fileManager.removeItem(at: url)
-    }
 }

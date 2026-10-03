@@ -17,6 +17,8 @@ import Foundation
 /// Thread-safety: `Sendable` via locking. `load`/`save` serialise
 /// against each other so one user can't observe a half-written file.
 public final class WorkflowModeStore: WorkflowModeStoring, @unchecked Sendable {
+    public static let fileName = "workflow-modes.json"
+
     private let lock = NSLock()
     private let baseDirectory: URL
     private let fileManager: FileManager
@@ -78,7 +80,7 @@ public final class WorkflowModeStore: WorkflowModeStoring, @unchecked Sendable {
     // MARK: - Internals
 
     private var fileURL: URL {
-        baseDirectory.appendingPathComponent("workflow-modes.json", isDirectory: false)
+        baseDirectory.appendingPathComponent(Self.fileName, isDirectory: false)
     }
 
     private func ensureBaseDirectoryExists() throws {

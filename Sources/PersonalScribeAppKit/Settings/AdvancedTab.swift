@@ -53,9 +53,11 @@ public struct AdvancedTab: View {
                     SettingsCard {
                         baseDirectoryRow(baseDirectory: baseDirectory)
 
-                        if viewModel.isMigrating || viewModel.feedback != nil {
+                        if let feedback = viewModel.feedback {
                             Divider()
-                            migrationStatusView
+                            Label(feedback.message, systemImage: feedback.systemImage)
+                                .font(PersonalScribeTheme.Typography.caption.font)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     diagnosticsCard
@@ -300,39 +302,17 @@ public struct AdvancedTab: View {
 
             IconButton(
                 systemImage: "magnifyingglass",
-                help: "Open in Finder",
-                isEnabled: !viewModel.isMigrating
+                help: "Open in Finder"
             ) {
                 viewModel.revealInFinder()
             }
 
             IconButton(
                 systemImage: "folder",
-                help: "Change base directory…",
-                isEnabled: !viewModel.isMigrating
+                help: "Change base directory…"
             ) {
-                Task {
-                    await viewModel.changeBaseDirectory()
-                }
+                viewModel.changeBaseDirectory()
             }
-        }
-    }
-
-    @ViewBuilder
-    private var migrationStatusView: some View {
-        if viewModel.isMigrating {
-            HStack(spacing: SettingsLayout.inlineSpacing) {
-                ProgressView()
-                    .controlSize(.small)
-
-                Text("Migrating models, modes, and recordings…")
-                    .font(PersonalScribeTheme.Typography.caption.font)
-                    .foregroundStyle(.secondary)
-            }
-        } else if let feedback = viewModel.feedback {
-            Label(feedback.message, systemImage: feedback.systemImage)
-                .font(PersonalScribeTheme.Typography.caption.font)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -373,7 +353,6 @@ final class AdvancedTabViewModel: ObservableObject {
     }
 
     @Published private(set) var baseDirectoryResult: Result<URL, Error>
-    @Published private(set) var isMigrating = false
     @Published private(set) var feedback: Feedback?
     @Published private(set) var diagnosticLoggingMode: DiagnosticLoggingMode
     @Published private(set) var logRetentionDays: Int
@@ -420,6 +399,7 @@ final class AdvancedTabViewModel: ObservableObject {
         whisperAdapterFilter = modelService.whisperAdapterFilter
         recordAudioEnabled = RecordAudioEnabledPreference.resolve(from: defaults)
         audioRetentionDays = AudioRecordingRetentionDaysPreference.resolve(from: defaults)
+        feedback = AppConfig.pendingBaseDirectory(defaults: defaults).map { .success(Self.restartMessage(for: $0)) }
         modelService.$whisperAdapterFilter
             .removeDuplicates()
             .sink { [weak self] filter in
@@ -533,18 +513,11 @@ final class AdvancedTabViewModel: ObservableObject {
         AudioRecordingRetentionDaysPreference.persist(sanitized, to: defaults)
     }
 
-    func changeBaseDirectory() async {
-        guard !isMigrating else { return }
+    func changeBaseDirectory() {
         guard let selectedDirectory = selectDirectory(currentBaseDirectory) else { return }
-
-        isMigrating = true
-        feedback = nil
-        defer { isMigrating = false }
-
         do {
-            let report = try await migrator.migrate(to: selectedDirectory)
-            baseDirectoryResult = .success(selectedDirectory.standardizedFileURL)
-            feedback = .success(Self.message(for: report))
+            feedback = try migrator.scheduleMove(to: selectedDirectory)
+                .map { .success(Self.restartMessage(for: $0)) }
         } catch {
             feedback = .failure(error.localizedDescription)
         }
@@ -592,19 +565,8 @@ final class AdvancedTabViewModel: ObservableObject {
         }
     }
 
-    private static func message(for report: MigrationReport) -> String {
-        switch report {
-        case .noOp:
-            return "Base directory already points to the selected folder."
-        case .migrated(let movedSubdirs, let totalBytes):
-            guard movedSubdirs.isEmpty == false else {
-                return "Base directory changed. No existing models, modes, or recordings needed moving."
-            }
-
-            let formattedDirectories = ListFormatter.localizedString(byJoining: movedSubdirs)
-            let formattedBytes = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-            return "Moved \(formattedDirectories) (\(formattedBytes))."
-        }
+    private static func restartMessage(for destination: URL) -> String {
+        "Restart \(AppBrand.displayName) to move your data to \(destination.path)."
     }
 }
 

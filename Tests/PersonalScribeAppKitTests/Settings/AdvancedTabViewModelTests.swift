@@ -6,33 +6,25 @@ import PersonalScribeSession
 
 @MainActor
 final class AdvancedTabViewModelTests: XCTestCase {
-    func testChangeBaseDirectory_reportsMovedSubdirsOnSuccess() async {
+    func testChangeBaseDirectory_schedulesMoveAndAsksForRestart() {
         let currentBase = URL(fileURLWithPath: "/tmp/current-base", isDirectory: true).standardizedFileURL
         let selectedBase = URL(fileURLWithPath: "/tmp/next-base", isDirectory: true).standardizedFileURL
-        let migrator = FakeBaseDirectoryMigrator(
-            outcome: .success(.migrated(movedSubdirs: ["models", "recordings"], totalBytes: 2_048))
-        )
+        let migrator = FakeBaseDirectoryMigrator(outcome: .success(selectedBase))
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(currentBase),
             migrator: migrator,
-            selectDirectory: { currentDirectory in
-                XCTAssertEqual(currentDirectory, currentBase)
-                return selectedBase
-            }
+            selectDirectory: { _ in selectedBase }
         )
 
-        await viewModel.changeBaseDirectory()
+        viewModel.changeBaseDirectory()
 
-        XCTAssertFalse(viewModel.isMigrating)
-        XCTAssertEqual(try? viewModel.baseDirectoryResult.get(), selectedBase)
-
+        XCTAssertEqual(migrator.recordedDestinations, [selectedBase])
+        XCTAssertEqual(try? viewModel.baseDirectoryResult.get(), currentBase, "location changes only after restart")
         guard case .success(let message)? = viewModel.feedback else {
-            return XCTFail("Expected a success message after migration.")
+            return XCTFail("Expected a restart prompt.")
         }
-        XCTAssertTrue(message.contains("models"))
-        XCTAssertTrue(message.contains("recordings"))
-        let recordedDestinations = await migrator.recordedDestinations()
-        XCTAssertEqual(recordedDestinations, [selectedBase])
+        XCTAssertTrue(message.contains("Restart"))
+        XCTAssertTrue(message.contains(selectedBase.path))
     }
 
     // Bug #006 regression: `openInFinder` must receive the resolved base
@@ -50,9 +42,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
 
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(baseDirectory),
-            migrator: FakeBaseDirectoryMigrator(
-                outcome: .success(.noOp)
-            ),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil },
             openInFinder: { openedURLs.append($0) }
         )
@@ -72,7 +62,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
 
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .failure(StubMigrationError(message: "unresolvable")),
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil },
             openInFinder: { openedURLs.append($0) }
         )
@@ -94,7 +84,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
 
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(tempDirectory),
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil },
             openInFinder: { openedURLs.append($0) },
             storageLocator: locator
@@ -113,7 +103,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
 
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(tempDirectory),
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil },
             openInFinder: { openedURLs.append($0) },
             storageLocator: locator
@@ -124,29 +114,19 @@ final class AdvancedTabViewModelTests: XCTestCase {
         XCTAssertEqual(openedURLs, [locator.url(for: .logs)])
     }
 
-    func testChangeBaseDirectory_reportsErrorMessageOnFailure() async {
-        let currentBase = URL(fileURLWithPath: "/tmp/current-base", isDirectory: true).standardizedFileURL
+    func testChangeBaseDirectory_reportsErrorMessageOnFailure() {
         let selectedBase = URL(fileURLWithPath: "/tmp/next-base", isDirectory: true).standardizedFileURL
-        let migrator = FakeBaseDirectoryMigrator(
-            outcome: .failure(StubMigrationError(message: "Existing recordings folder blocked the move."))
-        )
         let viewModel = AdvancedTabViewModel(
-            baseDirectoryResult: .success(currentBase),
-            migrator: migrator,
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/current-base", isDirectory: true)),
+            migrator: FakeBaseDirectoryMigrator(
+                outcome: .failure(StubMigrationError(message: "The selected base directory is not writable."))
+            ),
             selectDirectory: { _ in selectedBase }
         )
 
-        await viewModel.changeBaseDirectory()
+        viewModel.changeBaseDirectory()
 
-        XCTAssertFalse(viewModel.isMigrating)
-        XCTAssertEqual(try? viewModel.baseDirectoryResult.get(), currentBase)
-
-        guard case .failure(let message)? = viewModel.feedback else {
-            return XCTFail("Expected a failure message after migration fails.")
-        }
-        XCTAssertEqual(message, "Existing recordings folder blocked the move.")
-        let recordedDestinations = await migrator.recordedDestinations()
-        XCTAssertEqual(recordedDestinations, [selectedBase])
+        XCTAssertEqual(viewModel.feedback, .failure("The selected base directory is not writable."))
     }
 
     func testDiagnosticLoggingModePersistsUpdates() {
@@ -155,7 +135,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
             defaults: defaults,
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil }
         )
 
@@ -177,7 +157,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
             defaults: defaults,
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil }
         )
 
@@ -197,7 +177,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
             defaults: defaults,
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil }
         )
 
@@ -209,7 +189,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
         var openCount = 0
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil },
             openDiagnosticsWindow: { openCount += 1 }
         )
@@ -225,7 +205,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
             defaults: defaults,
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil }
         )
 
@@ -248,7 +228,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
             defaults: defaults,
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil }
         )
 
@@ -285,7 +265,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
             baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
             defaults: defaults,
             modelService: modelService,
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil }
         )
 
@@ -303,7 +283,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
             defaults: defaults,
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil }
         )
 
@@ -322,7 +302,7 @@ final class AdvancedTabViewModelTests: XCTestCase {
         let viewModel = AdvancedTabViewModel(
             baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
             defaults: defaults,
-            migrator: FakeBaseDirectoryMigrator(outcome: .success(.noOp)),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
             selectDirectory: { _ in nil }
         )
 
@@ -350,32 +330,17 @@ final class AdvancedTabViewModelTests: XCTestCase {
     }
 }
 
-private actor FakeBaseDirectoryMigrator: BaseDirectoryMigrating {
-    enum Outcome: Sendable {
-        case success(MigrationReport)
-        case failure(StubMigrationError)
-    }
+private final class FakeBaseDirectoryMigrator: BaseDirectoryMigrating, @unchecked Sendable {
+    private let outcome: Result<URL?, StubMigrationError>
+    private(set) var recordedDestinations: [URL] = []
 
-    private let outcome: Outcome
-    private var destinations: [URL] = []
-
-    init(outcome: Outcome) {
+    init(outcome: Result<URL?, StubMigrationError>) {
         self.outcome = outcome
     }
 
-    func migrate(to newBase: URL) async throws -> MigrationReport {
-        destinations.append(newBase.standardizedFileURL)
-
-        switch outcome {
-        case .success(let report):
-            return report
-        case .failure(let error):
-            throw error
-        }
-    }
-
-    func recordedDestinations() -> [URL] {
-        destinations
+    func scheduleMove(to newBase: URL) throws -> URL? {
+        recordedDestinations.append(newBase.standardizedFileURL)
+        return try outcome.get()
     }
 }
 

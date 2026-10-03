@@ -118,9 +118,9 @@ System Settings does NOT re-trigger first-run auto-open.
 
 ## Change base directory
 
-- Pick a new writable folder from `Advanced > Change Base Directory…` and confirm the tab shows an in-progress spinner followed by a success message naming the migrated subdirectories.
-- After the migration completes, confirm the selected directory now contains the expected `models`, `modes`, and/or `recordings` folders, and the old base directory is left behind without those moved folders.
-- Relaunch `<AppBrand.displayName>`, then confirm the app reads from the new base directory by finding an existing downloaded model and recent transcripts there without re-downloading or losing history.
+- Pick a new writable folder from `Advanced > Change Base Directory…`. Confirm the tab says to restart to move data to that folder, the old folder is untouched, and the message is still shown after closing and reopening Settings.
+- Quit and relaunch `<AppBrand.displayName>`. Confirm the new folder contains `db`, `models`, `recordings`, `logs` and `workflow-modes.json`, the old folder no longer does, and the Advanced tab shows the new path with no restart message.
+- Confirm history, custom modes and downloaded models are all present without re-downloading.
 
 ## Advanced — base-directory row layout + Open-in-Finder target (#006)
 
