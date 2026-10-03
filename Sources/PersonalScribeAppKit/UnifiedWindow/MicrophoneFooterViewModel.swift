@@ -102,22 +102,10 @@ public final class MicrophoneFooterViewModel: ObservableObject {
 
     // MARK: - Resolution
 
-    /// Returns the display name of the currently-selected device if it
-    /// is still present in `availableDevices()`; returns `nil` when
-    /// there is no selection or the previously-selected device has
-    /// disappeared (e.g. unplugged USB mic). Mirrors
-    /// `StatusItemMenuModel.currentInputDeviceName(in:selectedID:)`.
     private static func resolveCurrentDeviceName(
         provider: any AudioInputDeviceProviding
     ) -> String? {
-        let devices = provider.availableDevices()
-        if let selectedID = provider.selectedDeviceID,
-           let selected = devices.first(where: { $0.id == selectedID }) {
-            return selected.name
-        }
-        // Nothing selected, or the selected device is gone: capture uses
-        // the macOS default input, so name that device.
-        guard let defaultID = provider.systemDefaultDeviceID else { return nil }
-        return devices.first(where: { $0.id == defaultID })?.name
+        guard let id = provider.effectiveDeviceID else { return nil }
+        return provider.availableDevices().first(where: { $0.id == id })?.name
     }
 }

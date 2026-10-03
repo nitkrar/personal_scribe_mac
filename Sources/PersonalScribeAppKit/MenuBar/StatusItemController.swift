@@ -290,7 +290,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // reflects hotplug changes (USB mic plugged / unplugged)
         // without any observer plumbing.
         let inputDevices = inputDeviceProvider.availableDevices()
-        let currentInputDeviceID = inputDeviceProvider.selectedDeviceID
+        let currentInputDeviceID = inputDeviceProvider.effectiveDeviceID
         let model = StatusItemMenuModel.makeUnified(
             sessionState: snapshot.sessionState,
             micPermission: permissions[.microphone] ?? .pending,

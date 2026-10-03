@@ -16,4 +16,33 @@ final class AudioInputDeviceTests: XCTestCase {
         let device: any Identifiable = AudioInputDevice(id: "uid-42", name: "Audio")
         XCTAssertEqual(device.id as? String, "uid-42")
     }
+
+    func testEffectiveDeviceIsSelectionWhileConnected() {
+        let provider = StubInputDeviceProvider(available: ["usb", "built-in"], selected: "usb", systemDefault: "built-in")
+        XCTAssertEqual(provider.effectiveDeviceID, "usb")
+    }
+
+    func testEffectiveDeviceFallsBackToDefaultWhileSelectionIsDisconnected() {
+        let provider = StubInputDeviceProvider(available: ["built-in"], selected: "usb", systemDefault: "built-in")
+        XCTAssertEqual(provider.effectiveDeviceID, "built-in")
+        XCTAssertEqual(provider.selectedDeviceID, "usb", "choice is kept for when it reconnects")
+    }
+}
+
+private final class StubInputDeviceProvider: AudioInputDeviceProviding, @unchecked Sendable {
+    private let available: [String]
+    let selectedDeviceID: String?
+    let systemDefaultDeviceID: String?
+
+    init(available: [String], selected: String?, systemDefault: String?) {
+        self.available = available
+        self.selectedDeviceID = selected
+        self.systemDefaultDeviceID = systemDefault
+    }
+
+    func availableDevices() -> [AudioInputDevice] {
+        available.map { AudioInputDevice(id: $0, name: $0) }
+    }
+
+    func selectDevice(id: String?) {}
 }

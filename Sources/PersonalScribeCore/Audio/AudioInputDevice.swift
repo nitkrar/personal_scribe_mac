@@ -48,9 +48,8 @@ public protocol AudioInputDeviceProviding: AnyObject, Sendable {
     func availableDevices() -> [AudioInputDevice]
 
     /// Device ID the user has selected, or `nil` to use the macOS
-    /// system default. Never returns a stale value for a device that
-    /// has since disappeared from `availableDevices()` — callers must
-    /// still defend against that when rendering the current selection.
+    /// system default. Kept while the device is disconnected so it is
+    /// used again on reconnect; see `effectiveDeviceID`.
     var selectedDeviceID: String? { get }
 
     /// ID of the macOS system default input device (what capture uses
@@ -68,4 +67,13 @@ public extension AudioInputDeviceProviding {
     /// Conformers that can't resolve the system default report `nil`;
     /// UI then falls back to its generic label.
     var systemDefaultDeviceID: String? { nil }
+
+    /// The device capture will use: the selection while it is connected,
+    /// otherwise the system default.
+    var effectiveDeviceID: String? {
+        if let selectedDeviceID, availableDevices().contains(where: { $0.id == selectedDeviceID }) {
+            return selectedDeviceID
+        }
+        return systemDefaultDeviceID
+    }
 }
