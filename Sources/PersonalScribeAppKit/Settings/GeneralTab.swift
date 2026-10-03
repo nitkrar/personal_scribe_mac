@@ -313,6 +313,13 @@ public struct GeneralTab: View {
 
             Divider()
 
+            Text(viewModel.transcribeOutputSummary)
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+
             Toggle(isOn: Binding(
                 get: { viewModel.transcriptCleanupEnabled },
                 set: { viewModel.setTranscriptCleanupEnabled($0) }
@@ -324,13 +331,6 @@ public struct GeneralTab: View {
                         .foregroundStyle(.secondary)
                 }
             }
-
-            Divider()
-
-            Text(viewModel.transcribeOutputSummary)
-                .font(PersonalScribeTheme.Typography.caption.font)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -456,7 +456,6 @@ public struct GeneralTab: View {
                     )
                 )
             }
-
         }
     }
 
@@ -494,25 +493,12 @@ public struct GeneralTab: View {
         }
     }
 
-    /// Recording card — waveform decay, mute-while-recording, and how long
-    /// the Cancel card offers Resume.
+    /// Recording card — mute-while-recording and how long the Cancel card
+    /// offers Resume.
     private var behaviorCard: some View {
         SettingsCard {
             Text("Recording")
                 .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
-
-            Picker(
-                "Waveform decay",
-                selection: Binding(
-                    get: { viewModel.waveformDecayMode },
-                    set: { viewModel.setWaveformDecayMode($0) }
-                )
-            ) {
-                Text("Immediate").tag(WaveformDecayMode.immediate)
-                Text("Animated").tag(WaveformDecayMode.animated)
-            }
-
-            Divider()
 
             Toggle(
                 "Mute system audio while recording",
@@ -521,6 +507,7 @@ public struct GeneralTab: View {
                     set: { viewModel.setMuteOutputWhileRecording($0) }
                 )
             )
+
             Divider()
 
             VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
@@ -691,7 +678,6 @@ final class GeneralTabViewModel: ObservableObject {
 
     @Published private(set) var pillVisibilityMode: PillVisibility
     @Published private(set) var isMenuBarVisible: Bool
-    @Published private(set) var waveformDecayMode: WaveformDecayMode
     @Published private(set) var windowTint: WindowTint
     @Published private(set) var pillAppearance: PillAppearance
     @Published private(set) var pillStyle: PillStyle
@@ -826,7 +812,6 @@ final class GeneralTabViewModel: ObservableObject {
         // to toggle it), refresh here on view appear or swap to a
         // Published upstream source.
         self.isMenuBarVisible = menuBarVisibilityProvider()
-        self.waveformDecayMode = WaveformDecayMode.resolve(from: defaults)
         self.windowTint = WindowTint.resolve(from: defaults)
         self.pillAppearance = PillAppearance.resolve(from: defaults)
         self.pillStyle = PillStyle.resolve(from: defaults)
@@ -919,11 +904,6 @@ final class GeneralTabViewModel: ObservableObject {
         config.pillVisibilityMode.persist(to: defaults)
         menuBarVisibilitySetter(config.isMenuBarVisible)
         return nil
-    }
-
-    func setWaveformDecayMode(_ mode: WaveformDecayMode) {
-        waveformDecayMode = mode
-        mode.persist(to: defaults)
     }
 
     func setTranscriptCleanupEnabled(_ enabled: Bool) {

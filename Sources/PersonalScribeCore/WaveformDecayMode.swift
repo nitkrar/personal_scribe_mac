@@ -11,16 +11,9 @@ import Foundation
 ///
 /// This decay is strictly a presentation concern: `PersonalScribeSession` /
 /// `PersonalScribeAudio` plumbing stays as-is.
-///
-/// Persisted under `UserDefaults["WaveformDecayMode"]`. Default is
-/// `.immediate` (no behaviour change until a user explicitly opts in via
-/// Phase 3 Settings UI).
 public enum WaveformDecayMode: String, CaseIterable, Codable, Sendable, Equatable {
     case immediate
     case animated
-
-    /// The default mode on first launch / absent key.
-    public static let `default`: WaveformDecayMode = .immediate
 
     /// Duration (in seconds) of the linear-interpolation fade from the
     /// last-known level to zero. `.immediate` has duration `0`, which
@@ -30,20 +23,6 @@ public enum WaveformDecayMode: String, CaseIterable, Codable, Sendable, Equatabl
         case .immediate: return 0.0
         case .animated: return 0.5
         }
-    }
-
-    public static let userDefaultsKey = "WaveformDecayMode"
-
-    public static func preference(defaults: UserDefaults = .standard) -> Preference<Self> {
-        Preference(key: userDefaultsKey, default: .default, defaults: defaults)
-    }
-
-    public static func resolve(from defaults: UserDefaults = .standard) -> WaveformDecayMode {
-        preference(defaults: defaults).resolve()
-    }
-
-    public func persist(to defaults: UserDefaults = .standard) {
-        Self.preference(defaults: defaults).persist(self)
     }
 
     /// Pure linear-decay helper. Tests against this directly instead of

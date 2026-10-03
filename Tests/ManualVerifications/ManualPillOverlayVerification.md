@@ -63,16 +63,9 @@ and relaunch.
 
 ## Sprint 2 Lane B1 — Waveform decay coast-down
 
-Toggle `WaveformDecayMode` via
-`defaults write com.nitkrar.personal_scribe WaveformDecayMode "…"`.
-
-- [ ] **MV-B1-5 (immediate default)** Record a loud sentence, then stop.
-  The waveform SNAPS flat to zero on stop (this is the Sprint 1
-  behaviour retained as the default).
-- [ ] **MV-B1-6 (animated)** Flip the default to `"animated"` and
-  relaunch. Record a loud sentence, then stop. The waveform fades from
-  the last-known bar heights to zero smoothly over roughly 500 ms, then
-  snaps. No bounce, no overshoot — strictly linear interpolation.
+- [ ] **MV-B1-5** Record a loud sentence, then stop. The waveform fades
+  from its last height to flat over roughly 500 ms. No bounce, no
+  overshoot.
 
 ---
 

@@ -11,62 +11,6 @@ import XCTest
 ///   then snap. `.immediate` = snap to 0 on stream termination (current
 ///   Sprint 1 behaviour).
 final class WaveformDecayModeTests: XCTestCase {
-    private let suiteName = "PersonalScribeTestsWaveformDecayMode"
-
-    private func isolatedDefaults() -> UserDefaults {
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
-    }
-
-    // MARK: - Enum surface
-
-    func testRawValues() {
-        XCTAssertEqual(WaveformDecayMode.immediate.rawValue, "immediate")
-        XCTAssertEqual(WaveformDecayMode.animated.rawValue, "animated")
-    }
-
-    func testDefaultIsImmediate() {
-        XCTAssertEqual(WaveformDecayMode.default, .immediate)
-    }
-
-    func testUserDefaultsKey() {
-        XCTAssertEqual(WaveformDecayMode.userDefaultsKey, "WaveformDecayMode")
-    }
-
-    // MARK: - Resolve
-
-    func testResolveReturnsDefaultWhenKeyAbsent() {
-        let defaults = isolatedDefaults()
-        XCTAssertEqual(WaveformDecayMode.resolve(from: defaults), .immediate)
-    }
-
-    func testResolveReturnsDefaultForUnrecognizedValue() {
-        let defaults = isolatedDefaults()
-        defaults.set("garbage", forKey: WaveformDecayMode.userDefaultsKey)
-        XCTAssertEqual(WaveformDecayMode.resolve(from: defaults), .immediate)
-    }
-
-    func testPreferenceResolveAnimatedWhenPersisted() {
-        let defaults = isolatedDefaults()
-        let preference = WaveformDecayMode.preference(defaults: defaults)
-        preference.persist(.animated)
-
-        XCTAssertEqual(preference.resolve(), .animated)
-        XCTAssertEqual(WaveformDecayMode.resolve(from: defaults), .animated)
-    }
-
-    // MARK: - Persist round-trip
-
-    func testPersistRoundTripImmediate() {
-        let defaults = isolatedDefaults()
-        WaveformDecayMode.preference(defaults: defaults).persist(.immediate)
-        XCTAssertEqual(
-            defaults.string(forKey: WaveformDecayMode.userDefaultsKey),
-            "immediate"
-        )
-    }
-
     // MARK: - Duration contract
 
     func testAnimatedDurationIs500ms() {
