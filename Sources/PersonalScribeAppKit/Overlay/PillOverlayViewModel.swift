@@ -8,6 +8,9 @@ public final class PillOverlayViewModel: ObservableObject {
     public typealias Visibility = PillVisibilityState
 
     @Published public private(set) var visibility: Visibility
+    @Published public private(set) var pillStyle: PillStyle = .classic
+    /// Latest session-driven visibility, shown unless the style is `.none`.
+    private var sessionVisibility: Visibility
     @Published public private(set) var visibilityMode: PillVisibility
     @Published public var audioLevel: Double = 0
     /// Side of the panel the pill content is pinned to (set by the
@@ -27,6 +30,7 @@ public final class PillOverlayViewModel: ObservableObject {
         visibilityMode: PillVisibility = .autoShow
     ) {
         self.visibility = visibility
+        self.sessionVisibility = visibility
         self.visibilityMode = visibilityMode
     }
 
@@ -37,7 +41,14 @@ public final class PillOverlayViewModel: ObservableObject {
         if let visibilityMode {
             self.visibilityMode = visibilityMode
         }
-        self.visibility = visibility
+        sessionVisibility = visibility
+        self.visibility = pillStyle == .none ? .hidden : visibility
+    }
+
+    public func setPillStyle(_ style: PillStyle) {
+        guard style != pillStyle else { return }
+        pillStyle = style
+        visibility = style == .none ? .hidden : sessionVisibility
     }
 
     public func resumeCancelledRecording() {

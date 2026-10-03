@@ -331,6 +331,7 @@ public final class PillOverlayPresenter {
     private var responseCard: (any ResponseCardPresenting)?
     private var streamCard: (any StreamCardPresenting)?
     private var visibilityCancellable: AnyCancellable?
+    private var styleCancellable: AnyCancellable?
     private let diagnosticLogger: PersonalScribeLogger
     /// Visible screen area for a given pill frame; every pill frame is
     /// clamped into it (see `OverlayPlacement`).
@@ -429,6 +430,16 @@ public final class PillOverlayPresenter {
 
             logVisibilitySinkIfNeeded(for: visibility)
         }
+        // Classic ↔ Mini keeps the visibility but changes the footprint.
+        // Main-queue hop: @Published emits before the new value is stored.
+        styleCancellable = model.$pillStyle.dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.isVisible else { return }
+                    self.applyVisibilityResize(to: self.model.visibility)
+                }
+            }
     }
 
     private struct VisibilitySinkLogState: Equatable {
@@ -463,7 +474,7 @@ public final class PillOverlayPresenter {
             return
         }
 
-        let newSize = PillOverlayView.size(for: visibility)
+        let newSize = PillOverlayView.size(for: visibility, style: model.pillStyle)
         guard newSize != .zero else {
             // `.hidden` is routed to `hide()` already — defensive no-op.
             return

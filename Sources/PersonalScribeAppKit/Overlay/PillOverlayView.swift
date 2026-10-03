@@ -127,6 +127,11 @@ public struct PillOverlayView: View {
         }
     }
 
+    public static func size(for visibility: PillVisibilityState, style: PillStyle) -> CGSize {
+        let size = size(for: visibility)
+        return CGSize(width: size.width * style.scale, height: size.height * style.scale)
+    }
+
     /// Corner radius for idle (spec §2a — 14pt) and a few non-spec
     /// states. `PillChrome(state:)` picks this per state; the
     /// hold-to-record / recording / transcribing variants use 18pt per
@@ -207,6 +212,7 @@ public struct PillOverlayView: View {
         // trigger any SwiftUI animation (AppKit owns that morph via
         // setFrame animate); only the pill↔cancel flip does.
         .animation(.easeInOut(duration: 0.2), value: model.visibility == .cancelled)
+        .modifier(PillScale(visibility: model.visibility, style: model.pillStyle))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.contentAlignment)
     }
 
@@ -583,4 +589,22 @@ struct CancelCardView: View {
         .padding(40)
         .background(Color.black.opacity(0.3))
         .preferredColorScheme(.dark)
+}
+
+/// Lays the pill out at full size, then shrinks it to the style's scale.
+private struct PillScale: ViewModifier {
+    let visibility: PillVisibilityState
+    let style: PillStyle
+
+    func body(content: Content) -> some View {
+        if style.scale == 1 {
+            content
+        } else {
+            let full = PillOverlayView.size(for: visibility)
+            content
+                .frame(width: full.width, height: full.height)
+                .scaleEffect(style.scale)
+                .frame(width: full.width * style.scale, height: full.height * style.scale)
+        }
+    }
 }

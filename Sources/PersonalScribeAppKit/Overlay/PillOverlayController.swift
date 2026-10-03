@@ -141,7 +141,18 @@ public final class PillOverlayController: ObservableObject {
             diagnosticLogger: diagnosticLogger
         )
 
+        let styleDefaults = defaults ?? .standard
+        viewModel.setPillStyle(PillStyle.resolve(from: styleDefaults))
         applySnapshot(appStore.snapshot)
+
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification, object: styleDefaults)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak viewModel] _ in
+                MainActor.assumeIsolated {
+                    viewModel?.setPillStyle(PillStyle.resolve(from: styleDefaults))
+                }
+            }
+            .store(in: &cancellables)
 
         appStore.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {

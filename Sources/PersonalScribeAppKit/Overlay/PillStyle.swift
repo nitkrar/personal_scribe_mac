@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import PersonalScribeCore
 
@@ -7,14 +8,8 @@ import PersonalScribeCore
 ///
 /// Three variants:
 /// * `.classic` — full pill with voice-modulated waveform (default).
-/// * `.mini`    — compact flat pill, no inline content.
+/// * `.mini`    — the classic pill at `scale`.
 /// * `.none`    — pill hidden regardless of `PillVisibility`.
-///
-/// Reference: `plans/App UI design/final_settings_general_v2.png`
-/// RECORDING WINDOW section. The Settings UI that sets this
-/// preference landed in mockup-gaps D.1 (2026-04-21); the downstream
-/// wiring to `PillOverlayView` rendering is deferred — tracked in
-/// `plans/backlog/ui-mockup-gaps.md`.
 public enum PillStyle: String, CaseIterable, Identifiable, Codable, Sendable, StoredPreference {
     case classic = "Classic"
     case mini    = "Mini"
@@ -26,5 +21,10 @@ public enum PillStyle: String, CaseIterable, Identifiable, Codable, Sendable, St
 
     public func persist(to defaults: UserDefaults = .standard) {
         Self.persist(self, to: defaults)
+    }
+
+    /// Size multiplier applied to every pill state.
+    public var scale: CGFloat {
+        self == .mini ? 0.75 : 1
     }
 }

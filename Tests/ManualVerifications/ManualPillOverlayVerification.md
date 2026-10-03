@@ -443,3 +443,9 @@ continues the same recording; stop transcribes both parts as one.
 - [ ] **MV-PILL-RESUME-2** Press Esc and let the card expire. Nothing is
   pasted or copied; the next recording starts fresh (no old audio).
 - [ ] **MV-PILL-RESUME-3** Set the duration to 6s; the card stays ~6s.
+
+## Pill style
+
+- [ ] **MV-PILL-STYLE-1** Settings → Recording window → Style = Mini. The idle pill shrinks immediately; recording, transcribing and the Cancel card render as the same design at about three-quarters size, with nothing clipped.
+- [ ] **MV-PILL-STYLE-2** Style = None. The pill disappears, including during recording; dictation still works and pastes.
+- [ ] **MV-PILL-STYLE-3** Back to Classic while recording. The full-size recording pill returns without restarting the session.
