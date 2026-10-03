@@ -384,6 +384,7 @@ public enum AppComposition {
             processorProvider: processorProvider,
             transcriptRepository: transcriptRepository,
             sessionGate: sessionCoordinator.offlineTranscriptionSessionGate(),
+            jobStore: FileOfflineJobStore(directory: { AppConfig.liveStorageLocator().url(for: .db) }),
             logger: makeLogger(PersonalScribeLogCategory.transcription)
         )
     }()

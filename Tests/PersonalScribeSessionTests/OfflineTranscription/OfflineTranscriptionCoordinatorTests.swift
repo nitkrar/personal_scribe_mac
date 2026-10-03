@@ -4,6 +4,57 @@ import XCTest
 @testable import PersonalScribeSession
 
 final class OfflineTranscriptionCoordinatorTests: XCTestCase {
+    func testInterruptedJobsRunAgainAfterRestart() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { cleanup(tempDirectory) }
+        let audio = tempDirectory.appendingPathComponent("drop.wav")
+        try Data().write(to: audio)
+        func job(_ status: OfflineTranscriptionCoordinator.JobStatus) -> OfflineTranscriptionCoordinator.Job {
+            .init(id: UUID(), url: audio, sourceFilename: "drop.wav", descriptorID: BuiltInModelCatalog.parakeetTDT06Bv2.id,
+                  diarize: false, recipeOverride: nil, enqueuedAt: Date(timeIntervalSince1970: 1), status: status)
+        }
+        let interrupted = job(.inFlight(progress: 0.5))
+        let waiting = job(.queued)
+        let done = job(.completed(transcriptID: UUID()))
+        let store = InMemoryOfflineJobStore(jobs: [interrupted, waiting, done])
+        let harness = try makeHarness(
+            initialSessionState: .capturing,
+            transcribersByID: [BuiltInModelCatalog.parakeetTDT06Bv2.id: RecordingTranscriber(outcomes: [
+                .success(makeResult(text: "one")), .success(makeResult(text: "two")),
+            ])],
+            jobStore: store
+        )
+        defer { cleanup(harness.baseDirectory) }
+
+        let restored = await harness.coordinator.snapshot().map(\.status)
+        XCTAssertEqual(restored, [.queued, .queued, done.status])
+
+        await harness.sessionGate.setState(.idle)
+        try await waitUntil(description: "interrupted jobs completed") {
+            let statuses = await harness.coordinator.snapshot().prefix(2).map(\.status)
+            return statuses.allSatisfy { if case .completed = $0 { return true } else { return false } }
+        }
+        let saved = store.jobs.map(\.status)
+        XCTAssertEqual(saved.last, done.status)
+        XCTAssertTrue(saved.prefix(2).allSatisfy { if case .completed = $0 { return true } else { return false } })
+    }
+
+    func testFileJobStoreRoundTrips() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { cleanup(directory) }
+        let store = FileOfflineJobStore(directory: { directory })
+        let job = OfflineTranscriptionCoordinator.Job(
+            id: UUID(), url: URL(fileURLWithPath: "/tmp/a.wav"), sourceFilename: "a.wav", descriptorID: "d",
+            diarize: true, recipeOverride: .fixedDictation, enqueuedAt: Date(timeIntervalSince1970: 5),
+            status: .failed(reason: .other("boom"))
+        )
+
+        store.save([job])
+
+        XCTAssertEqual(FileOfflineJobStore(directory: { directory }).load(), [job])
+    }
+
     func testEnqueueFileTransitionsToInFlightThenCompleted() async throws {
         let harness = try makeHarness(initialSessionState: .capturing)
         defer { cleanup(harness.baseDirectory) }
@@ -497,7 +548,8 @@ private extension OfflineTranscriptionCoordinatorTests {
         transcribersByID: [String: any Transcriber]? = nil,
         diarizer: (any SpeakerDiarizer)? = nil,
         now: Date = Date(timeIntervalSince1970: 2_000),
-        cleanupEnabled: Bool = true
+        cleanupEnabled: Bool = true,
+        jobStore: (any OfflineJobStoring)? = nil
     ) throws -> Harness {
         let baseDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("OfflineTranscriptionCoordinatorTests-\(UUID().uuidString)", isDirectory: true)
@@ -543,6 +595,7 @@ private extension OfflineTranscriptionCoordinatorTests {
             recordingsDirectory: { recordingsDirectory },
             now: { now },
             cleanupEnabled: { cleanupEnabled },
+            jobStore: jobStore,
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 
@@ -791,4 +844,23 @@ private func makeTestBuffer(sampleCount: Int) throws -> PCMBuffer {
         samples: (0..<sampleCount).map { Float($0) },
         timestamp: ContinuousClock().now
     )
+}
+
+private final class InMemoryOfflineJobStore: OfflineJobStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [OfflineTranscriptionCoordinator.Job]
+
+    init(jobs: [OfflineTranscriptionCoordinator.Job]) {
+        stored = jobs
+    }
+
+    var jobs: [OfflineTranscriptionCoordinator.Job] {
+        lock.withLock { stored }
+    }
+
+    func load() -> [OfflineTranscriptionCoordinator.Job] { jobs }
+
+    func save(_ jobs: [OfflineTranscriptionCoordinator.Job]) {
+        lock.withLock { stored = jobs }
+    }
 }

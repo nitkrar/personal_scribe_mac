@@ -7,7 +7,7 @@ public protocol SessionGateProviding: Sendable {
 }
 
 public actor OfflineTranscriptionCoordinator {
-    public enum JobStatus: Sendable, Equatable {
+    public enum JobStatus: Sendable, Equatable, Codable {
         case queued
         case inFlight(progress: Double)
         case completed(transcriptID: UUID)
@@ -15,7 +15,7 @@ public actor OfflineTranscriptionCoordinator {
         case cancelled
     }
 
-    public enum FailureReason: Sendable, Equatable {
+    public enum FailureReason: Sendable, Equatable, Codable {
         case audioMissing
         case modelNotAvailable
         case conversionFailed
@@ -23,11 +23,11 @@ public actor OfflineTranscriptionCoordinator {
         case other(String)
     }
 
-    public enum RecipeOverride: Sendable, Equatable {
+    public enum RecipeOverride: Sendable, Equatable, Codable {
         case fixedDictation
     }
 
-    public struct Job: Sendable, Equatable {
+    public struct Job: Sendable, Equatable, Codable {
         public let id: UUID
         public let url: URL
         public let sourceFilename: String
@@ -69,6 +69,7 @@ public actor OfflineTranscriptionCoordinator {
     private let cleanupEnabled: @Sendable () -> Bool
     private let now: @Sendable () -> Date
     private let diarizationSensitivity: SpeakerSeparationSensitivity
+    private let jobStore: (any OfflineJobStoring)?
     private let logger: PersonalScribeLogger
 
     private var jobs: [Job] = []
@@ -91,6 +92,7 @@ public actor OfflineTranscriptionCoordinator {
         cleanupEnabled: @escaping @Sendable () -> Bool = {
             PreferenceKeys.transcriptCleanupEnabled.resolve(from: .standard)
         },
+        jobStore: (any OfflineJobStoring)? = nil,
         logger: PersonalScribeLogger
     ) {
         self.init(
@@ -113,6 +115,7 @@ public actor OfflineTranscriptionCoordinator {
             now: now,
             diarizationSensitivity: diarizationSensitivity,
             cleanupEnabled: cleanupEnabled,
+            jobStore: jobStore,
             logger: logger
         )
     }
@@ -131,6 +134,7 @@ public actor OfflineTranscriptionCoordinator {
         cleanupEnabled: @escaping @Sendable () -> Bool = {
             PreferenceKeys.transcriptCleanupEnabled.resolve(from: .standard)
         },
+        jobStore: (any OfflineJobStoring)? = nil,
         logger: PersonalScribeLogger
     ) {
         self.activeASRDescriptor = activeASRDescriptor
@@ -144,7 +148,17 @@ public actor OfflineTranscriptionCoordinator {
         self.cleanupEnabled = cleanupEnabled
         self.now = now
         self.diarizationSensitivity = diarizationSensitivity
+        self.jobStore = jobStore
         self.logger = logger
+        // Jobs interrupted by quit or crash start over; finished ones stay as history.
+        self.jobs = (jobStore?.load() ?? []).map { job in
+            switch job.status {
+            case .queued, .inFlight:
+                return Self.withStatus(job, .queued)
+            case .completed, .failed, .cancelled:
+                return job
+            }
+        }
         Task { [weak self] in
             await self?.observeSessionGate()
         }
@@ -604,6 +618,10 @@ private extension OfflineTranscriptionCoordinator {
     }
 
     func updated(_ job: Job, status: JobStatus) -> Job {
+        Self.withStatus(job, status)
+    }
+
+    static func withStatus(_ job: Job, _ status: JobStatus) -> Job {
         Job(
             id: job.id,
             url: job.url,
@@ -618,6 +636,7 @@ private extension OfflineTranscriptionCoordinator {
 
     func publishSnapshot() {
         let snapshot = jobs
+        jobStore?.save(snapshot)
         for continuation in snapshotContinuations.values {
             continuation.yield(snapshot)
         }
@@ -702,5 +721,35 @@ private extension OfflineTranscriptionCoordinator.JobStatus {
         case .completed, .failed, .cancelled:
             false
         }
+    }
+}
+
+/// Persists the offline queue so it survives quit and crash.
+public protocol OfflineJobStoring: Sendable {
+    func load() -> [OfflineTranscriptionCoordinator.Job]
+    func save(_ jobs: [OfflineTranscriptionCoordinator.Job])
+}
+
+/// JSON file `offline-jobs.json` in the given directory.
+public struct FileOfflineJobStore: OfflineJobStoring {
+    private let directory: @Sendable () throws -> URL
+
+    public init(directory: @escaping @Sendable () throws -> URL) {
+        self.directory = directory
+    }
+
+    public func load() -> [OfflineTranscriptionCoordinator.Job] {
+        guard let url = try? fileURL(), let data = try? Data(contentsOf: url) else { return [] }
+        return (try? JSONDecoder().decode([OfflineTranscriptionCoordinator.Job].self, from: data)) ?? []
+    }
+
+    public func save(_ jobs: [OfflineTranscriptionCoordinator.Job]) {
+        guard let url = try? fileURL(), let data = try? JSONEncoder().encode(jobs) else { return }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: url, options: .atomic)
+    }
+
+    private func fileURL() throws -> URL {
+        try directory().appendingPathComponent("offline-jobs.json", isDirectory: false)
     }
 }

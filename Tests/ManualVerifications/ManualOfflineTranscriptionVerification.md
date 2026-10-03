@@ -38,3 +38,5 @@ if you changed it in `Settings → Advanced`, use that location instead.
   press feedback on click, stays in a busy state while the job is in
   flight, and repeated clicks do not create duplicate queued jobs for
   the same source file.
+
+- [ ] **MV-OFFLINE-QUEUE-1** Queue two long files in the Offline tab, quit while the first is transcribing, and relaunch. Both files reappear as queued and transcribe; completed jobs from before the quit are still listed but do not run again. The queue lives in `<base>/db/offline-jobs.json`.
