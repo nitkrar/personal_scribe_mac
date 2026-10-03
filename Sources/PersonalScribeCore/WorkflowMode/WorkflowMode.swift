@@ -42,9 +42,7 @@ import Foundation
 /// Codable: serialised as part of `WorkflowModeDocument` (#078.12) on
 /// `workflow-modes.json` in `AppConfig.baseDirectory()`.
 ///
-/// `cleanup` — whether post-processing runs. Follows the global
-/// "Clean up transcript" setting unless overridden; missing-key decode
-/// follows the global setting.
+/// `cleanup` — whether post-processing runs; missing key follows the global setting.
 ///
 /// `Identifiable` so Modes-tab UI bindings work directly off `id`.
 public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {

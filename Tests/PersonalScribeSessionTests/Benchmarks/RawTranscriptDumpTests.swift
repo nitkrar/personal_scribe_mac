@@ -3,15 +3,7 @@ import XCTest
 import PersonalScribeCore
 @testable import PersonalScribeSession
 
-/// Opt-in harness for judging post-processing changes on real recordings.
-///
-/// 1. Re-transcribe saved recordings with Parakeet TDT, no post-processing:
-///    `NINIMMA_DUMP_DIR=~/Library/Application\ Support/personal_scribe/recordings
-///     NINIMMA_RAW_FILE=/tmp/raw.jsonl swift test --filter testDumpRawTranscripts`
-/// 2. Run the current pipeline over that raw text, before and after a change:
-///    `NINIMMA_RAW_FILE=/tmp/raw.jsonl NINIMMA_PP_OUT=/tmp/after.jsonl
-///     swift test --filter testPostProcessRawTranscripts`
-/// Then diff the two JSONL outputs (`{"file", "text"}` per line).
+/// Opt-in: dump raw Parakeet transcripts of saved recordings, then post-process them, to diff cleanup changes.
 final class RawTranscriptDumpTests: XCTestCase {
     func testDumpRawTranscripts() async throws {
         let env = ProcessInfo.processInfo.environment

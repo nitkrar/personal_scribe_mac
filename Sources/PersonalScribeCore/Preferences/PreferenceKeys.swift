@@ -57,8 +57,7 @@ public enum PreferenceKeys {
         default: true
     )
 
-    /// "Clean up transcript" — run post-processing (filler removal,
-    /// punctuation) on the transcript. Off delivers the raw text.
+    /// "Clean up transcript"; off delivers the raw transcript.
     public static let transcriptCleanupEnabled = SettingKey<Bool>(
         key: "TranscriptCleanupEnabled",
         default: true
