@@ -33,6 +33,29 @@ final class ModeDetailViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.lastError)
     }
 
+    func testEditKeepsChangesMadeElsewhereToTheSameMode() throws {
+        let custom = WorkflowMode(
+            id: "shared",
+            name: "Original",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])),
+            availableKindsProvider: { [.asr] }
+        )
+        let viewModel = ModeDetailViewModel(mode: custom, registry: registry)
+        try registry.saveCustom(custom.withName("Renamed elsewhere"))
+
+        viewModel.setCleanup(.override(false))
+
+        let saved = try XCTUnwrap(registry.customModes.first)
+        XCTAssertEqual(saved.name, "Renamed elsewhere")
+        XCTAssertEqual(saved.cleanup, .override(false))
+    }
+
     func testRealtimeToggleWithoutStreamingModelExplainsWhyAndKeepsMode() throws {
         let custom = WorkflowMode(
             id: "rt-unavailable",

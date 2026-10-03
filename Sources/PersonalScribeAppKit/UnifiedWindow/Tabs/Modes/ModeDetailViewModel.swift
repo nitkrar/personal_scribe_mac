@@ -172,45 +172,45 @@ final class ModeDetailViewModel: ObservableObject {
     }
 
     func setRealtime(_ on: Bool) {
-        apply(
-            mode.withRealtime(on)
+        apply {
+            $0.withRealtime(on)
                 .sanitizingLanguage(registeredDescriptors: registeredDescriptors)
-        )
+        }
     }
     func setDiarization(_ on: Bool) {
-        apply(
-            mode.withDiarization(on)
+        apply {
+            $0.withDiarization(on)
                 .sanitizingLanguage(registeredDescriptors: registeredDescriptors)
-        )
+        }
     }
-    func setAutoStop(_ parameter: Parameter<Bool>) { apply(mode.withAutoStop(parameter: parameter)) }
-    func setAutoPaste(_ parameter: Parameter<Bool>) { apply(mode.withAutoPaste(parameter: parameter)) }
-    func setRestoreClipboard(_ parameter: Parameter<Bool>) { apply(mode.withRestoreClipboard(parameter: parameter)) }
+    func setAutoStop(_ parameter: Parameter<Bool>) { apply { $0.withAutoStop(parameter: parameter) } }
+    func setAutoPaste(_ parameter: Parameter<Bool>) { apply { $0.withAutoPaste(parameter: parameter) } }
+    func setRestoreClipboard(_ parameter: Parameter<Bool>) { apply { $0.withRestoreClipboard(parameter: parameter) } }
     func setLiveTranscriptCard(_ parameter: Parameter<Bool>) {
-        apply(mode.withLiveTranscriptCard(parameter: parameter))
+        apply { $0.withLiveTranscriptCard(parameter: parameter) }
     }
     func setLiveCursorStreaming(_ parameter: Parameter<Bool>) {
-        apply(mode.withLiveCursorStreaming(parameter: parameter))
+        apply { $0.withLiveCursorStreaming(parameter: parameter) }
     }
     func setAuthoritativeSecondPass(_ parameter: Parameter<Bool>) {
-        apply(mode.withAuthoritativeSecondPass(parameter: parameter))
+        apply { $0.withAuthoritativeSecondPass(parameter: parameter) }
     }
-    func setCleanup(_ parameter: Parameter<Bool>) { apply(mode.withCleanup(parameter: parameter)) }
-    func setHotkey(_ hotkey: HotkeyPreference?) { apply(mode.withHotkey(hotkey)) }
+    func setCleanup(_ parameter: Parameter<Bool>) { apply { $0.withCleanup(parameter: parameter) } }
+    func setHotkey(_ hotkey: HotkeyPreference?) { apply { $0.withHotkey(hotkey) } }
     func setVoiceModelPin(_ id: String?) {
-        apply(
-            mode.withVoiceModelPin(id)
+        apply {
+            $0.withVoiceModelPin(id)
                 .sanitizingLanguage(registeredDescriptors: registeredDescriptors)
-        )
+        }
     }
     func setLanguage(_ language: String?) {
-        apply(
-            mode.withLanguage(language)
+        apply {
+            $0.withLanguage(language)
                 .sanitizingLanguage(registeredDescriptors: registeredDescriptors)
-        )
+        }
     }
     func setSpeakerSeparationSensitivity(_ parameter: Parameter<SpeakerSeparationSensitivity>) {
-        apply(mode.withSpeakerSeparationSensitivity(parameter: parameter))
+        apply { $0.withSpeakerSeparationSensitivity(parameter: parameter) }
     }
 
     @discardableResult
@@ -228,7 +228,7 @@ final class ModeDetailViewModel: ObservableObject {
     func setName(_ name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != mode.name else { return }
-        apply(mode.withName(trimmed))
+        apply { $0.withName(trimmed) }
     }
 
     /// Sibling per-mode hotkeys (excluding self) — passed to the
@@ -239,7 +239,11 @@ final class ModeDetailViewModel: ObservableObject {
             .compactMap(\.hotkey)
     }
 
-    private func apply(_ updated: WorkflowMode) {
+    /// Applies `change` to the registry's current copy so edits made
+    /// elsewhere to the same mode are kept.
+    private func apply(_ change: (WorkflowMode) -> WorkflowMode) {
+        let base = registry.customModes.first { $0.id == mode.id } ?? mode
+        let updated = change(base)
         do {
             try registry.saveCustom(updated)
             mode = updated
