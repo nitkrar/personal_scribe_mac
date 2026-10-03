@@ -17,7 +17,6 @@ final class PostProcessingPipelineTests: XCTestCase {
         XCTAssertEqual(output, "Hello world.")
     }
 
-    /// Phrases a regex can't tell from fillers stay; these sentences come from real dictations.
     func testKeepsWordsThatCanCarryMeaning() async throws {
         let sentences = [
             "This is what the image looks like.",

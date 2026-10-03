@@ -818,7 +818,7 @@ Replaces the original 7-stage string-rule chain. Whisper and Parakeet already em
 
 **Opt-in per mode:** LLM rewrite (e.g. "make this an email"), default Qwen3.5-2B Q4 (~1.3 GB resident; keep warm while the mode is active or pay the load on every recording).
 
-**LLM benchmark (2026-10-03, M5 Max, llama.cpp Q4, ~100-word dictation):** Gemma 3 270M and Qwen2.5 0.5B can't follow the instruction (echo the prompt / leave fillers). Llama 3.2 1B/3B and Qwen2.5 1.5B clean but rephrase or add preambles. Qwen3.5-2B (thinking off) was the only one that cleaned without rewriting, at 0.5 s. Generation is memory-bandwidth bound, so a base M1/M2 Air is ~5–8× slower: ~3–4 s per 100 words, 15–20 s for a long dictation — too slow for every dictation. Models in `~/Projects/nitkrar/models/bench-small/`. Apple Foundation Models needs Apple Intelligence enabled (off on the user's machines), so at most an optional backend.
+**LLM sizing:** Qwen3.5-2B (thinking off) is the smallest model that cleans without rewriting; sub-1B models fail the instruction. ~0.5 s per 100 words on M5 Max, ~5–8× slower on base M1/M2 — too slow for every dictation. Models in `~/Projects/nitkrar/models/bench-small/`. Apple Foundation Models requires Apple Intelligence enabled, so optional backend at most.
 
 **Depends on:** #045 Stage A (the chain architecture must exist first)
 ---

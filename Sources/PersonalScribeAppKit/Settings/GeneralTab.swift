@@ -493,8 +493,6 @@ public struct GeneralTab: View {
         }
     }
 
-    /// Recording card — mute-while-recording and how long the Cancel card
-    /// offers Resume.
     private var behaviorCard: some View {
         SettingsCard {
             Text("Recording")
@@ -706,7 +704,6 @@ final class GeneralTabViewModel: ObservableObject {
     /// clipboard (subject to the remaining AX / externality gates).
     /// When `false`, clipboard only — user pastes manually.
     @Published private(set) var autoPasteEnabled: Bool
-    /// Global "Clean up transcript" default; modes follow it unless overridden.
     @Published private(set) var transcriptCleanupEnabled: Bool
     /// "Restore clipboard" toggle (#072). When `true`, `ClipboardBatchOutput`
     /// schedules a `changeCount`-guarded restore of the user's pre-transcript

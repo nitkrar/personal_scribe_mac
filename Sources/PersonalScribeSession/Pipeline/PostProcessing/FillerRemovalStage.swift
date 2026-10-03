@@ -1,8 +1,7 @@
 import Foundation
 
 public struct FillerRemovalStage: PostProcessingStage {
-    /// Vocal fillers only. "like", "I mean", "kind of" etc. are real words as often as
-    /// not, and a regex can't tell which, so they stay.
+    /// Vocal fillers only: "like", "I mean", "kind of" are often real words.
     private static let fillers = try! NSRegularExpression(
         pattern: #"\b(um|uh|uhm|er|erm|ah|ahh|hmm|hmmm)\b"#,
         options: [.caseInsensitive]

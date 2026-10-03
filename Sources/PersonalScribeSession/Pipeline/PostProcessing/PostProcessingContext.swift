@@ -7,7 +7,7 @@ public struct PostProcessingContext: Sendable, Equatable {
     public let systemPrompt: String?
     public let segments: [TranscriptionResult.Segment]
     public let asrConfidence: Double?
-    /// `false` = deliver the transcript untouched (mode/global "Clean up transcript" off).
+    /// `false` delivers the transcript untouched.
     public let cleanupEnabled: Bool
 
     public init(
