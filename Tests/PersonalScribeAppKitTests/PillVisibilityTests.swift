@@ -24,13 +24,11 @@ final class PillVisibilityTests: XCTestCase {
     func testRawValues() {
         XCTAssertEqual(PillVisibility.alwaysOn.rawValue, "always-on")
         XCTAssertEqual(PillVisibility.autoShow.rawValue, "auto-show")
-        XCTAssertEqual(PillVisibility.hidden.rawValue, "hidden")
     }
 
     func testInitFromRawValue() {
         XCTAssertEqual(PillVisibility(rawValue: "always-on"), .alwaysOn)
         XCTAssertEqual(PillVisibility(rawValue: "auto-show"), .autoShow)
-        XCTAssertEqual(PillVisibility(rawValue: "hidden"), .hidden)
         XCTAssertNil(PillVisibility(rawValue: "nonsense"))
     }
 
@@ -76,16 +74,6 @@ final class PillVisibilityTests: XCTestCase {
         XCTAssertEqual(PillVisibility.resolve(from: defaults), .alwaysOn)
     }
 
-    func testPersistRoundTripHidden() {
-        let defaults = isolatedDefaults()
-        PillVisibility.hidden.persist(to: defaults)
-        XCTAssertEqual(
-            defaults.string(forKey: PillVisibility.userDefaultsKey),
-            "hidden"
-        )
-        XCTAssertEqual(PillVisibility.resolve(from: defaults), .hidden)
-    }
-
     func testPersistRoundTripAutoShow() {
         let defaults = isolatedDefaults()
         PillVisibility.autoShow.persist(to: defaults)
@@ -98,11 +86,7 @@ final class PillVisibilityTests: XCTestCase {
 
     // MARK: - Behaviour semantics
 
-    func testAllCasesAreCovered() {
-        // Guard against an accidental case being added without tests.
-        XCTAssertEqual(PillVisibility.allCases.count, 3)
-        XCTAssertTrue(PillVisibility.allCases.contains(.alwaysOn))
-        XCTAssertTrue(PillVisibility.allCases.contains(.autoShow))
-        XCTAssertTrue(PillVisibility.allCases.contains(.hidden))
+    func testCasesAreAlwaysOnAndAutoShow() {
+        XCTAssertEqual(PillVisibility.allCases, [.alwaysOn, .autoShow])
     }
 }

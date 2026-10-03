@@ -43,8 +43,6 @@ public final class AppKitVisibilityModeProvider: @unchecked Sendable, AppStoreVi
             return .alwaysOn
         case .autoShow:
             return .autoShow
-        case .hidden:
-            return .hidden
         }
     }
 }

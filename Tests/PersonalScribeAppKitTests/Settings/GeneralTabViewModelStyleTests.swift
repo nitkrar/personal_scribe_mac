@@ -31,10 +31,10 @@ final class GeneralTabViewModelStyleTests: XCTestCase {
         let defaults = Self.isolatedDefaults()
         let viewModel = GeneralTabViewModel(defaults: defaults)
 
-        viewModel.setPillStyle(.none)
+        viewModel.setPillStyle(.mini)
 
-        XCTAssertEqual(viewModel.pillStyle, .none)
-        XCTAssertEqual(defaults.string(forKey: "PillStyle"), "None")
+        XCTAssertEqual(viewModel.pillStyle, .mini)
+        XCTAssertEqual(defaults.string(forKey: "PillStyle"), "Mini")
     }
 
     func testSetPillStyleToMiniPersistsRawValue() {

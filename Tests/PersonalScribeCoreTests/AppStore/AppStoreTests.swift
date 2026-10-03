@@ -171,13 +171,13 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.activeMode?.id, "coding")
     }
 
-    func testResumableCancelledCaptureShowsCancelCardEvenWhenPillHidden() async {
+    func testResumableCancelledCaptureShowsCancelCardInAutoShow() async {
         let session = FakeAppStoreSessionProvider()
         let store = makeStore(
             session: session,
             permissions: FakePermissionService(),
             registry: makeRegistry(),
-            visibilityModeProvider: FakeVisibilityModeProvider(initialVisibilityMode: .hidden),
+            visibilityModeProvider: FakeVisibilityModeProvider(initialVisibilityMode: .autoShow),
             clock: ManualAppStoreClock()
         )
         store.start()
@@ -192,7 +192,7 @@ final class AppStoreTests: XCTestCase {
     }
 
     func testVisibilityModeChangesRecomputePillVisibility() async {
-        let visibilityModeProvider = FakeVisibilityModeProvider(initialVisibilityMode: .hidden)
+        let visibilityModeProvider = FakeVisibilityModeProvider(initialVisibilityMode: .autoShow)
         let store = makeStore(
             session: FakeAppStoreSessionProvider(),
             permissions: FakePermissionService(),
@@ -211,7 +211,7 @@ final class AppStoreTests: XCTestCase {
             store.snapshot.pillVisibility == .idle
         }
 
-        visibilityModeProvider.emit(.hidden)
+        visibilityModeProvider.emit(.autoShow)
         await waitUntil {
             store.snapshot.pillVisibility == .hidden
         }
@@ -309,7 +309,7 @@ final class AppStoreTests: XCTestCase {
     func testInitialVisibilityModeReplayDoesNotClobberDoneTransient() async {
         let session = FakeAppStoreSessionProvider()
         let visibilityModeProvider = DeferredInitialYieldVisibilityModeProvider(
-            initialVisibilityMode: .hidden
+            initialVisibilityMode: .autoShow
         )
         let clock = ManualAppStoreClock()
         let store = AppStore(

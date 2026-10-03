@@ -91,6 +91,43 @@ final class PillOverlayControllerTests: XCTestCase {
             message.message.contains("isStreamingSession=true")
         }, "Expected stream_card_hidden with updates summary; saw: \(messages.map(\.message))")
     }
+
+    func testSwitchingToAlwaysOnShowsTheIdlePillWithoutARecording() async throws {
+        for afterDictation in [false, true] {
+            for _ in 0..<10 {
+                let suite = "PillOverlayControllerTests.\(UUID().uuidString)"
+                let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+                defer { defaults.removePersistentDomain(forName: suite) }
+                PillVisibility.autoShow.persist(to: defaults)
+                let session = FakeSessionProvider()
+                if afterDictation { session.emit(SessionSnapshot(sessionState: .completed)) }
+                let appStore = AppStore(
+                    session: session,
+                    permissions: FakePermissionService(),
+                    workflowModeRegistry: try WorkflowModeRegistry(
+                        store: InMemoryWorkflowModeStore(),
+                        availableKindsProvider: { Set(ModelKind.allCases) }
+                    ),
+                    visibilityModeSource: AppKitVisibilityModeProvider(defaults: defaults)
+                )
+                appStore.start()
+                let controller = PillOverlayController(appStore: appStore, defaults: defaults, panelBuilder: RecordingPanelBuilder())
+                try await waitFor { controller.viewModel.visibility == .hidden || afterDictation }
+                try await Task.sleep(for: .milliseconds(20))
+
+                PillVisibility.alwaysOn.persist(to: defaults)
+
+                try await waitFor { controller.viewModel.visibility == .idle }
+            }
+        }
+    }
+
+    private func waitFor(_ condition: @MainActor () -> Bool) async throws {
+        for _ in 0..<200 where !condition() {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(condition())
+    }
 }
 
 @MainActor

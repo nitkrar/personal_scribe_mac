@@ -2,14 +2,14 @@ import XCTest
 @testable import PersonalScribeAppKit
 
 /// Tests for `PillStyle` — the user-selectable pill shape preference
-/// (Classic / Mini / None). Follows the `PillAppearanceTests.swift`
+/// (Classic / Mini). Follows the `PillAppearanceTests.swift`
 /// pattern verbatim (resolve/persist round-trip, fallback, no-prefix
 /// UserDefaults key).
 final class PillStyleTests: XCTestCase {
     // MARK: - Cases + UserDefaults round-trip
 
-    func testCasesInclude_Classic_Mini_None() {
-        XCTAssertEqual(PillStyle.allCases, [.classic, .mini, .none])
+    func testCasesAreClassicAndMini() {
+        XCTAssertEqual(PillStyle.allCases, [.classic, .mini])
     }
 
     func testDefaultResolvesToClassic() {
@@ -21,12 +21,6 @@ final class PillStyleTests: XCTestCase {
         let defaults = Self.isolatedDefaults()
         PillStyle.mini.persist(to: defaults)
         XCTAssertEqual(PillStyle.resolve(from: defaults), .mini)
-    }
-
-    func testResolveReadsPersistedNone() {
-        let defaults = Self.isolatedDefaults()
-        PillStyle.none.persist(to: defaults)
-        XCTAssertEqual(PillStyle.resolve(from: defaults), .none)
     }
 
     func testResolveFallsBackToClassicOnInvalidValue() {

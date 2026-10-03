@@ -127,7 +127,7 @@ final class PillOverlayPresenterTests: XCTestCase {
     /// If the view-model is already `.hidden` when the presenter
     /// subscribes, the presenter must not build or show a panel.
     func testPresenterDoesNotBuildPanelWhenCurrentVisibilityIsHidden() {
-        let viewModel = PillOverlayViewModel(visibilityMode: .hidden)
+        let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
         let panelBuilder = RecordingPanelBuilder()
 

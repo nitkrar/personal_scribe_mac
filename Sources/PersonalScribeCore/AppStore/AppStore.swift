@@ -258,10 +258,6 @@ public final class AppStore: ObservableObject {
             return idleVisibility(for: mode, progress: progress)
         }
 
-        if mode == .hidden {
-            return .hidden
-        }
-
         switch sessionState {
         case .idle:
             return idleVisibility(for: mode, progress: progress)
@@ -294,7 +290,7 @@ public final class AppStore: ObservableObject {
         switch mode {
         case .alwaysOn:
             return .idle
-        case .autoShow, .hidden:
+        case .autoShow:
             return .hidden
         }
     }

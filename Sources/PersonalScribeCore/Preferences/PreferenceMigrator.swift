@@ -10,17 +10,33 @@ import Foundation
 ///   (the only branded key on trunk at rename time). UserDefaults keys are
 ///   bundle-scoped by the `com.nitkrar.personal_scribe` domain, so the rename
 ///   policy is "strip the prefix" rather than swap to `PersonalScribe*`.
+/// - Version 2: pill visibility "hidden" becomes auto-show; pill style
+///   "None" falls back to the default style.
 public enum PreferenceMigrator {
-    public static let currentMigrationVersion: Int = 1
+    public static let currentMigrationVersion: Int = 2
     public static let migrationVersionKey = "PreferenceMigrationVersion"
 
     public static func migrate(defaults: UserDefaults = .standard) {
         let current = defaults.integer(forKey: migrationVersionKey)
         guard current < currentMigrationVersion else { return }
 
-        migrateSeshatOnboardingCompleted(defaults: defaults)
+        if current < 1 {
+            migrateSeshatOnboardingCompleted(defaults: defaults)
+        }
+        if current < 2 {
+            migrateRemovedPillOptions(defaults: defaults)
+        }
 
         defaults.set(currentMigrationVersion, forKey: migrationVersionKey)
+    }
+
+    private static func migrateRemovedPillOptions(defaults: UserDefaults) {
+        if defaults.string(forKey: "PillVisibilityMode") == "hidden" {
+            defaults.set("auto-show", forKey: "PillVisibilityMode")
+        }
+        if defaults.string(forKey: "PillStyle") == "None" {
+            defaults.removeObject(forKey: "PillStyle")
+        }
     }
 
     private static func migrateSeshatOnboardingCompleted(defaults: UserDefaults) {

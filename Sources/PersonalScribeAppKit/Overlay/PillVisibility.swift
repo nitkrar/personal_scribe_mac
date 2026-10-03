@@ -4,8 +4,8 @@ import PersonalScribeCore
 /// User-selectable visibility mode for the pill overlay.
 ///
 /// Reference: `plans/seshat_agent_bundle/03_Surfaces/PillOverlayWindow/architecture.png`
-/// shows the three rows — Always On / Auto-show / Hidden. This enum is the
-/// canonical representation.
+/// shows Always On / Auto-show / Hidden; Hidden was dropped because it
+/// behaved like Auto-show.
 ///
 /// ## Semantics
 /// * **`.alwaysOn` (default)** — the pill is visible at all times (Mode
@@ -15,12 +15,6 @@ import PersonalScribeCore
 /// * **`.autoShow`** — the pill appears only while a recording /
 ///   transcription / download is in flight, and fades back out when
 ///   idle. The menu bar is the always-visible surface.
-/// * **`.hidden`** — the pill never shows; the menu bar + hotkeys are
-///   the only user-reachable surfaces. Invariant: at least one of
-///   `hidden` pill / `hidden` menu bar must be false — the menu bar
-///   cannot ship a "hide" toggle while pill is `.hidden`. Phase 2 has
-///   no menu-bar-hide toggle, so the invariant holds by construction
-///   (see PLAN_PHASES.md line 293).
 ///
 /// ## Persistence
 /// Stored in `UserDefaults` at the key `"PillVisibilityMode"` (the type
@@ -34,7 +28,6 @@ import PersonalScribeCore
 public enum PillVisibility: String, CaseIterable, Codable, Sendable, Equatable {
     case alwaysOn = "always-on"
     case autoShow = "auto-show"
-    case hidden
 
     /// The UserDefaults key used across the app. Centralised here so
     /// the Phase 3 Settings UI and the Phase 2 pill overlay agree on

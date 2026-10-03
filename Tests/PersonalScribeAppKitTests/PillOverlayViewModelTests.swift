@@ -143,43 +143,6 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .recording)
     }
 
-    func testHiddenModeHidesIdleButRecordingOverridesHidden() {
-        // Sprint 2 redesign (2026-04-18) reversed the prior rule.
-        // Claude's pill spec requires the stop affordance to stay
-        // reachable during `.recording` regardless of the user's
-        // visibility preference. The menu bar still satisfies the
-        // "at-least-one-surface-visible" invariant in Phase 2.
-        let viewModel = PillOverlayViewModel(visibilityMode: .hidden)
-
-        viewModel.apply(sessionState: .idle, preparationProgress: nil)
-        XCTAssertEqual(viewModel.visibility, .hidden)
-
-        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
-        XCTAssertEqual(viewModel.visibility, .recording,
-                       "Recording must override hidden mode (stop affordance)")
-
-        viewModel.apply(sessionState: .transcribing, preparationProgress: nil)
-        XCTAssertEqual(viewModel.visibility, .transcribing,
-                       "Transcribing continues showing the pill after recording override until we return to idle")
-
-        let progress = ModelDownloadProgress(
-            phase: .downloading,
-            fractionCompleted: 0.5,
-            receivedBytes: 50,
-            expectedBytes: 100
-        )
-        // Transcribing → idle fires the `.done` confirmation (prior
-        // state was transcribing). Consume that first before checking
-        // the idle-hidden behaviour.
-        viewModel.apply(sessionState: .idle, preparationProgress: nil)
-        XCTAssertEqual(viewModel.visibility, .done)
-
-        // The AppStore now derives visibility centrally, and hidden mode
-        // still surfaces active download progress even when the session is idle.
-        viewModel.apply(sessionState: .idle, preparationProgress: progress)
-        XCTAssertEqual(viewModel.visibility, .downloading(fractionCompleted: 0.5))
-    }
-
     func testAutoShowModeHidesPillWhenIdleAndNoPreparation() {
         let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
 
@@ -208,8 +171,8 @@ final class PillOverlayViewModelTests: XCTestCase {
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
         XCTAssertEqual(viewModel.visibility, .idle)
 
-        viewModel.setVisibilityMode(.hidden)
-        XCTAssertEqual(viewModel.visibilityMode, .hidden)
+        viewModel.setVisibilityMode(.autoShow)
+        XCTAssertEqual(viewModel.visibilityMode, .autoShow)
         XCTAssertEqual(viewModel.visibility, .idle)
 
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
@@ -348,20 +311,6 @@ final class PillOverlayViewModelTests: XCTestCase {
     }
 
     // MARK: - Pill style
-
-    func testNoneStyleHidesThePillAndClassicRestoresIt() {
-        let viewModel = PillOverlayViewModel()
-        viewModel.apply(visibility: .recording)
-
-        viewModel.setPillStyle(.none)
-        XCTAssertEqual(viewModel.visibility, .hidden)
-
-        viewModel.apply(visibility: .transcribing)
-        XCTAssertEqual(viewModel.visibility, .hidden, "session updates stay hidden under None")
-
-        viewModel.setPillStyle(.classic)
-        XCTAssertEqual(viewModel.visibility, .transcribing)
-    }
 
     func testMiniStyleShrinksEveryStateProportionally() {
         let full = PillOverlayView.size(for: .recording, style: .classic)

@@ -25,7 +25,7 @@ final class GeneralTabViewModelTests: XCTestCase {
         XCTAssertEqual(GeneralTabViewModel(defaults: defaults).waveformPalette, .sunset)
     }
 
-    func test_applyVisibilityConfig_rejectsBothHidden() {
+    func testApplyVisibilityConfigPersistsPillModeAndMenuBar() {
         let defaults = isolatedDefaults()
         var menuBarVisible = true
         let viewModel = GeneralTabViewModel(
@@ -34,51 +34,11 @@ final class GeneralTabViewModelTests: XCTestCase {
             menuBarVisibilitySetter: { menuBarVisible = $0 }
         )
 
-        let conflict = viewModel.applyVisibilityConfig(
-            .init(
-                pillVisibilityMode: .hidden,
-                isMenuBarVisible: false
-            )
-        )
+        viewModel.applyVisibilityConfig(.init(pillVisibilityMode: .autoShow, isMenuBarVisible: false))
 
-        XCTAssertEqual(conflict, .conflict)
-        XCTAssertEqual(viewModel.visibilityError, .conflict)
-        // View model's init resolved the fallback mode from defaults when no
-        // key was set — the stored default flipped from `.autoShow` to
-        // `.alwaysOn` per dogfood feedback. The conflict-rejection path
-        // leaves the pre-apply mode in place, so the assertion tracks the
-        // new persisted default.
-        XCTAssertEqual(viewModel.pillVisibilityMode, .alwaysOn)
-        XCTAssertTrue(viewModel.isMenuBarVisible)
-        XCTAssertEqual(PillVisibility.resolve(from: defaults), .alwaysOn)
-        XCTAssertTrue(menuBarVisible)
-
-        let hidePillOnly = viewModel.applyVisibilityConfig(
-            .init(
-                pillVisibilityMode: .hidden,
-                isMenuBarVisible: true
-            )
-        )
-
-        XCTAssertNil(hidePillOnly)
-        XCTAssertNil(viewModel.visibilityError)
-        XCTAssertEqual(viewModel.pillVisibilityMode, .hidden)
-        XCTAssertTrue(viewModel.isMenuBarVisible)
-        XCTAssertEqual(PillVisibility.resolve(from: defaults), .hidden)
-        XCTAssertTrue(menuBarVisible)
-
-        let hideMenuOnly = viewModel.applyVisibilityConfig(
-            .init(
-                pillVisibilityMode: .alwaysOn,
-                isMenuBarVisible: false
-            )
-        )
-
-        XCTAssertNil(hideMenuOnly)
-        XCTAssertNil(viewModel.visibilityError)
-        XCTAssertEqual(viewModel.pillVisibilityMode, .alwaysOn)
+        XCTAssertEqual(viewModel.pillVisibilityMode, .autoShow)
+        XCTAssertEqual(PillVisibility.resolve(from: defaults), .autoShow)
         XCTAssertFalse(viewModel.isMenuBarVisible)
-        XCTAssertEqual(PillVisibility.resolve(from: defaults), .alwaysOn)
         XCTAssertFalse(menuBarVisible)
     }
 

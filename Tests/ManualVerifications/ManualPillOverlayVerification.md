@@ -50,15 +50,6 @@ relaunch — this exercises the first-launch default path.
   bottom. Stopping transcription and the pill fades out to hidden
   again. Matches `architecture.png` Mode 2 row.
 
-### Mode 3 — Hidden
-
-Setup: `defaults write com.nitkrar.personal_scribe PillVisibilityMode "hidden"`
-and relaunch.
-
-- [ ] **MV-B1-4** The pill never appears, not even during recording or
-  transcription. The menu bar remains the only user-reachable surface.
-  Invariant held because Phase 2 does not ship a menu-bar-hide toggle.
-
 ---
 
 ## Sprint 2 Lane B1 — Waveform decay coast-down
@@ -447,5 +438,5 @@ continues the same recording; stop transcribes both parts as one.
 ## Pill style
 
 - [ ] **MV-PILL-STYLE-1** Settings → Recording window → Style = Mini. The idle pill shrinks immediately; recording, transcribing and the Cancel card render as the same design at about three-quarters size, with nothing clipped.
-- [ ] **MV-PILL-STYLE-2** Style = None. The pill disappears, including during recording; dictation still works and pastes.
+- [ ] **MV-PILL-STYLE-2** Settings lists only Classic and Mini under Style, and only Always-on and Auto-show under Pill visibility.
 - [ ] **MV-PILL-STYLE-3** Back to Classic while recording. The full-size recording pill returns without restarting the session.

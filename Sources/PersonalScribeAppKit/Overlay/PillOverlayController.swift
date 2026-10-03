@@ -496,8 +496,6 @@ private final class LegacyVisibilityModeBridge: @unchecked Sendable, AppStoreVis
             return .alwaysOn
         case .autoShow:
             return .autoShow
-        case .hidden:
-            return .hidden
         }
     }
 }

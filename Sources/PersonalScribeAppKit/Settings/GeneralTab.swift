@@ -106,10 +106,7 @@ public struct GeneralTab: View {
 
     /// APPLICATION section — mockup-gaps D.2. Absorbs the old
     /// `launchCard` (Launch at login toggle) and adds the new Show in
-    /// Dock toggle. No cross-toggle invariant (unlike visibility's
-    /// pill+menu-bar conflict) — Show in Dock stays independent by
-    /// design; if a cross-check with menu-bar/pill visibility is needed
-    /// later, it's a follow-up.
+    /// Dock toggle.
     private var applicationCard: some View {
         SettingsCard {
             Text("Application")
@@ -211,7 +208,7 @@ public struct GeneralTab: View {
                 isOn: Binding(
                     get: { viewModel.isMenuBarVisible },
                     set: { isVisible in
-                        _ = viewModel.applyVisibilityConfig(
+                        viewModel.applyVisibilityConfig(
                             .init(
                                 pillVisibilityMode: viewModel.pillVisibilityMode,
                                 isMenuBarVisible: isVisible
@@ -228,7 +225,7 @@ public struct GeneralTab: View {
                 selection: Binding(
                     get: { viewModel.pillVisibilityMode },
                     set: { newValue in
-                        _ = viewModel.applyVisibilityConfig(
+                        viewModel.applyVisibilityConfig(
                             .init(
                                 pillVisibilityMode: newValue,
                                 isMenuBarVisible: viewModel.isMenuBarVisible
@@ -239,15 +236,6 @@ public struct GeneralTab: View {
             ) {
                 Text("Always-on").tag(PillVisibility.alwaysOn)
                 Text("Auto-show").tag(PillVisibility.autoShow)
-                Text("Hidden").tag(PillVisibility.hidden)
-            }
-
-            if let visibilityErrorMessage = viewModel.visibilityErrorMessage {
-                Divider()
-
-                Label(visibilityErrorMessage, systemImage: "exclamationmark.triangle.fill")
-                    .font(PersonalScribeTheme.Typography.caption.font)
-                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -670,10 +658,6 @@ final class GeneralTabViewModel: ObservableObject {
         let isMenuBarVisible: Bool
     }
 
-    enum VisibilityConfigError: Equatable {
-        case conflict
-    }
-
     @Published private(set) var pillVisibilityMode: PillVisibility
     @Published private(set) var isMenuBarVisible: Bool
     @Published private(set) var windowTint: WindowTint
@@ -682,7 +666,6 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var waveformPalette: WaveformPalette
     @Published private(set) var clipboardRestoreDelay: ClipboardRestoreDelay
     @Published private(set) var cancelCardDuration: CancelCardDuration
-    @Published private(set) var visibilityError: VisibilityConfigError?
     @Published private(set) var launchAtLogin: Bool
     /// Background mode = menu-bar-only accessory app. Default `false`
     /// (app is a regular app with Dock icon / Cmd+Tab entry / Force Quit
@@ -883,24 +866,11 @@ final class GeneralTabViewModel: ObservableObject {
         appTheme.effectiveScheme(systemIsDark: currentSystemIsDark) == .light
     }
 
-    var visibilityErrorMessage: String? {
-        guard visibilityError == .conflict else { return nil }
-        return "One surface must stay visible so you can reach the app."
-    }
-
-    @discardableResult
-    func applyVisibilityConfig(_ config: VisibilityConfig) -> VisibilityConfigError? {
-        guard !(config.pillVisibilityMode == .hidden && !config.isMenuBarVisible) else {
-            visibilityError = .conflict
-            return .conflict
-        }
-
-        visibilityError = nil
+    func applyVisibilityConfig(_ config: VisibilityConfig) {
         pillVisibilityMode = config.pillVisibilityMode
         isMenuBarVisible = config.isMenuBarVisible
         config.pillVisibilityMode.persist(to: defaults)
         menuBarVisibilitySetter(config.isMenuBarVisible)
-        return nil
     }
 
     func setTranscriptCleanupEnabled(_ enabled: Bool) {
@@ -1252,8 +1222,6 @@ private struct PillStyleSelectorCard: View {
             classicPreview
         case .mini:
             miniPreview
-        case .none:
-            nonePreview
         }
     }
 
@@ -1290,20 +1258,6 @@ private struct PillStyleSelectorCard: View {
             .frame(width: 40, height: 14)
     }
 
-    /// None — communicates "hidden". Low-opacity surface + eye.slash glyph.
-    private var nonePreview: some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
-
-        return ZStack {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(pillBackgroundColor.opacity(0.25))
-                .frame(width: 56, height: 28)
-
-            Image(systemName: "eye.slash")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(palette.primaryText)
-        }
-    }
 }
 
 // MARK: - Shortcuts subsection view model (#017)

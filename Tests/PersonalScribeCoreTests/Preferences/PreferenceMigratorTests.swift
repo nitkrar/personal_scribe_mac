@@ -27,6 +27,18 @@ final class PreferenceMigratorTests: XCTestCase {
         )
     }
 
+    func testRemovedPillOptionsMapToTheirReplacements() {
+        let defaults = isolatedDefaults()
+        defaults.set(1, forKey: PreferenceMigrator.migrationVersionKey)
+        defaults.set("hidden", forKey: "PillVisibilityMode")
+        defaults.set("None", forKey: "PillStyle")
+
+        PreferenceMigrator.migrate(defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: "PillVisibilityMode"), "auto-show")
+        XCTAssertNil(defaults.object(forKey: "PillStyle"))
+    }
+
     func testSkipsWhenMigrationAlreadyRun() {
         let defaults = isolatedDefaults()
         defaults.set(PreferenceMigrator.currentMigrationVersion, forKey: PreferenceMigrator.migrationVersionKey)
