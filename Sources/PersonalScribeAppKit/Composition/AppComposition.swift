@@ -439,9 +439,8 @@ public enum AppComposition {
         )
     }
 
-    /// Start observing `registry.customModesStream()` and keep
-    /// `monitor`'s per-mode hotkey table synchronized to the latest
-    /// valid custom-mode set.
+    /// Keeps `monitor`'s per-mode hotkey table synchronized to the valid
+    /// custom modes, re-validating when modes or model availability change.
     @MainActor
     static func observePerModeHotkeys(
         on monitor: GlobalHotkeyMonitor,
@@ -455,14 +454,18 @@ public enum AppComposition {
             coordinator: coordinator,
             modelService: modelService
         )
+        let update: @MainActor ([WorkflowMode]) -> Void = { modes in
+            monitor.updatePerModeHotkeys(currentlyValidCustomModes(among: modes, modelService: modelService))
+        }
+        let modelChanges = modelService.$activeModelIDs.map { _ in () }
+            .merge(with: modelService.$downloadStates.map { _ in () })
+            .dropFirst(2)
+            .receive(on: DispatchQueue.main)
+            .sink { MainActor.assumeIsolated { update(registry.customModes) } }
         return Task { @MainActor in
+            defer { modelChanges.cancel() }
             for await modes in registry.customModesStream() {
-                monitor.updatePerModeHotkeys(
-                    currentlyValidCustomModes(
-                        among: modes,
-                        modelService: modelService
-                    )
-                )
+                update(modes)
             }
         }
     }

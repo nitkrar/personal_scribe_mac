@@ -119,6 +119,69 @@ final class AppCompositionTests: XCTestCase {
         XCTAssertEqual(registry.currentMode.id, "med-notes")
     }
 
+    func testPerModeHotkeyRegistersOnceItsModelBecomesAvailable() async throws {
+        let mode = WorkflowMode(
+            id: "needs-asr",
+            name: "Needs ASR",
+            glyph: "mic",
+            hotkey: HotkeyPreference(
+                keyCode: 0, // 'a'
+                tapCount: 1,
+                modifiers: NSEvent.ModifierFlags([.command, .option]).rawValue
+            ),
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(initial: WorkflowModeDocument(defaultModeID: nil, customModes: [mode])),
+            availableKindsProvider: { Set(ModelKind.allCases) }
+        )
+        let downloaded = DownloadedFlag()
+        let suiteName = "AppCompositionTests.\(#function).\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let modelService = ActiveModelService(
+            activeIDsPreference: Preference(key: ActiveModelService.preferenceKey, default: [:], defaults: defaults),
+            isDownloaded: { _ in downloaded.value },
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+        let monitor = GlobalHotkeyMonitor(onToggle: { })
+        let observation = AppComposition.observePerModeHotkeys(
+            on: monitor,
+            registry: registry,
+            coordinator: DevelopmentComposition.makeTestingSessionCoordinator(),
+            modelService: modelService
+        )
+        defer { observation.cancel() }
+        try await Task.sleep(for: .milliseconds(100))
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: 0, modifierFlags: [.command, .option], characters: "a", timestamp: 0.5
+        ))
+        XCTAssertEqual(registry.currentMode.id, "dictation", "hotkey must be inert while the model is missing")
+
+        downloaded.value = true
+        modelService.refresh()
+        modelService.setActive(BuiltInModelCatalog.parakeetTDT06Bv2, forKind: .asr)
+
+        await waitUntil {
+            do {
+                monitor.handle(event: try self.makeKeyDownEvent(
+                    keyCode: 0,
+                    modifierFlags: [.command, .option],
+                    characters: "a",
+                    timestamp: 1.0
+                ))
+            } catch {
+                XCTFail("Failed to synthesize per-mode keyDown: \(error)")
+            }
+            return registry.currentMode.id == "needs-asr"
+        }
+        XCTAssertEqual(registry.currentMode.id, "needs-asr")
+    }
+
     func testReporterIncludesDebugFileSink() async throws {
         let tempDirectory = try makeTemporaryDirectory()
         let reporter = AppComposition.makeDiagnosticsReporter(
@@ -268,4 +331,8 @@ private struct TestStorageLocator: StorageLocator {
     }
 
     func ensureDirectoriesExist() throws {}
+}
+
+private final class DownloadedFlag: @unchecked Sendable {
+    var value = false
 }
