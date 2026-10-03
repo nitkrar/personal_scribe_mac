@@ -358,6 +358,27 @@ final class WorkflowModeRegistryTests: XCTestCase {
 
     // MARK: - Helpers
 
+    func testFailedSaveLeavesRegistryUnchanged() throws {
+        let store = SaveFailingStore(
+            initial: WorkflowModeDocument(
+                defaultModeID: "a",
+                customModes: [Self.makeCustomDictation(id: "a", name: "A"), Self.makeCustomDictation(id: "b", name: "B")]
+            )
+        )
+        let registry = try WorkflowModeRegistry(store: store, availableKindsProvider: { [.asr] })
+        registry.setCurrent(id: "a")
+        store.failSaves = true
+
+        XCTAssertThrowsError(try registry.setDefault(id: "b"))
+        XCTAssertThrowsError(try registry.reorderCustom(from: 0, to: 1))
+        XCTAssertThrowsError(try registry.saveCustom(Self.makeCustomDictation(id: "c", name: "C")))
+        XCTAssertThrowsError(try registry.deleteCustom(id: "a"))
+
+        XCTAssertEqual(registry.allModes.map(\.id), ["dictation", "a", "b"])
+        XCTAssertEqual(registry.defaultMode.id, "a")
+        XCTAssertEqual(registry.currentMode.id, "a")
+    }
+
     /// Custom mode that mirrors the built-in dictation shape but with a
     /// caller-chosen ID so it can be added without colliding with the
     /// built-in.
@@ -373,5 +394,23 @@ final class WorkflowModeRegistryTests: XCTestCase {
             captureControllers: [.manualHotkey],
             outputSinks: [.frontmostPaste(enabled: .override(true))]
         )
+    }
+}
+
+private final class SaveFailingStore: WorkflowModeStoring, @unchecked Sendable {
+    struct SaveFailed: Error {}
+
+    var failSaves = false
+    private var document: WorkflowModeDocument
+
+    init(initial: WorkflowModeDocument) {
+        document = initial
+    }
+
+    func load() throws -> WorkflowModeDocument { document }
+
+    func save(_ document: WorkflowModeDocument) throws {
+        if failSaves { throw SaveFailed() }
+        self.document = document
     }
 }

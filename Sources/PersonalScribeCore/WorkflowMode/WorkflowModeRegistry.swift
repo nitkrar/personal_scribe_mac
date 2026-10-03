@@ -251,8 +251,9 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
                 availableKinds: availableKindsProvider(),
                 registeredDescriptors: registeredDescriptorsProvider()
             )
-            document.defaultModeID = id
-            try store.save(document)
+            var candidate = document
+            candidate.defaultModeID = id
+            try commitLocked(candidate)
         }
         broadcastDefaultMode()
         // Default change can shift currentMode when no in-memory current
@@ -287,9 +288,10 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
                 throw WorkflowModeRegistryError.invalidIndex
             }
             guard from != to else { return }
-            let moved = document.customModes.remove(at: from)
-            document.customModes.insert(moved, at: to)
-            try store.save(document)
+            var candidate = document
+            let moved = candidate.customModes.remove(at: from)
+            candidate.customModes.insert(moved, at: to)
+            try commitLocked(candidate)
         }
         broadcastCustomModes()
     }
@@ -343,12 +345,13 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
                 availableKinds: availableKindsProvider(),
                 registeredDescriptors: registeredDescriptorsProvider()
             )
-            if let index = document.customModes.firstIndex(where: { $0.id == mode.id }) {
-                document.customModes[index] = mode
+            var candidate = document
+            if let index = candidate.customModes.firstIndex(where: { $0.id == mode.id }) {
+                candidate.customModes[index] = mode
             } else {
-                document.customModes.append(mode)
+                candidate.customModes.append(mode)
             }
-            try store.save(document)
+            try commitLocked(candidate)
             defaultChanged = (document.defaultModeID == mode.id)
             currentChanged = (inMemoryCurrentID == mode.id)
         }
@@ -392,20 +395,20 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
         var defaultChanged = false
         var currentChanged = false
         try lock.withLock {
-            let originalCount = document.customModes.count
-            document.customModes.removeAll { $0.id == id }
-            guard document.customModes.count != originalCount else {
+            var candidate = document
+            candidate.customModes.removeAll { $0.id == id }
+            guard candidate.customModes.count != document.customModes.count else {
                 return
             }
-            if document.defaultModeID == id {
-                document.defaultModeID = nil
+            if candidate.defaultModeID == id {
+                candidate.defaultModeID = nil
                 defaultChanged = true
             }
+            try commitLocked(candidate)
             if inMemoryCurrentID == id {
                 inMemoryCurrentID = nil
                 currentChanged = true
             }
-            try store.save(document)
         }
         broadcastCustomModes()
         if defaultChanged { broadcastDefaultMode() }
@@ -417,6 +420,12 @@ public final class WorkflowModeRegistry: @unchecked Sendable {
     }
 
     // MARK: - Internals (lock-held)
+
+    /// Persists first so a failed save leaves memory matching disk.
+    private func commitLocked(_ candidate: WorkflowModeDocument) throws {
+        try store.save(candidate)
+        document = candidate
+    }
 
     private func resolveDefaultLocked() -> WorkflowMode {
         if let id = document.defaultModeID,
