@@ -185,6 +185,40 @@ final class AdvancedTabViewModelTests: XCTestCase {
         XCTAssertTrue(RecordAudioEnabledPreference.resolve(from: defaults))
     }
 
+    func testSwitchingToErrorsOnlyDropsBufferedVerboseEvents() async throws {
+        let store = DiagnosticsStore()
+        await store.append(Self.event(level: .debug))
+        await store.append(Self.event(level: .error))
+        let viewModel = AdvancedTabViewModel(
+            baseDirectoryResult: .success(URL(fileURLWithPath: "/tmp/base", isDirectory: true)),
+            defaults: isolatedDefaults(),
+            migrator: FakeBaseDirectoryMigrator(outcome: .success(nil)),
+            selectDirectory: { _ in nil },
+            diagnosticsStore: store
+        )
+
+        viewModel.setDiagnosticLoggingMode(.errorsOnly)
+
+        for _ in 0..<100 where await store.snapshot().count != 1 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let levels = await store.snapshot().map(\.level)
+        XCTAssertEqual(levels, [.error])
+    }
+
+    private static func event(level: DiagnosticsLevel) -> RedactedDiagnosticsEvent {
+        RedactedDiagnosticsEvent(
+            level: level,
+            category: PersonalScribeLogCategory.app,
+            message: "\(level)",
+            timestamp: Date(),
+            underlyingError: nil,
+            metadata: [:],
+            userFacing: nil,
+            sourceLocation: DiagnosticsSourceLocation(file: #file, function: #function, line: #line)
+        )
+    }
+
     func testOpenDiagnosticsWindowInvokesInjectedAction() {
         var openCount = 0
         let viewModel = AdvancedTabViewModel(

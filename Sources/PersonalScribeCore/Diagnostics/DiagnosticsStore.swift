@@ -18,6 +18,11 @@ public actor DiagnosticsStore {
         publish()
     }
 
+    public func removeEvents(below level: DiagnosticsLevel) {
+        events.removeAll { $0.level < level }
+        publish()
+    }
+
     public func snapshot() -> [RedactedDiagnosticsEvent] {
         events
     }

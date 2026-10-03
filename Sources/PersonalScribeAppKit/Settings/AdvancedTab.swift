@@ -368,6 +368,7 @@ final class AdvancedTabViewModel: ObservableObject {
     private let openInFinder: @MainActor (URL) -> Void
     private let openDiagnosticsWindowAction: @MainActor () -> Void
     private let storageLocator: any StorageLocator
+    private let diagnosticsStore: DiagnosticsStore
     private var cancellables: Set<AnyCancellable> = []
 
     init(
@@ -382,7 +383,8 @@ final class AdvancedTabViewModel: ObservableObject {
             NSWorkspace.shared.open(url)
         },
         openDiagnosticsWindow: @escaping @MainActor () -> Void = {},
-        storageLocator: any StorageLocator = AppConfig.liveStorageLocator()
+        storageLocator: any StorageLocator = AppConfig.liveStorageLocator(),
+        diagnosticsStore: DiagnosticsStore = AppComposition.diagnosticsStore
     ) {
         self.baseDirectoryResult = baseDirectoryResult
         self.defaults = defaults
@@ -392,6 +394,7 @@ final class AdvancedTabViewModel: ObservableObject {
         self.openInFinder = openInFinder
         openDiagnosticsWindowAction = openDiagnosticsWindow
         self.storageLocator = storageLocator
+        self.diagnosticsStore = diagnosticsStore
         let diagnosticLoggingMode = DiagnosticLoggingMode.resolve(from: defaults)
         self.diagnosticLoggingMode = diagnosticLoggingMode
         logRetentionDays = LogRetentionDaysPreference.resolve(from: defaults)
@@ -550,6 +553,9 @@ final class AdvancedTabViewModel: ObservableObject {
     func setDiagnosticLoggingMode(_ mode: DiagnosticLoggingMode) {
         diagnosticLoggingMode = mode
         mode.persist(to: defaults)
+        Task { [diagnosticsStore] in
+            await diagnosticsStore.removeEvents(below: mode.minimumBufferedLevel)
+        }
     }
 
     func openDiagnosticsWindow() {
