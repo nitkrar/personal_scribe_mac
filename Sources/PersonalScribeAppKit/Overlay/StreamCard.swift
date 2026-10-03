@@ -7,6 +7,7 @@ protocol StreamCardPresenting: AnyObject {
     func update(text: String)
     func reanchor(abovePillFrame pillFrame: NSRect)
     func hide()
+    var isVisible: Bool { get }
 }
 
 @MainActor

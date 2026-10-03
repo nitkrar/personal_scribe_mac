@@ -11,8 +11,9 @@ public final class PillOverlayController: ObservableObject {
     private let legacyVisibilityModeBridge: LegacyVisibilityModeBridge?
     private let presenter: PillOverlayPresenter
     private var cancellables: Set<AnyCancellable> = []
-    private var recordingStatusCardContent: StatusCardContent?
-    private var streamCardText: String?
+    /// True between a logged stream-card show and its logged hide.
+    private var isStreamCardLogOpen = false
+    private var streamCardLastTextLength = 0
     /// Counts text updates since the most recent `show` so the eventual
     /// `hide` can emit one summary line instead of per-tick spam.
     private var streamCardUpdateCount: Int = 0
@@ -94,6 +95,8 @@ public final class PillOverlayController: ObservableObject {
         defaults: UserDefaults = .standard,
         onTap: @escaping @MainActor () -> Void = {},
         panelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
+        responseCardBuilder: any ResponseCardBuilding = LiveResponseCardBuilder(),
+        streamCardBuilder: any StreamCardBuilding = LiveStreamCardBuilder(),
         openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil,
         diagnosticLogger: PersonalScribeLogger = AppComposition.makeLogger(PersonalScribeLogCategory.ui)
     ) {
@@ -105,6 +108,8 @@ public final class PillOverlayController: ObservableObject {
             legacyVisibilityModeBridge: nil,
             onTap: onTap,
             panelBuilder: panelBuilder,
+            responseCardBuilder: responseCardBuilder,
+            streamCardBuilder: streamCardBuilder,
             openVadSettingsAction: openVadSettingsAction,
             diagnosticLogger: diagnosticLogger
         )
@@ -118,6 +123,8 @@ public final class PillOverlayController: ObservableObject {
         legacyVisibilityModeBridge: LegacyVisibilityModeBridge?,
         onTap: @escaping @MainActor () -> Void = {},
         panelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
+        responseCardBuilder: any ResponseCardBuilding = LiveResponseCardBuilder(),
+        streamCardBuilder: any StreamCardBuilding = LiveStreamCardBuilder(),
         openVadSettingsAction: (@MainActor @Sendable () -> Void)? = nil,
         diagnosticLogger: PersonalScribeLogger = AppComposition.makeLogger(PersonalScribeLogCategory.ui)
     ) {
@@ -138,6 +145,8 @@ public final class PillOverlayController: ObservableObject {
             model: viewModel,
             onTap: onTap,
             panelBuilder: panelBuilder,
+            responseCardBuilder: responseCardBuilder,
+            streamCardBuilder: streamCardBuilder,
             diagnosticLogger: diagnosticLogger
         )
 
@@ -273,7 +282,7 @@ public final class PillOverlayController: ObservableObject {
             showAutoStoppedNotification: showAutoStoppedNotification
         )
 
-        switch (recordingStatusCardContent, nextContent) {
+        switch (presenter.visibleStatusCard, nextContent) {
         case (nil, let next?):
             presenter.showRecordingStatusCard(
                 text: next.text,
@@ -281,7 +290,6 @@ public final class PillOverlayController: ObservableObject {
                 autoDismissAfter: next.autoDismissAfter,
                 onLinkTap: linkTapHandler(for: next)
             )
-            recordingStatusCardContent = next
             advanceLastSeenFireToken(renderedContent: next, snapshotToken: vadFireToken)
         case (let current?, let next?) where current != next:
             // When the new content only differs from the current card
@@ -306,22 +314,13 @@ public final class PillOverlayController: ObservableObject {
                     onLinkTap: linkTapHandler(for: next)
                 )
             }
-            recordingStatusCardContent = next
             advanceLastSeenFireToken(renderedContent: next, snapshotToken: vadFireToken)
         case (let current?, nil):
-            // Notifications self-dismiss via the ResponseCard's 2.0s timer
-            // (installed in `show(...)`). If we hide here, the card vanishes
-            // the instant the driver returns nil — which happens as soon as
-            // the snapshot transitions to `.transcribing` (fireToken has been
-            // seen, driver's token gate drops it). Let the timer finish;
-            // clear local tracking so subsequent content flows normally.
-            // Any non-notification content (warning, error, record-without-
-            // transcribe) still gets an explicit hide.
-            if current.link?.action == .openVadSettings {
-                recordingStatusCardContent = nil
-            } else {
+            // The auto-stopped notification dismisses on its own timer; the
+            // driver drops it as soon as the session moves on, so don't cut
+            // it short. Everything else is hidden explicitly.
+            if current.link?.action != .openVadSettings {
                 presenter.hideRecordingStatusCard()
-                recordingStatusCardContent = nil
             }
         default:
             break
@@ -329,7 +328,7 @@ public final class PillOverlayController: ObservableObject {
     }
 
     private func applyStreamCardState(session: SessionSnapshot) {
-        guard recordingStatusCardContent == nil else {
+        guard presenter.visibleStatusCard == nil else {
             hideStreamCardIfNeeded(reason: "recording_status_card_visible", session: session)
             return
         }
@@ -355,42 +354,48 @@ public final class PillOverlayController: ObservableObject {
             return
         }
 
-        switch streamCardText {
+        switch presenter.visibleStreamCardText {
         case nil:
             presenter.showStreamCard(text: nextText)
-            presenter.logStreamCardShown(
-                textLength: nextText.count,
-                sessionState: session.sessionState,
-                isStreamingSession: session.isStreamingSession
-            )
-            streamCardText = nextText
-            streamCardUpdateCount = 0
-            streamCardMaxTextLength = nextText.count
+            guard presenter.visibleStreamCardText != nil else { return }
+            if !isStreamCardLogOpen {
+                presenter.logStreamCardShown(
+                    textLength: nextText.count,
+                    sessionState: session.sessionState,
+                    isStreamingSession: session.isStreamingSession
+                )
+                isStreamCardLogOpen = true
+                streamCardUpdateCount = 0
+                streamCardMaxTextLength = nextText.count
+            }
+            streamCardLastTextLength = nextText.count
         case nextText:
             break
         case .some:
             presenter.updateStreamCard(text: nextText)
-            streamCardText = nextText
             streamCardUpdateCount += 1
             streamCardMaxTextLength = max(streamCardMaxTextLength, nextText.count)
+            streamCardLastTextLength = nextText.count
         }
     }
 
     private func hideStreamCardIfNeeded(reason: String, session: SessionSnapshot) {
-        guard streamCardText != nil else {
+        if presenter.visibleStreamCardText != nil {
+            presenter.hideStreamCard()
+        }
+        guard isStreamCardLogOpen else {
             return
         }
 
-        presenter.hideStreamCard()
         presenter.logStreamCardHidden(
             reason: reason,
             updatesSinceShow: streamCardUpdateCount,
-            finalTextLength: streamCardText?.count ?? 0,
+            finalTextLength: streamCardLastTextLength,
             maxTextLength: streamCardMaxTextLength,
             sessionState: session.sessionState,
             isStreamingSession: session.isStreamingSession
         )
-        streamCardText = nil
+        isStreamCardLogOpen = false
         streamCardUpdateCount = 0
         streamCardMaxTextLength = 0
     }

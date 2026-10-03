@@ -327,6 +327,19 @@ public final class PillOverlayPresenter {
     private let panelBuilder: any PillOverlayPanelBuilding
     private let responseCardBuilder: any ResponseCardBuilding
     private let streamCardBuilder: any StreamCardBuilding
+    private var shownStatusCard: StatusCardContent?
+    private var shownStreamText: String?
+
+    /// Status card content actually on screen; nil once it hides, including
+    /// by auto-dismiss, or when a show was skipped for lack of an anchor.
+    var visibleStatusCard: StatusCardContent? {
+        responseCard?.isVisible == true ? shownStatusCard : nil
+    }
+
+    /// Live-transcript card text actually on screen.
+    var visibleStreamCardText: String? {
+        streamCard?.isVisible == true ? shownStreamText : nil
+    }
     private var panel: (any PillOverlayPaneling)?
     private var responseCard: (any ResponseCardPresenting)?
     private var streamCard: (any StreamCardPresenting)?
@@ -639,11 +652,12 @@ public final class PillOverlayPresenter {
         hideStreamCard()
         let responseCard = responseCard ?? responseCardBuilder.makeResponseCard()
         self.responseCard = responseCard
-        responseCard.show(
+        let content = StatusCardContent(
             text: notice == .needsAccessibility ? Self.needsAccessibilityNoticeText : Self.clipboardOnlyNoticeText,
-            above: anchorWindow,
             autoDismissAfter: Self.clipboardOnlyNoticeDismissAfter
         )
+        responseCard.show(text: content.text, above: anchorWindow, autoDismissAfter: content.autoDismissAfter)
+        shownStatusCard = content
     }
 
     /// Show a persistent response card above the pill for the "record-
@@ -686,18 +700,22 @@ public final class PillOverlayPresenter {
             autoDismissAfter: autoDismissAfter,
             onLinkTap: onLinkTap
         )
+        shownStatusCard = StatusCardContent(text: text, link: link, autoDismissAfter: autoDismissAfter)
     }
 
     /// Update the text of the persistent recording-status card without
     /// rebuilding it. No-op if the card isn't currently visible.
     func updateRecordingStatusCard(text: String) {
+        guard let shown = visibleStatusCard else { return }
         responseCard?.update(text: text)
+        shownStatusCard = StatusCardContent(text: text, link: shown.link, autoDismissAfter: shown.autoDismissAfter)
     }
 
     /// Dismiss the persistent recording-status card. Called when the
     /// model reaches `.finished` or the user cancels recording.
     func hideRecordingStatusCard() {
         responseCard?.hide()
+        shownStatusCard = nil
     }
 
     func showStreamCard(text: String) {
@@ -709,19 +727,22 @@ public final class PillOverlayPresenter {
         let streamCard = streamCard ?? streamCardBuilder.makeStreamCard()
         self.streamCard = streamCard
         streamCard.show(text: text, above: anchorWindow)
+        shownStreamText = text
     }
 
     func updateStreamCard(text: String) {
-        guard let streamCard else {
+        guard visibleStreamCardText != nil, let streamCard else {
             showStreamCard(text: text)
             return
         }
 
         streamCard.update(text: text)
+        shownStreamText = text
     }
 
     func hideStreamCard() {
         streamCard?.hide()
+        shownStreamText = nil
     }
 
     func logStreamCardShown(

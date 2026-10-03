@@ -128,6 +128,39 @@ final class PillOverlayControllerTests: XCTestCase {
         }
         XCTAssertTrue(condition())
     }
+
+    func testStreamCardReturnsAfterAClipboardNoticeDismissesItself() async throws {
+        let responseCards = FakeResponseCardBuilder()
+        let streamCards = FakeStreamCardBuilder()
+        let controller = PillOverlayController(
+            appStore: try makeAppStore(),
+            defaults: .standard,
+            panelBuilder: RecordingPanelBuilder(),
+            responseCardBuilder: responseCards,
+            streamCardBuilder: streamCards
+        )
+        func streaming(_ text: String) -> AppStoreSnapshot {
+            makeSnapshot(
+                session: SessionSnapshot(
+                    sessionState: .capturing,
+                    transcriptProgress: TranscriptProgress(revision: 1, text: text, isFinal: false, sourceStage: .transcription),
+                    isStreamingSession: true
+                ),
+                pillVisibility: .recording
+            )
+        }
+        controller.applySnapshotForTesting(streaming("hello"))
+        XCTAssertTrue(streamCards.card.isVisible)
+
+        controller.showClipboardOnlyNotice(.copied)
+        XCTAssertFalse(streamCards.card.isVisible)
+        responseCards.card.dismissOnItsOwn()
+
+        controller.applySnapshotForTesting(streaming("hello world"))
+
+        XCTAssertTrue(streamCards.card.isVisible)
+        XCTAssertEqual(streamCards.card.text, "hello world")
+    }
 }
 
 @MainActor
@@ -313,4 +346,62 @@ private final class FakeVisibilityModeProvider: @unchecked Sendable, AppStoreVis
             continuation.finish()
         }
     }
+}
+
+@MainActor
+private final class FakeResponseCard: ResponseCardPresenting {
+    private(set) var isVisible = false
+    private(set) var text: String?
+
+    func show(text: String, above pillWindow: NSWindow, autoDismissAfter: TimeInterval?) {
+        self.text = text
+        isVisible = true
+    }
+
+    func update(text: String) {
+        if isVisible { self.text = text }
+    }
+
+    func reanchor(abovePillFrame pillFrame: NSRect) {}
+
+    func hide() {
+        isVisible = false
+    }
+
+    func dismissOnItsOwn() {
+        isVisible = false
+    }
+}
+
+@MainActor
+private final class FakeResponseCardBuilder: ResponseCardBuilding {
+    let card = FakeResponseCard()
+    func makeResponseCard() -> any ResponseCardPresenting { card }
+}
+
+@MainActor
+private final class FakeStreamCard: StreamCardPresenting {
+    private(set) var isVisible = false
+    private(set) var text: String?
+
+    func show(text: String, above pillWindow: NSWindow) {
+        self.text = text
+        isVisible = true
+    }
+
+    func update(text: String) {
+        if isVisible { self.text = text }
+    }
+
+    func reanchor(abovePillFrame pillFrame: NSRect) {}
+
+    func hide() {
+        isVisible = false
+    }
+}
+
+@MainActor
+private final class FakeStreamCardBuilder: StreamCardBuilding {
+    let card = FakeStreamCard()
+    func makeStreamCard() -> any StreamCardPresenting { card }
 }

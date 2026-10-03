@@ -32,6 +32,8 @@ protocol ResponseCardPresenting: AnyObject {
     /// the presenter also moved it). No-op if the card isn't visible.
     func reanchor(abovePillFrame pillFrame: NSRect)
     func hide()
+    /// False once hidden, including by its own auto-dismiss.
+    var isVisible: Bool { get }
 }
 
 extension ResponseCardPresenting {

@@ -877,6 +877,7 @@ private final class RecordingResponseCardBuilder: ResponseCardBuilding {
 
 @MainActor
 private final class RecordingResponseCard: ResponseCardPresenting {
+    private(set) var isVisible = false
     private(set) var lastText: String?
     private(set) var lastAnchorWindow: NSWindow?
     private(set) var lastAutoDismissAfter: TimeInterval?
@@ -894,6 +895,7 @@ private final class RecordingResponseCard: ResponseCardPresenting {
         lastAnchorWindow = pillWindow
         lastAutoDismissAfter = autoDismissAfter
         showCallCount += 1
+        isVisible = true
     }
 
     func update(text: String) {
@@ -907,6 +909,7 @@ private final class RecordingResponseCard: ResponseCardPresenting {
 
     func hide() {
         hideCallCount += 1
+        isVisible = false
     }
 }
 
@@ -923,6 +926,7 @@ private final class RecordingStreamCardBuilder: StreamCardBuilding {
 
 @MainActor
 private final class RecordingStreamCard: StreamCardPresenting {
+    private(set) var isVisible = false
     private(set) var lastText: String?
     private(set) var lastAnchorWindow: NSWindow?
     private(set) var showCallCount = 0
@@ -934,6 +938,7 @@ private final class RecordingStreamCard: StreamCardPresenting {
         lastText = text
         lastAnchorWindow = pillWindow
         showCallCount += 1
+        isVisible = true
     }
 
     func update(text: String) {
@@ -947,5 +952,6 @@ private final class RecordingStreamCard: StreamCardPresenting {
 
     func hide() {
         hideCallCount += 1
+        isVisible = false
     }
 }
