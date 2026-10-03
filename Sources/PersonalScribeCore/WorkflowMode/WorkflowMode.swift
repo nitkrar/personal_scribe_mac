@@ -42,6 +42,9 @@ import Foundation
 /// Codable: serialised as part of `WorkflowModeDocument` (#078.12) on
 /// `workflow-modes.json` in `AppConfig.baseDirectory()`.
 ///
+/// `cleanup` — transcript cleanup level. Defaults to `.standard` on
+/// missing-key decode so existing documents keep today's behaviour.
+///
 /// `Identifiable` so Modes-tab UI bindings work directly off `id`.
 public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
     public let id: String
@@ -55,6 +58,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
     public var captureControllers: [CaptureControllerSpec]
     public var outputSinks: [OutputSinkSpec]
     public var streamingBehavior: StreamingBehaviorSpec?
+    public var cleanup: TranscriptCleanup
 
     public init(
         id: String,
@@ -67,7 +71,8 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         processors: [ProcessorSpec],
         captureControllers: [CaptureControllerSpec],
         outputSinks: [OutputSinkSpec],
-        streamingBehavior: StreamingBehaviorSpec? = nil
+        streamingBehavior: StreamingBehaviorSpec? = nil,
+        cleanup: TranscriptCleanup = .standard
     ) {
         self.id = id
         self.name = name
@@ -80,6 +85,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         self.captureControllers = captureControllers
         self.outputSinks = outputSinks
         self.streamingBehavior = streamingBehavior
+        self.cleanup = cleanup
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -94,6 +100,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         case captureControllers
         case outputSinks
         case streamingBehavior
+        case cleanup
     }
 
     public init(from decoder: Decoder) throws {
@@ -125,6 +132,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         } else {
             self.streamingBehavior = nil
         }
+        self.cleanup = try container.decodeIfPresent(TranscriptCleanup.self, forKey: .cleanup) ?? .standard
     }
 
     // MARK: - ID generation (#027)

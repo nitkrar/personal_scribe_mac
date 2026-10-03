@@ -48,7 +48,7 @@ Quick lookup when an old commit or doc cites a legacy ID.
 ### From `ui-mockup-gaps.md` (open items)
 - Transcriptions mode-pill (row) → #032
 - Unified-shell + D-follow-up mic footer → #008 (sidebar) / #037 (title-bar accessory)
-- Settings→General D-follow-up: PillStyle wiring → #029 · pasteEnabled wiring → #030
+- Settings→General D-follow-up: PillStyle wiring → #102 (was #029) · pasteEnabled wiring → #030
 
 ### From `PLAN_PHASES.md`
 - Step 1.1b (signposts) → #012 · Step 1.4b (drag-tap test C) → #010
@@ -589,7 +589,7 @@ Investigate window ordering and an early, non-activating `orderFrontRegardless` 
 **Shipped so far:** `d03947a`, `4612cfe`, `d3e6af2`, `f9efaf1` — cards choose above/below placement, the pill grows away from a nearby edge, the live pill has a three-strand waveform, and Light appearance renders the whole pill coherently. Vertical/circular edge shapes, `PillStyle` runtime wiring, and matching preview cards remain open.
 
 1. **Edge-aware layout.** When the pill is dragged to a screen edge it should adapt: horizontal along the top/bottom edges and vertical or circular along the left/right edges.
-2. **Style setting does nothing (bug, by omission).** Settings → Recording window → Style (Classic / Mini / None) only persists `PillStyle` and drives the Settings preview cards; nothing in `PillOverlayView` / `PillOverlayPresenter` reads it (documented as deferred in `PillStyle.swift` / mockup-gaps D.1). Also define what **None** means vs. the separate pill Visibility "Hidden" setting (`PillStyle.none` = "pill hidden regardless of PillVisibility") — likely redundant; merge or drop.
+2. **Style setting does nothing (bug, by omission).** Settings → Recording window → Style (Classic / Mini / None) only persists `PillStyle` and drives the Settings preview cards; nothing in `PillOverlayView` / `PillOverlayPresenter` reads it, so the overlay always renders Classic. Mini should be a smaller compact pill (documented as deferred in `PillStyle.swift` / mockup-gaps D.1). Also define what **None** means vs. the separate pill Visibility "Hidden" setting (`PillStyle.none` = "pill hidden regardless of PillVisibility") — likely redundant; merge or drop.
 3. **Style preview cards are stale.** Settings → Recording window → Style previews draw a single-line equalizer instead of the pill's three-strand waveform. Update them after defining Classic, Mini, and None.
 
 Scope: layout per edge, snapping, state transitions, stream-card placement on vertical or circular variants, and wiring the style setting into the overlay.
@@ -688,17 +688,6 @@ State ownership keeps fragmenting during ostensibly-simple tasks: the same conce
 - **Consolidated (good precedent):** `PasteboardSnapshotService` owns transient clipboard snapshots and guarded restore tokens for output delivery.
 
 Audit scope intentionally left open. Walk state concepts, not classes. Details filled in during the audit — not now.
-
----
-
-### #029 — Wire `PillStyle` preference to overlay rendering
-
-`refactor` · `P2` · `open` · `area: pill, theming`
-*Updated 2026-04-21*
-
-Preference + Settings picker landed (`ee4d7ca`); the overlay still always renders Classic visuals. When Mini: smaller compact pill. When None: overlay hidden regardless of `PillVisibilityMode`. Requires reconciling with `PillVisibilityMode` semantics.
-
-**Legacy:** `ui-mockup-gaps.md` Settings→General deferred follow-up
 
 ---
 
@@ -811,20 +800,27 @@ Auto-archive transcripts older than N days or shorter than M chars; hide from pr
 
 ---
 
-### #053 — 7-stage post-processing pipeline
+### #053 — Transcript cleanup: dictionary → disfluency tagger → number rules; LLM rewrite opt-in
 
 `feature` · `P2` · `parked` · `area: post-processing, memory-learning`
-*Updated 2026-10-02*
+*Updated 2026-10-03*
 
-**Shipped so far:** `c82af27`, `00f5f9b`, `6fd7768` — the stage pipeline runs filler removal and basic punctuation while preserving diarized line boundaries; ITN, personal dictionary, capitalization, disfluency repair, and formatter stages remain unimplemented.
+**Shipped so far:** `c82af27`, `00f5f9b`, `6fd7768`, `aeddfb6` — the stage pipeline runs vocal-filler removal (um/uh/er/ah/hmm only) and basic punctuation while preserving diarized line boundaries.
 
-Extend #045 Stage A's chain-of-stages architecture with named stages that add new transformation behavior: ITN → punctuation → filler removal → personal dictionary → capitalization → disfluency repair → formatter. Each stage is additive output cleanup, not a restructuring of existing logic. ITN (Inverse Text Normalization) subsumes FluidAudio `CustomPronunciation.md` path.
+Replaces the original 7-stage string-rule chain. Whisper and Parakeet already emit punctuation and capitalization, and regex can't tell filler "like" from the verb (`aeddfb6` removed that after it broke saved transcripts).
 
-**Priority: ITN first.** Convert spoken forms such as "one dollar", "twenty percent", dates, times, and addresses into written forms. Run after `NonSpeechMarkerFilter` and apply to final text and live EOU chunks.
+**Every dictation (must be fast on any Mac, never adds words):**
+1. **Personal dictionary** — #045.
+2. **Disfluency tagger** — small token classifier (BERT-size) that marks fillers, stutters and false starts for deletion. Tens of ms regardless of length; can only delete, so it can't change meaning. Untested: needs a spike to find a model and run it on the saved recordings.
+3. **Inverse text normalization** — grammar rules for numbers, money, percentages, dates, times ("twenty five percent" → "25%"). No LLM: in the benchmark below only one model formatted numbers, and it was the one that rewrote sentences.
+
+**Per-mode Cleanup setting:** `WorkflowMode.cleanup` (Off / Standard) with the mode editor's "Clean up transcript" toggle shipped; add an AI rewrite case when the LLM step lands.
+
+**Opt-in per mode:** LLM rewrite (e.g. "make this an email"), default Qwen3.5-2B Q4 (~1.3 GB resident; keep warm while the mode is active or pay the load on every recording).
+
+**LLM benchmark (2026-10-03, M5 Max, llama.cpp Q4, ~100-word dictation):** Gemma 3 270M and Qwen2.5 0.5B can't follow the instruction (echo the prompt / leave fillers). Llama 3.2 1B/3B and Qwen2.5 1.5B clean but rephrase or add preambles. Qwen3.5-2B (thinking off) was the only one that cleaned without rewriting, at 0.5 s. Generation is memory-bandwidth bound, so a base M1/M2 Air is ~5–8× slower: ~3–4 s per 100 words, 15–20 s for a long dictation — too slow for every dictation. Models in `~/Projects/nitkrar/models/bench-small/`. Apple Foundation Models needs Apple Intelligence enabled (off on the user's machines), so at most an optional backend.
 
 **Depends on:** #045 Stage A (the chain architecture must exist first)
-**Legacy:** `plans/_legacy/BACKLOG_pre_migration.md` → "7-stage post-processing pipeline"
-
 ---
 
 ### #058 — Speaker diarization (LS-EEND, up to 10 speakers)

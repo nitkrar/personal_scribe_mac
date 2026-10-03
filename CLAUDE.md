@@ -21,11 +21,6 @@ Santa on this machine runs in **Lockdown** with **Transitive Allowlisting** enab
 
 **Subagent contract (worktree agents)**: use `swift build --build-tests` at lane close. This compiles the xctest bundles without executing them, which stays inside Transitive Allowlisting's coverage. **Do NOT run `swift test` from a worktree** — it executes fresh unsigned xctest binaries and will prompt. The main session runs `swift test` from the canonical repo path after cherry-picking the worktree's commits (Transitive Allowlisting covers that path fine).
 
-## Architectural Invariants
-<!-- TODO: fill in load-bearing invariants from the plan in progress in another session.
-  Candidates to confirm: PillOverlayPresenter routing, menu bar lifecycle,
-  hotkey monitor setup, paste injection permission flow. -->
-
 ## Design references
 
 - `plans/App UI design/SeshatTheme.swift` is **informational / brainstorm-seed only**. It is NOT a drop-in to adopt verbatim. The project has deliberately diverged (e.g. `Palette.brandChampagne = #D4D0C8` wins over the reference's `Accent.champagne = #CCB990`; UserDefaults keys strip the `Seshat*` prefix). Tests codify the current policy — when in doubt, grep the test suite before "fixing" a divergence from the reference. See `plans/backlog/ui-mockup-gaps.md` "Not acting on" section for the canonical list of deliberate divergences.

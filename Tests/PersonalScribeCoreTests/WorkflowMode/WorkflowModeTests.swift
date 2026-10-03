@@ -102,6 +102,25 @@ final class WorkflowModeTests: XCTestCase {
         XCTAssertNil(decoded.language)
     }
 
+    func testCleanupFieldRoundTripsViaCodable() throws {
+        var original = WorkflowMode.dictation
+        original.cleanup = .off
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(WorkflowMode.self, from: data)
+
+        XCTAssertEqual(decoded.cleanup, .off)
+    }
+
+    func testLegacyDecodeWithoutCleanupDefaultsToStandard() throws {
+        let decoded = try JSONDecoder().decode(
+            WorkflowMode.self,
+            from: legacyJSON(glyph: "mic")
+        )
+
+        XCTAssertEqual(decoded.cleanup, .standard)
+    }
+
     func testLegacyStreamingDecodeWithoutStreamingBehaviorSynthesizesDefaultSettings() throws {
         let decoded = try JSONDecoder().decode(
             WorkflowMode.self,

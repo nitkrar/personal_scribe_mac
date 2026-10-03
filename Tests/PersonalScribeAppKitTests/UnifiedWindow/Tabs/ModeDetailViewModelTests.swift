@@ -178,6 +178,31 @@ final class ModeDetailViewModelTests: XCTestCase {
         )
     }
 
+    func testCleanupRoundTripsThroughRegistry() throws {
+        let custom = WorkflowMode(
+            id: "cleanup-rt",
+            name: "Cleanup Round Trip",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+        let store = InMemoryWorkflowModeStore(
+            initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
+        )
+        let registry = try WorkflowModeRegistry(
+            store: store,
+            availableKindsProvider: { [.asr] }
+        )
+        let viewModel = ModeDetailViewModel(mode: custom, registry: registry)
+        XCTAssertTrue(viewModel.cleanupOn)
+
+        viewModel.setCleanupOn(false)
+
+        XCTAssertFalse(viewModel.cleanupOn)
+        XCTAssertEqual(registry.customModes.first { $0.id == "cleanup-rt" }?.cleanup, .off)
+    }
+
     func testLanguagePickerHiddenWhenModeUsesDefaultVoiceModel() throws {
         let custom = WorkflowMode(
             id: "lang-default",

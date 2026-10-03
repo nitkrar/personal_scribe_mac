@@ -1716,3 +1716,16 @@ V1 remains a user-created custom mode / preset (not a built-in mode). English-on
 Repro with the opt-in `StreamingSecondPassBenchmarkTests` (`NINIMMA_BENCH_WAV=…`): feed a recording to `WhisperKitAdapter.transcribe(stream:)` in one burst. `LiveWhisperKitRuntimeBridge.finish()` calls `stopStreamTranscription()`, but `transcriberTask` does not end. Real-time-paced input completes. Burst delivery can occur when capture catches up after a stall; Parakeet EOU completes under the same input pattern.
 
 **Closed:** 2026-10-02 — root cause was a start race, not burst input as such: `startStreamTranscription()` awaits a mic-permission check before it marks itself recording and clears the processor buffer, but `start()` returned immediately. A stop sent in that gap was lost (the loop then ran forever), and audio appended in that gap was wiped. `start()` now waits until the processor reports recording started (or the start task ends). Verified with `NINIMMA_BENCH_PACE=burst` (hung before, finishes after) and the real-time benchmark (unchanged).
+
+---
+
+### #029 — Wire `PillStyle` preference to overlay rendering
+
+`refactor` · `P2` · `done` · `area: pill, theming`
+*Updated 2026-10-03*
+
+Preference + Settings picker landed (`ee4d7ca`); the overlay still always renders Classic visuals. When Mini: smaller compact pill. When None: overlay hidden regardless of `PillVisibilityMode`. Requires reconciling with `PillVisibilityMode` semantics.
+
+**Legacy:** `ui-mockup-gaps.md` Settings→General deferred follow-up
+
+**Closed:** 2026-10-03 — merged into #102 point 2 (Style setting wiring).

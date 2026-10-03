@@ -221,3 +221,7 @@ mode-list event or app restart. Acceptable trade-off for V1.
 - [ ] **MV-MODES-23 — Drag reorder drives menu order:** drag a row to a
   new position, open the menu bar mode submenu: modes appear in the new
   order. The global hotkey still starts the starred mode, not the top row.
+- [ ] **MV-MODES-24 — Clean up transcript toggle:** open a mode, turn
+  "Clean up transcript" off, dictate "um hello uh world": the pasted and
+  saved text keeps "um" / "uh" and has no added capital or period. Turn it
+  back on and repeat: "Hello world." Reopen the app: the setting persists.

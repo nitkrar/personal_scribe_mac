@@ -38,6 +38,7 @@ struct ModeDetailView: View {
                 pipelineCard
                 voiceModelCard
                 processorsCard
+                cleanupCard
                 captureCard
                 outputCard
                 hotkeyCard
@@ -316,6 +317,27 @@ struct ModeDetailView: View {
                 )
             }
         }
+    }
+
+    private var cleanupCard: some View {
+        SettingsCard {
+            Toggle(isOn: cleanupBinding) {
+                VStack(alignment: .leading) {
+                    Text("Clean up transcript")
+                        .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+                    Text("Removes um and uh, capitalizes and adds a final period. Off keeps the raw transcript.")
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var cleanupBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.cleanupOn },
+            set: { viewModel.setCleanupOn($0) }
+        )
     }
 
     private var diarizationBinding: Binding<Bool> {

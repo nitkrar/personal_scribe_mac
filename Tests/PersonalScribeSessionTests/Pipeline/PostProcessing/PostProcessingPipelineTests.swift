@@ -35,6 +35,16 @@ final class PostProcessingPipelineTests: XCTestCase {
         }
     }
 
+    func testCleanupOffReturnsTranscriptUnchanged() async throws {
+        var mode = WorkflowMode.dictation
+        mode.cleanup = .off
+        let context = PostProcessingContext(recordingDuration: .seconds(1), activeMode: mode)
+
+        let output = try await pipeline.run("um hello uh world", context: context)
+
+        XCTAssertEqual(output, "um hello uh world")
+    }
+
     func testPreservesTerminalPunctuation() async throws {
         let output = try await pipeline.run("hello!", context: makeContext())
         XCTAssertEqual(output, "Hello!")

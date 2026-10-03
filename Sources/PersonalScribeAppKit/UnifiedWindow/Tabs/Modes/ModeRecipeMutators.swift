@@ -37,6 +37,12 @@ extension WorkflowMode {
         return copy
     }
 
+    func withCleanup(_ cleanup: TranscriptCleanup) -> WorkflowMode {
+        var copy = self
+        copy.cleanup = cleanup
+        return copy
+    }
+
     func withLiveTranscriptCard(parameter: Parameter<Bool>) -> WorkflowMode {
         rewritingStreamingBehavior { behavior in
             behavior.liveCardEnabled = parameter
