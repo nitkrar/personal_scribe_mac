@@ -360,13 +360,6 @@ struct ModeDetailView: View {
         SettingsCard {
             VStack(spacing: PersonalScribeTheme.Spacing.sm) {
                 ParameterPickerView(
-                    title: "Clean up transcript",
-                    settingKey: PreferenceKeys.transcriptCleanupEnabled,
-                    parameter: viewModel.cleanupParameter,
-                    onChange: { viewModel.setCleanup($0) }
-                )
-                Divider()
-                ParameterPickerView(
                     title: "Auto-paste",
                     settingKey: PreferenceKeys.autoPasteEnabled,
                     parameter: viewModel.autoPasteParameter,
@@ -378,6 +371,13 @@ struct ModeDetailView: View {
                     settingKey: PreferenceKeys.clipboardRestoreEnabled,
                     parameter: viewModel.restoreClipboardParameter,
                     onChange: { viewModel.setRestoreClipboard($0) }
+                )
+                Divider()
+                ParameterPickerView(
+                    title: "Clean up transcript",
+                    settingKey: PreferenceKeys.transcriptCleanupEnabled,
+                    parameter: viewModel.cleanupParameter,
+                    onChange: { viewModel.setCleanup($0) }
                 )
             }
         }

@@ -273,20 +273,6 @@ public struct GeneralTab: View {
             Text("Transcribe output")
                 .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
 
-            Toggle(isOn: Binding(
-                get: { viewModel.transcriptCleanupEnabled },
-                set: { viewModel.setTranscriptCleanupEnabled($0) }
-            )) {
-                VStack(alignment: .leading) {
-                    Text("Clean up transcript")
-                    Text("Removes um and uh, capitalizes and adds a final period. Off keeps the raw transcript. Modes can override this.")
-                        .font(PersonalScribeTheme.Typography.caption.font)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Divider()
-
             Toggle(
                 "Auto-paste to cursor",
                 isOn: Binding(
@@ -322,6 +308,20 @@ public struct GeneralTab: View {
                         in: ClipboardRestoreDelay.minimumSeconds...ClipboardRestoreDelay.maximumSeconds,
                         step: 0.1
                     )
+                }
+            }
+
+            Divider()
+
+            Toggle(isOn: Binding(
+                get: { viewModel.transcriptCleanupEnabled },
+                set: { viewModel.setTranscriptCleanupEnabled($0) }
+            )) {
+                VStack(alignment: .leading) {
+                    Text("Clean up transcript")
+                    Text("Removes fillers, capitalizes and adds a final period. Off keeps the raw transcript.")
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
                 }
             }
 

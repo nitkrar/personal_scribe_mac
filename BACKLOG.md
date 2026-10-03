@@ -814,7 +814,7 @@ Replaces the original 7-stage string-rule chain. Whisper and Parakeet already em
 2. **Disfluency tagger** — small token classifier (BERT-size) that marks fillers, stutters and false starts for deletion. Tens of ms regardless of length; can only delete, so it can't change meaning. Untested: needs a spike to find a model and run it on the saved recordings.
 3. **Inverse text normalization** — grammar rules for numbers, money, percentages, dates, times ("twenty five percent" → "25%"). No LLM: in the benchmark below only one model formatted numbers, and it was the one that rewrote sentences.
 
-**Per-mode Cleanup setting:** `WorkflowMode.cleanup` (Off / Standard) with the mode editor's "Clean up transcript" toggle shipped; add an AI rewrite case when the LLM step lands.
+**Cleanup setting:** global "Clean up transcript" toggle (General → Transcribe output) with per-mode Default/On/Off override shipped (`705dc18`). An AI rewrite level needs its own setting when the LLM step lands.
 
 **Opt-in per mode:** LLM rewrite (e.g. "make this an email"), default Qwen3.5-2B Q4 (~1.3 GB resident; keep warm while the mode is active or pay the load on every recording).
 
