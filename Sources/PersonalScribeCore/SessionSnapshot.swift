@@ -26,6 +26,8 @@ public struct SessionSnapshot: Sendable, Equatable {
     /// manual-stop paths. Codex-recommended replacement for the broken
     /// consumer-clears Bool latch.
     public var vadAutoStopFireToken: UUID?
+    /// True while the last cancelled capture can be resumed (Cancel Card up).
+    public var cancelledCaptureResumable: Bool
 
     public init(
         sessionState: SessionState = .idle,
@@ -39,7 +41,8 @@ public struct SessionSnapshot: Sendable, Equatable {
         isStreamingSession: Bool = false,
         vadAutoStopGracePending: Bool = false,
         vadAutoStopGraceDeadline: Date? = nil,
-        vadAutoStopFireToken: UUID? = nil
+        vadAutoStopFireToken: UUID? = nil,
+        cancelledCaptureResumable: Bool = false
     ) {
         self.sessionState = sessionState
         self.activeStage = activeStage
@@ -53,5 +56,6 @@ public struct SessionSnapshot: Sendable, Equatable {
         self.vadAutoStopGracePending = vadAutoStopGracePending
         self.vadAutoStopGraceDeadline = vadAutoStopGraceDeadline
         self.vadAutoStopFireToken = vadAutoStopFireToken
+        self.cancelledCaptureResumable = cancelledCaptureResumable
     }
 }

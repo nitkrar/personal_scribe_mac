@@ -64,7 +64,8 @@ public final class AppStore: ObservableObject {
             pillVisibility: Self.derivePillVisibility(
                 mode: initialVisibilityMode,
                 sessionState: initialSession.sessionState,
-                progress: initialSession.modelDownloadProgress
+                progress: initialSession.modelDownloadProgress,
+                cancelledCaptureResumable: initialSession.cancelledCaptureResumable
             ),
             lastTranscriptionResult: nil,
             currentRecordingDuration: nil
@@ -251,7 +252,8 @@ public final class AppStore: ObservableObject {
         let visibility = Self.derivePillVisibility(
             mode: currentVisibilityMode,
             sessionState: snapshot.session.sessionState,
-            progress: snapshot.modelDownloadProgress
+            progress: snapshot.modelDownloadProgress,
+            cancelledCaptureResumable: snapshot.session.cancelledCaptureResumable
         )
 
         updateSnapshot { snapshot in
@@ -282,8 +284,13 @@ public final class AppStore: ObservableObject {
     private static func derivePillVisibility(
         mode: AppStoreVisibilityMode,
         sessionState: SessionState,
-        progress: ModelDownloadProgress?
+        progress: ModelDownloadProgress?,
+        cancelledCaptureResumable: Bool
     ) -> PillVisibilityState {
+        if cancelledCaptureResumable {
+            return .cancelled
+        }
+
         if sessionState.isHoldRecording {
             return .holdToRecord
         }

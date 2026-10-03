@@ -347,61 +347,17 @@ final class PillOverlayViewModelTests: XCTestCase {
         }
     }
 
-    // MARK: - Phase 3: Cancel Card + Undo (spec §2f + §3)
+    // MARK: - Cancel Card
 
-    func testCancelMovesVisibilityToCancelled() {
-        let viewModel = PillOverlayViewModel()
-        viewModel.apply(visibility: .recording)
-
-        viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })
-
-        XCTAssertEqual(viewModel.visibility, .cancelled)
-        XCTAssertTrue(viewModel.isShowingCancelCard)
-    }
-
-    func testCancelAutoDismissesToIdleAfterSleepCompletes() async {
-        let viewModel = PillOverlayViewModel()
-        viewModel.apply(visibility: .recording)
-
-        // Immediate sleep so the dismiss fires as soon as the inner
-        // detached task gets scheduled. A short Task.sleep lets the
-        // inner `MainActor.run { visibility = .idle }` complete before
-        // we assert — using yields alone is racy because the detached
-        // task may not have dispatched onto MainActor yet.
-        viewModel.cancel(sleep: { _ in })
-        try? await Task.sleep(for: .milliseconds(50))
-
-        XCTAssertEqual(viewModel.visibility, .idle)
-        XCTAssertFalse(viewModel.isShowingCancelCard)
-    }
-
-    func testResumeFiresCallbackAndClosesCard() {
+    func testResumeFiresCallbackWhileCancelCardShown() {
         let viewModel = PillOverlayViewModel()
         var resumes = 0
-        var expiries = 0
         viewModel.onResumeCancelledRecording = { resumes += 1 }
-        viewModel.onCancelCardExpired = { expiries += 1 }
-        viewModel.apply(visibility: .recording)
-        viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })
+        viewModel.apply(visibility: .cancelled)
 
         viewModel.resumeCancelledRecording()
 
         XCTAssertEqual(resumes, 1)
-        XCTAssertEqual(expiries, 0, "resuming must not discard the kept audio")
-        XCTAssertFalse(viewModel.isShowingCancelCard)
-    }
-
-    /// The card's lifetime is the "Cancel card duration" setting.
-    func testCancelCardUsesConfiguredDuration() async {
-        let viewModel = PillOverlayViewModel(cancelCardDuration: { .seconds(7) })
-        let requested = RequestedDelay()
-        viewModel.apply(visibility: .recording)
-
-        viewModel.cancel(sleep: { delay in await requested.set(delay) })
-        try? await Task.sleep(for: .milliseconds(50))
-
-        let delay = await requested.value
-        XCTAssertEqual(delay, .seconds(7))
     }
 
     func testResumeIsNoopWhenNotCancelled() {
@@ -413,21 +369,6 @@ final class PillOverlayViewModelTests: XCTestCase {
 
         XCTAssertEqual(resumes, 0)
         XCTAssertEqual(viewModel.visibility, .idle)
-    }
-
-    /// The card timing out ends the chance to Resume: the kept
-    /// audio is discarded.
-    func testCancelCardExpiryDiscardsKeptRecording() async {
-        let viewModel = PillOverlayViewModel()
-        var expiries = 0
-        viewModel.onCancelCardExpired = { expiries += 1 }
-        viewModel.apply(visibility: .recording)
-
-        viewModel.cancel(sleep: { _ in })
-        try? await Task.sleep(for: .milliseconds(50))
-
-        XCTAssertEqual(expiries, 1)
-        XCTAssertFalse(viewModel.isShowingCancelCard)
     }
 
     func testHoldToRecordIsStickyAgainstIncomingRecordingVisibility() {
@@ -453,37 +394,4 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .transcribing)
     }
 
-    func testCancelledStateIsStickyAgainstIncomingSessionVisibilityUpdates() {
-        // Session-state updates must not replace the Cancel Card before
-        // Resume or its configured timeout.
-        let viewModel = PillOverlayViewModel()
-        viewModel.apply(visibility: .recording)
-        viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })
-        XCTAssertEqual(viewModel.visibility, .cancelled)
-
-        for incoming: PillOverlayViewModel.Visibility in [.recording, .transcribing, .hidden, .idle] {
-            viewModel.apply(visibility: incoming)
-            XCTAssertEqual(viewModel.visibility, .cancelled, "\(incoming) must not dismiss the Cancel Card")
-        }
-    }
-
-    /// When the card closes it shows whatever the session reported
-    /// meanwhile (e.g. hidden in auto-show mode), not a hard-coded idle.
-    func testCancelCardDismissAppliesLatestSessionVisibility() async {
-        let viewModel = PillOverlayViewModel()
-        viewModel.apply(visibility: .recording)
-        viewModel.cancel(sleep: { _ in try await Task.sleep(for: .milliseconds(10)) })
-        viewModel.apply(visibility: .idle)
-        viewModel.apply(visibility: .hidden)
-        XCTAssertEqual(viewModel.visibility, .cancelled)
-
-        try? await Task.sleep(for: .milliseconds(100))
-
-        XCTAssertEqual(viewModel.visibility, .hidden)
-    }
-}
-
-private actor RequestedDelay {
-    private(set) var value: Duration?
-    func set(_ delay: Duration) { value = delay }
 }

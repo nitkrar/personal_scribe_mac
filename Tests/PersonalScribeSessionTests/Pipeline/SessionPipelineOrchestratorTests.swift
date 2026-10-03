@@ -2249,7 +2249,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         recordAudioEnabled: @escaping @Sendable () -> Bool = { false },
         recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
         boundRecipe: BoundRecipe? = nil,
-        liveStreamingEventShutdownTimeout: Duration = .seconds(2)
+        liveStreamingEventShutdownTimeout: Duration = .seconds(2),
+        cancelCardDuration: Duration = .seconds(10)
     ) -> SessionPipelineOrchestrator {
         // #078.31b: orchestrator init takes a `BoundRecipe` post-cutover.
         // Wrap the `transcriber:` arg as the asr processor of a built-in
@@ -2277,7 +2278,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                 recordingsDirectory: recordingsDirectory,
                 vadProvider: vadProvider,
                 boundRecipe: resolvedRecipe,
-                liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout
+                liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout,
+                cancelCardDuration: { cancelCardDuration }
             )
         }
 
@@ -2293,7 +2295,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             recordingsDirectory: recordingsDirectory,
             vadProvider: vadProvider,
             boundRecipe: resolvedRecipe,
-            liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout
+            liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout,
+            cancelCardDuration: { cancelCardDuration }
         )
     }
 
@@ -3256,8 +3259,7 @@ extension SessionPipelineOrchestratorTests {
         XCTAssertEqual(finals.count, 1)
     }
 
-    /// Once the Cancel Card expires the audio is dropped; Resume is a no-op.
-    func testResumeAfterDiscardDoesNothing() async throws {
+    func testCancelPublishesResumableTogetherWithIdle() async throws {
         let orchestrator = makeOrchestrator(
             capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
             transcriber: DurationRecordingTranscriber()
@@ -3266,7 +3268,44 @@ extension SessionPipelineOrchestratorTests {
         await orchestrator.toggleCapture()
         try await waitForState(.capturing, orchestrator)
         await orchestrator.cancelCapture()
-        await orchestrator.discardCancelledCapture()
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .idle)
+        XCTAssertTrue(snapshot.cancelledCaptureResumable)
+    }
+
+    func testResumeClearsResumable() async throws {
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            transcriber: DurationRecordingTranscriber()
+        )
+
+        await orchestrator.toggleCapture()
+        try await waitForState(.capturing, orchestrator)
+        await orchestrator.cancelCapture()
+        await orchestrator.resumeCancelledCapture()
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .capturing)
+        XCTAssertFalse(snapshot.cancelledCaptureResumable)
+    }
+
+    /// When the Cancel Card duration passes the audio is dropped; Resume is a no-op.
+    func testResumableExpiresAfterCancelCardDuration() async throws {
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            transcriber: DurationRecordingTranscriber(),
+            cancelCardDuration: .milliseconds(50)
+        )
+
+        await orchestrator.toggleCapture()
+        try await waitForState(.capturing, orchestrator)
+        await orchestrator.cancelCapture()
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().cancelledCaptureResumable {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
         await orchestrator.resumeCancelledCapture()
 
         let state = await orchestrator.snapshot().sessionState

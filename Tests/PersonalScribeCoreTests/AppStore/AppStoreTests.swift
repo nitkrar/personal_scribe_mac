@@ -171,6 +171,26 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.activeMode?.id, "coding")
     }
 
+    func testResumableCancelledCaptureShowsCancelCardEvenWhenPillHidden() async {
+        let session = FakeAppStoreSessionProvider()
+        let store = makeStore(
+            session: session,
+            permissions: FakePermissionService(),
+            registry: makeRegistry(),
+            visibilityModeProvider: FakeVisibilityModeProvider(initialVisibilityMode: .hidden),
+            clock: ManualAppStoreClock()
+        )
+        store.start()
+
+        session.emitSnapshot(SessionSnapshot(sessionState: .idle, cancelledCaptureResumable: true))
+        await waitUntil { store.snapshot.pillVisibility == .cancelled }
+        XCTAssertEqual(store.snapshot.pillVisibility, .cancelled)
+
+        session.emitSnapshot(SessionSnapshot(sessionState: .idle))
+        await waitUntil { store.snapshot.pillVisibility == .hidden }
+        XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
+    }
+
     func testVisibilityModeChangesRecomputePillVisibility() async {
         let visibilityModeProvider = FakeVisibilityModeProvider(initialVisibilityMode: .hidden)
         let store = makeStore(

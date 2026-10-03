@@ -115,8 +115,7 @@ struct PersonalScribeAppMain: App {
             store: AppComposition.diagnosticsStore
         )
 
-        // Esc cancels only an active recording. The Cancel Card retains
-        // its audio until Resume or the configured timeout.
+        // Esc cancels only an active recording.
         let escapeKeyMonitor = EscapeKeyMonitor(
             router: AppComposition.keyEventRouter
         ) { [weak pillController, weak coordinator] in
@@ -125,21 +124,14 @@ struct PersonalScribeAppMain: App {
             guard visibility == .holdToRecord || visibility == .recording else {
                 return false
             }
-            pillController.viewModel.cancel()
             Task { [weak coordinator] in
                 await coordinator?.cancelIfActive()
             }
             return true
         }
 
-        // Cancel Card: Resume continues the cancelled recording (the
-        // pipeline keeps its audio while the card is up); the card timing
-        // out ends that window and drops the audio.
         pillController.viewModel.onResumeCancelledRecording = { [weak coordinator] in
             Task { await coordinator?.resumeCancelled() }
-        }
-        pillController.viewModel.onCancelCardExpired = { [weak coordinator] in
-            Task { await coordinator?.discardCancelled() }
         }
 
         // #071: hold-start now routes through `coordinator.startHoldIfIdle()`

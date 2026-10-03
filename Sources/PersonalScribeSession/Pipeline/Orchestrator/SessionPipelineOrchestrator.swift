@@ -50,6 +50,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// Overridable at init for tests that want to exercise the timer
     /// without sleeping a full grace window.
     private let graceDurationSeconds: Double
+    /// How long a cancelled capture stays resumable.
+    private let cancelCardDuration: @Sendable () -> Duration
     /// Bound the live-stream shutdown wait so a misbehaving adapter
     /// cannot wedge stop/cancel forever by never terminating its event
     /// stream after input closes.
@@ -119,10 +121,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private var startRecordingInFlight = false
     private var snapshotContinuations: [UUID: AsyncStream<SessionSnapshot>.Continuation] = [:]
     private var bufferedAudio: [PCMBuffer] = []
-    /// Audio of the last cancelled capture, kept while the Cancel Card
-    /// offers Resume. Dropped by `discardCancelledCapture()` (card expired)
-    /// or when any new capture starts.
+    /// Audio of the last cancelled capture, kept for `cancelCardDuration`
+    /// or until any new capture starts.
     private struct ResumableCapture {
+        let id = UUID()
         let buffers: [PCMBuffer]
         let recipe: BoundRecipe?
         /// Live streaming text seen before the cancel — prepended when a
@@ -130,6 +132,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         let liveText: String?
     }
     private var resumableCapture: ResumableCapture?
+    private var resumableExpiryTask: Task<Void, Never>?
     /// Live text carried into the current (resumed) session.
     private var resumedLiveText: String?
     private var captureTask: Task<Void, Never>?
@@ -157,7 +160,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         vadProvider: (any VadProviding)? = nil,
         boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds,
-        liveStreamingEventShutdownTimeout: Duration = .seconds(2)
+        liveStreamingEventShutdownTimeout: Duration = .seconds(2),
+        cancelCardDuration: @escaping @Sendable () -> Duration = { .seconds(CancelCardDuration.resolve().seconds) }
     ) {
         let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
         if let repository = transcriptRepository {
@@ -180,7 +184,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             vadProvider: vadProvider,
             boundRecipe: boundRecipe,
             graceDurationSeconds: graceDurationSeconds,
-            liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout
+            liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout,
+            cancelCardDuration: cancelCardDuration
         )
     }
 
@@ -197,7 +202,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         vadProvider: (any VadProviding)? = nil,
         boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds,
-        liveStreamingEventShutdownTimeout: Duration = .seconds(2)
+        liveStreamingEventShutdownTimeout: Duration = .seconds(2),
+        cancelCardDuration: @escaping @Sendable () -> Duration = { .seconds(CancelCardDuration.resolve().seconds) }
     ) {
         let initialContext = contextProvider.currentContext()
         self.capture = capture
@@ -213,6 +219,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.boundRecipe = boundRecipe
         self.graceDurationSeconds = graceDurationSeconds
         self.liveStreamingEventShutdownTimeout = liveStreamingEventShutdownTimeout
+        self.cancelCardDuration = cancelCardDuration
         self.activeContext = initialContext
         self.currentSnapshot = SessionSnapshot()
     }
@@ -349,9 +356,17 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
-    /// Drop the cancelled capture's audio (Cancel Card closed).
-    public func discardCancelledCapture() {
+    private func clearResumableCapture() {
+        resumableExpiryTask?.cancel()
+        resumableExpiryTask = nil
+        guard resumableCapture != nil else { return }
         resumableCapture = nil
+        publish { $0.cancelledCaptureResumable = false }
+    }
+
+    private func expireResumableCapture(id: UUID) {
+        guard resumableCapture?.id == id else { return }
+        clearResumableCapture()
     }
 
     public func prepareTranscriber() async throws {
@@ -588,7 +603,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
         bufferedAudio = resumable?.buffers ?? []
         resumedLiveText = resumable?.liveText
-        resumableCapture = nil
+        clearResumableCapture()
         nextRevision = 0
         latestStageFailure = nil
         activeContext = contextProvider.currentContext()
@@ -669,11 +684,18 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             let liveText = [resumedLiveText, currentSnapshot.transcriptProgress?.text]
                 .compactMap { $0?.isEmpty == false ? $0 : nil }
                 .joined(separator: " ")
-            resumableCapture = ResumableCapture(
+            let resumable = ResumableCapture(
                 buffers: bufferedAudio,
                 recipe: activeSessionRecipe,
                 liveText: liveText.isEmpty ? nil : liveText
             )
+            resumableCapture = resumable
+            let delay = cancelCardDuration()
+            resumableExpiryTask = Task { [weak self] in
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled else { return }
+                await self?.expireResumableCapture(id: resumable.id)
+            }
         }
         resumedLiveText = nil
         bufferedAudio.removeAll(keepingCapacity: true)
@@ -684,6 +706,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
         await endSessionAndReleaseIdleResources(for: completedRecipe)
 
+        let isResumable = resumableCapture != nil
         publish { snapshot in
             snapshot.sessionState = .idle
             snapshot.activeStage = nil
@@ -694,6 +717,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             snapshot.vadAutoStopGracePending = false
             snapshot.vadAutoStopGraceDeadline = nil
             snapshot.vadAutoStopFireToken = nil
+            snapshot.cancelledCaptureResumable = isResumable
         }
     }
 
@@ -706,7 +730,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// transitioning state to `.error` — the eager publish is reverted
     /// implicitly by the error publication.
     private func startHoldRecording() async {
-        resumableCapture = nil
+        clearResumableCapture()
         resumedLiveText = nil
         bufferedAudio.removeAll(keepingCapacity: true)
         nextRevision = 0

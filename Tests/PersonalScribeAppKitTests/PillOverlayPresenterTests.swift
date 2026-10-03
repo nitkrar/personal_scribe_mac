@@ -515,11 +515,10 @@ final class PillOverlayPresenterTests: XCTestCase {
         let panelBuilder = RecordingPanelBuilder()
         let presenter = PillOverlayPresenter(model: viewModel, panelBuilder: panelBuilder)
         _ = presenter
-        viewModel.cancel(sleep: { _ in try await Task.sleep(for: .seconds(3600)) })
+        viewModel.apply(visibility: .cancelled)
         XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.cancelCardSize)
 
-        viewModel.resumeCancelledRecording()
-        XCTAssertEqual(viewModel.visibility, .idle)
+        viewModel.apply(visibility: .idle)
         XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.cancelCardSize, "no shrink mid-crossfade")
 
         try await Task.sleep(for: .milliseconds(Int(PillOverlayPresenter.cancelCrossfadeDuration * 1000) + 150))
