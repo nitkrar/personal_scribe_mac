@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import PersonalScribeAppKit
 
@@ -99,6 +100,17 @@ final class GeneralTabViewModelThemeTests: XCTestCase {
 
         XCTAssertEqual(viewModel.pillAppearance, .light)
         XCTAssertEqual(defaults.string(forKey: "PillAppearance"), "Light")
+    }
+
+    func testSetAppThemeLeavesOtherWindowsAppearanceAlone() {
+        let pillPanel = NSPanel(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: true)
+        pillPanel.appearance = NSAppearance(named: .aqua)
+        let viewModel = GeneralTabViewModel(defaults: Self.isolatedDefaults())
+
+        viewModel.setAppTheme(.dark)
+
+        XCTAssertEqual(pillPanel.appearance?.name, .aqua)
+        pillPanel.close()
     }
 
     /// Setting `AppTheme` must NOT mutate `windowTint`. Tint is just

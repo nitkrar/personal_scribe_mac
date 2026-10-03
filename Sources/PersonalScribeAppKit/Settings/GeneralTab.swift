@@ -996,13 +996,10 @@ final class GeneralTabViewModel: ObservableObject {
         SpeakerSeparationSensitivityPreference.persist(sensitivity, to: defaults)
     }
 
+    /// The unified window re-applies its appearance when this persists.
     func setAppTheme(_ theme: AppTheme) {
         appTheme = theme
         theme.persist(to: defaults)
-        let appearance = theme.nsAppearance(systemIsDark: currentSystemIsDark)
-        for window in NSApplication.shared.windows {
-            window.appearance = appearance
-        }
     }
 
     func setPillAppearance(_ appearance: PillAppearance) {
