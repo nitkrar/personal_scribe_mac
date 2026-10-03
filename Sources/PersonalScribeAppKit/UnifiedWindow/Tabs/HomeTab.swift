@@ -7,19 +7,20 @@ import SwiftUI
 /// Recordings, Minutes saved, WPM avg) + a "Recent" section showing the
 /// 3 most-recent transcripts via the shared `TranscriptRow` composite.
 ///
-/// Data source: `HomeTabViewModel`, which consumes the existing L8
-/// `MetricsReading.loadSnapshot(window:, recentLimit:)`. Reactive
-/// refresh is driven by `MetricsNotification.transcriptCommit`.
+/// Data source: the shared `MetricsSnapshotStore`, which refreshes on
+/// `MetricsNotification.transcriptCommit`.
 ///
 /// Reference: `plans/App UI design/Claude_Final_Bundle_Prompt.md` §3A.
 @MainActor
 struct HomeTab: View {
     @ObservedObject private var viewModel: HomeTabViewModel
+    @ObservedObject private var metrics: MetricsSnapshotStore
 
     @Environment(\.colorScheme) private var colorScheme
 
     init(viewModel: HomeTabViewModel) {
         self.viewModel = viewModel
+        self.metrics = viewModel.metrics
     }
 
     var body: some View {
@@ -34,10 +35,10 @@ struct HomeTab: View {
                     .font(PersonalScribeTheme.Typography.sectionLabel.font)
                     .textCase(.uppercase)
 
-                if viewModel.recent.isEmpty {
+                if metrics.recentTranscriptions.isEmpty {
                     emptyStateView
                 } else {
-                    ForEach(viewModel.recent.prefix(HomeTabViewModel.recentLimit), id: \.id) { entry in
+                    ForEach(metrics.recentTranscriptions, id: \.id) { entry in
                         TranscriptRow(
                             title: Self.title(for: entry),
                             timestamp: entry.timestamp,
@@ -48,24 +49,15 @@ struct HomeTab: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .task {
-            await viewModel.load()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: MetricsNotification.transcriptCommit
-            )
-        ) { _ in
-            Task { @MainActor in
-                await viewModel.refresh()
-            }
+        .onAppear {
+            viewModel.refreshHotkey()
         }
     }
 
     // MARK: - Empty state (mockup-gaps B.1)
 
     /// Vertically-stacked empty-state view shown when
-    /// `viewModel.recent.isEmpty`. Matches `plans/App UI design/screen_home.png`:
+    /// `metrics.recentTranscriptions.isEmpty`. Matches `plans/App UI design/screen_home.png`:
     /// a champagne feather + "No transcriptions yet" primary line and a
     /// secondary "Press <hotkey> to start recording" hint. The hotkey
     /// string comes from `viewModel.emptyStateHotkeyHint` — it MUST NOT
@@ -106,26 +98,26 @@ struct HomeTab: View {
             StatCard(
                 label: "Words this week",
                 value: Self.integerFormatter.string(
-                    from: NSNumber(value: viewModel.rollups.wordsThisWeek)
-                ) ?? "\(viewModel.rollups.wordsThisWeek)"
+                    from: NSNumber(value: metrics.rollups.wordsThisWeek)
+                ) ?? "\(metrics.rollups.wordsThisWeek)"
             )
             StatCard(
                 label: "Recordings",
                 value: Self.integerFormatter.string(
-                    from: NSNumber(value: viewModel.rollups.recordingsThisWeek)
-                ) ?? "\(viewModel.rollups.recordingsThisWeek)"
+                    from: NSNumber(value: metrics.rollups.recordingsThisWeek)
+                ) ?? "\(metrics.rollups.recordingsThisWeek)"
             )
             StatCard(
                 label: "Mins saved",
                 value: Self.minutesFormatter.string(
-                    from: NSNumber(value: viewModel.rollups.minutesSavedThisWeek.rounded())
-                ) ?? "\(Int(viewModel.rollups.minutesSavedThisWeek.rounded()))"
+                    from: NSNumber(value: metrics.rollups.minutesSavedThisWeek.rounded())
+                ) ?? "\(Int(metrics.rollups.minutesSavedThisWeek.rounded()))"
             )
             StatCard(
                 label: "WPM avg",
                 value: Self.wpmFormatter.string(
-                    from: NSNumber(value: viewModel.rollups.averageWPMThisWeek)
-                ) ?? String(format: "%.1f", viewModel.rollups.averageWPMThisWeek)
+                    from: NSNumber(value: metrics.rollups.averageWPMThisWeek)
+                ) ?? String(format: "%.1f", metrics.rollups.averageWPMThisWeek)
             )
         }
     }

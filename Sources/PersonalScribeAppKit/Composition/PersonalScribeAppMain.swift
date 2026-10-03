@@ -162,6 +162,11 @@ struct PersonalScribeAppMain: App {
                 referenceDateProvider: Date.init
             )
         }()
+        let metricsStore = MetricsSnapshotStore(
+            reader: metricsReader,
+            logger: AppComposition.makeLogger(PersonalScribeLogCategory.app)
+        )
+        metricsStore.startObserving()
         let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader(
             logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
         )
@@ -192,7 +197,7 @@ struct PersonalScribeAppMain: App {
                 UnifiedWindowController(
                     defaults: defaults,
                     transcriptReader: unifiedTranscriptReader,
-                    metricsReader: metricsReader,
+                    metricsStore: metricsStore,
                     permissionService: appPermissionService,
                     inputDeviceProvider: inputDeviceProvider,
                     modes: WorkflowModeRegistry.builtInModes,

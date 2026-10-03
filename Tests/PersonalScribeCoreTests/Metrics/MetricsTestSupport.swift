@@ -165,7 +165,7 @@ struct ScriptedMetricsReader: MetricsReading {
     }
 }
 
-struct ScriptedMetricsService: MetricsSnapshotLoading {
+struct ScriptedMetricsService: MetricsService, MetricsReading {
     let snapshot: MetricsSnapshot
     let recentEntries: [TranscriptEntry]
 
@@ -194,7 +194,7 @@ struct ScriptedMetricsService: MetricsSnapshotLoading {
     }
 }
 
-actor ControllableMetricsService: MetricsSnapshotLoading {
+actor ControllableMetricsService: MetricsReading {
     private var loadRequests: [(window: MetricsWindow, recentLimit: Int)] = []
     private var loadContinuations: [CheckedContinuation<MetricsSnapshot, Error>] = []
 

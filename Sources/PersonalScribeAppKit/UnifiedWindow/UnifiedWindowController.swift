@@ -75,7 +75,7 @@ final class UnifiedWindowController: NSWindowController {
         workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
         model: UnifiedWindowModel = UnifiedWindowModel(),
         transcriptReader: any TranscriptReading,
-        metricsReader: any MetricsReading,
+        metricsStore: MetricsSnapshotStore,
         permissionService: any PermissionService,
         inputDeviceProvider: any AudioInputDeviceProviding,
         modes: [WorkflowMode] = WorkflowModeRegistry.builtInModes,
@@ -95,7 +95,7 @@ final class UnifiedWindowController: NSWindowController {
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.openDiagnosticsWindow = openDiagnosticsWindow
-        self.homeViewModel = HomeTabViewModel(reader: metricsReader)
+        self.homeViewModel = HomeTabViewModel(metrics: metricsStore, defaults: defaults)
         self.transcriptionsViewModel = TranscriptionsTabViewModel(
             reader: transcriptReader,
             offlineRetranscriptionAction: offlineRetranscriptionAction

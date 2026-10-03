@@ -1,10 +1,6 @@
 import Combine
 import Foundation
 
-protocol MetricsSnapshotLoading: MetricsService {
-    func loadSnapshot(window: MetricsWindow, recentLimit: Int) async throws -> MetricsSnapshot
-}
-
 @MainActor
 public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
     @Published public private(set) var rollups: MetricsRollups
@@ -13,7 +9,7 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
     @Published public private(set) var lastRefreshReason: MetricsRefreshReason?
     @Published public private(set) var isRefreshing = false
 
-    private let metricsService: any MetricsService
+    private let reader: any MetricsReading
     private let notificationCenter: NotificationCenter
     private let calendar: Calendar
     private let referenceDateProvider: @Sendable () -> Date
@@ -24,14 +20,14 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
     private var isObserving = false
 
     public init(
-        metricsService: any MetricsService,
+        reader: any MetricsReading,
         notificationCenter: NotificationCenter = .default,
         calendar: Calendar = .current,
         referenceDateProvider: @escaping @Sendable () -> Date = Date.init,
         recentLimit: Int = SQLiteMetricsService.defaultRecentLimit,
         logger: PersonalScribeLogger
     ) {
-        self.metricsService = metricsService
+        self.reader = reader
         self.notificationCenter = notificationCenter
         self.calendar = calendar
         self.referenceDateProvider = referenceDateProvider
@@ -124,52 +120,13 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
             calendar: calendar
         )
 
-        if let snapshotLoader = metricsService as? any MetricsSnapshotLoading {
-            let snapshot = try await snapshotLoader.loadSnapshot(
-                window: window,
-                recentLimit: recentLimit
-            )
-            return MetricsSnapshot(
-                rollups: snapshot.rollups,
-                recentTranscriptions: snapshot.recentTranscriptions,
-                lastUpdatedAt: refreshedAt,
-                lastRefreshReason: reason
-            )
-        }
-
-        async let recordingsThisWeek = metricsService.recordingsThisWeek()
-        async let wordsThisWeek = metricsService.wordsThisWeek()
-        async let minsSavedThisWeek = metricsService.minsSavedThisWeek()
-        async let averageWPMThisWeek = metricsService.wpmAverageThisWeek()
-        async let recentEntries = metricsService.recentTranscriptions(limit: recentLimit)
-
-        let recordings = try await recordingsThisWeek
-        let words = try await wordsThisWeek
-        let minsSaved = try await minsSavedThisWeek
-        let averageWPM = try await averageWPMThisWeek
-        let recentTranscriptions = try await recentEntries
-
+        let snapshot = try await reader.loadSnapshot(window: window, recentLimit: recentLimit)
         return MetricsSnapshot(
-            rollups: MetricsRollups(
-                recordingsThisWeek: recordings,
-                wordsThisWeek: words,
-                minutesSavedThisWeek: Self.minutes(from: minsSaved),
-                averageWPMThisWeek: averageWPM,
-                sampleCount: recordings,
-                windowStart: window.start,
-                windowEnd: window.end
-            ),
-            recentTranscriptions: recentTranscriptions,
+            rollups: snapshot.rollups,
+            recentTranscriptions: snapshot.recentTranscriptions,
             lastUpdatedAt: refreshedAt,
             lastRefreshReason: reason
         )
-    }
-
-    private static func minutes(from duration: Duration) -> Double {
-        let components = duration.components
-        let seconds = Double(components.seconds)
-            + Double(components.attoseconds) / 1_000_000_000_000_000_000
-        return seconds / 60
     }
 
     private func apply(snapshot: MetricsSnapshot) {

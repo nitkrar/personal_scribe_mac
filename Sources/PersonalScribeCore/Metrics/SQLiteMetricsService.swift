@@ -8,7 +8,7 @@ import Foundation
 /// `MetricsTranscriptRow` struct is gone; reads go through
 /// `TranscriptRepository.entries(in:orderedBy:)` / `.recent(limit:)`, which
 /// already decode to `TranscriptEntry` via its `FetchableRecord` conformance.
-public final class SQLiteMetricsService: MetricsSnapshotLoading, MetricsReading, @unchecked Sendable {
+public final class SQLiteMetricsService: MetricsService, MetricsReading, @unchecked Sendable {
     public static let assumedTypingWPM = 40
     public static let defaultRecentLimit = 3
 

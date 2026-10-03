@@ -224,7 +224,10 @@ final class UnifiedWindowControllerTests: XCTestCase {
         return UnifiedWindowController(
             defaults: defaults,
             transcriptReader: StubTranscriptReader(),
-            metricsReader: StubMetricsReader(),
+            metricsStore: MetricsSnapshotStore(
+                reader: StubMetricsReader(),
+                logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
+            ),
             permissionService: StubPermissionService(),
             inputDeviceProvider: NoOpAudioInputDeviceProvider(),
             modelService: modelService

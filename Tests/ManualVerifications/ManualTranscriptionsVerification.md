@@ -15,6 +15,9 @@ actions.
 - [ ] **MV-DEL-3** With the unified window still open, switch to `Home`
   after deleting a transcript and confirm the recent list and weekly
   rollups reflect the updated SQLite history exactly once.
+- [ ] **MV-HOME-1** Close the unified window, dictate once, then open
+  `Home`. Confirm the new transcript is first in the recent list and the
+  weekly rollups include it without a manual refresh.
 - [ ] **MV-DEL-4** Relaunch the app and confirm the deleted transcript
   does not return. If the deleted row had an `audioFilePath`, confirm
   only the database row is gone; the audio file itself remains on disk

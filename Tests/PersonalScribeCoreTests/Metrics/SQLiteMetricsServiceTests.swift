@@ -36,7 +36,7 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         )
         let metricsService = ControllableMetricsService()
         let store = MetricsSnapshotStore(
-            metricsService: metricsService,
+            reader: metricsService,
             notificationCenter: notificationCenter,
             calendar: calendar,
             referenceDateProvider: { referenceDate },
@@ -114,7 +114,7 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         )
         let metricsService = ControllableMetricsService()
         let store = MetricsSnapshotStore(
-            metricsService: metricsService,
+            reader: metricsService,
             notificationCenter: notificationCenter,
             calendar: calendar,
             referenceDateProvider: { referenceDate },
@@ -173,7 +173,7 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         )
         let metricsService = ControllableMetricsService()
         let store = MetricsSnapshotStore(
-            metricsService: metricsService,
+            reader: metricsService,
             notificationCenter: notificationCenter,
             calendar: calendar,
             referenceDateProvider: { referenceDate },
