@@ -25,12 +25,7 @@ public struct AppStoreSnapshot: Sendable, Equatable {
     }
 
     public var sessionState: SessionState {
-        switch session.sessionState {
-        case .completed, .shortExit:
-            return .idle
-        case .idle, .capturing, .holdRecording, .transcribing, .error:
-            return session.sessionState
-        }
+        session.sessionState.displayState
     }
 
     public var modelDownloadProgress: ModelDownloadProgress? {

@@ -10,7 +10,7 @@ final class SessionCoordinatorHoldPathTests: XCTestCase {
     /// pipeline's short-hold termination wedges every entry point until
     /// something non-guarded re-arms the state machine.
     func testShortExitDisplayStateMapsToIdle() {
-        XCTAssertEqual(SessionCoordinator.displayState(for: .shortExit), .idle)
+        XCTAssertEqual(SessionState.shortExit.displayState, .idle)
     }
 
     /// `#075` wedge regression: after a short-hold publishes `.shortExit`,

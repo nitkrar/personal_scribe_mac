@@ -234,7 +234,7 @@ public actor SessionCoordinator {
                 var lastYielded: SessionState?
 
                 for await snapshot in snapshotStream {
-                    let state = Self.displayState(for: snapshot.sessionState)
+                    let state = snapshot.sessionState.displayState
                     guard lastYielded != state else {
                         continue
                     }
@@ -640,16 +640,7 @@ public actor SessionCoordinator {
 
     private func currentDisplayState() async -> SessionState {
         let snapshot = await pipeline.snapshot()
-        return Self.displayState(for: snapshot.sessionState)
-    }
-
-    static func displayState(for state: SessionState) -> SessionState {
-        switch state {
-        case .completed, .shortExit:
-            return .idle
-        case .idle, .capturing, .holdRecording, .transcribing, .error:
-            return state
-        }
+        return snapshot.sessionState.displayState
     }
 
     private struct ApplicationTerminationWaitTimeout: Error {}

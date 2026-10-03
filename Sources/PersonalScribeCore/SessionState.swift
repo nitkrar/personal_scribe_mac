@@ -18,3 +18,15 @@ public enum SessionState: Sendable, Equatable {
     case shortExit
     case error(PersonalScribeError)
 }
+
+extension SessionState {
+    /// Terminal states shown as `.idle`, so entry points treat them as startable.
+    public var displayState: SessionState {
+        switch self {
+        case .completed, .shortExit:
+            return .idle
+        case .idle, .capturing, .holdRecording, .transcribing, .error:
+            return self
+        }
+    }
+}
