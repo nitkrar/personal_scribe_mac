@@ -63,6 +63,30 @@ final class OfflineTranscriptionCoordinatorTests: XCTestCase {
         XCTAssertEqual(entries[0].audioFilename, url.path)
     }
 
+    func testSavedTextFollowsGlobalCleanupSetting() async throws {
+        for (cleanupEnabled, expected) in [(false, "hello world"), (true, "Hello world.")] {
+            let harness = try makeHarness(initialSessionState: .idle, cleanupEnabled: cleanupEnabled)
+            defer { cleanup(harness.baseDirectory) }
+            let url = harness.baseDirectory.appendingPathComponent("drop.wav", isDirectory: false)
+            try Data().write(to: url)
+
+            let jobID = await harness.coordinator.enqueueFile(
+                url: url,
+                descriptorID: harness.asrDescriptor.id,
+                diarize: false
+            )
+            try await waitUntil(description: "job completed") {
+                if case .completed = await jobStatus(for: jobID, coordinator: harness.coordinator) {
+                    return true
+                }
+                return false
+            }
+
+            let entries = await harness.repository.all()
+            XCTAssertEqual(entries.map(\.text), [expected], "cleanupEnabled=\(cleanupEnabled)")
+        }
+    }
+
     func testReTranscribeWithFixedDictationRecipeWritesNewDBRow() async throws {
         let harness = try makeHarness(initialSessionState: .capturing, now: Date(timeIntervalSince1970: 1234))
         defer { cleanup(harness.baseDirectory) }
@@ -472,7 +496,8 @@ private extension OfflineTranscriptionCoordinatorTests {
         initialSessionState: SessionState,
         transcribersByID: [String: any Transcriber]? = nil,
         diarizer: (any SpeakerDiarizer)? = nil,
-        now: Date = Date(timeIntervalSince1970: 2_000)
+        now: Date = Date(timeIntervalSince1970: 2_000),
+        cleanupEnabled: Bool = true
     ) throws -> Harness {
         let baseDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("OfflineTranscriptionCoordinatorTests-\(UUID().uuidString)", isDirectory: true)
@@ -517,6 +542,7 @@ private extension OfflineTranscriptionCoordinatorTests {
             fileSourceAudioStream: stream,
             recordingsDirectory: { recordingsDirectory },
             now: { now },
+            cleanupEnabled: { cleanupEnabled },
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
 

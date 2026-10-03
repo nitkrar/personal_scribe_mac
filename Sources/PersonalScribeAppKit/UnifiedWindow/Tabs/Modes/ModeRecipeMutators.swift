@@ -37,9 +37,9 @@ extension WorkflowMode {
         return copy
     }
 
-    func withCleanup(_ cleanup: TranscriptCleanup) -> WorkflowMode {
+    func withCleanup(parameter: Parameter<Bool>) -> WorkflowMode {
         var copy = self
-        copy.cleanup = cleanup
+        copy.cleanup = parameter
         return copy
     }
 

@@ -42,8 +42,9 @@ import Foundation
 /// Codable: serialised as part of `WorkflowModeDocument` (#078.12) on
 /// `workflow-modes.json` in `AppConfig.baseDirectory()`.
 ///
-/// `cleanup` — transcript cleanup level. Defaults to `.standard` on
-/// missing-key decode so existing documents keep today's behaviour.
+/// `cleanup` — whether post-processing runs. Follows the global
+/// "Clean up transcript" setting unless overridden; missing-key decode
+/// follows the global setting.
 ///
 /// `Identifiable` so Modes-tab UI bindings work directly off `id`.
 public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
@@ -58,7 +59,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
     public var captureControllers: [CaptureControllerSpec]
     public var outputSinks: [OutputSinkSpec]
     public var streamingBehavior: StreamingBehaviorSpec?
-    public var cleanup: TranscriptCleanup
+    public var cleanup: Parameter<Bool>
 
     public init(
         id: String,
@@ -72,7 +73,7 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         captureControllers: [CaptureControllerSpec],
         outputSinks: [OutputSinkSpec],
         streamingBehavior: StreamingBehaviorSpec? = nil,
-        cleanup: TranscriptCleanup = .standard
+        cleanup: Parameter<Bool> = .setting(PreferenceKeys.transcriptCleanupEnabled)
     ) {
         self.id = id
         self.name = name
@@ -132,7 +133,8 @@ public struct WorkflowMode: Codable, Equatable, Identifiable, Sendable {
         } else {
             self.streamingBehavior = nil
         }
-        self.cleanup = try container.decodeIfPresent(TranscriptCleanup.self, forKey: .cleanup) ?? .standard
+        self.cleanup = try container.decodeIfPresent(Parameter<Bool>.self, forKey: .cleanup)
+            ?? .setting(PreferenceKeys.transcriptCleanupEnabled)
     }
 
     // MARK: - ID generation (#027)

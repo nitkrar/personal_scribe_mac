@@ -35,10 +35,8 @@ final class PostProcessingPipelineTests: XCTestCase {
         }
     }
 
-    func testCleanupOffReturnsTranscriptUnchanged() async throws {
-        var mode = WorkflowMode.dictation
-        mode.cleanup = .off
-        let context = PostProcessingContext(recordingDuration: .seconds(1), activeMode: mode)
+    func testCleanupDisabledReturnsTranscriptUnchanged() async throws {
+        let context = PostProcessingContext(recordingDuration: .seconds(1), cleanupEnabled: false)
 
         let output = try await pipeline.run("um hello uh world", context: context)
 

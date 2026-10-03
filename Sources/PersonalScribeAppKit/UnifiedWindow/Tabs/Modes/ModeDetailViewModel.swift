@@ -136,7 +136,7 @@ final class ModeDetailViewModel: ObservableObject {
         return nil
     }
 
-    var cleanupOn: Bool { mode.cleanup != .off }
+    var cleanupParameter: Parameter<Bool> { mode.cleanup }
 
     var selectedLanguage: String? {
         guard let descriptor = languageDescriptor else {
@@ -195,7 +195,7 @@ final class ModeDetailViewModel: ObservableObject {
     func setAuthoritativeSecondPass(_ parameter: Parameter<Bool>) {
         apply(mode.withAuthoritativeSecondPass(parameter: parameter))
     }
-    func setCleanupOn(_ on: Bool) { apply(mode.withCleanup(on ? .standard : .off)) }
+    func setCleanup(_ parameter: Parameter<Bool>) { apply(mode.withCleanup(parameter: parameter)) }
     func setHotkey(_ hotkey: HotkeyPreference?) { apply(mode.withHotkey(hotkey)) }
     func setVoiceModelPin(_ id: String?) {
         apply(

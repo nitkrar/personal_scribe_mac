@@ -57,6 +57,13 @@ public enum PreferenceKeys {
         default: true
     )
 
+    /// "Clean up transcript" — run post-processing (filler removal,
+    /// punctuation) on the transcript. Off delivers the raw text.
+    public static let transcriptCleanupEnabled = SettingKey<Bool>(
+        key: "TranscriptCleanupEnabled",
+        default: true
+    )
+
     /// Streaming dictation live transcript card toggle. Mirrors
     /// `StreamingLiveCardEnabledPreference.userDefaultsKey`.
     public static let streamingLiveCardEnabled = SettingKey<Bool>(

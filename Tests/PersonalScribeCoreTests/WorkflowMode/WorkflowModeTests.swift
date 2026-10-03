@@ -104,21 +104,21 @@ final class WorkflowModeTests: XCTestCase {
 
     func testCleanupFieldRoundTripsViaCodable() throws {
         var original = WorkflowMode.dictation
-        original.cleanup = .off
+        original.cleanup = .override(false)
 
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(WorkflowMode.self, from: data)
 
-        XCTAssertEqual(decoded.cleanup, .off)
+        XCTAssertEqual(decoded.cleanup, .override(false))
     }
 
-    func testLegacyDecodeWithoutCleanupDefaultsToStandard() throws {
+    func testLegacyDecodeWithoutCleanupFollowsGlobalSetting() throws {
         let decoded = try JSONDecoder().decode(
             WorkflowMode.self,
             from: legacyJSON(glyph: "mic")
         )
 
-        XCTAssertEqual(decoded.cleanup, .standard)
+        XCTAssertEqual(decoded.cleanup, .setting(PreferenceKeys.transcriptCleanupEnabled))
     }
 
     func testLegacyStreamingDecodeWithoutStreamingBehaviorSynthesizesDefaultSettings() throws {

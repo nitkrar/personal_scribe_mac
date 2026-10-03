@@ -273,6 +273,20 @@ public struct GeneralTab: View {
             Text("Transcribe output")
                 .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
 
+            Toggle(isOn: Binding(
+                get: { viewModel.transcriptCleanupEnabled },
+                set: { viewModel.setTranscriptCleanupEnabled($0) }
+            )) {
+                VStack(alignment: .leading) {
+                    Text("Clean up transcript")
+                    Text("Removes um and uh, capitalizes and adds a final period. Off keeps the raw transcript. Modes can override this.")
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Divider()
+
             Toggle(
                 "Auto-paste to cursor",
                 isOn: Binding(
@@ -443,25 +457,6 @@ public struct GeneralTab: View {
                 )
             }
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
-                Text("Cancel card duration")
-                    .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
-
-                Text(viewModel.cancelCardDurationDescription)
-                    .font(PersonalScribeTheme.Typography.caption.font)
-                    .foregroundStyle(.secondary)
-
-                Slider(
-                    value: Binding(
-                        get: { viewModel.cancelCardDuration.seconds },
-                        set: { viewModel.setCancelCardDurationSeconds($0) }
-                    ),
-                    in: CancelCardDuration.minimumSeconds...CancelCardDuration.maximumSeconds,
-                    step: 1
-                )
-            }
         }
     }
 
@@ -499,11 +494,11 @@ public struct GeneralTab: View {
         }
     }
 
-    /// Residual Behavior card — Waveform decay + Mute-while-recording.
-    /// Restore-delay slider moved into `transcribeOutputCard` per #072.
+    /// Recording card — waveform decay, mute-while-recording, and how long
+    /// the Cancel card offers Resume.
     private var behaviorCard: some View {
         SettingsCard {
-            Text("Behavior")
+            Text("Recording")
                 .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
 
             Picker(
@@ -526,6 +521,25 @@ public struct GeneralTab: View {
                     set: { viewModel.setMuteOutputWhileRecording($0) }
                 )
             )
+            Divider()
+
+            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                Text("Cancel card duration")
+                    .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+
+                Text(viewModel.cancelCardDurationDescription)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+
+                Slider(
+                    value: Binding(
+                        get: { viewModel.cancelCardDuration.seconds },
+                        set: { viewModel.setCancelCardDurationSeconds($0) }
+                    ),
+                    in: CancelCardDuration.minimumSeconds...CancelCardDuration.maximumSeconds,
+                    step: 1
+                )
+            }
         }
     }
 
@@ -706,6 +720,8 @@ final class GeneralTabViewModel: ObservableObject {
     /// clipboard (subject to the remaining AX / externality gates).
     /// When `false`, clipboard only — user pastes manually.
     @Published private(set) var autoPasteEnabled: Bool
+    /// Global "Clean up transcript" default; modes follow it unless overridden.
+    @Published private(set) var transcriptCleanupEnabled: Bool
     /// "Restore clipboard" toggle (#072). When `true`, `ClipboardBatchOutput`
     /// schedules a `changeCount`-guarded restore of the user's pre-transcript
     /// clipboard after `clipboardRestoreDelay`. When `false`, the transcript
@@ -823,6 +839,7 @@ final class GeneralTabViewModel: ObservableObject {
         self.launchAtLogin = launchAtLoginService.isEnabled
         self.backgroundMode = BackgroundLaunchPreference.resolve(from: defaults)
         self.autoPasteEnabled = AutoPasteEnabledPreference.resolve(from: defaults)
+        self.transcriptCleanupEnabled = PreferenceKeys.transcriptCleanupEnabled.resolve(from: defaults)
         self.clipboardRestoreEnabled = ClipboardRestoreEnabledPreference.resolve(from: defaults)
         self.muteOutputWhileRecording = MuteOutputWhileRecordingPreference.resolve(from: defaults)
         self.vadAutoStopEnabled = VadAutoStopEnabledPreference.resolve(from: defaults)
@@ -907,6 +924,11 @@ final class GeneralTabViewModel: ObservableObject {
     func setWaveformDecayMode(_ mode: WaveformDecayMode) {
         waveformDecayMode = mode
         mode.persist(to: defaults)
+    }
+
+    func setTranscriptCleanupEnabled(_ enabled: Bool) {
+        transcriptCleanupEnabled = enabled
+        defaults.set(enabled, forKey: PreferenceKeys.transcriptCleanupEnabled.key)
     }
 
     func setAutoPasteEnabled(_ enabled: Bool) {

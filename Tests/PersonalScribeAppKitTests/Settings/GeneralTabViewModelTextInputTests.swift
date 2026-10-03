@@ -40,6 +40,19 @@ final class GeneralTabViewModelTextInputTests: XCTestCase {
         )
     }
 
+    // MARK: - Clean up transcript toggle
+
+    func testTranscriptCleanupDefaultsOnAndSetterPersists() {
+        let defaults = Self.isolatedDefaults()
+        let viewModel = GeneralTabViewModel(defaults: defaults)
+        XCTAssertTrue(viewModel.transcriptCleanupEnabled)
+
+        viewModel.setTranscriptCleanupEnabled(false)
+
+        XCTAssertFalse(viewModel.transcriptCleanupEnabled)
+        XCTAssertFalse(GeneralTabViewModel(defaults: defaults).transcriptCleanupEnabled)
+    }
+
     // MARK: - Restore clipboard toggle
 
     func testInitFallsBackToRestoreDisabledWhenDefaultsEmpty() {

@@ -873,7 +873,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 activeAIModelID: activeContext.activeAIModelID,
                 systemPrompt: activeContext.systemPrompt,
                 segments: rawResult.segments,
-                asrConfidence: nil
+                asrConfidence: nil,
+                cleanupEnabled: activeSessionRecipe?.cleanupEnabled ?? true
             )
             let cleanedText = try await runPostProcessing(rawResult.text, context: postProcessingContext)
             let cleanedProgress = nextTranscriptProgress(

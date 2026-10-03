@@ -1780,6 +1780,41 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertTrue(finals.isEmpty)
     }
 
+    func testRecipeWithCleanupDisabledPersistsRawTranscript() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
+        let persisted = PersistedEntries()
+        let transcriber = FakeTranscriber(
+            result: TranscriptionResult(
+                text: "um hello uh world",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(100)
+            )
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: transcriber,
+            persistenceHandler: { entry in
+                await persisted.append(entry)
+            },
+            boundRecipe: BoundRecipe(
+                recipeID: "raw",
+                recipeName: "Raw",
+                pipelineShape: .batch,
+                processors: [.transcriber(transcriber)],
+                captureControllers: [.manualHotkey],
+                outputSinks: [.frontmostPaste(enabled: true)],
+                cleanupEnabled: false
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await waitUntilPersistedEntries(persisted, minimum: 1)
+
+        let capturedEntry = await persisted.first()
+        XCTAssertEqual(try XCTUnwrap(capturedEntry).text, "um hello uh world")
+    }
+
     func testPersistSkipsWriterWhenPreferenceDisabled() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
         let persisted = PersistedEntries()

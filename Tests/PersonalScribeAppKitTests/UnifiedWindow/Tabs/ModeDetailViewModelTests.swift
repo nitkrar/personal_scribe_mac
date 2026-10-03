@@ -195,12 +195,12 @@ final class ModeDetailViewModelTests: XCTestCase {
             availableKindsProvider: { [.asr] }
         )
         let viewModel = ModeDetailViewModel(mode: custom, registry: registry)
-        XCTAssertTrue(viewModel.cleanupOn)
+        XCTAssertEqual(viewModel.cleanupParameter, .setting(PreferenceKeys.transcriptCleanupEnabled))
 
-        viewModel.setCleanupOn(false)
+        viewModel.setCleanup(.override(false))
 
-        XCTAssertFalse(viewModel.cleanupOn)
-        XCTAssertEqual(registry.customModes.first { $0.id == "cleanup-rt" }?.cleanup, .off)
+        XCTAssertEqual(viewModel.cleanupParameter, .override(false))
+        XCTAssertEqual(registry.customModes.first { $0.id == "cleanup-rt" }?.cleanup, .override(false))
     }
 
     func testLanguagePickerHiddenWhenModeUsesDefaultVoiceModel() throws {

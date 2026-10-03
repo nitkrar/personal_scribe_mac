@@ -7,6 +7,8 @@ public struct PostProcessingContext: Sendable, Equatable {
     public let systemPrompt: String?
     public let segments: [TranscriptionResult.Segment]
     public let asrConfidence: Double?
+    /// `false` = deliver the transcript untouched (mode/global "Clean up transcript" off).
+    public let cleanupEnabled: Bool
 
     public init(
         recordingDuration: Duration,
@@ -14,7 +16,8 @@ public struct PostProcessingContext: Sendable, Equatable {
         activeAIModelID: String? = nil,
         systemPrompt: String? = nil,
         segments: [TranscriptionResult.Segment] = [],
-        asrConfidence: Double? = nil
+        asrConfidence: Double? = nil,
+        cleanupEnabled: Bool = true
     ) {
         self.recordingDuration = recordingDuration
         self.activeMode = activeMode
@@ -22,5 +25,6 @@ public struct PostProcessingContext: Sendable, Equatable {
         self.systemPrompt = systemPrompt
         self.segments = segments
         self.asrConfidence = asrConfidence
+        self.cleanupEnabled = cleanupEnabled
     }
 }

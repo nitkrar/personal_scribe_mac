@@ -98,6 +98,28 @@ final class RecipeBuilderTests: XCTestCase {
         XCTAssertFalse(showAutoStopped) // setting key default: false
     }
 
+    func testBuilderResolvesCleanupFromGlobalSettingUnlessOverridden() throws {
+        defaults.set(false, forKey: PreferenceKeys.transcriptCleanupEnabled.key)
+        let builder = RecipeBuilder(
+            modelService: makeServiceWithActive(asr: BuiltInModelCatalog.parakeetTDT06Bv2.id),
+            processorProvider: StubProcessorProvider(),
+            defaults: defaults
+        )
+        var mode = WorkflowMode(
+            id: "cleanup-mode",
+            name: "Cleanup Mode",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+
+        XCTAssertFalse(try builder.build(mode).cleanupEnabled)
+
+        mode.cleanup = .override(true)
+        XCTAssertTrue(try builder.build(mode).cleanupEnabled)
+    }
+
     func testPinnedDescriptorOverridesActiveDescriptor() throws {
         // #090: when a `.transcriber` pins a descriptorID, RecipeBuilder
         // resolves to the pinned descriptor regardless of which model is

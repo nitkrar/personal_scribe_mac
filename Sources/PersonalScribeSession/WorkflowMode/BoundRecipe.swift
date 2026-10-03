@@ -21,6 +21,7 @@ public struct BoundRecipe: Sendable {
     public let outputSinks: [BoundOutputSink]
     public let streamingBehavior: BoundStreamingBehavior?
     public let streamingSecondPassTranscriber: (any Transcriber)?
+    public let cleanupEnabled: Bool
 
     public init(
         recipeID: String,
@@ -30,7 +31,8 @@ public struct BoundRecipe: Sendable {
         captureControllers: [BoundCaptureController],
         outputSinks: [BoundOutputSink],
         streamingBehavior: BoundStreamingBehavior? = nil,
-        streamingSecondPassTranscriber: (any Transcriber)? = nil
+        streamingSecondPassTranscriber: (any Transcriber)? = nil,
+        cleanupEnabled: Bool = true
     ) {
         self.recipeID = recipeID
         self.recipeName = recipeName
@@ -40,6 +42,7 @@ public struct BoundRecipe: Sendable {
         self.outputSinks = outputSinks
         self.streamingBehavior = streamingBehavior
         self.streamingSecondPassTranscriber = streamingSecondPassTranscriber
+        self.cleanupEnabled = cleanupEnabled
     }
 }
 

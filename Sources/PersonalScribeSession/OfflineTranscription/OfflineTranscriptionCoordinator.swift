@@ -66,6 +66,7 @@ public actor OfflineTranscriptionCoordinator {
     private let fileSourceAudioStream: any FileSourceAudioStreaming
     private let postProcessingPipeline: any PostProcessingPipeline
     private let recordingsDirectory: @Sendable () throws -> URL
+    private let cleanupEnabled: @Sendable () -> Bool
     private let now: @Sendable () -> Date
     private let diarizationSensitivity: SpeakerSeparationSensitivity
     private let logger: PersonalScribeLogger
@@ -87,6 +88,9 @@ public actor OfflineTranscriptionCoordinator {
         recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
         now: @escaping @Sendable () -> Date = Date.init,
         diarizationSensitivity: SpeakerSeparationSensitivity = .balanced,
+        cleanupEnabled: @escaping @Sendable () -> Bool = {
+            PreferenceKeys.transcriptCleanupEnabled.resolve(from: .standard)
+        },
         logger: PersonalScribeLogger
     ) {
         self.init(
@@ -108,6 +112,7 @@ public actor OfflineTranscriptionCoordinator {
             recordingsDirectory: recordingsDirectory,
             now: now,
             diarizationSensitivity: diarizationSensitivity,
+            cleanupEnabled: cleanupEnabled,
             logger: logger
         )
     }
@@ -123,6 +128,9 @@ public actor OfflineTranscriptionCoordinator {
         recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
         now: @escaping @Sendable () -> Date = Date.init,
         diarizationSensitivity: SpeakerSeparationSensitivity = .balanced,
+        cleanupEnabled: @escaping @Sendable () -> Bool = {
+            PreferenceKeys.transcriptCleanupEnabled.resolve(from: .standard)
+        },
         logger: PersonalScribeLogger
     ) {
         self.activeASRDescriptor = activeASRDescriptor
@@ -133,6 +141,7 @@ public actor OfflineTranscriptionCoordinator {
         self.fileSourceAudioStream = fileSourceAudioStream
         self.postProcessingPipeline = postProcessingPipeline
         self.recordingsDirectory = recordingsDirectory
+        self.cleanupEnabled = cleanupEnabled
         self.now = now
         self.diarizationSensitivity = diarizationSensitivity
         self.logger = logger
@@ -476,7 +485,8 @@ private extension OfflineTranscriptionCoordinator {
             activeAIModelID: descriptorID,
             systemPrompt: nil,
             segments: rawResult.segments,
-            asrConfidence: nil
+            asrConfidence: nil,
+            cleanupEnabled: cleanupEnabled()
         )
         let cleanedText = try await postProcessingPipeline.run(rawResult.text, context: context)
         return TranscriptionResult(

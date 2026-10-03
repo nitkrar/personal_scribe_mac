@@ -16,7 +16,7 @@ public struct DefaultPostProcessingPipeline: PostProcessingPipeline {
     /// against `\s+`-style regexes eating the inter-turn separators
     /// that diarized recipes (`#078`) emit.
     public func run(_ text: String, context: PostProcessingContext) async throws -> String {
-        if context.activeMode?.cleanup == .off {
+        guard context.cleanupEnabled else {
             return text
         }
         guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {

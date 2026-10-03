@@ -66,7 +66,8 @@ public final class RecipeBuilder {
             captureControllers: captureControllers,
             outputSinks: outputSinks,
             streamingBehavior: streamingBehavior,
-            streamingSecondPassTranscriber: streamingSecondPassTranscriber
+            streamingSecondPassTranscriber: streamingSecondPassTranscriber,
+            cleanupEnabled: ParameterResolver.resolve(mode.cleanup, from: defaults)
         )
     }
 
