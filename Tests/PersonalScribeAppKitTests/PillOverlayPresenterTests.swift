@@ -525,6 +525,23 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.idleSize)
     }
 
+    func testDragDuringCancelCrossfadeIsNotUndoneByTheDeferredShrink() async throws {
+        let viewModel = PillOverlayViewModel(visibility: .recording, visibilityMode: .alwaysOn)
+        let panelBuilder = RecordingPanelBuilder()
+        let presenter = PillOverlayPresenter(model: viewModel, panelBuilder: panelBuilder)
+        viewModel.apply(visibility: .cancelled)
+        viewModel.apply(visibility: .idle)
+
+        let dragged = panelBuilder.panel.frame.offsetBy(dx: -120, dy: 80)
+        panelBuilder.panel.setFrame(dragged, animate: false)
+        presenter.userDidMovePanel()
+        try await Task.sleep(for: .milliseconds(Int(PillOverlayPresenter.cancelCrossfadeDuration * 1000) + 150))
+
+        let frame = panelBuilder.panel.frame
+        XCTAssertEqual(frame.size, PillOverlayView.idleSize)
+        XCTAssertTrue(dragged.intersects(frame), "pill stays where it was dragged, got \(frame) vs \(dragged)")
+    }
+
     /// Shrinking waits one run-loop turn so the smaller content renders
     /// before AppKit's (blocking) resize animation; otherwise the old,
     /// wider content is clipped while the panel shrinks. Growing resizes

@@ -589,9 +589,18 @@ public final class PillOverlayPresenter {
         guard let panel else {
             return
         }
-        let settled = OverlayPlacement.clamp(panel.frame, within: screenBounds(panel.frame))
+        var settled = OverlayPlacement.clamp(panel.frame, within: screenBounds(panel.frame))
         homeFrame = settled
-        if settled != panel.frame {
+        // A resize deferred before the drag would put the pill back at the
+        // old spot; apply its target size here instead.
+        if let pending = pendingShrink, let visibility = lastSizedVisibility {
+            pending.cancel()
+            pendingShrink = nil
+            let bounds = screenBounds(settled)
+            let anchor = PillAnchor(home: settled, within: bounds, largestSize: PillOverlayView.largestSize)
+            settled = anchor.frame(for: PillOverlayView.size(for: visibility, style: model.pillStyle), within: bounds)
+            panel.setFrame(settled, animate: false)
+        } else if settled != panel.frame {
             panel.setFrame(settled, animate: true)
         }
         diagnosticLogger.info("PillOverlayPresenter.userDidMovePanel — frame=\(settled)")
