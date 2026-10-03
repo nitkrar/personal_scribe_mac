@@ -182,6 +182,32 @@ final class AppCompositionTests: XCTestCase {
         XCTAssertEqual(registry.currentMode.id, "needs-asr")
     }
 
+    func testModelCacheRefreshesWhenPreparationProgressEnds() async throws {
+        let downloaded = DownloadedFlag()
+        let suiteName = "AppCompositionTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let modelService = ActiveModelService(
+            activeIDsPreference: Preference(key: ActiveModelService.preferenceKey, default: [:], defaults: defaults),
+            isDownloaded: { _ in downloaded.value },
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+        let (snapshots, continuation) = AsyncStream<SessionSnapshot>.makeStream()
+        let task = AppComposition.refreshModelCacheWhenPreparationEnds(snapshots: snapshots, modelService: modelService)
+        defer { task.cancel() }
+        let descriptor = BuiltInModelCatalog.parakeetTDT06Bv2
+
+        continuation.yield(SessionSnapshot(modelDownloadProgress: ModelDownloadProgress(
+            phase: .downloading, fractionCompleted: 0.5, receivedBytes: 5, expectedBytes: 10
+        )))
+        downloaded.value = true
+        continuation.yield(SessionSnapshot(modelDownloadProgress: nil))
+
+        await waitUntil { modelService.downloadStates[descriptor.id]?.phase == .ready }
+        XCTAssertEqual(modelService.downloadStates[descriptor.id]?.phase, .ready)
+    }
+
     func testReporterIncludesDebugFileSink() async throws {
         let tempDirectory = try makeTemporaryDirectory()
         let reporter = AppComposition.makeDiagnosticsReporter(

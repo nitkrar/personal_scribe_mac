@@ -282,9 +282,41 @@ public enum AppComposition {
 
         wirePostSetActivePrewarm(modelService: modelService, coordinator: coordinator)
         wirePostDownloadWarmUp(modelService: modelService, processorProvider: processorProvider)
+        wireModelCacheRefresh(modelService: modelService, coordinator: coordinator)
 
         return coordinator
     }()
+
+    private static func wireModelCacheRefresh(
+        modelService: ActiveModelService,
+        coordinator: SessionCoordinator
+    ) {
+        Task { @MainActor in
+            await refreshModelCacheWhenPreparationEnds(
+                snapshots: coordinator.snapshotStream(),
+                modelService: modelService
+            ).value
+        }
+    }
+
+    /// Adapters download models during prepare, outside `ActiveModelService`,
+    /// so its download cache is re-read from disk whenever preparation ends.
+    @MainActor
+    static func refreshModelCacheWhenPreparationEnds(
+        snapshots: AsyncStream<SessionSnapshot>,
+        modelService: ActiveModelService
+    ) -> Task<Void, Never> {
+        Task { @MainActor in
+            var wasPreparing = false
+            for await snapshot in snapshots {
+                let isPreparing = snapshot.modelDownloadProgress != nil
+                if wasPreparing && !isPreparing {
+                    modelService.refresh()
+                }
+                wasPreparing = isPreparing
+            }
+        }
+    }
 
     /// Wire `modelService.onSetActive` to `coordinator.prepareTranscriber()`
     /// so an explicit Activate flips the transcriber prep at activate-time.
