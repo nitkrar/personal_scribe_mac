@@ -1920,24 +1920,20 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         await orchestrator.toggleCapture()
         await orchestrator.toggleCapture()
         try await waitUntilPersistedEntries(persisted, minimum: 1)
-        try await withTimeout(.seconds(1)) {
-            while await diagnosticsSink.snapshot().isEmpty {
+        let isWriteFailure: @Sendable (RedactedDiagnosticsEvent) -> Bool = { event in
+            event.level == .error &&
+                event.message == "Failed to persist audio recording" &&
+                event.underlyingError?.contains("writeFailed") == true
+        }
+        try await withTimeout(.seconds(2)) {
+            while await !diagnosticsSink.snapshot().contains(where: isWriteFailure) {
                 try? await Task.sleep(for: .milliseconds(10))
             }
         }
 
         let capturedEntry = await persisted.first()
         let entry = try XCTUnwrap(capturedEntry)
-        let events = await diagnosticsSink.snapshot()
-
         XCTAssertNil(entry.audioFilename)
-        XCTAssertTrue(
-            events.contains { event in
-                event.level == .error &&
-                event.message == "Failed to persist audio recording" &&
-                event.underlyingError?.contains("writeFailed") == true
-            }
-        )
     }
 
     func testOutputFailurePublishesTypedStageFailure() async throws {
