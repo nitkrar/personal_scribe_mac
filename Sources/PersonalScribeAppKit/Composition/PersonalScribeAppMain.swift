@@ -58,7 +58,8 @@ struct PersonalScribeAppMain: App {
         openSettings: @escaping @MainActor () -> Void = PersonalScribeAppMain.defaultOpenSettings,
         overlayPanelBuilder: any PillOverlayPanelBuilding = AppKitPillOverlayPanelBuilder(),
         defaults: UserDefaults = .standard,
-        startupCoordinator: AppStartupCoordinator? = nil
+        startupCoordinator: AppStartupCoordinator? = nil,
+        showWindowAtLaunch: Bool = true
     ) {
         // Run the one-shot UserDefaults rename migration before any preference
         // read. Idempotent; bounded by PreferenceMigrator.currentMigrationVersion.
@@ -353,18 +354,12 @@ struct PersonalScribeAppMain: App {
         observer.start()
         self.onboardingCompletionObserver = observer
 
-        // First-launch onboarding routing: if permissions haven't been
-        // granted yet, auto-open the unified window to the Settings tab
-        // so the Permissions sub-tab is one click away. Replaces the
-        // pre-M4 OnboardingWindowController auto-open.
-        //
-        // Re-read after `observer.start()` — the observer may have
-        // flipped the flag synchronously on init if perms were already
-        // granted (common on re-install), in which case we skip the
-        // auto-open.
-        if !isOnboardingCompleteProvider() {
+        // Read after `observer.start()`, which may complete onboarding
+        // synchronously when permissions are already granted.
+        let launchTab = Self.launchTab(isOnboardingComplete: isOnboardingCompleteProvider())
+        if showWindowAtLaunch {
             Task { @MainActor in
-                unifiedWindowControllerHost.showWindow(selecting: .settings)
+                unifiedWindowControllerHost.showWindow(selecting: launchTab)
             }
         }
 
@@ -403,6 +398,11 @@ struct PersonalScribeAppMain: App {
 }
 
 extension PersonalScribeAppMain {
+    /// Settings (for permissions) until onboarding completes, then Home.
+    static func launchTab(isOnboardingComplete: Bool) -> AppTab {
+        isOnboardingComplete ? .home : .settings
+    }
+
     static func defaultTranscriptReader(
         logger: PersonalScribeLogger
     ) -> any TranscriptReading {

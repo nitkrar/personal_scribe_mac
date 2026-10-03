@@ -14,6 +14,9 @@ or `StatusItemIconLoader`.
   or DMG install). The menu-bar status item shows the **quill glyph**,
   not the text letter "S". Regression guard for the
   `NSImage(named:) -> nil` bug fixed by loading through `Bundle.module`.
+- [ ] **MV-SI-LAUNCH-1** With onboarding complete, quit and relaunch.
+  The unified window opens on **Home**. With permissions missing it
+  opens on **Settings** instead.
 - [ ] **MV-SI-2** Flip macOS Appearance between Light and Dark. The
   icon re-tints appropriately (template-rendering-intent honoured from
   the asset catalog `Contents.json`).

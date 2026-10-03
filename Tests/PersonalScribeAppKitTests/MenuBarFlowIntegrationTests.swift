@@ -118,7 +118,8 @@ final class MenuBarFlowIntegrationTests: XCTestCase {
             openSettings: {},
             overlayPanelBuilder: NoOpPanelBuilder(),
             defaults: defaults,
-            startupCoordinator: startupCoordinator
+            startupCoordinator: startupCoordinator,
+            showWindowAtLaunch: false
         )
 
         XCTAssertFalse(
