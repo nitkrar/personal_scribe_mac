@@ -1887,6 +1887,32 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertTrue(entry.audioFilename?.hasSuffix(".wav") ?? false)
     }
 
+    func testFailedTranscriptInsertRemovesItsRecording() async throws {
+        let recordingsDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: recordingsDirectory) }
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(text: "hello", audioDuration: .seconds(1), processingDuration: .zero)
+            ),
+            persistenceHandler: { _ in throw PersistenceFailure.writeFailed },
+            recordingFileWriter: RecordingFileWriterSpy(writesFile: true),
+            recordAudioEnabled: { true },
+            recordingsDirectory: { recordingsDirectory }
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.latestStageFailureForTesting() == nil {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+
+        let remaining = try FileManager.default.contentsOfDirectory(atPath: recordingsDirectory.path)
+        XCTAssertEqual(remaining, [])
+    }
+
     func testPersistContinuesWhenWriterFails() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
         let persisted = PersistedEntries()
@@ -3128,14 +3154,19 @@ private final class RecordingFileWriterSpy: @unchecked Sendable, RecordingFileWr
     private let lock = NSLock()
     private var calls: [Call] = []
     private let error: (any Error)?
+    private let writesFile: Bool
 
-    init(error: (any Error)? = nil) {
+    init(error: (any Error)? = nil, writesFile: Bool = false) {
         self.error = error
+        self.writesFile = writesFile
     }
 
     func write(_ buffers: [PCMBuffer], to url: URL) throws {
         if let error {
             throw error
+        }
+        if writesFile {
+            try Data().write(to: url)
         }
 
         lock.lock()

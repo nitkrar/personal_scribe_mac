@@ -105,6 +105,27 @@ final class RecordingRetentionSweeperTests: XCTestCase {
         XCTAssertEqual(calls, [["first.wav", "second.wav"]])
     }
 
+    func testSweepKeepsFilesWhenReferencesCannotBeCleared() async throws {
+        let recordingsDirectory = try makeTemporaryDirectory()
+        defer { cleanup(recordingsDirectory) }
+
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let stale = recordingsDirectory.appendingPathComponent("stale.wav", isDirectory: false)
+        try Data("stale".utf8).write(to: stale)
+        try setModificationDate(now.addingTimeInterval(-9 * 86_400), for: stale)
+        let sweeper = RecordingRetentionSweeper(
+            recordingsDirectory: { recordingsDirectory },
+            repository: RecordingRetentionRepositorySpy(fails: true),
+            retentionDays: { 7 },
+            now: { now },
+            diagnostics: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
+
+        await sweeper.sweep()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: stale.path))
+    }
+
     func testSweepIsIdempotentWithinSamePeriod() async throws {
         let recordingsDirectory = try makeTemporaryDirectory()
         defer { cleanup(recordingsDirectory) }
@@ -147,9 +168,17 @@ final class RecordingRetentionSweeperTests: XCTestCase {
 }
 
 private actor RecordingRetentionRepositorySpy: TranscriptAudioFilenameNullifying {
+    struct NullifyFailed: Error {}
+
+    private let fails: Bool
     private var capturedCalls: [[String]] = []
 
+    init(fails: Bool = false) {
+        self.fails = fails
+    }
+
     func nullifyAudioFilenames(_ filenames: [String]) async throws {
+        if fails { throw NullifyFailed() }
         capturedCalls.append(filenames.sorted())
     }
 

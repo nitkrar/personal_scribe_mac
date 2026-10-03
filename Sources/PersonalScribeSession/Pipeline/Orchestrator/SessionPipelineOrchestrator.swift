@@ -1195,6 +1195,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
 
         var audioFilename: String?
+        var audioFileURL: URL?
         if recordAudioEnabled(),
            let recordingFileWriter,
            !replayBuffers.isEmpty {
@@ -1204,6 +1205,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 let fileURL = directory.appendingPathComponent(filename, isDirectory: false)
                 try recordingFileWriter.write(replayBuffers, to: fileURL)
                 audioFilename = filename
+                audioFileURL = fileURL
             } catch {
                 logger.error("Failed to persist audio recording", error: error)
                 audioFilename = nil
@@ -1231,6 +1233,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         do {
             try await persistenceHandler(entry)
         } catch {
+            // No row will reference the recording, so don't leave it behind.
+            if let audioFileURL {
+                try? FileManager.default.removeItem(at: audioFileURL)
+            }
             throw makeStageFailure(stage: .persistence, error: error, fallback: .transcriptionFailure)
         }
     }

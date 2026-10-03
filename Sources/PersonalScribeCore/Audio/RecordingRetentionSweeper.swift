@@ -46,6 +46,12 @@ public actor RecordingRetentionSweeper {
             let directory = try recordingsDirectory()
             let staleFiles = try staleAudioFiles(in: directory, olderThan: cutoff)
 
+            // References first: a file whose delete fails is still stale next sweep,
+            // but a row pointing at a deleted file would never be found again.
+            if !staleFiles.isEmpty {
+                try await repository.nullifyAudioFilenames(staleFiles.map(\.lastPathComponent).sorted())
+            }
+
             var removedFilenames: [String] = []
             var failedRemovals = 0
 
@@ -56,10 +62,6 @@ public actor RecordingRetentionSweeper {
                 } catch {
                     failedRemovals += 1
                 }
-            }
-
-            if !removedFilenames.isEmpty {
-                try await repository.nullifyAudioFilenames(removedFilenames.sorted())
             }
 
             diagnostics.info(
