@@ -98,7 +98,7 @@ final class OfflineTranscriptionTabViewModelTests: XCTestCase {
 
         viewModel.setDiarizationEnabled(true)
 
-        XCTAssertTrue(defaults.bool(forKey: OfflineTranscriptionDiarizationPreference.key))
+        XCTAssertTrue(defaults.bool(forKey: OfflineTranscriptionDiarizationPreference.userDefaultsKey))
     }
 
     func testJobsPublishedNewestFirst() async throws {

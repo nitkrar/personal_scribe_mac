@@ -5,11 +5,11 @@ struct StreamCardView: View {
     let text: String
 
     @AppStorage(StreamingCardOverflowModePreference.userDefaultsKey)
-    private var overflowModeRawValue = StreamingCardOverflowMode.tailPinnedHeadEllipsis.rawValue
+    private var overflowModeRawValue = StreamingCardOverflowModePreference.default.rawValue
     @Environment(\.colorScheme) private var colorScheme
 
     private var overflowMode: StreamingCardOverflowMode {
-        StreamingCardOverflowMode(rawValue: overflowModeRawValue) ?? .tailPinnedHeadEllipsis
+        StreamingCardOverflowMode(rawValue: overflowModeRawValue) ?? StreamingCardOverflowModePreference.default
     }
 
     var body: some View {

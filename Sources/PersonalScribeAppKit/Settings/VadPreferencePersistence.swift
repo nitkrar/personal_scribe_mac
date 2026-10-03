@@ -5,83 +5,26 @@ import PersonalScribeVAD
 /// Master toggle for VAD auto-stop (#046). `true` ships the feature; when
 /// `false` the orchestrator skips VAD wiring and recording only stops via
 /// manual hotkey / pill / Esc. Default `true` per locked scope.
-public enum VadAutoStopEnabledPreference {
-    public static let userDefaultsKey = "VadAutoStopEnabled"
-    public static let `default`: Bool = true
-
-    public static func resolve(from defaults: UserDefaults = .standard) -> Bool {
-        guard defaults.object(forKey: userDefaultsKey) != nil else {
-            return `default`
-        }
-        return defaults.bool(forKey: userDefaultsKey)
-    }
-
-    public static func persist(_ value: Bool, to defaults: UserDefaults = .standard) {
-        defaults.set(value, forKey: userDefaultsKey)
-    }
+public enum VadAutoStopEnabledPreference: StoredPreference {
+    public static let setting = PreferenceKeys.vadAutoStopEnabled
 }
 
 /// Stage B opt-in (#046): enable the grace window + "…stopping,
 /// speak to continue" ResponseCard before auto-stop fires.
-public enum VadShowStoppingWarningPreference {
-    public static let userDefaultsKey = "VadShowStoppingWarning"
-    public static let `default`: Bool = false
-
-    public static func resolve(from defaults: UserDefaults = .standard) -> Bool {
-        guard defaults.object(forKey: userDefaultsKey) != nil else {
-            return `default`
-        }
-        return defaults.bool(forKey: userDefaultsKey)
-    }
-
-    public static func persist(_ value: Bool, to defaults: UserDefaults = .standard) {
-        defaults.set(value, forKey: userDefaultsKey)
-    }
+public enum VadShowStoppingWarningPreference: StoredPreference {
+    public static let setting = PreferenceKeys.vadShowStoppingWarning
 }
 
 /// Stage B opt-in (#046): enable the "Auto stopped. Update settings to
 /// change." ResponseCard notification after VAD-triggered auto-stop.
-public enum VadShowAutoStoppedNotificationPreference {
-    public static let userDefaultsKey = "VadShowAutoStoppedNotification"
-    public static let `default`: Bool = false
-
-    public static func resolve(from defaults: UserDefaults = .standard) -> Bool {
-        guard defaults.object(forKey: userDefaultsKey) != nil else {
-            return `default`
-        }
-        return defaults.bool(forKey: userDefaultsKey)
-    }
-
-    public static func persist(_ value: Bool, to defaults: UserDefaults = .standard) {
-        defaults.set(value, forKey: userDefaultsKey)
-    }
+public enum VadShowAutoStoppedNotificationPreference: StoredPreference {
+    public static let setting = PreferenceKeys.vadShowAutoStoppedNotification
 }
 
-/// Silence duration (seconds) after which VAD auto-stop fires. Clamped to
-/// `VadPreferences.minSilenceThresholdSeconds ... maxSilenceThresholdSeconds`
-/// (1.0–10.0s) at read/write time as defense in depth — the Settings slider
-/// also constrains the live edit range. Default 5.0s.
-public enum VadSilenceThresholdPreference {
-    public static let userDefaultsKey = "VadSilenceDurationSeconds"
-    public static let `default`: Double = 5.0
-
-    public static func resolve(from defaults: UserDefaults = .standard) -> Double {
-        guard defaults.object(forKey: userDefaultsKey) != nil else {
-            return `default`
-        }
-        return clamp(defaults.double(forKey: userDefaultsKey))
-    }
-
-    public static func persist(_ value: Double, to defaults: UserDefaults = .standard) {
-        defaults.set(clamp(value), forKey: userDefaultsKey)
-    }
-
-    private static func clamp(_ value: Double) -> Double {
-        min(
-            max(value, VadPreferences.minSilenceThresholdSeconds),
-            VadPreferences.maxSilenceThresholdSeconds
-        )
-    }
+/// Silence duration (seconds) after which VAD auto-stop fires. Clamped
+/// to `VadPreferences` min/max on read and write.
+public enum VadSilenceThresholdPreference: StoredPreference {
+    public static let setting = PreferenceKeys.vadSilenceThreshold
 }
 
 /// `VadPreferencesReading` implementation backed by UserDefaults. Snapshots

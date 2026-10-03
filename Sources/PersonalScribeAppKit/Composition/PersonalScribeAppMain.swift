@@ -66,9 +66,8 @@ struct PersonalScribeAppMain: App {
             visibilityModeSource: AppKitVisibilityModeProvider(defaults: defaults)
         )
         appStore.start()
-        let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
         let isOnboardingCompleteProvider: @MainActor () -> Bool = {
-            onboardingCompletionPreference.resolve()
+            OnboardingState.resolve(from: defaults) == .completed
         }
 
         self.coordinator = coordinator
@@ -400,14 +399,6 @@ struct PersonalScribeAppMain: App {
 }
 
 extension PersonalScribeAppMain {
-    fileprivate static func onboardingCompletionPreference(defaults: UserDefaults) -> Preference<Bool> {
-        Preference(
-            key: "OnboardingCompleted",
-            default: false,
-            defaults: defaults
-        )
-    }
-
     static func defaultTranscriptReader(
         logger: PersonalScribeLogger
     ) -> any TranscriptReading {
@@ -464,7 +455,7 @@ final class StatusItemControllerHost: ObservableObject {
         openCopyLastTranscript: @escaping @MainActor () -> Void = {},
         offlineRetranscriptionAction: OfflineRetranscriptionAction? = nil,
         isOnboardingCompleteProvider: @escaping @MainActor () -> Bool = {
-            PersonalScribeAppMain.onboardingCompletionPreference(defaults: .standard).resolve()
+            OnboardingState.resolve() == .completed
         },
         inputDeviceProvider: (any AudioInputDeviceProviding)? = nil,
         modesProvider: @escaping @MainActor () -> [WorkflowMode] = { WorkflowModeRegistry.builtInModes },

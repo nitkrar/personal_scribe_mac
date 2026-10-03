@@ -1,4 +1,5 @@
 import Foundation
+import PersonalScribeCore
 
 /// User-selectable "Background mode" preference. When `true`, the app
 /// runs as a menu-bar-only accessory (`.accessory` activation policy) —
@@ -25,30 +26,6 @@ import Foundation
 ///   `NSApp.setActivationPolicy(.accessory)` if true. Not applied if
 ///   false — the default activation policy from `Info.plist` is
 ///   `.regular`.
-///
-/// Persisted under `UserDefaults` key `"BackgroundMode"` (unprefixed —
-/// bundle-scoped already, per the project's `PreferenceMigrator`
-/// UserDefaults key policy).
-public enum BackgroundLaunchPreference {
-    /// UserDefaults key. Unprefixed by design — bundle-scoped already.
-    public static let userDefaultsKey = "BackgroundMode"
-
-    /// Default — the app is a regular macOS app on fresh install.
-    public static let `default`: Bool = false
-
-    /// Reads the persisted preference, falling back to `default` when
-    /// the key is absent. `UserDefaults.bool(forKey:)` returns `false`
-    /// on absence so we probe with `object(forKey:)` first to
-    /// distinguish "explicitly false" from "not set".
-    public static func resolve(from defaults: UserDefaults = .standard) -> Bool {
-        guard defaults.object(forKey: userDefaultsKey) != nil else {
-            return `default`
-        }
-        return defaults.bool(forKey: userDefaultsKey)
-    }
-
-    /// Writes the bool to defaults under `userDefaultsKey`.
-    public static func persist(_ value: Bool, to defaults: UserDefaults = .standard) {
-        defaults.set(value, forKey: userDefaultsKey)
-    }
+public enum BackgroundLaunchPreference: StoredPreference {
+    public static let setting = SettingKey<Bool>(key: "BackgroundMode", default: false)
 }

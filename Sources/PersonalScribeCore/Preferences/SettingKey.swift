@@ -29,19 +29,31 @@ public struct SettingKey<Value: Codable & Sendable>: Sendable {
     /// `key`. Matches the existing `Preference<Value>.default` field.
     public let `default`: Value
 
-    public init(key: String, default defaultValue: Value) {
+    /// Applied to every resolved and persisted value.
+    public let sanitize: @Sendable (Value) -> Value
+
+    public init(
+        key: String,
+        default defaultValue: Value,
+        sanitize: @escaping @Sendable (Value) -> Value = { $0 }
+    ) {
         self.key = key
         self.default = defaultValue
+        self.sanitize = sanitize
     }
 
     /// Resolve the current value from the supplied `UserDefaults`
     /// suite, falling back to `default` when the key is absent or the
     /// stored value fails to decode. Mirrors `Preference.resolve()`.
     public func resolve(from defaults: UserDefaults) -> Value {
-        Preference<Value>(
-            key: key,
-            default: `default`,
-            defaults: defaults
-        ).resolve()
+        sanitize(preference(defaults).resolve())
+    }
+
+    public func persist(_ value: Value, to defaults: UserDefaults) {
+        preference(defaults).persist(sanitize(value))
+    }
+
+    private func preference(_ defaults: UserDefaults) -> Preference<Value> {
+        Preference(key: key, default: `default`, defaults: defaults)
     }
 }

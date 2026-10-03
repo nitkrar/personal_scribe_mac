@@ -1,4 +1,5 @@
 import Foundation
+import PersonalScribeCore
 
 /// Gates the synthetic `Cmd+V` post in `ClipboardBatchOutput.deliverBatch`.
 /// When `true`, the transcript is written to the clipboard AND auto-pasted
@@ -12,23 +13,7 @@ import Foundation
 /// clipboard-only picker). One boolean captures the same two-state space
 /// the picker did without the redundant master.
 ///
-/// Persisted under `UserDefaults` key `"AutoPasteEnabled"`. Default
-/// `true` — preserves pre-#072 paste-at-cursor behavior for fresh
-/// installs. `object(forKey:)` probe distinguishes unset from explicit
-/// false, matching `BackgroundLaunchPreference`'s pattern.
-public enum AutoPasteEnabledPreference {
-    public static let userDefaultsKey = "AutoPasteEnabled"
-
-    public static let `default`: Bool = true
-
-    public static func resolve(from defaults: UserDefaults = .standard) -> Bool {
-        guard defaults.object(forKey: userDefaultsKey) != nil else {
-            return `default`
-        }
-        return defaults.bool(forKey: userDefaultsKey)
-    }
-
-    public static func persist(_ value: Bool, to defaults: UserDefaults = .standard) {
-        defaults.set(value, forKey: userDefaultsKey)
-    }
+/// Default `true` preserves paste-at-cursor for fresh installs.
+public enum AutoPasteEnabledPreference: StoredPreference {
+    public static let setting = PreferenceKeys.autoPasteEnabled
 }

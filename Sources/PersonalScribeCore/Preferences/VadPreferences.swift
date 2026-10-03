@@ -19,20 +19,22 @@ public struct VadPreferences: Sendable, Equatable, Codable {
         showAutoStoppedNotification: Bool = false
     ) {
         self.autoStopEnabled = autoStopEnabled
-        self.silenceThresholdSeconds = Self.clamp(silenceThresholdSeconds)
+        self.silenceThresholdSeconds = Self.clampedSilenceThreshold(silenceThresholdSeconds)
         self.showStoppingWarning = showStoppingWarning
         self.showAutoStoppedNotification = showAutoStoppedNotification
     }
 
     public static let `default` = VadPreferences(
-        autoStopEnabled: true,
-        silenceThresholdSeconds: 5.0
+        autoStopEnabled: PreferenceKeys.vadAutoStopEnabled.default,
+        silenceThresholdSeconds: PreferenceKeys.vadSilenceThreshold.default,
+        showStoppingWarning: PreferenceKeys.vadShowStoppingWarning.default,
+        showAutoStoppedNotification: PreferenceKeys.vadShowAutoStoppedNotification.default
     )
 
     public static let minSilenceThresholdSeconds: Double = 1.0
     public static let maxSilenceThresholdSeconds: Double = 10.0
 
-    private static func clamp(_ seconds: Double) -> Double {
+    public static func clampedSilenceThreshold(_ seconds: Double) -> Double {
         min(max(seconds, minSilenceThresholdSeconds), maxSilenceThresholdSeconds)
     }
 }

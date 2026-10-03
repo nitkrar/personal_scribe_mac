@@ -13,29 +13,6 @@ import PersonalScribeCore
 /// Persisted under `UserDefaults` key `"SpeakerSeparationSensitivity"`
 /// as a JSON-encoded string raw-value (`"relaxed"` / `"balanced"` /
 /// `"strict"`). Mirrors `PreferenceKeys.speakerSeparationSensitivity`.
-public enum SpeakerSeparationSensitivityPreference {
-    public static let userDefaultsKey = "SpeakerSeparationSensitivity"
-
-    public static let `default`: SpeakerSeparationSensitivity = .balanced
-
-    public static func resolve(
-        from defaults: UserDefaults = .standard
-    ) -> SpeakerSeparationSensitivity {
-        Preference<SpeakerSeparationSensitivity>(
-            key: userDefaultsKey,
-            default: `default`,
-            defaults: defaults
-        ).resolve()
-    }
-
-    public static func persist(
-        _ value: SpeakerSeparationSensitivity,
-        to defaults: UserDefaults = .standard
-    ) {
-        Preference<SpeakerSeparationSensitivity>(
-            key: userDefaultsKey,
-            default: `default`,
-            defaults: defaults
-        ).persist(value)
-    }
+public enum SpeakerSeparationSensitivityPreference: StoredPreference {
+    public static let setting = PreferenceKeys.speakerSeparationSensitivity
 }

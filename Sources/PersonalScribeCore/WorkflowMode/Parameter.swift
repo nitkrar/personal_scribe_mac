@@ -21,16 +21,8 @@ import Foundation
 /// - `.setting`: `{"source": "setting", "key": "VadSilenceDurationSeconds"}`
 /// - `.override`: `{"source": "override", "value": 2.5}`
 ///
-/// On decode of `.setting`, the resulting `SettingKey` carries the
-/// decoded key paired with a placeholder default value; the
-/// `ParameterResolver` tolerates this by accepting a `defaults:
-/// UserDefaults` and reading the persisted scalar — when the persisted
-/// scalar is absent the resolver returns the in-memory `default` of
-/// the `SettingKey` (which production code re-pairs with the central
-/// `PreferenceKeys` registry before resolving). Tests that exercise
-/// `Parameter` Codable round-trip therefore pin the case + key only;
-/// tests that exercise `ParameterResolver` separately pin the
-/// per-source resolution rule.
+/// Decoding `.setting` looks the key up in `PreferenceKeys`; unknown
+/// keys fail to decode.
 ///
 /// `Value: Codable & Sendable` matches `SettingKey`'s constraints and
 /// keeps recipe documents (`WorkflowModeDocument`) round-trippable.
@@ -44,12 +36,6 @@ extension Parameter: Codable {
         case source
         case key
         case value
-        // Optional default-roundtrip companion to `key` so that
-        // round-tripped `.setting` parameters retain the in-memory
-        // default. Encoded as a sibling of `key` for the `.setting`
-        // case; absent for `.override`. Tolerates older / external
-        // documents that omit it (decoder keeps the placeholder).
-        case settingDefault
     }
 
     private enum Source: String, Codable {
@@ -63,27 +49,14 @@ extension Parameter: Codable {
         switch source {
         case .setting:
             let key = try container.decode(String.self, forKey: .key)
-            // Round-trip companion (optional). When missing, the
-            // resolver consults the central registry to re-pair the
-            // hardcoded default with this key.
-            let placeholder = try container.decodeIfPresent(
-                Value.self,
-                forKey: .settingDefault
-            )
-            // Without a placeholder we cannot construct a SettingKey
-            // because Value is not default-initializable in the type
-            // system. Decode is therefore strict: round-trip requires
-            // the companion. Production-side, recipes only encode/
-            // decode through round-trip pipelines we control, so the
-            // companion is always present.
-            guard let defaultValue = placeholder else {
+            guard let registered = PreferenceKeys.registered(key, as: Value.self) else {
                 throw DecodingError.dataCorruptedError(
-                    forKey: .settingDefault,
+                    forKey: .key,
                     in: container,
-                    debugDescription: "Parameter.setting requires a `settingDefault` companion to reconstruct the SettingKey default."
+                    debugDescription: "Unregistered setting key \(key)"
                 )
             }
-            self = .setting(SettingKey(key: key, default: defaultValue))
+            self = .setting(registered)
         case .override:
             let value = try container.decode(Value.self, forKey: .value)
             self = .override(value)
@@ -96,7 +69,6 @@ extension Parameter: Codable {
         case .setting(let settingKey):
             try container.encode(Source.setting, forKey: .source)
             try container.encode(settingKey.key, forKey: .key)
-            try container.encode(settingKey.default, forKey: .settingDefault)
         case .override(let value):
             try container.encode(Source.override, forKey: .source)
             try container.encode(value, forKey: .value)

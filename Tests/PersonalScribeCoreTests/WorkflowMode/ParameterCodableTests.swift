@@ -5,8 +5,7 @@ import XCTest
 /// #078.9 — `Parameter<Value>` Codable round-trip.
 ///
 /// Per L22, the on-disk shape distinguishes:
-/// - `.setting`: `{"source": "setting", "key": "..."}` (+ companion
-///   `settingDefault` to round-trip the in-memory hardcoded default).
+/// - `.setting`: `{"source": "setting", "key": "..."}`.
 /// - `.override`: `{"source": "override", "value": ...}`.
 ///
 /// These tests pin the encoded shape (source field, key/value fields)
@@ -29,6 +28,35 @@ final class ParameterCodableTests: XCTestCase {
             json?["value"],
             "Setting case must not encode an override value field."
         )
+    }
+
+    func testDecodedRegisteredSettingUsesRegistryDefaultNotStoredOne() throws {
+        let stored = #"{"source":"setting","key":"ClipboardRestoreEnabled","settingDefault":true}"#
+        let suite = "ParameterCodableTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let parameter = try JSONDecoder().decode(Parameter<Bool>.self, from: Data(stored.utf8))
+
+        XCTAssertEqual(
+            ParameterResolver.resolve(parameter, from: defaults),
+            PreferenceKeys.clipboardRestoreEnabled.default
+        )
+    }
+
+    func testDecodingUnregisteredSettingKeyFails() {
+        let stored = #"{"source":"setting","key":"NotARegisteredKey"}"#
+
+        XCTAssertThrowsError(try JSONDecoder().decode(Parameter<Bool>.self, from: Data(stored.utf8)))
+    }
+
+    func testShippedModesRoundTrip() throws {
+        let modes = [WorkflowMode.dictation] + Preset.allCases.map { $0.materialize(name: $0.displayName) }
+
+        for mode in modes {
+            let data = try JSONEncoder().encode(mode)
+            XCTAssertEqual(try JSONDecoder().decode(WorkflowMode.self, from: data), mode, mode.name)
+        }
     }
 
     func testOverrideCaseEncodesSourceAndValue() throws {

@@ -1,4 +1,5 @@
 import Foundation
+import PersonalScribeCore
 
 /// Gates the scheduled restore of the user's pre-transcript clipboard
 /// in `ClipboardBatchOutput.deliverBatch`. When `true`, the service
@@ -15,27 +16,8 @@ import Foundation
 /// auto-paste ON + restore OFF to mean "paste and leave the transcript
 /// on the clipboard for unlimited Cmd+V re-paste".
 ///
-/// Persisted under `UserDefaults` key `"ClipboardRestoreEnabled"`.
-/// Default `false` — fresh installs leave the transcript on the clipboard
-/// indefinitely, which structurally prevents #072's silent-drop-into-
-/// cursorless-surface symptom. Users who value the
-/// "preserve pre-recording clipboard" convenience opt in.
-///
-/// `object(forKey:)` probe distinguishes unset from explicit false,
-/// matching `AutoPasteEnabledPreference` / `BackgroundLaunchPreference`.
-public enum ClipboardRestoreEnabledPreference {
-    public static let userDefaultsKey = "ClipboardRestoreEnabled"
-
-    public static let `default`: Bool = false
-
-    public static func resolve(from defaults: UserDefaults = .standard) -> Bool {
-        guard defaults.object(forKey: userDefaultsKey) != nil else {
-            return `default`
-        }
-        return defaults.bool(forKey: userDefaultsKey)
-    }
-
-    public static func persist(_ value: Bool, to defaults: UserDefaults = .standard) {
-        defaults.set(value, forKey: userDefaultsKey)
-    }
+/// Default `false` keeps the transcript on the clipboard, so a paste
+/// into a cursorless surface isn't lost (#072).
+public enum ClipboardRestoreEnabledPreference: StoredPreference {
+    public static let setting = PreferenceKeys.clipboardRestoreEnabled
 }

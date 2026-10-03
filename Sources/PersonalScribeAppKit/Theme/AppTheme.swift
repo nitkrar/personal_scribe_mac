@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import PersonalScribeCore
 
 /// User-selectable app-level master theme.
 ///
@@ -14,41 +15,22 @@ import SwiftUI
 /// independent: the floating pill's own appearance picker is not
 /// affected by `AppTheme`.
 ///
-/// Persisted under `UserDefaults` key `"AppTheme"` (unprefixed — the
-/// bundle domain already namespaces it, same convention as
-/// `PillAppearance` / `WindowTint`).
-///
 /// Introduced by mockup-gaps G (2026-04-21) to replace the previous
 /// `WindowTint.dark` double-duty behaviour. There is no migration
 /// shim: a persisted `"WindowTint" == "Dark"` silently falls back to
 /// `WindowTint.warm` via `WindowTint.resolve`.
-public enum AppTheme: String, CaseIterable, Identifiable, Sendable {
+public enum AppTheme: String, CaseIterable, Identifiable, Codable, Sendable, StoredPreference {
     case light  = "Light"
     case dark   = "Dark"
     case system = "System"
 
     public var id: String { rawValue }
 
-    /// UserDefaults key. Unprefixed by design — bundle-scoped already.
-    public static let userDefaultsKey = "AppTheme"
+    /// Light was a product decision, not a system-follows default.
+    public static let setting = SettingKey<AppTheme>(key: "AppTheme", default: .light)
 
-    /// Default theme. Light was explicitly chosen by the user
-    /// (2026-04-21) — product decision, not a system-follows default.
-    public static let `default`: AppTheme = .light
-
-    /// Reads the persisted theme, falling back to `default` when
-    /// absent or the stored value is not a recognised case.
-    public static func resolve(from defaults: UserDefaults = .standard) -> AppTheme {
-        guard let raw = defaults.string(forKey: userDefaultsKey),
-              let value = AppTheme(rawValue: raw) else {
-            return .default
-        }
-        return value
-    }
-
-    /// Writes the theme's raw value to defaults.
     public func persist(to defaults: UserDefaults = .standard) {
-        defaults.set(rawValue, forKey: Self.userDefaultsKey)
+        Self.persist(self, to: defaults)
     }
 
     /// Effective SwiftUI `ColorScheme` for this theme, resolved

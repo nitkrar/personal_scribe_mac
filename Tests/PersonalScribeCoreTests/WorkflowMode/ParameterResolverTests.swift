@@ -36,6 +36,15 @@ final class ParameterResolverTests: XCTestCase {
         )
     }
 
+    func testVadSilenceThresholdSettingIsClampedLikeSettings() {
+        let defaults = isolatedDefaults()
+        defaults.set(60.0, forKey: PreferenceKeys.vadSilenceThreshold.key)
+
+        let resolved = ParameterResolver.resolve(.setting(PreferenceKeys.vadSilenceThreshold), from: defaults)
+
+        XCTAssertEqual(resolved, VadPreferences.maxSilenceThresholdSeconds, accuracy: 0.0001)
+    }
+
     func testSettingFallsBackToHardcodedDefault() {
         let defaults = isolatedDefaults()
         // No persisted value under this key — the resolver must

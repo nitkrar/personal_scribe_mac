@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import PersonalScribeCore
 
 /// User-selectable main-window background tint (light-mode brand flavor).
 ///
@@ -13,38 +14,19 @@ import SwiftUI
 /// a dark-aqua `NSAppearance` override — was removed as part of
 /// mockup-gaps G (2026-04-21). For dark rendering use `AppTheme.dark`.
 ///
-/// Persisted under `UserDefaults` key `"WindowTint"`. Per the project
-/// convention, UserDefaults keys are bundle-scoped (the
-/// `com.nitkrar.personal_scribe` domain already namespaces them) so
-/// the raw key has no `PersonalScribe*` prefix.
-///
 /// No migration shim for the retired `.dark` raw value: a persisted
 /// `"WindowTint" == "Dark"` silently falls back to `.warm` via the
 /// `resolve` unrecognised-raw-value path.
-public enum WindowTint: String, CaseIterable, Identifiable, Sendable {
+public enum WindowTint: String, CaseIterable, Identifiable, Codable, Sendable, StoredPreference {
     case warm    = "Warm"
     case neutral = "Neutral"
 
     public var id: String { rawValue }
 
-    /// UserDefaults key. Unprefixed by design — bundle-scoped already.
-    public static let userDefaultsKey = "WindowTint"
+    public static let setting = SettingKey<WindowTint>(key: "WindowTint", default: .warm)
 
-    /// Reads the persisted tint, falling back to `.warm` when absent
-    /// or the stored value is not a recognised case. A legacy
-    /// `"Dark"` raw value also falls through to `.warm` — intentional;
-    /// see type doc for the no-shim policy.
-    public static func resolve(from defaults: UserDefaults = .standard) -> WindowTint {
-        guard let raw = defaults.string(forKey: userDefaultsKey),
-              let value = WindowTint(rawValue: raw) else {
-            return .warm
-        }
-        return value
-    }
-
-    /// Writes the tint's raw value to defaults.
     public func persist(to defaults: UserDefaults = .standard) {
-        defaults.set(rawValue, forKey: Self.userDefaultsKey)
+        Self.persist(self, to: defaults)
     }
 
     // MARK: - Semantic backgrounds

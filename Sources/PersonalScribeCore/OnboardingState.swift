@@ -15,19 +15,16 @@ public struct OnboardingState: RawRepresentable, Sendable, Equatable {
     public static let incomplete = OnboardingState(rawValue: false)
     public static let completed = OnboardingState(rawValue: true)
 
-    public static let `default`: OnboardingState = .incomplete
-    public static let userDefaultsKey = "OnboardingCompleted"
+    public static let setting = SettingKey<Bool>(key: "OnboardingCompleted", default: false)
+    public static let `default` = OnboardingState(rawValue: setting.default)
+    public static let userDefaultsKey = setting.key
 
     public static func resolve(from defaults: UserDefaults = .standard) -> OnboardingState {
-        guard let value = defaults.object(forKey: userDefaultsKey) as? Bool else {
-            return .default
-        }
-
-        return value ? .completed : .incomplete
+        OnboardingState(rawValue: setting.resolve(from: defaults))
     }
 
     public func persist(to defaults: UserDefaults = .standard) {
-        defaults.set(rawValue, forKey: Self.userDefaultsKey)
+        Self.setting.persist(rawValue, to: defaults)
     }
 }
 

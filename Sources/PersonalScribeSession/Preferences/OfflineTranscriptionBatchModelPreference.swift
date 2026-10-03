@@ -2,18 +2,20 @@ import Foundation
 import PersonalScribeCore
 
 public enum OfflineTranscriptionBatchModelPreference {
-    public static let key = "OfflineTranscriptionBatchModelID"
+    public static let setting = SettingKey<String>(key: "OfflineTranscriptionBatchModelID", default: "")
+    public static let key = setting.key
 
     public static func resolve(
         from defaults: UserDefaults = .standard,
         activeFallback: () -> String
     ) -> String {
-        if let stored = defaults.string(forKey: key), !stored.isEmpty {
+        let stored = setting.resolve(from: defaults)
+        if !stored.isEmpty {
             return stored
         }
 
         let fallback = activeFallback()
-        defaults.set(fallback, forKey: key)
+        setting.persist(fallback, to: defaults)
         return fallback
     }
 
@@ -32,6 +34,6 @@ public enum OfflineTranscriptionBatchModelPreference {
         _ value: String,
         to defaults: UserDefaults = .standard
     ) {
-        defaults.set(value, forKey: key)
+        setting.persist(value, to: defaults)
     }
 }

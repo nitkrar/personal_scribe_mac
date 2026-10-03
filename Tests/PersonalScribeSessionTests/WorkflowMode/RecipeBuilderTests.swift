@@ -120,6 +120,23 @@ final class RecipeBuilderTests: XCTestCase {
         XCTAssertTrue(try builder.build(mode).cleanupEnabled)
     }
 
+    func testDictationClipboardRestoreIsOffOnFreshInstall() throws {
+        let builder = RecipeBuilder(
+            modelService: makeServiceWithActive(asr: BuiltInModelCatalog.parakeetTDT06Bv2.id),
+            processorProvider: StubProcessorProvider(),
+            defaults: defaults
+        )
+
+        let restoreFlags = try builder.build(.dictation).outputSinks.compactMap { sink -> Bool? in
+            if case .clipboard(let restoreEnabled) = sink {
+                return restoreEnabled
+            }
+            return nil
+        }
+
+        XCTAssertEqual(restoreFlags, [false])
+    }
+
     func testPinnedDescriptorOverridesActiveDescriptor() throws {
         // #090: when a `.transcriber` pins a descriptorID, RecipeBuilder
         // resolves to the pinned descriptor regardless of which model is

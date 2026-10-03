@@ -905,7 +905,7 @@ final class GeneralTabViewModel: ObservableObject {
 
     func setTranscriptCleanupEnabled(_ enabled: Bool) {
         transcriptCleanupEnabled = enabled
-        defaults.set(enabled, forKey: PreferenceKeys.transcriptCleanupEnabled.key)
+        PreferenceKeys.transcriptCleanupEnabled.persist(enabled, to: defaults)
     }
 
     func setAutoPasteEnabled(_ enabled: Bool) {

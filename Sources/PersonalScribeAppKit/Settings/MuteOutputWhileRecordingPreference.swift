@@ -1,4 +1,5 @@
 import Foundation
+import PersonalScribeCore
 
 /// Gates `AVAudioCaptureService`'s system-audio mute behavior. When
 /// `true`, the service calls `SystemAudioMuter.muteIfNeeded()` before
@@ -12,25 +13,7 @@ import Foundation
 /// management. Intended to prevent speaker → mic bleed from polluting
 /// the transcript when the user is recording with background audio
 /// playing.
-///
-/// Persisted under `UserDefaults` key `"MuteOutputWhileRecording"`.
-/// Default `false` — fresh installs behave exactly as they did before
-/// the feature existed; users opt in. `object(forKey:)` probe
-/// distinguishes unset from explicit false, matching
-/// `AutoPasteEnabledPreference` / `ClipboardRestoreEnabledPreference`.
-public enum MuteOutputWhileRecordingPreference {
-    public static let userDefaultsKey = "MuteOutputWhileRecording"
-
-    public static let `default`: Bool = false
-
-    public static func resolve(from defaults: UserDefaults = .standard) -> Bool {
-        guard defaults.object(forKey: userDefaultsKey) != nil else {
-            return `default`
-        }
-        return defaults.bool(forKey: userDefaultsKey)
-    }
-
-    public static func persist(_ value: Bool, to defaults: UserDefaults = .standard) {
-        defaults.set(value, forKey: userDefaultsKey)
-    }
+/// Opt-in; default `false`.
+public enum MuteOutputWhileRecordingPreference: StoredPreference {
+    public static let setting = SettingKey<Bool>(key: "MuteOutputWhileRecording", default: false)
 }

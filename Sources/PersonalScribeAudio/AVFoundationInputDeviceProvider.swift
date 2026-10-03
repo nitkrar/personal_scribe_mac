@@ -20,9 +20,8 @@ import PersonalScribeCore
 public final class AVFoundationInputDeviceProvider: AudioInputDeviceProviding, @unchecked Sendable {
     private let defaults: UserDefaults
 
-    /// UserDefaults key. Unprefixed to match the rest of the codebase
-    /// (`OnboardingCompleted`, `PillVisibilityMode`, …).
-    static let userDefaultsKey = "SelectedAudioInputDeviceID"
+    static let setting = SettingKey<String?>(key: "SelectedAudioInputDeviceID", default: nil)
+    static let userDefaultsKey = setting.key
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -44,7 +43,7 @@ public final class AVFoundationInputDeviceProvider: AudioInputDeviceProviding, @
     }
 
     public var selectedDeviceID: String? {
-        defaults.string(forKey: Self.userDefaultsKey)
+        Self.setting.resolve(from: defaults)
     }
 
     /// `AVCaptureDevice.default(for: .audio)` is the macOS default input;
@@ -54,11 +53,7 @@ public final class AVFoundationInputDeviceProvider: AudioInputDeviceProviding, @
     }
 
     public func selectDevice(id: String?) {
-        if let id, !id.isEmpty {
-            defaults.set(id, forKey: Self.userDefaultsKey)
-        } else {
-            defaults.removeObject(forKey: Self.userDefaultsKey)
-        }
+        Self.setting.persist(id?.isEmpty == false ? id : nil, to: defaults)
     }
 
     // MARK: - Device-type selection

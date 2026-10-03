@@ -1,4 +1,5 @@
 import AppKit
+import PersonalScribeCore
 
 /// User-selectable floating-pill appearance, independent of the system
 /// theme and of `WindowTint`.
@@ -8,37 +9,23 @@ import AppKit
 /// * `.light`  — always light-aqua.
 /// * `.system` — inherit from the system (follows light/dark mode).
 ///
-/// Persisted under `UserDefaults` key `"PillAppearance"` (unprefixed —
-/// bundle-scoped already). Default is `.dark` because the floating
-/// pill is most legible on a dark-navy surface regardless of the
-/// surrounding window's appearance.
+/// Default is `.dark` because the floating pill is most legible on a
+/// dark-navy surface regardless of the surrounding window's appearance.
 ///
 /// Reference: `plans/App UI design/Claude_Final_Bundle_Prompt.md` §1
 /// and the `SeshatTheme.swift` drop-in (`PillAppearance` adopted
 /// verbatim; type is namespace-free per the project naming rule).
-public enum PillAppearance: String, CaseIterable, Identifiable, Sendable {
+public enum PillAppearance: String, CaseIterable, Identifiable, Codable, Sendable, StoredPreference {
     case dark   = "Dark"
     case light  = "Light"
     case system = "System"
 
     public var id: String { rawValue }
 
-    /// UserDefaults key. Unprefixed by design — bundle-scoped already.
-    public static let userDefaultsKey = "PillAppearance"
+    public static let setting = SettingKey<PillAppearance>(key: "PillAppearance", default: .dark)
 
-    /// Reads the persisted appearance, falling back to `.dark` when
-    /// absent or the stored value is not a recognised case.
-    public static func resolve(from defaults: UserDefaults = .standard) -> PillAppearance {
-        guard let raw = defaults.string(forKey: userDefaultsKey),
-              let value = PillAppearance(rawValue: raw) else {
-            return .dark
-        }
-        return value
-    }
-
-    /// Writes the appearance's raw value to defaults.
     public func persist(to defaults: UserDefaults = .standard) {
-        defaults.set(rawValue, forKey: Self.userDefaultsKey)
+        Self.persist(self, to: defaults)
     }
 
     /// Resolves whether the pill should render with dark tokens.

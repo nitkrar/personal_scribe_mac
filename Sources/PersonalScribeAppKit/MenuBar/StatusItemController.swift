@@ -86,7 +86,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         prequitHandler: @escaping @MainActor () async -> Void = {},
         logger: PersonalScribeLogger
     ) {
-        let onboardingCompletionPreference = Self.onboardingCompletionPreference(defaults: defaults)
         self.sceneModel = sceneModel
         self.appStore = appStore
         self.openHome = openHome
@@ -95,7 +94,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.openCopyLastTranscript = openCopyLastTranscript
         self.offlineRetranscriptionAction = offlineRetranscriptionAction
         self.isOnboardingCompleteProvider = isOnboardingCompleteProvider ?? {
-            onboardingCompletionPreference.resolve()
+            OnboardingState.resolve(from: defaults) == .completed
         }
         self.openURL = openURL ?? { url in
             switch url {
@@ -469,14 +468,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         ) else { return }
         NSWorkspace.shared.open(url)
-    }
-
-    private static func onboardingCompletionPreference(defaults: UserDefaults) -> Preference<Bool> {
-        Preference(
-            key: "OnboardingCompleted",
-            default: false,
-            defaults: defaults
-        )
     }
 }
 

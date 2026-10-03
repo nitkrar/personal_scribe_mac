@@ -41,7 +41,7 @@ final class RecordAudioEnabledPreferenceTests: XCTestCase {
 
     func testKey() {
         XCTAssertEqual(
-            RecordAudioEnabledPreference.key,
+            RecordAudioEnabledPreference.userDefaultsKey,
             "RecordAudioEnabled"
         )
     }
