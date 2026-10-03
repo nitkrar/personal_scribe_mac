@@ -16,12 +16,15 @@ final class OfflineTranscriptionTabViewModel: ObservableObject {
     private let coordinator: (any OfflineTranscriptionJobManaging)?
     private let defaults: UserDefaults
     private var jobsObservationTask: Task<Void, Never>?
+    private let notificationCenter: NotificationCenter
+    private var transcriptCommitObservation: NSObjectProtocol?
 
     init(
         transcriptReader: any TranscriptReading,
         coordinator: (any OfflineTranscriptionJobManaging)? = nil,
         modelService: ActiveModelService,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        notificationCenter: NotificationCenter = .default
     ) {
         let persistedSelection = OfflineTranscriptionBatchModelPreference.resolve(
             from: defaults,
@@ -38,6 +41,7 @@ final class OfflineTranscriptionTabViewModel: ObservableObject {
         self.transcriptReader = transcriptReader
         self.coordinator = coordinator
         self.defaults = defaults
+        self.notificationCenter = notificationCenter
         self.availableDescriptors = descriptors
         self.selectedDescriptorID = resolvedSelection
         self.diarizationEnabled = OfflineTranscriptionDiarizationPreference.resolve(from: defaults)
@@ -48,6 +52,16 @@ final class OfflineTranscriptionTabViewModel: ObservableObject {
 
         jobsObservationTask = Task { [weak self] in
             await self?.observeJobs()
+        }
+        transcriptCommitObservation = notificationCenter.addObserver(
+            forName: MetricsNotification.transcriptCommit,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let id = self.selectedCompletedJobID else { return }
+                await self.selectCompletedJob(id: id)
+            }
         }
     }
 
@@ -133,6 +147,9 @@ final class OfflineTranscriptionTabViewModel: ObservableObject {
 
     isolated deinit {
         jobsObservationTask?.cancel()
+        if let transcriptCommitObservation {
+            notificationCenter.removeObserver(transcriptCommitObservation)
+        }
     }
 }
 

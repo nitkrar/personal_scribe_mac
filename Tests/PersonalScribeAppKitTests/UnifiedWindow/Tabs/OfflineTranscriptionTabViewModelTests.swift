@@ -50,6 +50,24 @@ final class OfflineTranscriptionTabViewModelTests: XCTestCase {
         XCTAssertNil(harness.viewModel.selectedTranscriptErrorMessage)
     }
 
+    func testSelectedTranscriptRefreshesWhenEditedElsewhere() async throws {
+        let transcriptID = UUID()
+        let jobID = UUID()
+        let harness = makeHarness(entries: [makeEntry(id: transcriptID, text: "Before")])
+        await harness.coordinator.emitSnapshot([
+            makeCompletedJob(id: jobID, transcriptID: transcriptID, enqueuedAt: Date())
+        ])
+        try await waitUntil(description: "jobs published") { harness.viewModel.jobs.count == 1 }
+        await harness.viewModel.selectCompletedJob(id: jobID)
+
+        await harness.reader.setEntries([makeEntry(id: transcriptID, text: "After")])
+        harness.notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
+
+        try await waitUntil(description: "detail refreshed") {
+            harness.viewModel.selectedTranscriptText == "After"
+        }
+    }
+
     func testSelectingNonexistentTranscriptShowsLoadFailure() async throws {
         let harness = makeHarness(entries: [])
         let jobID = UUID()
@@ -138,18 +156,21 @@ private extension OfflineTranscriptionTabViewModelTests {
         viewModel: OfflineTranscriptionTabViewModel,
         coordinator: FakeOfflineTranscriptionCoordinator,
         reader: FakeTranscriptReader,
-        defaults: UserDefaults
+        defaults: UserDefaults,
+        notificationCenter: NotificationCenter
     ) {
         let resolvedDefaults = defaults ?? ephemeralDefaults()
         let coordinator = FakeOfflineTranscriptionCoordinator()
         let reader = FakeTranscriptReader(entries: entries)
+        let notificationCenter = NotificationCenter()
         let viewModel = OfflineTranscriptionTabViewModel(
             transcriptReader: reader,
             coordinator: coordinator,
             modelService: makeModelService(defaults: resolvedDefaults),
-            defaults: resolvedDefaults
+            defaults: resolvedDefaults,
+            notificationCenter: notificationCenter
         )
-        return (viewModel, coordinator, reader, resolvedDefaults)
+        return (viewModel, coordinator, reader, resolvedDefaults, notificationCenter)
     }
 
     func makeModelService(defaults: UserDefaults) -> ActiveModelService {
@@ -234,9 +255,13 @@ private extension OfflineTranscriptionTabViewModelTests {
 }
 
 private actor FakeTranscriptReader: TranscriptReading {
-    private let entries: [TranscriptEntry]
+    private var entries: [TranscriptEntry]
 
     init(entries: [TranscriptEntry]) {
+        self.entries = entries
+    }
+
+    func setEntries(_ entries: [TranscriptEntry]) {
         self.entries = entries
     }
 
