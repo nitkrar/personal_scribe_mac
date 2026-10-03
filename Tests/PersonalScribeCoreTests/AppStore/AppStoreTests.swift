@@ -405,42 +405,6 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
     }
 
-    func testRecordingDurationTicksAndClearsOutsideRecording() async {
-        let session = FakeAppStoreSessionProvider()
-        let clock = ManualAppStoreClock()
-        let store = makeStore(
-            session: session,
-            permissions: FakePermissionService(),
-            registry: makeRegistry(),
-            visibilityModeProvider: FakeVisibilityModeProvider(),
-            clock: clock
-        )
-
-        store.start()
-
-        session.emitState(.capturing)
-        await waitUntil {
-            store.snapshot.currentRecordingDuration == .zero
-        }
-
-        await clock.advance(by: .milliseconds(250))
-        await waitUntil {
-            store.snapshot.currentRecordingDuration == .milliseconds(250)
-        }
-
-        await clock.advance(by: .milliseconds(750))
-        await waitUntil {
-            store.snapshot.currentRecordingDuration == .seconds(1)
-        }
-
-        session.emitState(.transcribing)
-        await waitUntil {
-            store.snapshot.currentRecordingDuration == nil
-        }
-
-        XCTAssertNil(store.snapshot.currentRecordingDuration)
-    }
-
     private func makeStore(
         session: FakeAppStoreSessionProvider,
         permissions: FakePermissionService,

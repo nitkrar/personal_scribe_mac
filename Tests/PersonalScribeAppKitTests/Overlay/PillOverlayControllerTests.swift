@@ -120,8 +120,7 @@ private extension PillOverlayControllerTests {
             ],
             activeMode: WorkflowMode.dictation,
             pillVisibility: pillVisibility,
-            lastTranscriptionResult: nil,
-            currentRecordingDuration: nil
+            lastTranscriptionResult: nil
         )
     }
 

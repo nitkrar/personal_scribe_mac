@@ -6,22 +6,19 @@ public struct AppStoreSnapshot: Sendable, Equatable {
     public var activeMode: WorkflowMode?
     public var pillVisibility: PillVisibilityState
     public var lastTranscriptionResult: TranscriptionResult?
-    public var currentRecordingDuration: Duration?
 
     public init(
         session: SessionSnapshot,
         permissions: [Permission: PermissionStatus],
         activeMode: WorkflowMode?,
         pillVisibility: PillVisibilityState,
-        lastTranscriptionResult: TranscriptionResult?,
-        currentRecordingDuration: Duration?
+        lastTranscriptionResult: TranscriptionResult?
     ) {
         self.session = session
         self.permissions = permissions
         self.activeMode = activeMode
         self.pillVisibility = pillVisibility
         self.lastTranscriptionResult = lastTranscriptionResult
-        self.currentRecordingDuration = currentRecordingDuration
     }
 
     public var sessionState: SessionState {

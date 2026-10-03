@@ -4,7 +4,6 @@ import Foundation
 @MainActor
 public final class AppStore: ObservableObject {
     public static let doneVisibilityDuration: Duration = .milliseconds(1_000)
-    public static let recordingDurationTickInterval: Duration = .milliseconds(250)
 
     @Published public private(set) var snapshot: AppStoreSnapshot
 
@@ -28,7 +27,6 @@ public final class AppStore: ObservableObject {
     private var permissionsObservationTask: Task<Void, Never>?
     private var modeObservationTask: Task<Void, Never>?
     private var pillTransitionTask: Task<Void, Never>?
-    private var recordingDurationTask: Task<Void, Never>?
     private var permissionObservationCancellable: AnyCancellable?
 
     public init<Permissions: PermissionService>(
@@ -67,8 +65,7 @@ public final class AppStore: ObservableObject {
                 progress: initialSession.modelDownloadProgress,
                 cancelledCaptureResumable: initialSession.cancelledCaptureResumable
             ),
-            lastTranscriptionResult: nil,
-            currentRecordingDuration: nil
+            lastTranscriptionResult: nil
         )
     }
 
@@ -128,12 +125,6 @@ public final class AppStore: ObservableObject {
             snapshot.session = newSession
         }
 
-        if !previousState.isRecording && newState.isRecording {
-            startRecordingDurationLoop()
-        } else if previousState.isRecording && !newState.isRecording {
-            stopRecordingDurationLoop()
-        }
-
         if newState == .completed {
             guard previousState != .completed else {
                 return
@@ -167,46 +158,6 @@ public final class AppStore: ObservableObject {
         currentVisibilityMode = visibilityMode
         cancelPillTransition()
         rederivePillVisibility()
-    }
-
-    private func startRecordingDurationLoop() {
-        recordingDurationTask?.cancel()
-
-        let recordingStart = clock.now()
-        let clock = self.clock
-        updateSnapshot { snapshot in
-            snapshot.currentRecordingDuration = .zero
-        }
-
-        recordingDurationTask = Task { [weak self] in
-            while !Task.isCancelled {
-                do {
-                    try await clock.sleep(for: Self.recordingDurationTickInterval)
-                } catch {
-                    return
-                }
-
-                guard !Task.isCancelled, let self else {
-                    return
-                }
-
-                self.updateRecordingDuration(clock.now() - recordingStart)
-            }
-        }
-    }
-
-    private func stopRecordingDurationLoop() {
-        recordingDurationTask?.cancel()
-        recordingDurationTask = nil
-        updateSnapshot { snapshot in
-            snapshot.currentRecordingDuration = nil
-        }
-    }
-
-    private func updateRecordingDuration(_ duration: Duration) {
-        updateSnapshot { snapshot in
-            snapshot.currentRecordingDuration = duration
-        }
     }
 
     private func schedulePillTransition(after duration: Duration) {
