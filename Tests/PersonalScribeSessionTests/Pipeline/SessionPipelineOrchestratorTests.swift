@@ -3225,6 +3225,65 @@ private actor HangingStartCapture: AudioCapturer {
     }
 }
 
+// MARK: - Progress across rebinds
+
+/// Reports one fixed progress value, then stays silent.
+private actor FixedProgressTranscriber: Transcriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+    private nonisolated let progress: ModelDownloadProgress?
+
+    init(progress: ModelDownloadProgress?) {
+        self.progress = progress
+    }
+
+    func prepare() async throws {}
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { continuation in
+            if let progress { continuation.yield(progress) }
+        }
+    }
+    func transcribe(_ audio: PCMBuffer, languageHint: String?) async throws -> TranscriptionResult {
+        TranscriptionResult(text: "", audioDuration: audio.duration, processingDuration: .zero)
+    }
+    func releaseIdleResources() async {}
+}
+
+extension SessionPipelineOrchestratorTests {
+    func testRebindClearsPreviousModelProgress() async throws {
+        let downloading = ModelDownloadProgress(phase: .downloading, fractionCompleted: 0.4, receivedBytes: 4, expectedBytes: 10)
+        let orchestrator = makeOrchestrator(transcriber: FixedProgressTranscriber(progress: downloading))
+        await orchestrator.bindRecipeForNextSession(
+            BoundRecipe(
+                recipeID: "downloading",
+                recipeName: "Downloading",
+                pipelineShape: .batch,
+                processors: [.transcriber(FixedProgressTranscriber(progress: downloading))],
+                captureControllers: [.manualHotkey],
+                outputSinks: []
+            )
+        )
+        try await withTimeout(.seconds(2)) {
+            while await orchestrator.snapshot().modelDownloadProgress == nil {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+
+        await orchestrator.bindRecipeForNextSession(
+            BoundRecipe(
+                recipeID: "ready",
+                recipeName: "Ready",
+                pipelineShape: .batch,
+                processors: [.transcriber(FixedProgressTranscriber(progress: nil))],
+                captureControllers: [.manualHotkey],
+                outputSinks: []
+            )
+        )
+
+        let progress = await orchestrator.snapshot().modelDownloadProgress
+        XCTAssertNil(progress)
+    }
+}
+
 // MARK: - Resume after cancel
 
 /// Records the duration of every buffer handed to `transcribe`.

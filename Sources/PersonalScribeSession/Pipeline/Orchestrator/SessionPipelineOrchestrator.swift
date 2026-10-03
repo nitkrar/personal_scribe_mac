@@ -233,6 +233,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     public func bindRecipeForNextSession(_ recipe: BoundRecipe) {
         boundRecipe = recipe
         progressForwardingTask?.cancel()
+        // The new recipe's stream replays its current progress, if any.
+        if currentSnapshot.modelDownloadProgress != nil {
+            publish { $0.modelDownloadProgress = nil }
+        }
         progressForwardingTask = makeProgressForwardingTask(for: recipe)
     }
 
