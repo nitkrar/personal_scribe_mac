@@ -104,6 +104,8 @@ public final class PasteboardSnapshotService {
         transientSnapshots.removeValue(forKey: handle.id)
     }
 
+    var heldSnapshotCount: Int { transientSnapshots.count }
+
     // MARK: - Write boundary
 
     /// The only sanctioned path for writing a transcript string to the

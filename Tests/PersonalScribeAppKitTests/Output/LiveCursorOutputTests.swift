@@ -443,6 +443,29 @@ final class LiveCursorOutputTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "user-pre-session")
     }
 
+    func testEndSessionKeepsClipboardCopiedAfterLiveChunk() async throws {
+        let pasteboard = makePasteboard()
+        pasteboard.clearContents()
+        pasteboard.setString("user-pre-session", forType: .string)
+        let output = makeOutput(pasteboard: pasteboard)
+
+        try await output.deliverPartial(makeProgress("hello"))
+        pasteboard.clearContents()
+        pasteboard.setString("copied-during-session", forType: .string)
+        await output.endSession()
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "copied-during-session")
+    }
+
+    func testFailedLivePasteIsNotCountedAsPasted() async throws {
+        let output = makeOutput(pasteboard: makePasteboard(), pasteShortcutPoster: { false })
+
+        try await output.deliverPartial(makeProgress("hello"))
+        await output.endSession()
+
+        XCTAssertEqual(output.lastSessionSuccessfulLivePastes, 0)
+    }
+
     func testEndSessionWithoutDeliveriesIsNoOp() async throws {
         let pasteboard = makePasteboard()
         pasteboard.clearContents()

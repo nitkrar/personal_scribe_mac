@@ -208,7 +208,7 @@ public enum AppComposition {
     /// (no snapshot was captured).
     ///
     /// Lifted to a top-level `public static let` so
-    /// `PersonalScribeAppMain` can read `lastSessionLivePasteAttempts`
+    /// `PersonalScribeAppMain` can read `lastSessionSuccessfulLivePastes`
     /// off it to drive #098's newline-before-final-paste decision in
     /// `ClipboardBatchOutput`. Construction must happen before
     /// `sessionCoordinator` so both initializers see the same
@@ -236,7 +236,7 @@ public enum AppComposition {
             liveCursorPasteSnapshot: {
                 // #098: live paste count from the just-ended streaming
                 // session; the final paste prepends "\n" when > 0.
-                liveCursorOutput.lastSessionLivePasteAttempts
+                liveCursorOutput.lastSessionSuccessfulLivePastes
             }
         ),
         logger: makeLogger(PersonalScribeLogCategory.ui)
@@ -258,7 +258,7 @@ public enum AppComposition {
         // (no snapshot was captured).
         //
         // #098: the same instance is exposed as `AppComposition.liveCursorOutput`
-        // so `ClipboardBatchOutput` can read `lastSessionLivePasteAttempts`
+        // so `ClipboardBatchOutput` can read `lastSessionSuccessfulLivePastes`
         // when deciding whether to prepend a newline before the final
         // paste.
         let sessionOutputStage = Self.sessionOutputStage

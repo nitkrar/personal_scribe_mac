@@ -21,9 +21,8 @@ import PersonalScribeSession
 ///   externality probe agree.
 /// - `endSession()` is called on every termination path (success,
 ///   cancel, error, short-exit). Restores the captured snapshot only
-///   if this sink actually wrote at least one live chunk; otherwise it
-///   discards the unused session snapshot so unrelated clipboard
-///   changes made during dormant sessions survive.
+///   if this sink wrote a chunk and nothing has been copied since;
+///   otherwise it discards the snapshot.
 /// - `deliverFinal(_:)` is a no-op. Authoritative second-pass output
 ///   travels through `MenuBarSceneModel` + `ClipboardBatchOutput`'s
 ///   stop-time path — not this sink. Per #056 DESIGN: when live cursor
@@ -49,17 +48,15 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
     private let selfBundleIdentifier: String
 
     private var sessionSnapshotHandle: PasteboardSnapshotService.Handle?
-    private var didWriteChunkThisSession = false
+    private var lastWriteToken: ClipboardWriteToken?
+    private var didWriteChunkThisSession: Bool { lastWriteToken != nil }
     private var didLogAccessibilityTrustSkipThisCycle = false
     private var pasteSessionID: String?
     private var pasteAccumulator = PasteSessionAccumulator()
 
-    /// #098: last completed session's live-paste attempt count. Read by
-    /// `ClipboardBatchOutput.deliverBatch` to decide whether to prepend
-    /// a newline before the authoritative final paste. Set in
-    /// `endSession()` immediately before the accumulator is wiped.
-    /// Resets to 0 at the start of every new session.
-    public private(set) var lastSessionLivePasteAttempts: Int = 0
+    /// Live chunks actually pasted in the last completed session. Read by
+    /// `ClipboardBatchOutput` to put the final paste on its own line.
+    public private(set) var lastSessionSuccessfulLivePastes: Int = 0
 
     init(
         logger: PersonalScribeLogger,
@@ -92,7 +89,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         let chunkToWrite = didWriteChunkThisSession ? " \(chunk)" : chunk
         pasteAccumulator.recordLiveAttempt(chars: chunkToWrite.count)
 
-        guard snapshotService.replaceContents(with: chunkToWrite) != nil else {
+        guard let writeToken = snapshotService.replaceContents(with: chunkToWrite) else {
             pasteAccumulator.recordLiveFailed(reason: .pasteboardWriteFailed)
             logger.error(
                 pasteFailedLogLine(
@@ -105,7 +102,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
             )
             return
         }
-        didWriteChunkThisSession = true
+        lastWriteToken = writeToken
 
         guard isAccessibilityTrusted() else {
             pasteAccumulator.recordLiveClipboardWrite(chars: chunkToWrite.count)
@@ -164,7 +161,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         if let handle = sessionSnapshotHandle {
             snapshotService.discardSnapshot(handle)
         }
-        didWriteChunkThisSession = false
+        lastWriteToken = nil
         didLogAccessibilityTrustSkipThisCycle = false
         pasteSessionID = UUID().uuidString
         pasteAccumulator = PasteSessionAccumulator()
@@ -176,21 +173,16 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         guard let handle = sessionSnapshotHandle else { return }
         let sessionID = pasteSessionID ?? UUID().uuidString
         logger.info(pasteAccumulator.summary(sink: .live, sessionID: sessionID).formatLogLine())
-        // #098: snapshot the live-session paste count BEFORE wiping
-        // the accumulator. ClipboardBatchOutput reads this to decide
-        // whether to prepend a newline before the final paste — if
-        // live cursor pasted ≥1 chunk and the recipe also wants
-        // final-paste, the newline avoids running the last live chunk
-        // into the first word of the authoritative final.
-        lastSessionLivePasteAttempts = pasteAccumulator.livePasteAttempts
+        lastSessionSuccessfulLivePastes = pasteAccumulator.livePasteSucceeded
         sessionSnapshotHandle = nil
-        let shouldRestore = didWriteChunkThisSession
-        didWriteChunkThisSession = false
+        let writeToken = lastWriteToken
+        lastWriteToken = nil
         didLogAccessibilityTrustSkipThisCycle = false
         pasteSessionID = nil
         pasteAccumulator = PasteSessionAccumulator()
-        if shouldRestore {
-            snapshotService.restoreSnapshot(handle)
+        if let writeToken {
+            // Skips the restore if the user copied something after our last chunk.
+            snapshotService.restoreSnapshotIfUnchanged(handle, token: writeToken)
         } else {
             snapshotService.discardSnapshot(handle)
         }

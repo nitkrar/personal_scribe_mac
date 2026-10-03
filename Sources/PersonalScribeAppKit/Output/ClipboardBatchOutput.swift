@@ -26,14 +26,8 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
     private let isAccessibilityTrusted: @MainActor () -> Bool
     private let pasteShortcutPoster: @MainActor () -> Bool
     private let pasteTarget: PasteTargetProbe
-    /// #098: Closure that reports how many chunks the live-cursor sink
-    /// pasted in the most-recently-completed streaming session. When
-    /// the value is `> 0` AND `.frontmostPaste(enabled: true)` is in
-    /// the sinks, `deliverBatch` prepends `"\n"` to the text before
-    /// the clipboard write so the authoritative final paste lands on
-    /// its own line instead of running into the last live-pasted
-    /// chunk. Defaults to a constant 0 so non-streaming callers and
-    /// older tests opt out cleanly.
+    /// Live chunks successfully pasted in the last streaming session; when
+    /// non-zero and paste is enabled, the final paste starts on a new line.
     private let liveCursorPasteSnapshot: @MainActor () -> Int
 
     init(
@@ -148,7 +142,10 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         // (AutoPasteEnabledPreference off, or AX untrusted, or externality
         // probe says focus-is-in-self) — restore is orthogonal to paste mode.
         let maybeScheduleRestore: @MainActor () -> Void = { [snapshotService, scheduleRestore] in
-            guard restoreEnabled else { return }
+            guard restoreEnabled else {
+                snapshotService.discardSnapshot(handle)
+                return
+            }
             scheduleRestore(restoreDelay) {
                 snapshotService.restoreSnapshotIfUnchanged(handle, token: writeToken)
             }

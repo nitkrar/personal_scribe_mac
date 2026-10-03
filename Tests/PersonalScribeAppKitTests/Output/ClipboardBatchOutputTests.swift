@@ -822,6 +822,24 @@ final class ClipboardBatchOutputTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "\nFinal paragraph.")
     }
 
+    func testRestoreDisabledReleasesClipboardSnapshot() async {
+        let pasteboard = makePasteboard()
+        let snapshotService = makeSnapshotService(for: pasteboard)
+        let service = ClipboardBatchOutput(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
+            defaults: isolatedDefaults(),
+            snapshotService: snapshotService,
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            pasteShortcutPoster: { _ in true },
+            pasteTarget: { .frontmost(bundleID: "com.example.target", pid: 4242) }
+        )
+
+        _ = await service.deliverBatch(text: "hello", sinks: Self.sinks(restoreEnabled: false))
+
+        XCTAssertEqual(snapshotService.heldSnapshotCount, 0)
+    }
+
     func testFinalPasteDoesNotPrependNewlineWhenLiveCursorDidNotPaste() async {
         // #098: zero live chunks this session (typical short Parakeet
         // session with no EoU fires). No newline.
