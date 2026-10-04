@@ -240,7 +240,8 @@ public final class PillOverlayController: ObservableObject {
             progress: snapshot.modelDownloadProgress,
             isStreamingSession: snapshot.session.isStreamingSession,
             vadGracePending: snapshot.session.vadAutoStopGracePending,
-            vadFireToken: snapshot.session.vadAutoStopFireToken
+            vadFireToken: snapshot.session.vadAutoStopFireToken,
+            inputSilent: snapshot.session.inputSilent
         )
         applyStreamCardState(session: snapshot.session)
     }
@@ -260,7 +261,8 @@ public final class PillOverlayController: ObservableObject {
         progress: ModelDownloadProgress?,
         isStreamingSession: Bool,
         vadGracePending: Bool,
-        vadFireToken: UUID?
+        vadFireToken: UUID?,
+        inputSilent: Bool
     ) {
         let showStoppingWarning = VadShowStoppingWarningPreference.resolve(
             from: defaults ?? .standard
@@ -279,7 +281,8 @@ public final class PillOverlayController: ObservableObject {
             vadFireToken: vadFireToken,
             vadLastSeenFireToken: lastSeenVadFireToken,
             showStoppingWarning: showStoppingWarning,
-            showAutoStoppedNotification: showAutoStoppedNotification
+            showAutoStoppedNotification: showAutoStoppedNotification,
+            inputSilent: inputSilent
         )
 
         switch (presenter.visibleStatusCard, nextContent) {

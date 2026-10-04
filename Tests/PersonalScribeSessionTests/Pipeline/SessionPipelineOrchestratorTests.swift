@@ -506,6 +506,32 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(sinks, [[.frontmostPaste(enabled: true)]])
     }
 
+    func testExactlySilentInputIsFlaggedWhileRecording() async throws {
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 32_000, sampleValue: 0)])
+        )
+
+        await orchestrator.toggleCapture()
+
+        try await withTimeout(.seconds(2)) {
+            while await !orchestrator.snapshot().inputSilent {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+    }
+
+    func testQuietButRealInputIsNotFlagged() async throws {
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 32_000, sampleValue: 0.001)])
+        )
+
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(200))
+
+        let silent = await orchestrator.snapshot().inputSilent
+        XCTAssertFalse(silent)
+    }
+
     /// A cancelled session never reaches the output stage.
     func testCancelledSessionNeverReachesOutputStage() async throws {
         let outputSink = TestPipelineOutputSink()

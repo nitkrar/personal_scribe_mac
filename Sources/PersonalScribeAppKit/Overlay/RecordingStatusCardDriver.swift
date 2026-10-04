@@ -72,7 +72,8 @@ enum RecordingStatusCardDriver {
         vadFireToken: UUID?,
         vadLastSeenFireToken: UUID?,
         showStoppingWarning: Bool,
-        showAutoStoppedNotification: Bool
+        showAutoStoppedNotification: Bool,
+        inputSilent: Bool = false
     ) -> StatusCardContent? {
         // 1. Error overrides every VAD state.
         if case let .error(err) = sessionState {
@@ -89,6 +90,16 @@ enum RecordingStatusCardDriver {
             switch sessionState {
             case .capturing, .holdRecording:
                 return StatusCardContent(text: liveStreamingFallbackNotice, link: nil)
+            default:
+                break
+            }
+        }
+
+        // 2b. No signal from the mic while recording.
+        if inputSilent {
+            switch sessionState {
+            case .capturing, .holdRecording:
+                return StatusCardContent(text: Self.inputSilentText, link: nil)
             default:
                 break
             }
@@ -167,6 +178,7 @@ enum RecordingStatusCardDriver {
     // MARK: - Fixed strings
 
     static let warningText = "…stopping, speak to continue"
+    static let inputSilentText = "No audio from the microphone — check it isn't muted, or pick another mic."
     static let notificationText = "Auto stopped. Update settings to change."
     static let notificationLinkSubstring = "Update settings to change"
 

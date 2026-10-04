@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 import Combine
 import PersonalScribeCore
@@ -144,6 +145,27 @@ final class MicrophoneFooterViewModelTests: XCTestCase {
         model.refresh()
 
         XCTAssertNil(model.currentDeviceName)
+    }
+
+    func testDeviceDisconnectRefreshesTheFooter() {
+        let provider = FakeProvider(
+            devices: [
+                AudioInputDevice(id: "uid-built-in", name: "MacBook Pro Microphone"),
+                AudioInputDevice(id: "uid-airpods", name: "AirPods Pro"),
+            ],
+            systemDefaultID: "uid-airpods"
+        )
+        let model = MicrophoneFooterViewModel(provider: provider, defaults: makeDefaults())
+        XCTAssertEqual(model.currentDeviceName, "AirPods Pro")
+
+        provider.availableDevicesValue = [AudioInputDevice(id: "uid-built-in", name: "MacBook Pro Microphone")]
+        provider.systemDefaultDeviceIDValue = "uid-built-in"
+        NotificationCenter.default.post(name: AVCaptureDevice.wasDisconnectedNotification, object: nil)
+
+        let refreshed = expectation(description: "footer refreshed")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { refreshed.fulfill() }
+        wait(for: [refreshed], timeout: 1.0)
+        XCTAssertEqual(model.currentDeviceName, "MacBook Pro Microphone")
     }
 
     func testUserDefaultsSelectionChangePushesUpdateAutomatically() {

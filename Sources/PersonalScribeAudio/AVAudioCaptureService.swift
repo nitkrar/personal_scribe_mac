@@ -61,61 +61,51 @@ public actor AVAudioCaptureService: AudioCapturer {
             throw PersonalScribeError.audioEngineFailure
         }
 
-        // 2a. Apply the persisted input-device selection before reading the
-        // input format so the resampler is sized for the selected device's
-        // sample rate (e.g. 48 kHz USB mic vs. 44.1 kHz built-in). A failure
-        // here is intentionally logged and swallowed — the engine will still
-        // start on the macOS system default. This matches the brief's "log
-        // + proceed" contract: a disconnected-device selection must never
-        // block the user from recording.
-        do {
-            try engineDriver.applyInputDevice(uid: inputDeviceProvider.selectedDeviceID)
-        } catch {
-            logger.error(
-                "Failed to apply selected audio input device; proceeding with system default",
-                error: error
-            )
-        }
-
-        // 3. Read input format and create resampler
-        let inputFormat = engineDriver.inputFormat()
-        let sampleRate = inputFormat.sampleRate
-        let channelCount = Int(inputFormat.channelCount)
-
-        let resampler: AudioResampler
-        do {
-            resampler = try resamplerFactory(sampleRate, logger)
-        } catch {
-            logger.error("Failed to create resampler", error: error)
-            throw PersonalScribeError.audioEngineFailure
-        }
-
-        // 4. Create streams
+        // 3. Create streams
         let (stream, continuation) = AsyncThrowingStream<PCMBuffer, Error>.makeStream()
         let (levelStream, levelContinuation) = AsyncStream<Float>.makeStream()
 
-        // 5. Mute system audio output if the user opted in. Placed here so
-        // any earlier throw path (auth / double-start / resampler) never
-        // leaves the machine muted. Any failure after this point MUST
-        // call `systemAudioMuter.restoreIfNeeded()`.
+        // 4. Mute system audio output if the user opted in. Placed after
+        // the auth / double-start checks so those never leave the machine
+        // muted. Any failure after this point MUST call
+        // `systemAudioMuter.restoreIfNeeded()`.
         if shouldMuteOutput() {
             systemAudioMuter.muteIfNeeded()
         }
 
-        // 6. Install tap, prepare, start engine
-        do {
-            try engineDriver.installTap { [weak self] buffer, _ in
-                // Called on the engine's tap thread. Extract Sendable values only.
-                let samples = Self.extractMonoSamples(from: buffer, channels: channelCount)
-                let ts = ContinuousClock.now
-                Task { [weak self] in
-                    await self?.handleTapSamples(samples: samples, timestamp: ts)
-                }
+        if !isObservingConfigurationChanges {
+            isObservingConfigurationChanges = true
+            engineDriver.observeConfigurationChanges { [weak self] in
+                Task { [weak self] in await self?.handleConfigurationChange() }
             }
+        }
+
+        // 5. Read the hardware format, then install the tap and start.
+        let startedAt = ContinuousClock.now
+        let sampleRate: Double
+        let resampler: AudioResampler
+        do {
+            applySelectedInputDevice()
+            let inputFormat = engineDriver.inputFormat()
+            sampleRate = inputFormat.sampleRate
+            let channelCount = Int(inputFormat.channelCount)
+            // A device mid-switch can report no format; installing a tap
+            // then raises an uncatchable ObjC exception.
+            guard sampleRate > 0, channelCount > 0 else {
+                throw CaptureStartError.noUsableFormat(sampleRate: sampleRate, channels: channelCount)
+            }
+            let deviceID = inputDeviceProvider.effectiveDeviceID
+            let deviceName = inputDeviceProvider.availableDevices().first { $0.id == deviceID }?.name ?? "system default"
+            logger.info("capture_starting — device=\(deviceName) sampleRate=\(Int(sampleRate)) channels=\(channelCount)")
+            resampler = try resamplerFactory(sampleRate, logger)
+            try installForwardingTap(channelCount: channelCount)
             engineDriver.prepare()
             try engineDriver.start()
+            runningSampleRate = sampleRate
+            runningChannelCount = channelCount
         } catch {
-            logger.error("Engine startup failed", error: error)
+            let nsError = error as NSError
+            logger.error("Engine startup failed (\(nsError.domain) \(nsError.code))", error: error)
             systemAudioMuter.restoreIfNeeded()
             engineDriver.removeTap()
             engineDriver.stop()
@@ -124,6 +114,11 @@ public actor AVAudioCaptureService: AudioCapturer {
             levelContinuation.finish()
             throw PersonalScribeError.audioEngineFailure
         }
+        captureStartedAt = ContinuousClock.now
+        receivedFrames = 0
+        receivedSeconds = 0
+        peakSample = 0
+        logger.info("capture_engine_started — afterMs=\(Self.milliseconds(captureStartedAt! - startedAt))")
 
         // 6. Mark live and wire continuations
         self.continuation = continuation
@@ -181,6 +176,10 @@ public actor AVAudioCaptureService: AudioCapturer {
 
         // First actor-visible terminal event wins: claim termination synchronously.
         isTerminated = true
+        if captureStartedAt != nil {
+            logger.info("capture_stopped — receivedSeconds=\(String(format: "%.1f", receivedSeconds)) peak=\(String(format: "%.3f", peakSample))")
+            captureStartedAt = nil
+        }
 
         engineDriver.removeTap()
         engineDriver.stop()
@@ -200,8 +199,73 @@ public actor AVAudioCaptureService: AudioCapturer {
 
     // MARK: - Actor-isolated tap handling
 
+    /// A missing selected device falls back to the system default; a
+    /// failure here must never block recording.
+    private func applySelectedInputDevice() {
+        do {
+            try engineDriver.applyInputDevice(uid: inputDeviceProvider.selectedDeviceID)
+        } catch {
+            logger.error("Failed to apply selected audio input device; proceeding with system default", error: error)
+        }
+    }
+
+    private func installForwardingTap(channelCount: Int) throws {
+        try engineDriver.installTap { [weak self] buffer, _ in
+            // Called on the engine's tap thread. Extract Sendable values only.
+            let samples = Self.extractMonoSamples(from: buffer, channels: channelCount)
+            let ts = ContinuousClock.now
+            Task { [weak self] in
+                await self?.handleTapSamples(samples: samples, timestamp: ts)
+            }
+        }
+    }
+
+    /// The input device went away or changed mid-recording (e.g. AirPods put
+    /// back in their case). Restart on the current input and keep feeding the
+    /// same stream; end the recording with an error if that isn't possible.
+    private func handleConfigurationChange() async {
+        // macOS also posts this when nothing changed (e.g. right after
+        // start). Restart when the device went away (engine stopped) or the
+        // hardware format no longer matches what capture is running at.
+        guard isCapturing, !isTerminated else { return }
+        let hardware = engineDriver.inputFormat()
+        let formatChanged = hardware.sampleRate != runningSampleRate || Int(hardware.channelCount) != runningChannelCount
+        guard formatChanged || !engineDriver.isRunning else { return }
+        engineDriver.removeTap()
+        engineDriver.stop()
+        do {
+            applySelectedInputDevice()
+            let format = engineDriver.inputFormat()
+            let channelCount = Int(format.channelCount)
+            guard format.sampleRate > 0, channelCount > 0 else {
+                throw PersonalScribeError.audioEngineFailure
+            }
+            resampler = try resamplerFactory(format.sampleRate, logger)
+            runningSampleRate = format.sampleRate
+            runningChannelCount = channelCount
+            levelSampleRate = format.sampleRate
+            levelAccumulator.removeAll(keepingCapacity: true)
+            levelAccumulatedFrames = 0
+            try installForwardingTap(channelCount: channelCount)
+            engineDriver.prepare()
+            try engineDriver.start()
+            let deviceID = inputDeviceProvider.effectiveDeviceID
+            let deviceName = inputDeviceProvider.availableDevices().first { $0.id == deviceID }?.name ?? "system default"
+            logger.info("capture_device_changed — restarted on device=\(deviceName) sampleRate=\(Int(format.sampleRate))")
+        } catch {
+            logger.error("Capture could not restart after the input device changed", error: error)
+            finishWithError(.audioEngineFailure)
+        }
+    }
+
     private func handleTapSamples(samples: [Float], timestamp: ContinuousClock.Instant) async {
         guard !isTerminated, let resampler, let continuation else { return }
+        if receivedFrames == 0, let captureStartedAt {
+            logger.info("capture_first_audio — afterMs=\(Self.milliseconds(timestamp - captureStartedAt))")
+        }
+        receivedFrames += samples.count
+        if levelSampleRate > 0 { receivedSeconds += Double(samples.count) / levelSampleRate }
+        peakSample = max(peakSample, samples.lazy.map(abs).max() ?? 0)
 
         // Step 2.9: additive audio-level emission. Runs on the actor so it's
         // serialized against stop()/finishWithError() — no level yields
@@ -332,6 +396,16 @@ public actor AVAudioCaptureService: AudioCapturer {
     private var resampler: AudioResampler?
     private var isCapturing = false
     private var isTerminated = false
+    /// Once-per-recording diagnostics: when audio started, how much arrived, how loud.
+    private var captureStartedAt: ContinuousClock.Instant?
+    private var receivedFrames = 0
+    private var receivedSeconds: Double = 0
+    private var isObservingConfigurationChanges = false
+    /// Hardware format capture is running at; a configuration change only
+    /// needs a restart when this no longer matches.
+    private var runningSampleRate: Double = 0
+    private var runningChannelCount = 0
+    private var peakSample: Float = 0
 
     // Step 2.9: audio-level stream state.
     private var levelContinuation: AsyncStream<Float>.Continuation?
@@ -341,4 +415,13 @@ public actor AVAudioCaptureService: AudioCapturer {
     private var levelAccumulatedFrames: Int = 0
     /// 100 ms window → ~10 Hz emission cadence.
     private let levelWindowSeconds: Double = 0.1
+
+    private enum CaptureStartError: Error {
+        case noUsableFormat(sampleRate: Double, channels: Int)
+    }
+
+    private static func milliseconds(_ duration: Duration) -> Int {
+        Int(duration.components.seconds * 1_000 + duration.components.attoseconds / 1_000_000_000_000_000)
+    }
+
 }

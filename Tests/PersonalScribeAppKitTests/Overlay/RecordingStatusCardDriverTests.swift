@@ -130,6 +130,28 @@ final class RecordingStatusCardDriverTests: XCTestCase {
 
     // MARK: - Stage B (#046) — statusContent() driver
 
+    func testNoSignalCardShowsWhileRecordingFromASilentInput() {
+        func content(_ state: SessionState, silent: Bool) -> StatusCardContent? {
+            RecordingStatusCardDriver.statusContent(
+                sessionState: state,
+                reportedError: nil,
+                liveStreamingFallbackNotice: nil,
+                progress: nil,
+                isStreamingSession: false,
+                vadGracePending: false,
+                vadFireToken: nil,
+                vadLastSeenFireToken: nil,
+                showStoppingWarning: false,
+                showAutoStoppedNotification: false,
+                inputSilent: silent
+            )
+        }
+
+        XCTAssertEqual(content(.capturing, silent: true)?.text, RecordingStatusCardDriver.inputSilentText)
+        XCTAssertNil(content(.capturing, silent: false))
+        XCTAssertNil(content(.transcribing, silent: true))
+    }
+
     /// Warning card must only appear when `showStoppingWarning` is on.
     /// Same inputs otherwise.
     func testDriverEmitsWarningOnlyWhenPrefOn() {

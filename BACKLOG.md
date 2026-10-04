@@ -71,12 +71,12 @@ Quick lookup when an old commit or doc cites a legacy ID.
 
 Done bugs archived 2026-04-30 → see [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.md) "Archived 2026-04-30: 9 bugs closed" for #002, #007, #039, #042, #071, #072, #073, #075, #077.
 
-### #110 — Bluetooth microphones: quality drop and sample-rate changes
+### #110 — Bluetooth microphones: device switches mid-recording
 
-`bug` · `P3` · `open` · `stage: investigate` · `area: audio, capture`
-*Updated 2026-10-02*
+`bug` · `P3` · `done` · `area: audio, capture`
+*Updated 2026-10-04*
 
-When a Bluetooth headset mic (e.g. AirPods) is activated, macOS switches the device from A2DP to the low-bandwidth hands-free profile: transcription quality drops and any playback degrades. The hardware sample rate can also change mid-session when devices switch. Capture doesn't handle either explicitly today (no engine configuration-change handling found in `Sources/`). Check what happens on a device switch during recording, and decide whether to warn or prefer the built-in mic when a Bluetooth input is selected. Raised in the April adversarial review.
+Recording follows input device switches (headset connecting, disconnecting, profile/sample-rate changes) and the next recording starts cleanly; the mic footer follows device changes; exactly silent input shows a "No audio from the microphone" warning. Known limitation: about half a second is lost per switch. Bluetooth hands-free quality drop is not addressed (no built-in-mic preference). Verified with AirPods both directions in one recording; runbook in `ManualAudioCaptureVerification.md`.
 
 ---
 

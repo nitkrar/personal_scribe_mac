@@ -1,3 +1,4 @@
+import AVFoundation
 import Combine
 import Foundation
 import PersonalScribeCore
@@ -52,6 +53,7 @@ public final class MicrophoneFooterViewModel: ObservableObject {
     private let provider: any AudioInputDeviceProviding
     private let defaults: UserDefaults
     private var defaultsObserver: NSObjectProtocol?
+    private var deviceObservers: [NSObjectProtocol] = []
 
     public init(
         provider: any AudioInputDeviceProviding,
@@ -80,12 +82,22 @@ public final class MicrophoneFooterViewModel: ObservableObject {
                 self?.refresh()
             }
         }
+
+        // Headsets connecting or disconnecting change the default input.
+        deviceObservers = [AVCaptureDevice.wasConnectedNotification, AVCaptureDevice.wasDisconnectedNotification].map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.refresh()
+                }
+            }
+        }
     }
 
     isolated deinit {
         if let defaultsObserver {
             NotificationCenter.default.removeObserver(defaultsObserver)
         }
+        deviceObservers.forEach(NotificationCenter.default.removeObserver)
     }
 
     /// Re-pull the provider and republish `currentDeviceName` if the

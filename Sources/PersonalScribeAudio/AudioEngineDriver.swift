@@ -24,7 +24,9 @@ internal final class AudioEngineDriver: @unchecked Sendable {
         start: @escaping () throws -> Void,
         stop: @escaping () -> Void,
         reset: @escaping () -> Void,
-        applyInputDevice: @escaping (String?) throws -> Void = { _ in }
+        applyInputDevice: @escaping (String?) throws -> Void = { _ in },
+        observeConfigurationChanges: @escaping (@escaping @Sendable () -> Void) -> Void = { _ in },
+        isRunning: @escaping () -> Bool = { false }
     ) {
         self.inputFormatProvider = inputFormatProvider
         self.installTapImpl = installTap
@@ -34,40 +36,56 @@ internal final class AudioEngineDriver: @unchecked Sendable {
         self.stopImpl = stop
         self.resetImpl = reset
         self.applyInputDeviceImpl = applyInputDevice
+        self.observeConfigurationChangesImpl = observeConfigurationChanges
+        self.isRunningImpl = isRunning
     }
 
     internal static func live() -> AudioEngineDriver {
-        let engine = AVAudioEngine()
-        let inputNode = engine.inputNode
+        let live = LiveEngine()
 
         return AudioEngineDriver(
-            inputFormatProvider: { inputNode.outputFormat(forBus: 0) },
+            // The hardware format; `outputFormat(forBus:)` can lag a device
+            // change, and a tap at a stale rate fails with -10868.
+            inputFormatProvider: { live.engine.inputNode.inputFormat(forBus: 0) },
             installTap: { handler in
-                inputNode.installTap(
-                    onBus: 0,
-                    bufferSize: 4_096,
-                    format: inputNode.outputFormat(forBus: 0)
-                ) { buffer, when in
+                // A leftover tap or a format that doesn't match the hardware
+                // makes installTap raise an uncatchable ObjC exception.
+                let inputNode = live.engine.inputNode
+                inputNode.removeTap(onBus: 0)
+                inputNode.installTap(onBus: 0, bufferSize: 4_096, format: inputNode.inputFormat(forBus: 0)) { buffer, when in
                     handler(buffer, when)
                 }
             },
             removeTap: {
-                inputNode.removeTap(onBus: 0)
+                live.engine.inputNode.removeTap(onBus: 0)
             },
             prepare: {
-                engine.prepare()
+                live.engine.prepare()
             },
             start: {
-                try engine.start()
+                try live.engine.start()
             },
             stop: {
-                engine.stop()
+                live.engine.stop()
             },
             reset: {
-                engine.reset()
+                live.engine.reset()
             },
             applyInputDevice: { uid in
-                try AudioEngineDriver.applyInputDeviceLive(uid: uid, inputNode: inputNode)
+                // Without a connected selection the engine must follow the
+                // system default itself: a pinned device isn't tracked through
+                // format or device changes. Unpinning needs a fresh engine.
+                if let uid, try AudioEngineDriver.pinInputDevice(uid: uid, inputNode: live.engine.inputNode) {
+                    live.isPinned = true
+                } else if live.isPinned {
+                    live.rebuild()
+                }
+            },
+            observeConfigurationChanges: { handler in
+                live.setConfigurationChangeHandler(handler)
+            },
+            isRunning: {
+                live.engine.isRunning
             }
         )
     }
@@ -81,6 +99,10 @@ internal final class AudioEngineDriver: @unchecked Sendable {
     internal func start() throws { try startImpl() }
     internal func stop() { stopImpl() }
     internal func reset() { resetImpl() }
+    internal func observeConfigurationChanges(_ handler: @escaping @Sendable () -> Void) {
+        observeConfigurationChangesImpl(handler)
+    }
+    internal var isRunning: Bool { isRunningImpl() }
 
     /// Apply the user-selected CoreAudio input device (matched by
     /// `AVCaptureDevice.uniqueID`, which maps 1:1 to
@@ -104,39 +126,22 @@ internal final class AudioEngineDriver: @unchecked Sendable {
     private let stopImpl: () -> Void
     private let resetImpl: () -> Void
     private let applyInputDeviceImpl: (String?) throws -> Void
+    private let observeConfigurationChangesImpl: (@escaping @Sendable () -> Void) -> Void
+    private let isRunningImpl: () -> Bool
 }
 
 // MARK: - Live CoreAudio plumbing
 
 extension AudioEngineDriver {
-    /// Resolve the `AudioDeviceID` for a given `uid` (if any), then point the
-    /// engine's input audio unit at it via
-    /// `kAudioOutputUnitProperty_CurrentDevice`. `nil` uid → look up the
-    /// current system default input device. A stored-but-missing device (e.g.
-    /// the user unplugged the USB mic since they selected it) is NOT an
-    /// error: we leave the current default in place and log a warning so
-    /// recording still starts.
-    fileprivate static func applyInputDeviceLive(
-        uid: String?,
+    /// Points the engine's input at the device with `uid`. Returns false
+    /// when that device isn't connected, so the caller falls back to the
+    /// system default.
+    fileprivate static func pinInputDevice(
+        uid: String,
         inputNode: AVAudioInputNode
-    ) throws {
-        let targetDeviceID: AudioDeviceID?
-        if let uid {
-            if let resolved = audioDeviceID(forUID: uid) {
-                targetDeviceID = resolved
-            } else {
-                // Persisted selection no longer enumerates — don't block
-                // recording; fall through to the macOS system default.
-                print("[PersonalScribeAudio] Selected input device UID \(uid) not found; using system default")
-                return
-            }
-        } else {
-            targetDeviceID = systemDefaultInputDeviceID()
-        }
-
-        guard var deviceID = targetDeviceID else {
-            // No system-default device resolvable either — leave engine alone.
-            return
+    ) throws -> Bool {
+        guard var deviceID = audioDeviceID(forUID: uid) else {
+            return false
         }
 
         guard let audioUnit = inputNode.audioUnit else {
@@ -154,6 +159,7 @@ extension AudioEngineDriver {
         if status != noErr {
             throw PersonalScribeAudioDeviceError.audioUnitSetFailed(status: status)
         }
+        return true
     }
 
     /// Enumerate CoreAudio devices and return the `AudioDeviceID` whose
@@ -167,27 +173,6 @@ extension AudioEngineDriver {
             }
         }
         return nil
-    }
-
-    /// Read the current system default input device.
-    fileprivate static func systemDefaultInputDeviceID() -> AudioDeviceID? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var deviceID: AudioDeviceID = 0
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &size,
-            &deviceID
-        )
-        guard status == noErr, deviceID != 0 else { return nil }
-        return deviceID
     }
 
     /// Return every `AudioDeviceID` registered with the system
@@ -259,4 +244,39 @@ extension AudioEngineDriver {
 internal enum PersonalScribeAudioDeviceError: Error, Equatable {
     case missingInputAudioUnit
     case audioUnitSetFailed(status: OSStatus)
+}
+
+/// Holds the current live engine and keeps the configuration-change
+/// observer attached to whichever engine is current.
+private final class LiveEngine: @unchecked Sendable {
+    // Safe: mutated only from the owning AVAudioCaptureService actor.
+    private(set) var engine = AVAudioEngine()
+    var isPinned = false
+    private var configurationChangeHandler: (@Sendable () -> Void)?
+    private var observer: NSObjectProtocol?
+
+    func setConfigurationChangeHandler(_ handler: @escaping @Sendable () -> Void) {
+        configurationChangeHandler = handler
+        observeCurrentEngine()
+    }
+
+    func rebuild() {
+        engine.stop()
+        engine = AVAudioEngine()
+        isPinned = false
+        observeCurrentEngine()
+    }
+
+    private func observeCurrentEngine() {
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        guard let handler = configurationChangeHandler else { return }
+        // Posted when the input device disappears or changes format.
+        observer = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { _ in handler() }
+    }
 }

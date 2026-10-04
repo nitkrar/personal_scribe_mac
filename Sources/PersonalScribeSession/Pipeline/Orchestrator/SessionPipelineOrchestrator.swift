@@ -133,6 +133,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
     private var resumableCapture: ResumableCapture?
     private var resumableExpiryTask: Task<Void, Never>?
+    private var silentSecondsThisSession: Double = 0
+    private var heardAudioThisSession = false
+    static let inputSilenceWarningSeconds: Double = 1.5
     /// Live text carried into the current (resumed) session.
     private var resumedLiveText: String?
     private var captureTask: Task<Void, Never>?
@@ -357,6 +360,30 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             await startRecording(resuming: resumable)
         case .capturing, .holdRecording, .transcribing, .error:
             logger.info("Ignored resume while session is not idle")
+        }
+    }
+
+    private func resetInputSilence() {
+        silentSecondsThisSession = 0
+        heardAudioThisSession = false
+        if currentSnapshot.inputSilent {
+            publish { $0.inputSilent = false }
+        }
+    }
+
+    private func trackInputSilence(_ buffer: PCMBuffer) {
+        guard !heardAudioThisSession else { return }
+        if buffer.samples.contains(where: { $0 != 0 }) {
+            heardAudioThisSession = true
+            if currentSnapshot.inputSilent {
+                publish { $0.inputSilent = false }
+            }
+            return
+        }
+        silentSecondsThisSession += Double(buffer.frameCount) / buffer.sampleRate
+        if !currentSnapshot.inputSilent, silentSecondsThisSession >= Self.inputSilenceWarningSeconds {
+            logger.info("capture_input_silent — no signal for \(Self.inputSilenceWarningSeconds) s")
+            publish { $0.inputSilent = true }
         }
     }
 
@@ -608,6 +635,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         bufferedAudio = resumable?.buffers ?? []
         resumedLiveText = resumable?.liveText
         clearResumableCapture()
+        resetInputSilence()
         nextRevision = 0
         latestStageFailure = nil
         activeContext = contextProvider.currentContext()
@@ -735,6 +763,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// implicitly by the error publication.
     private func startHoldRecording() async {
         clearResumableCapture()
+        resetInputSilence()
         resumedLiveText = nil
         bufferedAudio.removeAll(keepingCapacity: true)
         nextRevision = 0
@@ -1288,6 +1317,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         do {
             for try await buffer in stream {
                 bufferedAudio.append(buffer)
+                trackInputSilence(buffer)
                 if liveStreamingFailure == nil {
                     if liveStreamingInputContinuation != nil {
                         recordStreamingInputForwarded(buffer)

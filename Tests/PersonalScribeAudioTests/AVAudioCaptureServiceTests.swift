@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Dispatch
 import XCTest
@@ -79,6 +80,101 @@ final class HappyPathCaptureTests: XCTestCase {
     }
 }
 
+final class DeviceChangeTests: XCTestCase {
+    /// AirPods leaving mid-recording: macOS posts a configuration change and
+    /// the input moves to another device at a different rate. Capture must
+    /// carry on from the new device in the same stream.
+    func testCaptureContinuesOnTheNewInputAfterAConfigurationChange() async throws {
+        let box = ThreadSafeEngineBox()
+        let formats = FormatSequence([
+            AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 44_100, channels: 1, interleaved: false)!,
+            AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24_000, channels: 1, interleaved: false)!,
+        ])
+        let changes = ConfigurationChangeTrigger()
+        let driver = AudioEngineDriver(
+            inputFormatProvider: { formats.current },
+            installTap: { handler in box.setHandler(handler) },
+            removeTap: { box.clearHandler() },
+            prepare: { box.recordPrepare() },
+            start: { try box.recordStart() },
+            stop: { box.recordStop() },
+            reset: { box.recordReset() },
+            observeConfigurationChanges: { changes.handler = $0 }
+        )
+        let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
+            authorizationStatusProvider: { .authorized },
+            engineDriver: driver,
+            resamplerFactory: { rate, logger in try AudioResampler(inputSampleRate: rate, logger: logger) }
+        )
+        let stream = try await service.start()
+        var iterator = stream.makeAsyncIterator()
+        box.emit(AudioTestSupport.makeFloatBuffer(sampleRate: 44_100, channels: 1, frames: 4_410) { _, _ in 0.5 })
+        _ = try await iterator.next()
+
+        formats.advance()
+        changes.handler?()
+        for _ in 0..<100 where box.installCount < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        box.emit(AudioTestSupport.makeFloatBuffer(sampleRate: 24_000, channels: 1, frames: 2_400) { _, _ in 0.5 })
+        let afterChange = try await iterator.next()
+
+        XCTAssertEqual(box.installCount, 2)
+        XCTAssertEqual(afterChange?.sampleRate, 16_000)
+        XCTAssertEqual(afterChange?.frameCount, 1_600)
+        await service.stop()
+    }
+}
+
+final class SpuriousConfigurationChangeTests: XCTestCase {
+    /// macOS posts a configuration change right after start even though
+    /// nothing changed; restarting on it looped and starved capture.
+    func testRunningEngineWithUnchangedFormatIsNotRestarted() async throws {
+        let box = ThreadSafeEngineBox()
+        let changes = ConfigurationChangeTrigger()
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false)!
+        let driver = AudioEngineDriver(
+            inputFormatProvider: { format },
+            installTap: { handler in box.setHandler(handler) },
+            removeTap: { box.clearHandler() },
+            prepare: { box.recordPrepare() },
+            start: { try box.recordStart() },
+            stop: { box.recordStop() },
+            reset: { box.recordReset() },
+            observeConfigurationChanges: { changes.handler = $0 },
+            isRunning: { true }
+        )
+        let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
+            authorizationStatusProvider: { .authorized },
+            engineDriver: driver,
+            resamplerFactory: { rate, logger in try AudioResampler(inputSampleRate: rate, logger: logger) }
+        )
+        let stream = try await service.start()
+
+        changes.handler?()
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(box.installCount, 1)
+        await service.stop()
+        withExtendedLifetime(stream) {}
+    }
+}
+
+private final class FormatSequence: @unchecked Sendable {
+    private let lock = NSLock()
+    private let formats: [AVAudioFormat]
+    private var index = 0
+    init(_ formats: [AVAudioFormat]) { self.formats = formats }
+    var current: AVAudioFormat { lock.withLock { formats[index] } }
+    func advance() { lock.withLock { index += 1 } }
+}
+
+private final class ConfigurationChangeTrigger: @unchecked Sendable {
+    var handler: (@Sendable () -> Void)?
+}
+
 final class SingleCaptureTests: XCTestCase {
     func testSecondStartWhileLiveThrowsAudioEngineFailure() async throws {
         let service = AVAudioCaptureService(
@@ -131,6 +227,38 @@ final class StopBehaviorTests: XCTestCase {
 }
 
 final class EngineFailureTests: XCTestCase {
+    /// A device mid-switch (e.g. AirPods moving to the headset profile)
+    /// reports a 0 Hz / 0-channel input; installing a tap then raises an
+    /// Objective-C exception that aborts the app.
+    func testInvalidInputFormatFailsStartWithoutInstallingATap() async throws {
+        let box = ThreadSafeEngineBox()
+        let driver = AudioEngineDriver(
+            inputFormatProvider: { AVAudioFormat() },
+            installTap: { handler in box.setHandler(handler) },
+            removeTap: { box.clearHandler() },
+            prepare: { box.recordPrepare() },
+            start: { try box.recordStart() },
+            stop: { box.recordStop() },
+            reset: { box.recordReset() }
+        )
+        let service = AVAudioCaptureService(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.audio),
+            authorizationStatusProvider: { .authorized },
+            engineDriver: driver,
+            resamplerFactory: { rate, logger in
+                try AudioResampler(inputSampleRate: max(rate, 1), logger: logger)
+            }
+        )
+
+        do {
+            _ = try await service.start()
+            XCTFail("Expected audioEngineFailure")
+        } catch let error as PersonalScribeError {
+            XCTAssertEqual(error, .audioEngineFailure)
+        }
+        XCTAssertEqual(box.installCount, 0)
+    }
+
     func testEngineStartFailureMapsToAudioEngineFailure() async throws {
         let box = ThreadSafeEngineBox(
             startError: NSError(domain: "AudioEngineTests", code: 7)
