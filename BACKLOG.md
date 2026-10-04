@@ -71,15 +71,6 @@ Quick lookup when an old commit or doc cites a legacy ID.
 
 Done bugs archived 2026-04-30 → see [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.md) "Archived 2026-04-30: 9 bugs closed" for #002, #007, #039, #042, #071, #072, #073, #075, #077.
 
-### #109 — WhisperKit memory over long sessions (measure first)
-
-`bug` · `P2` · `open` · `stage: investigate` · `area: transcription, performance`
-*Updated 2026-10-02*
-
-April ML reviews reported WhisperKit's CoreML path growing memory over long runs (figures quoted from ~0.8 GB to 2.4→3.3 GB over 40 min, medium model). Never measured here, and Ninimma keeps a WhisperKit model loaded in a menu-bar app. First step: record resident memory across a long session of repeated dictations (batch and streaming) with the default WhisperKit model. If it grows, options raised then were periodic model reload or the whisper.cpp Metal path.
-
----
-
 ### #110 — Bluetooth microphones: quality drop and sample-rate changes
 
 `bug` · `P3` · `open` · `stage: investigate` · `area: audio, capture`

@@ -1764,3 +1764,14 @@ Preference + Settings toggle landed (`41c3f6c`); when disabled, should suppress 
 Returning from a full-screen app to the desktop left the Ninimma window behind another app's window.
 
 **Closed:** 2026-10-04 — the window kept `.moveToActiveSpace` permanently, so macOS treated it as not belonging to the desktop and re-focused that desktop's own app on return. The flag is now applied only while opening the window, so it belongs to its desktop and macOS restores it. Opening Ninimma from a full-screen app now switches to the desktop. Verified by the user over repeated round trips.
+
+---
+
+### #109 — WhisperKit memory over long sessions (measure first)
+
+`bug` · `P2` · `done` · `area: transcription, performance`
+*Updated 2026-10-04*
+
+Earlier reviews reported WhisperKit's CoreML path growing memory over long runs (medium model, ~40 min).
+
+**Closed:** 2026-10-04 — not reproduced with `whisperkit-small-en-217mb`: memory stayed flat across 50 batch, 50 streaming and 50 release-and-reload runs (~42 min of audio each, about 205–217 MB). Rerun with `WhisperKitMemoryBenchmarkTests` (`NINIMMA_BENCH_WAV`, `NINIMMA_BENCH_ITERATIONS`).

@@ -108,7 +108,7 @@ final class StreamingSecondPassBenchmarkTests: XCTestCase {
         """
     }
 
-    private static func loadMono16k(path: String) throws -> [Float] {
+    static func loadMono16k(path: String) throws -> [Float] {
         let file = try AVAudioFile(forReading: URL(fileURLWithPath: path))
         let format = file.processingFormat
         XCTAssertEqual(format.sampleRate, 16_000, "convert with afconvert -d LEF32@16000 -c 1")
