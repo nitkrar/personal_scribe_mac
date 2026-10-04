@@ -189,8 +189,8 @@ in M3.2–M3.5; this milestone proves the shell + routing + menu-bar entry
 - [ ] **MV-WINDOW-PIN-1 (no full-screen pin)** Put another app (e.g.
   Safari) into **full-screen** mode — that creates its own dedicated
   space. While on that full-screen space, click the Ninimma menu bar
-  icon → Home. Confirm the unified window appears on the full-screen
-  app's space (expected). Close the window. Press `^+↑` /
+  icon → Home. macOS switches to the desktop and the unified window
+  appears there (expected). Close the window. Press `^+↑` /
   Mission Control and exit the full-screen app (or swipe back to the
   main desktop). Trigger **Home** again from the menu bar. The
   unified window MUST open on the current desktop — NOT warp the user
@@ -212,10 +212,9 @@ in M3.2–M3.5; this milestone proves the shell + routing + menu-bar entry
 - [ ] **MV-WINDOW-FOREGROUND-1 (frontmost survives full-screen round-trip)**
   Open Ninimma's Home window on the desktop so it is the frontmost
   window. Switch to another app in a dedicated **full-screen** space,
-  then return to the original desktop. Ninimma's window should still
-  be present and frontmost on that desktop — it must not silently
-  drop behind another window or appear to disappear until reopened
-  from the menu bar.
+  then return to the original desktop. Repeat several times without
+  clicking. Ninimma's window stays frontmost on that desktop every
+  time, with no flash and without dropping behind another window (#101).
 
 ## M4.1 voice-modulated pill waveform
 

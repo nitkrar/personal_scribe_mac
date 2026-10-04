@@ -151,14 +151,12 @@ final class UnifiedWindowController: NSWindowController {
         window.appearance = initialTheme.nsAppearance(
             systemIsDark: Self.systemIsDark()
         )
-        // Bug #041: without `.moveToActiveSpace` the window re-opens on the
-        // space it was last shown on — so triggering Home from the menu bar
-        // after a full-screen session warps the user back to that space.
-        // `.fullScreenAuxiliary` lets the window surface over any full-screen
-        // app without forcing a space switch. Deliberately do NOT set
+        // `.fullScreenAuxiliary` lets the window surface over a full-screen
+        // app without a space switch. `.moveToActiveSpace` is added only while
+        // opening (see `showWindow`). Deliberately do NOT set
         // `.canJoinAllSpaces` / `.stationary` — those are pill-overlay
-        // pinning flags that would re-create the bug.
-        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        // pinning flags that would pin the window to one space (#041).
+        window.collectionBehavior = [.fullScreenAuxiliary]
 
         super.init(window: window)
 
@@ -236,16 +234,22 @@ final class UnifiedWindowController: NSWindowController {
         // that currently exists (e.g. the user left a multi-monitor setup,
         // or the window is about to be dragged over from a dismissed
         // full-screen space) re-center it on the screen the user is
-        // actually looking at. `.moveToActiveSpace` ensures the window
-        // follows to the current space; this ensures it lands on-screen.
+        // actually looking at.
         reconcileWindowFrameIfNeeded(window, whenVisible: false)
 
+        // Join the current space while opening (#041), then stop following:
+        // a window that always follows the active space isn't treated as part
+        // of a desktop, so macOS buries it on return to that desktop (#101).
+        window.collectionBehavior.insert(.moveToActiveSpace)
         super.showWindow(sender)
         if window.isMiniaturized {
             window.deminiaturize(nil)
         }
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
+        DispatchQueue.main.async { [weak window] in
+            window?.collectionBehavior.remove(.moveToActiveSpace)
+        }
     }
 
     /// Convenience for menu-bar / hotkey entry points that want to

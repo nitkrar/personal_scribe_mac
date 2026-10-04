@@ -553,22 +553,6 @@ on transcript rows.
 
 ---
 
-### #101 — Unified window buried after a full-screen Space round-trip
-
-`bug` · `P2` · `open` · `area: window, spaces`
-*Opened 2026-10-02*
-
-Repro: open the Ninimma window on a desktop Space, switch to a full-screen app, then return. The window appears during the transition but settles behind another app's window. Background mode does not affect the result.
-
-Constraints:
-- `NSWorkspace.activeSpaceDidChangeNotification` arrives before `didResignActive`, when the window is no longer key or main, so #041's `pendingRestore` does not arm.
-- macOS activates another app on the destination Space, so activation-based restore does not run.
-- Raising the window after the Space change causes a visible frontmost-app flicker and can incorrectly restore Ninimma after the user switches to another app.
-
-Investigate window ordering and an early, non-activating `orderFrontRegardless` restore. Opening Ninimma from its menu bar item may switch from a full-screen app to the desktop Space.
-
----
-
 ### #102 — Pill refactor: edge-aware shape, wire Style + Theme for real
 
 `feature` · `bug` · `P2` · `open` · `area: pill, overlay, settings`
@@ -674,17 +658,6 @@ State ownership kept fragmenting: the same concept lived in several places coupl
 **Open:** session and mode-registry validation accept any enabled model kind, while the Modes screen, menu and per-mode hotkeys require an active, downloaded model. Since the download cache now refreshes after preparation, the two agree in practice; tightening validation is optional.
 
 **Not doing:** remembering window frame, last tab or menu-bar icon visibility across launches; collapsing the four-layer permission-status copy (no observed bug).
-
----
-
-### #030 — Wire `pasteEnabled` master toggle to OutputService
-
-`refactor` · `P2` · `open` · `area: output, settings`
-*Updated 2026-04-21*
-
-Preference + Settings toggle landed (`41c3f6c`); when disabled, should suppress both paste AND clipboard write.
-
-**Legacy:** `ui-mockup-gaps.md` Settings→General deferred follow-up
 
 ---
 

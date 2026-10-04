@@ -109,16 +109,19 @@ final class UnifiedWindowControllerTests: XCTestCase {
     // `.moveToActiveSpace` so the window follows the user to the current
     // space instead of warping them to the space it was last shown on.
 
-    func testWindowCollectionBehaviorIncludesMoveToActiveSpace() {
+    /// Following the active Space permanently makes macOS treat the window
+    /// as not part of any desktop, so it gets buried on return (#101); the
+    /// flag is only applied while opening (#041).
+    func testWindowFollowsTheActiveSpaceOnlyWhileOpening() async throws {
         let controller = Self.makeController()
-        guard let behavior = controller.window?.collectionBehavior else {
-            return XCTFail("Unified window must exist after init")
-        }
-        XCTAssertTrue(
-            behavior.contains(.moveToActiveSpace),
-            "Unified window must set `.moveToActiveSpace` so it follows the "
-            + "user to the current space (bug #041)."
-        )
+        let window = try XCTUnwrap(controller.window)
+        XCTAssertFalse(window.collectionBehavior.contains(.moveToActiveSpace))
+
+        controller.showWindow(nil)
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertFalse(window.collectionBehavior.contains(.moveToActiveSpace))
+        window.close()
     }
 
     func testWindowCollectionBehaviorDoesNotPinLikePillOverlay() {

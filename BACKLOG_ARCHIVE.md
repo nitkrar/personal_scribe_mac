@@ -1740,3 +1740,27 @@ Preference + Settings picker landed (`ee4d7ca`); the overlay still always render
 The recorder accepted plain keys with no modifier, let ⌘⇧Q and similar past the reserved ⌘Q/W/C/V/X list, and flashed "Modifier-only" between ⌘-down and the letter.
 
 **Closed:** 2026-10-04 — keys need ⌘, ⌥ or ⌃ unless they are F1–F20 (Shift alone is not enough); reserved letters are rejected with any modifiers that include ⌘; modifier-only is judged on release. The reported left/right ⌥ display issue does not apply: the recorder cannot create Option-key bindings and the monitor ignores tap counts.
+
+---
+
+### #030 — Wire `pasteEnabled` master toggle to OutputService
+
+`refactor` · `P2` · `done` · `area: output, settings`
+*Updated 2026-10-04*
+
+Preference + Settings toggle landed (`41c3f6c`); when disabled, should suppress both paste AND clipboard write.
+
+**Legacy:** `ui-mockup-gaps.md` Settings→General deferred follow-up
+
+**Closed:** 2026-10-04 — superseded by #072: `pasteEnabled` and the paste-mode picker were replaced by the single Auto-paste toggle, which is wired. A no-clipboard-write option was dropped by design.
+
+---
+
+### #101 — Unified window buried after a full-screen Space round-trip
+
+`bug` · `P2` · `done` · `area: window, spaces`
+*Updated 2026-10-04*
+
+Returning from a full-screen app to the desktop left the Ninimma window behind another app's window.
+
+**Closed:** 2026-10-04 — the window kept `.moveToActiveSpace` permanently, so macOS treated it as not belonging to the desktop and re-focused that desktop's own app on return. The flag is now applied only while opening the window, so it belongs to its desktop and macOS restores it. Opening Ninimma from a full-screen app now switches to the desktop. Verified by the user over repeated round trips.
