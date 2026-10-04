@@ -140,6 +140,7 @@ warning, live apply (no relaunch).
   Separately, try to bind any combination that includes **Escape**
   (e.g. `⌘Esc`) — rejection names Escape. Plain `Esc` cancels the
   recorder as before.
+- [ ] **MV-HK-SAFE-1** In the recorder: plain `A` and `⇧A` are rejected; `F5` alone is accepted; `⌘⇧Q` is rejected as Cmd+Q; holding `⌘` shows no rejection until a key is pressed, and releasing `⌘` alone shows "Modifier-only".
 - [ ] **MV-HK-4** Disable one of your system shortcuts in System
   Settings → Keyboard → Keyboard Shortcuts (e.g. toggle Spotlight off).
   Re-open Ninimma's recorder and press the disabled combination. The

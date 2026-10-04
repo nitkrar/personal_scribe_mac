@@ -71,19 +71,6 @@ Quick lookup when an old commit or doc cites a legacy ID.
 
 Done bugs archived 2026-04-30 → see [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.md) "Archived 2026-04-30: 9 bugs closed" for #002, #007, #039, #042, #071, #072, #073, #075, #077.
 
-### #108 — Shortcut recorder accepts unsafe bindings
-
-`bug` · `P2` · `open` · `area: settings, hotkeys`
-*Updated 2026-10-02*
-
-Found in the April Phase 3.G review, still true in `HotkeyRecorder.swift`:
-- **Plain key with no modifier is accepted.** `captureKeyPress` → `rejectionReason` never rejects empty modifiers, so binding plain "A" toggles recording on every "A" typed anywhere. Reject unless the key is a function/special key.
-- **Reserved list matches only exact ⌘.** `rejectionReason` checks `modifiers == [.command]` for Q/W/C/V/X, so ⌘⇧Q etc. pass. Match `modifiers.contains(.command)`.
-- **"Modifier-only" rejection flashes during a valid chord.** `captureModifierChange` shows the rejection between ⌘-down and the letter key-down.
-- **Left and right ⌥ render the same.** `HotkeyShortcutFormatter` maps keyCodes 58 and 61 both to `⌥`.
-
----
-
 ### #109 — WhisperKit memory over long sessions (measure first)
 
 `bug` · `P2` · `open` · `stage: investigate` · `area: transcription, performance`
@@ -550,6 +537,7 @@ after MV runs complete.
 - Playback / compare tooling in History for persisted recordings and
   retranscribed variants.
 - Folder-watch / bulk-import workflows.
+- ~~Durable queue~~ — done in `fbeede3`: queue saved to `db/offline-jobs.json`; queued and interrupted jobs re-run at launch.
 - Any future offline recipes that go beyond the current fixed
   retranscribe path plus the tab-level model + diarization knobs.
 
@@ -586,10 +574,10 @@ Investigate window ordering and an early, non-activating `orderFrontRegardless` 
 `feature` · `bug` · `P2` · `open` · `area: pill, overlay, settings`
 *Updated 2026-10-02*
 
-**Shipped so far:** `d03947a`, `4612cfe`, `d3e6af2`, `f9efaf1` — cards choose above/below placement, the pill grows away from a nearby edge, the live pill has a three-strand waveform, and Light appearance renders the whole pill coherently. Vertical/circular edge shapes, `PillStyle` runtime wiring, and matching preview cards remain open.
+**Shipped so far:** `d03947a`, `4612cfe`, `d3e6af2`, `f9efaf1` — cards choose above/below placement, the pill grows away from a nearby edge, the live pill has a three-strand waveform, and Light appearance renders the whole pill coherently. `fe096c5` wires the Style setting: Mini renders the classic pill at 0.75×, None hides it. Vertical/circular edge shapes and matching preview cards remain open.
 
 1. **Edge-aware layout.** When the pill is dragged to a screen edge it should adapt: horizontal along the top/bottom edges and vertical or circular along the left/right edges.
-2. **Style setting does nothing (bug, by omission).** Settings → Recording window → Style (Classic / Mini / None) only persists `PillStyle` and drives the Settings preview cards; nothing in `PillOverlayView` / `PillOverlayPresenter` reads it, so the overlay always renders Classic. Mini should be a smaller compact pill (documented as deferred in `PillStyle.swift` / mockup-gaps D.1). Also define what **None** means vs. the separate pill Visibility "Hidden" setting (`PillStyle.none` = "pill hidden regardless of PillVisibility") — likely redundant; merge or drop.
+2. **Style setting (done).** `fe096c5` wired Classic/Mini; `f8e590b` removed None (visibility, not style) and Visibility "Hidden" (same as Auto-show).
 3. **Style preview cards are stale.** Settings → Recording window → Style previews draw a single-line equalizer instead of the pill's three-strand waveform. Update them after defining Classic, Mini, and None.
 
 Scope: layout per edge, snapping, state transitions, stream-card placement on vertical or circular variants, and wiring the style setting into the overlay.
@@ -678,16 +666,14 @@ inspection (#078 follow-up).
 
 ### #074 — State-ownership audit across app
 
-`refactor` · `P0` · `open` · `area: architecture`
-*Filed 2026-04-24*
+`refactor` · `P0` · `in-progress` · `area: architecture`
+*Updated 2026-10-04*
 
-State ownership keeps fragmenting during ostensibly-simple tasks: the same concept lives in multiple places coupled to different state machines. Recurring pattern, not tied to any single class.
+State ownership kept fragmenting: the same concept lived in several places coupled to different state machines. The audit's fixes are listed by `git log --grep '#074'`; manual checks are the `MV-HOME-1`, `MV-PILL-RESUME-*`, `MV-PILL-STYLE-*`, `MV-SI-LAUNCH-1`, `MV-SI-MIC-1`, `MV-OFFLINE-QUEUE-1` and "Change base directory" runbook entries.
 
-**Examples:**
-- **Consolidated (good precedent):** session + capture pipeline. One coordinator, one state machine.
-- **Consolidated (good precedent):** `PasteboardSnapshotService` owns transient clipboard snapshots and guarded restore tokens for output delivery.
+**Open:** session and mode-registry validation accept any enabled model kind, while the Modes screen, menu and per-mode hotkeys require an active, downloaded model. Since the download cache now refreshes after preparation, the two agree in practice; tightening validation is optional.
 
-Audit scope intentionally left open. Walk state concepts, not classes. Details filled in during the audit — not now.
+**Not doing:** remembering window frame, last tab or menu-bar icon visibility across launches; collapsing the four-layer permission-status copy (no observed bug).
 
 ---
 

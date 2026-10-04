@@ -110,8 +110,13 @@ final class HotkeyRecorderModel: ObservableObject {
     private static let escapeKeyCode: UInt16 = 53
     private static let spaceKeyCode: UInt16 = 49
     private static let tabKeyCode: UInt16 = 48
+    /// F1–F20, the only keys allowed without ⌘, ⌥ or ⌃.
+    private static let functionKeyCodes: Set<UInt16> = [
+        122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111, 105, 107, 113, 106, 64, 79, 80, 90,
+    ]
 
     @Published private(set) var captureResult: CaptureResult = .idle
+    private var modifiersHeldWithoutKey = false
 
     private let onConfirm: @MainActor (HotkeyPreference) -> Void
     private let onCancel: @MainActor () -> Void
@@ -226,23 +231,22 @@ final class HotkeyRecorderModel: ObservableObject {
         onCancel()
     }
 
+    /// Modifiers alone are judged on release, so a chord in progress
+    /// doesn't flash a rejection before its key arrives.
     private func captureModifierChange(_ event: HotkeyEvent) {
         let modifiers = normalizedModifierFlags(event.modifierFlags)
-        guard modifiers.isEmpty == false else {
+        guard modifiers.isEmpty else {
+            modifiersHeldWithoutKey = true
             return
         }
-
-        if modifiers == [.shift] {
-            captureResult = .rejected(
-                reason: "Modifier-only shortcuts are not supported; plain Shift cannot be used."
-            )
-            return
+        if modifiersHeldWithoutKey {
+            captureResult = .rejected(reason: "Modifier-only shortcuts are not supported.")
         }
-
-        captureResult = .rejected(reason: "Modifier-only shortcuts are not supported.")
+        modifiersHeldWithoutKey = false
     }
 
     private func captureKeyPress(_ event: HotkeyEvent) {
+        modifiersHeldWithoutKey = false
         let preference = HotkeyPreference(
             keyCode: event.keyCode,
             tapCount: 1,
@@ -295,6 +299,10 @@ final class HotkeyRecorderModel: ObservableObject {
 
         let modifiers = preference.modifierFlags
 
+        if modifiers.subtracting(.shift).isEmpty, !functionKeyCodes.contains(preference.keyCode) {
+            return "Add ⌘, ⌥ or ⌃ — otherwise the shortcut fires while you type."
+        }
+
         if modifiers == [.command], preference.keyCode == spaceKeyCode {
             return "Cmd+Space is reserved by macOS and cannot be overridden here."
         }
@@ -307,23 +315,23 @@ final class HotkeyRecorderModel: ObservableObject {
             return "Cmd+Shift+Space is reserved by macOS and cannot be used."
         }
 
-        if modifiers == [.command], charactersIgnoringModifiers == "q" {
+        if modifiers.contains(.command), charactersIgnoringModifiers == "q" {
             return "Cmd+Q is reserved by Quit."
         }
 
-        if modifiers == [.command], charactersIgnoringModifiers == "w" {
+        if modifiers.contains(.command), charactersIgnoringModifiers == "w" {
             return "Cmd+W is reserved by Close Window."
         }
 
-        if modifiers == [.command], charactersIgnoringModifiers == "c" {
+        if modifiers.contains(.command), charactersIgnoringModifiers == "c" {
             return "Cmd+C is reserved by Copy."
         }
 
-        if modifiers == [.command], charactersIgnoringModifiers == "v" {
+        if modifiers.contains(.command), charactersIgnoringModifiers == "v" {
             return "Cmd+V is reserved by Paste."
         }
 
-        if modifiers == [.command], charactersIgnoringModifiers == "x" {
+        if modifiers.contains(.command), charactersIgnoringModifiers == "x" {
             return "Cmd+X is reserved by Cut."
         }
 

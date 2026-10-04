@@ -4,9 +4,7 @@
 
 **Phase gate semantics:** Each phase has a definition-of-done. Phases are product-state milestones, never calendar dates. Do not start Phase N+1 work until Phase N's gate is met.
 
-**Backlog location:** active items in [`BACKLOG.md`](./BACKLOG.md); closed items in [`BACKLOG_ARCHIVE.md`](./BACKLOG_ARCHIVE.md). Step-level scope that used to live here has been unbundled into tickets and removed — see the per-ticket `phase:` field.
-
-**Central-layers refactor:** plans at [`central/`](./central/); remaining validation tracked by ticket **#031**.
+**Backlog location:** active items in [`BACKLOG.md`](../BACKLOG.md); closed items in [`BACKLOG_ARCHIVE.md`](../BACKLOG_ARCHIVE.md). Each ticket's `phase:` tag is the canonical phase scope.
 
 ---
 
@@ -36,34 +34,6 @@ Apply to every phase. See [`~/.claude/CLAUDE.md`](~/.claude/CLAUDE.md) global op
 
 ---
 
-## Phase 3 in-flight summary
+## Phase scope
 
-Tickets currently carrying `phase: 3`:
-
-- **#009** — FluidAudio model-download progress (Stage B, P0) — blocks clean first-launch UX
-- **#011** — Per-row delete on history (depends on #026)
-- **#013** — NotesWindow (P1, depends on #026)
-- **#014** — Tags (P1, depends on #026 + #013)
-- **#015** — OnboardingWindow (P2)
-- **#016** — Second model descriptor parakeet-tdt-110m (P2)
-- **#017** — Hotkey customization + collision detection (P2)
-- **#018** — Clipboard clobber timing (P3)
-- **#019** — Triple-tap ⌥ emergency quit (P3)
-- **#024** — Per-row model delete button (P2)
-- **#025** — Disk-space precheck (P2)
-- **#026** — **Central storage/database layer** (P1, in-progress, blocks #011/#013/#014/#022/#027)
-
-**Critical path for Phase 3:** #026 (storage layer) → #013 (Notes) → #014 (tags). #009 is independently P0 because it's a dogfood-blocker symptom, not a feature.
-
----
-
-## Phase 4 scope sketch
-
-Not a plan — a direction. Revisit after Phase 3 ships and dogfood feedback accumulates on intent-style flows. Tickets carrying `phase: 4`:
-
-- **#020** — `IntentClassifier`; NLEmbedding-based first, escalate to llama.cpp local LLM when ambiguous
-- **#021** — Command Mode pill response cards (query answer / action confirmation / dictation)
-- **#022** — "Ask Ninimma" query flow wired to Notes FTS5 + embedding lookup
-- **#023** — Action Dispatcher (NSWorkspace + app-specific APIs)
-- **#027** — `TranscriptEntry` schema evolution (`modeId` + `trigger`) — driven by Command Mode stressing the schema
-- **#038** — Second "AI models" settings section (LLM downloader surface)
+Open work for a phase is every ticket tagged with it: `grep -n 'phase: 3' BACKLOG.md`. For Phase 3 that is tags (#014), the disk-space precheck (#025), the personal dictionary (#045), active-window context capture (#048), the in-pill mode switcher (#068 Stage B) and recording-persistence follow-ups (#069). Phase 4 is a direction, not a plan: intent classification, Command Mode, "Ask Ninimma", the action dispatcher, meeting mode and assistant features, revisited once Phase 3 ships.

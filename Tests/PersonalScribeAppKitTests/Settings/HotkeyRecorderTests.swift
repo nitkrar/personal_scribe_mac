@@ -78,20 +78,54 @@ final class HotkeyRecorderTests: XCTestCase {
         )
     }
 
-    func testRejectsModifierOnlyChordWithReason() throws {
+    func testModifierOnlyIsRejectedWhenReleasedWithoutAKey() throws {
         let model = HotkeyRecorderModel(onConfirm: { _ in }, onCancel: { })
 
-        try model.handle(event: makeFlagsChangedEvent(
-            keyCode: 56,
-            modifierFlags: [.shift],
-            timestamp: 1.0
-        ))
+        try model.handle(event: makeFlagsChangedEvent(keyCode: 56, modifierFlags: [.shift], timestamp: 1.0))
+        XCTAssertEqual(model.captureResult, .idle, "no rejection while the modifier is still held")
 
+        try model.handle(event: makeFlagsChangedEvent(keyCode: 56, modifierFlags: [], timestamp: 1.1))
         guard case let .rejected(reason) = model.captureResult else {
             return XCTFail("Expected rejected capture result")
         }
-
         XCTAssertTrue(reason.contains("Modifier-only"))
+    }
+
+    func testChordCapturesWithoutAnInterimRejection() throws {
+        let model = HotkeyRecorderModel(onConfirm: { _ in }, onCancel: { })
+
+        try model.handle(event: makeFlagsChangedEvent(keyCode: 55, modifierFlags: [.command], timestamp: 1.0))
+        XCTAssertEqual(model.captureResult, .idle)
+        try model.handle(event: makeKeyDownEvent(keyCode: 15, modifierFlags: [.command, .option], characters: "r", timestamp: 1.1))
+        try model.handle(event: makeFlagsChangedEvent(keyCode: 55, modifierFlags: [], timestamp: 1.2))
+
+        guard case .captured = model.captureResult else {
+            return XCTFail("Expected captured, got \(model.captureResult)")
+        }
+    }
+
+    func testRejectsKeysThatWouldFireWhileTyping() throws {
+        let model = HotkeyRecorderModel(onConfirm: { _ in }, onCancel: { })
+
+        try model.handle(event: makeKeyDownEvent(keyCode: 0, modifierFlags: [], characters: "a", timestamp: 1.0))
+        guard case .rejected = model.captureResult else { return XCTFail("plain A must be rejected") }
+
+        try model.handle(event: makeKeyDownEvent(keyCode: 0, modifierFlags: [.shift], characters: "A", timestamp: 1.1))
+        guard case .rejected = model.captureResult else { return XCTFail("Shift+A must be rejected") }
+
+        try model.handle(event: makeKeyDownEvent(keyCode: 96, modifierFlags: [], characters: "", timestamp: 1.2))
+        guard case .captured = model.captureResult else { return XCTFail("F5 alone is allowed") }
+    }
+
+    func testReservedCommandLettersAreRejectedWithExtraModifiers() throws {
+        let model = HotkeyRecorderModel(onConfirm: { _ in }, onCancel: { })
+
+        try model.handle(event: makeKeyDownEvent(keyCode: 12, modifierFlags: [.command, .shift], characters: "q", timestamp: 1.0))
+
+        guard case let .rejected(reason) = model.captureResult else {
+            return XCTFail("Expected Cmd+Shift+Q to be rejected")
+        }
+        XCTAssertTrue(reason.contains("Cmd+Q"))
     }
 
     func testRejectsShortcutThatMatchesEnabledSystemShortcut() throws {

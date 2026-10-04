@@ -1729,3 +1729,14 @@ Preference + Settings picker landed (`ee4d7ca`); the overlay still always render
 **Legacy:** `ui-mockup-gaps.md` Settings→General deferred follow-up
 
 **Closed:** 2026-10-03 — merged into #102 point 2 (Style setting wiring).
+
+---
+
+### #108 — Shortcut recorder accepts unsafe bindings
+
+`bug` · `P2` · `done` · `area: settings, hotkeys`
+*Updated 2026-10-04*
+
+The recorder accepted plain keys with no modifier, let ⌘⇧Q and similar past the reserved ⌘Q/W/C/V/X list, and flashed "Modifier-only" between ⌘-down and the letter.
+
+**Closed:** 2026-10-04 — keys need ⌘, ⌥ or ⌃ unless they are F1–F20 (Shift alone is not enough); reserved letters are rejected with any modifiers that include ⌘; modifier-only is judged on release. The reported left/right ⌥ display issue does not apply: the recorder cannot create Option-key bindings and the monitor ignores tap counts.
