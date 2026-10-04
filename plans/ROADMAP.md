@@ -36,4 +36,4 @@ Apply to every phase. See [`~/.claude/CLAUDE.md`](~/.claude/CLAUDE.md) global op
 
 ## Phase scope
 
-Open work for a phase is every ticket tagged with it: `grep -n 'phase: 3' BACKLOG.md`. For Phase 3 that is tags (#014), the disk-space precheck (#025), the personal dictionary (#045), active-window context capture (#048), the in-pill mode switcher (#068 Stage B) and recording-persistence follow-ups (#069). Phase 4 is a direction, not a plan: intent classification, Command Mode, "Ask Ninimma", the action dispatcher, meeting mode and assistant features, revisited once Phase 3 ships.
+Open work for a phase is every ticket tagged with it: `grep -n 'phase: 3' BACKLOG.md`. For Phase 3 that is tags (#014), the personal dictionary (#045), active-window context capture (#048), the in-pill mode switcher (#068 Stage B) and recording-persistence follow-ups (#069). Phase 4 is a direction, not a plan: intent classification, Command Mode, "Ask Ninimma", the action dispatcher, meeting mode and assistant features, revisited once Phase 3 ships.

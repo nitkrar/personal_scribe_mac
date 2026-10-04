@@ -190,17 +190,6 @@ FTS5 + embedding lookup over transcripts/notes. Needs embeddings schema (migrati
 
 ---
 
-### #025 — Model Stage B: disk-space precheck
-
-`feature` · `P2` · `open` · `phase: 3` · `area: models`
-*Updated 2026-04-21*
-
-Read `ModelDescriptor.approximateSizeBytes` at Download click. Compare against `FileManager.attributesOfFileSystem[.systemFreeSize]`. Confirmation sheet if free space < 2× download size.
-
-**Legacy:** `backlog/model-download-ux-bug-research.md` Stage B
-
----
-
 ### #045 — Personal dictionary (2-stage)
 
 `feature` · `P2` · `open` · `phase: 3` · `area: post-processing, memory-learning`
@@ -544,18 +533,18 @@ on transcript rows.
 
 ---
 
-### #102 — Pill refactor: edge-aware shape, wire Style + Theme for real
+### #102 — Pill redesign: separate click targets, hover detail
 
-`feature` · `bug` · `P2` · `open` · `area: pill, overlay, settings`
-*Updated 2026-10-02*
+`feature` · `P2` · `open` · `area: pill, overlay, settings`
+*Updated 2026-10-04*
 
-**Shipped so far:** `d03947a`, `4612cfe`, `d3e6af2`, `f9efaf1` — cards choose above/below placement, the pill grows away from a nearby edge, the live pill has a three-strand waveform, and Light appearance renders the whole pill coherently. `fe096c5` wires the Style setting: Mini renders the classic pill at 0.75×, None hides it. Vertical/circular edge shapes and matching preview cards remain open.
+**Shipped so far:** cards choose above/below placement, the pill grows away from a nearby edge, the live pill has a three-strand waveform, Light appearance renders the whole pill coherently, and Style is wired (Classic, Mini at 0.75×, None never shows the pill). Pill visibility is an "Always show pill" toggle.
 
-1. **Edge-aware layout.** When the pill is dragged to a screen edge it should adapt: horizontal along the top/bottom edges and vertical or circular along the left/right edges.
-2. **Style setting (done).** `fe096c5` wired Classic/Mini; `f8e590b` removed None (visibility, not style) and Visibility "Hidden" (same as Auto-show).
-3. **Style preview cards are stale.** Settings → Recording window → Style previews draw a single-line equalizer instead of the pill's three-strand waveform. Update them after defining Classic, Mini, and None.
+1. **Separate click targets.** The whole pill is one tap target that toggles recording; the × and stop are drawn but not separate buttons. Make cancel, stop and the body distinct targets. Prerequisite for 2.
+2. **Minimal while recording, more on hover.** Show a design preview before building. Mini may shrink further (around 50%) as part of this.
+3. **Style preview cards are stale.** Settings → Recording window → Style previews draw a single-line equalizer instead of the three-strand waveform.
 
-Scope: layout per edge, snapping, state transitions, stream-card placement on vertical or circular variants, and wiring the style setting into the overlay.
+Not doing: vertical or circular shapes at side edges; the pill stays horizontal.
 
 ---
 

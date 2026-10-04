@@ -220,23 +220,21 @@ public struct GeneralTab: View {
 
             Divider()
 
-            Picker(
-                "Pill visibility",
-                selection: Binding(
-                    get: { viewModel.pillVisibilityMode },
-                    set: { newValue in
+            // Off = auto-show: the pill appears only while recording.
+            Toggle(
+                "Always show pill",
+                isOn: Binding(
+                    get: { viewModel.pillVisibilityMode == .alwaysOn },
+                    set: { isOn in
                         viewModel.applyVisibilityConfig(
                             .init(
-                                pillVisibilityMode: newValue,
+                                pillVisibilityMode: isOn ? .alwaysOn : .autoShow,
                                 isMenuBarVisible: viewModel.isMenuBarVisible
                             )
                         )
                     }
                 )
-            ) {
-                Text("Always-on").tag(PillVisibility.alwaysOn)
-                Text("Auto-show").tag(PillVisibility.autoShow)
-            }
+            )
         }
     }
 
@@ -1222,6 +1220,8 @@ private struct PillStyleSelectorCard: View {
             classicPreview
         case .mini:
             miniPreview
+        case .none:
+            nonePreview
         }
     }
 
@@ -1249,6 +1249,21 @@ private struct PillStyleSelectorCard: View {
     private func classicBarHeight(for index: Int) -> CGFloat {
         let heights: [CGFloat] = [6, 12, 16, 10, 7]
         return heights[index % heights.count]
+    }
+
+    /// None — communicates "hidden". Low-opacity surface + eye.slash glyph.
+    private var nonePreview: some View {
+        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(pillBackgroundColor.opacity(0.25))
+                .frame(width: 56, height: 28)
+
+            Image(systemName: "eye.slash")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(palette.primaryText)
+        }
     }
 
     /// Mini — smaller flat pill, no content. Just the shape.

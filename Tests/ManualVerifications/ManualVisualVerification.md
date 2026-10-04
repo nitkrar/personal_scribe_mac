@@ -455,16 +455,18 @@ against the mockup.
 1. Above the APPEARANCE card, a new card with header **"Style"**
    (semibold body font, same weight/size as other card headers) is
    rendered.
-2. Two side-by-side selector cards labelled **Classic** and **Mini**,
-   each ~72pt tall plus label.
+2. Three side-by-side selector cards labelled **Classic**, **Mini** and
+   **None**, each ~72pt tall plus label.
 3. The currently-selected card has a solid **champagne border**
    (palette `brandChampagne`) at ~2pt width and a subtle shadow. The
-   other card has a 12%-opacity champagne border at 1pt.
+   other cards have a 12%-opacity champagne border at 1pt.
 4. **Classic preview** renders a dark-navy rounded-rect pill with a
    5-bar mini waveform sketch inside. Bars are champagne on the dark
    pill, dark ink on the light pill.
 5. **Mini preview** renders a small flat rounded-rect pill (40×14pt)
    in the same pill-surface colour. No inline content.
+6. **None preview** renders a translucent pill surface with an
+   `eye.slash` glyph centered on top.
 7. Click each card → the champagne border migrates to the clicked
    card. Selection persists across Settings tab switches AND across
    app relaunch (value written to `UserDefaults` key `PillStyle`).
@@ -472,7 +474,7 @@ against the mockup.
    Light / System. The Style previews' pill surfaces flip
    between `#1A1B2E` (dark-resolved) and `#F0EDE8` (light-resolved)
    in step with the selected theme.
-9. Selecting Mini shrinks the runtime pill (see MV-PILL-STYLE-1).
+9. Selecting Mini shrinks the runtime pill and None hides it (see MV-PILL-STYLE-1..2).
 
 ### D.2 — APPLICATION section (Launch at login + Show in Dock)
 10. Below the VISIBILITY card, a card with header **"Application"**

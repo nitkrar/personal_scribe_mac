@@ -6,12 +6,14 @@ import PersonalScribeCore
 /// `PillAppearance` (dark/light tokens) and `PillVisibility`
 /// (when the pill is shown at all).
 ///
-/// Two variants:
+/// Three variants:
 /// * `.classic` — full pill with voice-modulated waveform (default).
 /// * `.mini`    — the classic pill at `scale`.
+/// * `.none`    — the pill never shows; record from the shortcut or menu bar.
 public enum PillStyle: String, CaseIterable, Identifiable, Codable, Sendable, StoredPreference {
     case classic = "Classic"
     case mini    = "Mini"
+    case none    = "None"
 
     public var id: String { rawValue }
 

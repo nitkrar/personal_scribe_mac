@@ -312,6 +312,20 @@ final class PillOverlayViewModelTests: XCTestCase {
 
     // MARK: - Pill style
 
+    func testNoneStyleNeverShowsThePillAndOtherStylesRestoreIt() {
+        let viewModel = PillOverlayViewModel()
+        viewModel.apply(visibility: .recording)
+
+        viewModel.setPillStyle(.none)
+        XCTAssertEqual(viewModel.visibility, .hidden)
+
+        viewModel.apply(visibility: .transcribing)
+        XCTAssertEqual(viewModel.visibility, .hidden, "session updates stay hidden under None")
+
+        viewModel.setPillStyle(.classic)
+        XCTAssertEqual(viewModel.visibility, .transcribing)
+    }
+
     func testMiniStyleShrinksEveryStateProportionally() {
         let full = PillOverlayView.size(for: .recording, style: .classic)
         let mini = PillOverlayView.size(for: .recording, style: .mini)

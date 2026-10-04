@@ -1775,3 +1775,14 @@ Returning from a full-screen app to the desktop left the Ninimma window behind a
 Earlier reviews reported WhisperKit's CoreML path growing memory over long runs (medium model, ~40 min).
 
 **Closed:** 2026-10-04 — not reproduced with `whisperkit-small-en-217mb`: memory stayed flat across 50 batch, 50 streaming and 50 release-and-reload runs (~42 min of audio each, about 205–217 MB). Rerun with `WhisperKitMemoryBenchmarkTests` (`NINIMMA_BENCH_WAV`, `NINIMMA_BENCH_ITERATIONS`).
+
+---
+
+### #025 — Model Stage B: disk-space precheck
+
+`feature` · `P2` · `done` · `phase: 3` · `area: models`
+*Updated 2026-10-04*
+
+Asked for a confirmation sheet when free space is under twice the download size.
+
+**Closed:** 2026-10-04 — shipped differently in `b15a0b7`: a download is refused when free space is below the model size plus 200 MB, and the AI Models row shows the required and available space. No confirmation sheet.
