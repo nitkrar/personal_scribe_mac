@@ -538,7 +538,7 @@ on transcript rows.
 `feature` · `P2` · `open` · `area: pill, overlay, settings`
 *Updated 2026-10-04*
 
-**Shipped so far:** cards choose above/below placement, the pill grows away from a nearby edge, the live pill has a three-strand waveform, Light appearance renders the whole pill coherently, and Style is wired (Classic, Mini at 0.75×, None never shows the pill). Pill visibility is an "Always show pill" toggle.
+**Shipped so far:** cards choose above/below placement, the pill grows away from a nearby edge, the live pill has a three-strand waveform, Light appearance renders the whole pill coherently, and Style is wired (Classic, Mini at 0.75×, None never shows the pill). Pill visibility is an "Auto-hide pill" toggle, disabled under Style None.
 
 1. **Separate click targets.** The whole pill is one tap target that toggles recording; the × and stop are drawn but not separate buttons. Make cancel, stop and the body distinct targets. Prerequisite for 2.
 2. **Minimal while recording, more on hover.** Show a design preview before building. Mini may shrink further (around 50%) as part of this.

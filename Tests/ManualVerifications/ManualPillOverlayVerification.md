@@ -438,5 +438,5 @@ continues the same recording; stop transcribes both parts as one.
 ## Pill style
 
 - [ ] **MV-PILL-STYLE-1** Settings → Recording window → Style = Mini. The idle pill shrinks immediately; recording, transcribing and the Cancel card render as the same design at about three-quarters size, with nothing clipped.
-- [ ] **MV-PILL-STYLE-2** Style = None. The pill never shows, including while recording; the shortcut and menu bar still start and stop dictation. Pill visibility is a single "Always show pill" toggle: off shows the pill only while recording.
+- [ ] **MV-PILL-STYLE-2** Style = None. The pill never shows, including while recording; the shortcut and menu bar still start and stop dictation. Pill visibility is a single "Auto-hide pill" toggle (on: the pill shows only while recording), disabled while Style is None.
 - [ ] **MV-PILL-STYLE-3** Back to Classic while recording. The full-size recording pill returns without restarting the session.

@@ -220,21 +220,23 @@ public struct GeneralTab: View {
 
             Divider()
 
-            // Off = auto-show: the pill appears only while recording.
+            // On = the pill appears only while recording. Meaningless when
+            // Style is None (the pill never shows), so it's disabled then.
             Toggle(
-                "Always show pill",
+                "Auto-hide pill",
                 isOn: Binding(
-                    get: { viewModel.pillVisibilityMode == .alwaysOn },
-                    set: { isOn in
+                    get: { viewModel.pillVisibilityMode == .autoShow },
+                    set: { autoHide in
                         viewModel.applyVisibilityConfig(
                             .init(
-                                pillVisibilityMode: isOn ? .alwaysOn : .autoShow,
+                                pillVisibilityMode: autoHide ? .autoShow : .alwaysOn,
                                 isMenuBarVisible: viewModel.isMenuBarVisible
                             )
                         )
                     }
                 )
             )
+            .disabled(viewModel.pillStyle == .none)
         }
     }
 
