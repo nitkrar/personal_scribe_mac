@@ -7,6 +7,7 @@ public enum SessionState: Sendable, Equatable {
     /// release of the gesture can transition directly to `.transcribing`
     /// through the normal state machine. See `#071`.
     case holdRecording
+    case paused
     case transcribing
     case completed
     /// Non-error terminal state: the pipeline exited early without producing
@@ -25,7 +26,7 @@ extension SessionState {
         switch self {
         case .completed, .shortExit:
             return .idle
-        case .idle, .capturing, .holdRecording, .transcribing, .error:
+        case .idle, .capturing, .holdRecording, .paused, .transcribing, .error:
             return self
         }
     }

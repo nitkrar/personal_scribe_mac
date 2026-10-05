@@ -303,6 +303,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             await startRecording()
         case .capturing, .holdRecording:
             await stopRecordingAndRunPipeline()
+        case .paused:
+            logger.info("Ignored toggle while paused")
         case .transcribing:
             logger.info("Ignored toggle while transcribing")
         case .error:
@@ -332,7 +334,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.isStreamingSession = false
             }
             await startHoldRecording()
-        case .capturing, .holdRecording, .transcribing:
+        case .capturing, .holdRecording, .paused, .transcribing:
             logger.info("Ignored hold-start while session is not .idle")
         }
     }
@@ -341,6 +343,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         switch currentSnapshot.sessionState {
         case .capturing, .holdRecording:
             await discardActiveCapture()
+        case .paused:
+            logger.info("Ignored cancel while paused")
         case .idle, .completed, .shortExit, .transcribing, .error:
             logger.info("Ignored cancel from non-active session state")
         }
@@ -358,7 +362,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         case .idle, .completed, .shortExit:
             logger.info("capture_resumed — keptBufferCount=\(resumable.buffers.count)")
             await startRecording(resuming: resumable)
-        case .capturing, .holdRecording, .transcribing, .error:
+        case .capturing, .holdRecording, .paused, .transcribing, .error:
             logger.info("Ignored resume while session is not idle")
         }
     }

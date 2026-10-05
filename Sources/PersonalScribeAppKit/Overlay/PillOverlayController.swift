@@ -340,7 +340,7 @@ public final class PillOverlayController: ObservableObject {
         switch session.sessionState {
         case .capturing, .holdRecording:
             isLiveCaptureState = true
-        case .idle, .completed, .shortExit, .transcribing, .error:
+        case .idle, .completed, .shortExit, .paused, .transcribing, .error:
             isLiveCaptureState = false
         }
 

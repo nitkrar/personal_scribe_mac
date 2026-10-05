@@ -36,6 +36,11 @@ enum PillInteractionRouter {
             if point.x < controlWidth { return .pause }
             if point.x >= size.width - controlWidth { return .stop }
             return .toggle
+        case .paused:
+            let controlWidth = min(44, size.width / 3)
+            if point.x < controlWidth { return .resume }
+            if point.x >= size.width - controlWidth { return .stop }
+            return nil
         case .holdToRecord:
             return .toggle
         case .hidden, .downloading, .loading, .transcribing, .done, .cancelled, .error:
@@ -433,6 +438,7 @@ public final class PillOverlayPresenter {
     private var streamCard: (any StreamCardPresenting)?
     private var visibilityCancellable: AnyCancellable?
     private var styleCancellable: AnyCancellable?
+    private var hoverCancellable: AnyCancellable?
     private let diagnosticLogger: PersonalScribeLogger
     /// Visible screen area for a given pill frame; every pill frame is
     /// clamped into it (see `OverlayPlacement`).
@@ -512,7 +518,7 @@ public final class PillOverlayPresenter {
                 hide()
             case .cancelled,
                  .idle, .downloading, .loading,
-                 .holdToRecord, .recording, .transcribing, .done, .error:
+                 .holdToRecord, .recording, .paused, .transcribing, .done, .error:
                 // #044: panel must be sized per visibility so the panel
                 // frame == visible pill frame (no invisible click-halo).
                 // First show from `.hidden`: `show()` pre-sizes the
@@ -534,6 +540,14 @@ public final class PillOverlayPresenter {
         // Classic ↔ Mini keeps the visibility but changes the footprint.
         // Main-queue hop: @Published emits before the new value is stored.
         styleCancellable = model.$pillStyle.dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.isVisible else { return }
+                    self.applyVisibilityResize(to: self.model.visibility)
+                }
+            }
+        hoverCancellable = model.$isHovered.dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 MainActor.assumeIsolated {
@@ -575,7 +589,11 @@ public final class PillOverlayPresenter {
             return
         }
 
-        let newSize = PillOverlayView.size(for: visibility, style: model.pillStyle)
+        let newSize = PillOverlayView.size(
+            for: visibility,
+            style: model.pillStyle,
+            isHovered: model.isHovered
+        )
         guard newSize != .zero else {
             // `.hidden` is routed to `hide()` already — defensive no-op.
             return
@@ -699,7 +717,14 @@ public final class PillOverlayPresenter {
             pendingShrink = nil
             let bounds = screenBounds(settled)
             let anchor = PillAnchor(home: settled, within: bounds, largestSize: PillOverlayView.largestSize)
-            settled = anchor.frame(for: PillOverlayView.size(for: visibility, style: model.pillStyle), within: bounds)
+            settled = anchor.frame(
+                for: PillOverlayView.size(
+                    for: visibility,
+                    style: model.pillStyle,
+                    isHovered: model.isHovered
+                ),
+                within: bounds
+            )
             panel.setFrame(settled, animate: false)
         } else if settled != panel.frame {
             panel.setFrame(settled, animate: true)
@@ -884,7 +909,7 @@ public final class PillOverlayPresenter {
         // pill click target, so taps are NOT enabled during hold —
         // otherwise a click mid-hold would fight the release-to-
         // transcribe semantic.
-        case .idle, .recording:
+        case .idle, .recording, .paused:
             return true
         case .hidden, .downloading, .loading, .holdToRecord, .transcribing, .done, .cancelled, .error:
             return false

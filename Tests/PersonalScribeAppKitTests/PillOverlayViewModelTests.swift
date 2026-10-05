@@ -339,13 +339,13 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .transcribing)
     }
 
-    func testMiniStyleShrinksEveryStateProportionally() {
+    func testMiniRecordingUsesDedicatedMockupSizeInsteadOfProportionalScale() {
         let full = PillOverlayView.size(for: .recording, style: .classic)
         let mini = PillOverlayView.size(for: .recording, style: .mini)
 
         XCTAssertEqual(full, PillOverlayView.size(for: .recording))
-        XCTAssertLessThan(mini.width, full.width)
-        XCTAssertEqual(mini.width / full.width, mini.height / full.height, accuracy: 0.001)
+        XCTAssertEqual(mini, CGSize(width: 110, height: 20))
+        XCTAssertNotEqual(mini.width / full.width, mini.height / full.height)
     }
 
     // MARK: - Cancel Card

@@ -170,7 +170,7 @@ enum RecordingStatusCardDriver {
             return recordingMessage(for: progress)
         case .transcribing:
             return transcribingMessage(for: progress)
-        case .idle, .completed, .shortExit, .error:
+        case .idle, .paused, .completed, .shortExit, .error:
             return nil
         }
     }

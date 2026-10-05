@@ -252,7 +252,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         let pose: StatusItemIconLoader.Pose = {
             switch sessionState {
-            case .capturing, .holdRecording, .transcribing:
+            case .capturing, .holdRecording, .paused, .transcribing:
                 return .listening
             case .idle, .completed, .shortExit, .error:
                 return .idle
@@ -266,6 +266,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         switch sessionState {
         case .capturing, .holdRecording:
             button.contentTintColor = .systemRed
+        case .paused:
+            button.contentTintColor = .systemOrange
         case .transcribing:
             button.contentTintColor = .systemOrange
         case .idle, .completed, .shortExit, .error:
@@ -439,6 +441,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         switch sessionState {
         case .capturing, .holdRecording:
             return "\(AppBrand.displayName) — recording"
+        case .paused:
+            return "\(AppBrand.displayName) — paused"
         case .transcribing:
             return "\(AppBrand.displayName) — transcribing"
         case .idle, .completed, .shortExit, .error:

@@ -143,6 +143,8 @@ public actor SessionCoordinator {
             await performStart()
         case .capturing, .holdRecording:
             await performStop()
+        case .paused:
+            return
         case .transcribing, .error:
             await performToggle()
         case .completed, .shortExit:
@@ -198,7 +200,7 @@ public actor SessionCoordinator {
         switch await currentDisplayState() {
         case .capturing, .holdRecording:
             await performStop()
-        case .idle, .completed, .shortExit, .transcribing, .error:
+        case .idle, .completed, .shortExit, .paused, .transcribing, .error:
             return
         }
     }
@@ -212,7 +214,7 @@ public actor SessionCoordinator {
         switch await currentDisplayState() {
         case .capturing, .holdRecording:
             await performCancel()
-        case .idle, .completed, .shortExit, .transcribing, .error:
+        case .idle, .completed, .shortExit, .paused, .transcribing, .error:
             return
         }
     }
@@ -415,7 +417,7 @@ public actor SessionCoordinator {
 
     private func isBusyForApplicationTermination() async -> Bool {
         switch await pipeline.snapshot().sessionState {
-        case .capturing, .holdRecording, .transcribing:
+        case .capturing, .holdRecording, .paused, .transcribing:
             return true
         case .idle, .completed, .shortExit, .error:
             return false

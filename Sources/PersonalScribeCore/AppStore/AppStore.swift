@@ -62,6 +62,7 @@ public final class AppStore: ObservableObject {
             pillVisibility: Self.derivePillVisibility(
                 mode: initialVisibilityMode,
                 sessionState: initialSession.sessionState,
+                recordingDuration: initialSession.recordingDuration,
                 progress: initialSession.modelDownloadProgress,
                 cancelledCaptureResumable: initialSession.cancelledCaptureResumable
             ),
@@ -203,6 +204,7 @@ public final class AppStore: ObservableObject {
         let visibility = Self.derivePillVisibility(
             mode: currentVisibilityMode,
             sessionState: snapshot.session.sessionState,
+            recordingDuration: snapshot.session.recordingDuration,
             progress: snapshot.modelDownloadProgress,
             cancelledCaptureResumable: snapshot.session.cancelledCaptureResumable
         )
@@ -235,6 +237,7 @@ public final class AppStore: ObservableObject {
     private static func derivePillVisibility(
         mode: AppStoreVisibilityMode,
         sessionState: SessionState,
+        recordingDuration: Duration?,
         progress: ModelDownloadProgress?,
         cancelledCaptureResumable: Bool
     ) -> PillVisibilityState {
@@ -248,6 +251,12 @@ public final class AppStore: ObservableObject {
 
         if sessionState.isRecording {
             return .recording
+        }
+
+        if sessionState == .paused {
+            return .paused(
+                elapsedSeconds: Int(recordingDuration?.components.seconds ?? 0)
+            )
         }
 
         if sessionState.isTranscribing {
@@ -265,6 +274,10 @@ public final class AppStore: ObservableObject {
             return .recording
         case .holdRecording:
             return .holdToRecord
+        case .paused:
+            return .paused(
+                elapsedSeconds: Int(recordingDuration?.components.seconds ?? 0)
+            )
         case .transcribing:
             return transcribingVisibility(progress: progress)
         case .completed, .shortExit, .error:

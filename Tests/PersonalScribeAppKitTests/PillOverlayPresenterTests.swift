@@ -81,6 +81,40 @@ final class PillOverlayPresenterTests: XCTestCase {
         )
     }
 
+    func testPausedRoutesResumeAndStopButMiddleDoesNothing() {
+        let size = CGSize(width: 220, height: 36)
+
+        XCTAssertEqual(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 20, y: 18),
+                size: size,
+                visibility: .paused(elapsedSeconds: 23),
+                style: .classic,
+                isHovered: false
+            ),
+            .resume
+        )
+        XCTAssertNil(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 110, y: 18),
+                size: size,
+                visibility: .paused(elapsedSeconds: 23),
+                style: .classic,
+                isHovered: false
+            )
+        )
+        XCTAssertEqual(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 200, y: 18),
+                size: size,
+                visibility: .paused(elapsedSeconds: 23),
+                style: .classic,
+                isHovered: false
+            ),
+            .stop
+        )
+    }
+
     func testSmallMovementEndsAsClick() {
         var state = OverlayPanelInteractionState()
 

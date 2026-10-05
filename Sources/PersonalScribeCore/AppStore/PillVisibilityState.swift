@@ -10,6 +10,7 @@ public enum PillVisibilityState: Sendable, Equatable {
     /// Phase 2; Phase 1 reuses the recording-pill chrome as a placeholder.
     case holdToRecord
     case recording
+    case paused(elapsedSeconds: Int)
     case transcribing
     case done
     /// Recording was discarded without transcribing (✕ button or Esc).

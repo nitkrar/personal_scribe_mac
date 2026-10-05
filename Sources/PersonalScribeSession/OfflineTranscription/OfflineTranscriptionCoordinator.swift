@@ -689,7 +689,7 @@ private extension OfflineTranscriptionCoordinator {
 
     static func isIdleState(_ state: SessionState) -> Bool {
         switch state {
-        case .capturing, .holdRecording, .transcribing:
+        case .capturing, .holdRecording, .paused, .transcribing:
             false
         case .idle, .completed, .shortExit, .error:
             true

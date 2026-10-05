@@ -113,6 +113,28 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.pillVisibility, .holdToRecord)
     }
 
+    func testPausedSessionDerivesPausedPillWithCapturedDuration() async {
+        let session = FakeAppStoreSessionProvider()
+        let store = makeStore(
+            session: session,
+            permissions: FakePermissionService(),
+            registry: makeRegistry(),
+            visibilityModeProvider: FakeVisibilityModeProvider(),
+            clock: ManualAppStoreClock()
+        )
+        store.start()
+
+        session.emitSnapshot(
+            SessionSnapshot(
+                sessionState: .paused,
+                recordingDuration: .seconds(83)
+            )
+        )
+        await waitUntil { store.snapshot.sessionState == .paused }
+
+        XCTAssertEqual(store.snapshot.pillVisibility, .paused(elapsedSeconds: 83))
+    }
+
     func testPermissionRefreshRepublishesSnapshot() async {
         let session = FakeAppStoreSessionProvider()
         let permissions = FakePermissionService(statuses: [

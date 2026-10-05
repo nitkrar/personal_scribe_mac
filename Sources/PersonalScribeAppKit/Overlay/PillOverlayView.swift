@@ -54,6 +54,12 @@ public struct PillOverlayView: View {
         width: PersonalScribeTheme.Pill.Width.medium,
         height: PersonalScribeTheme.Pill.Height.active
     )
+    static let pausedSize = CGSize(width: 220, height: 36)
+    static let miniIdleSize = CGSize(width: 40, height: 16)
+    static let miniIdleHoverSize = CGSize(width: 66, height: 30)
+    static let miniRecordingSize = CGSize(width: 110, height: 20)
+    static let miniRecordingHoverSize = CGSize(width: 170, height: 30)
+    static let miniPausedSize = CGSize(width: 170, height: 30)
     /// Transcribing.
     static let transcribingSize = CGSize(
         width: PersonalScribeTheme.Pill.Width.medium,
@@ -88,7 +94,7 @@ public struct PillOverlayView: View {
     /// Widest and tallest footprint across all states; decides whether
     /// the pill sits "next to an edge" (see `PillAnchor`).
     static let largestSize: CGSize = [
-        idleSize, holdToRecordSize, recordingSize, transcribingSize, doneSize,
+        idleSize, holdToRecordSize, recordingSize, pausedSize, transcribingSize, doneSize,
         downloadingSize, loadingSize, errorSize, cancelCardSize,
     ].reduce(.zero) { CGSize(width: max($0.width, $1.width), height: max($0.height, $1.height)) }
 
@@ -112,6 +118,8 @@ public struct PillOverlayView: View {
             return holdToRecordSize
         case .recording:
             return recordingSize
+        case .paused:
+            return pausedSize
         case .transcribing:
             return transcribingSize
         case .done:
@@ -127,8 +135,27 @@ public struct PillOverlayView: View {
         }
     }
 
-    public static func size(for visibility: PillVisibilityState, style: PillStyle) -> CGSize {
+    public static func size(
+        for visibility: PillVisibilityState,
+        style: PillStyle,
+        isHovered: Bool = false
+    ) -> CGSize {
         let size = size(for: visibility)
+        if style == .mini {
+            switch visibility {
+            case .idle:
+                return isHovered ? miniIdleHoverSize : miniIdleSize
+            case .recording:
+                return isHovered ? miniRecordingHoverSize : miniRecordingSize
+            case .paused:
+                return miniPausedSize
+            case .cancelled:
+                return cancelCardSize
+            case .hidden, .downloading, .loading, .holdToRecord,
+                 .transcribing, .done, .error:
+                break
+            }
+        }
         return CGSize(width: size.width * style.scale, height: size.height * style.scale)
     }
 
@@ -185,6 +212,8 @@ public struct PillOverlayView: View {
                 holdToRecordPill
             case .recording:
                 recordingPill
+            case .paused(let elapsedSeconds):
+                pausedPill(elapsedSeconds: elapsedSeconds)
             case .transcribing:
                 transcribingPill
             case .done:
@@ -212,20 +241,44 @@ public struct PillOverlayView: View {
         // trigger any SwiftUI animation (AppKit owns that morph via
         // setFrame animate); only the pill↔cancel flip does.
         .animation(.easeInOut(duration: 0.2), value: model.visibility == .cancelled)
-        .modifier(PillScale(visibility: model.visibility, style: model.pillStyle))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.contentAlignment)
     }
 
     // MARK: - Idle
 
     private var idlePill: some View {
+        let size = Self.size(
+            for: .idle,
+            style: model.pillStyle,
+            isHovered: model.isHovered
+        )
 
-        return HStack {
-            // Logo uses the scheme-invariant champagne fg token.
-            PersonalScribeLogoView(color: fg.opacity(0.9))
-                .frame(width: 14, height: 14)
+        return Group {
+            if model.pillStyle == .mini, model.isHovered {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.grid.2x2")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(fgDim)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    Circle()
+                        .fill(fg.opacity(0.95))
+                        .overlay(
+                            PersonalScribeLogoView(
+                                color: PersonalScribeTheme.Pill.surface(for: colorScheme)
+                            )
+                            .frame(width: 11, height: 11)
+                        )
+                        .help("Start recording")
+                }
+                .padding(3)
+            } else {
+                PersonalScribeLogoView(color: fg.opacity(0.9))
+                    .frame(width: model.pillStyle == .mini ? 10 : 14,
+                           height: model.pillStyle == .mini ? 10 : 14)
+            }
         }
-        .frame(width: Self.idleSize.width, height: Self.idleSize.height)
+        .frame(width: size.width, height: size.height)
         .modifier(PillChrome(borderStyle: .idle))
         .accessibilityElement()
         .accessibilityLabel("\(AppBrand.displayName) idle — double-tap right Option to record")
@@ -255,36 +308,83 @@ public struct PillOverlayView: View {
     // MARK: - Recording (spec §2c)
 
     private var recordingPill: some View {
+        let mini = model.pillStyle == .mini
+        let showsControls = !mini || model.isHovered
+        let size = Self.size(
+            for: .recording,
+            style: model.pillStyle,
+            isHovered: model.isHovered
+        )
 
-        return HStack(spacing: 12) {
-            // Cancel glyph — dimmed secondary fg.
-            Image(systemName: "xmark")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(fgDim)
+        return HStack(spacing: mini ? 6 : 12) {
+            if showsControls {
+                Image(systemName: "pause.fill")
+                    .font(.system(size: mini ? 9 : 11, weight: .semibold))
+                    .foregroundColor(fgDim)
+                    .frame(width: mini ? 24 : 28)
+            }
 
-            // Voice-modulated waveform.
             SineWaveView(
                 audioLevel: model.audioLevel,
                 decayMode: .animated,
                 palette: WaveformPalette(rawValue: waveformPaletteRaw) ?? .default,
                 onDarkBackground: colorScheme == .dark
             )
-            .frame(width: 140, height: 34)
+            .frame(width: mini ? (showsControls ? 98 : 100) : 140,
+                   height: mini ? size.height : 34)
 
-            // Stop button.
-            Circle()
-                .fill(fgStop)
-                .frame(width: 18, height: 18)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.white)
-                        .frame(width: 7, height: 7)
-                )
+            if showsControls {
+                stopGlyph(diameter: mini ? 22 : 24)
+            }
         }
-        .frame(width: Self.recordingSize.width, height: Self.recordingSize.height)
+        .padding(.horizontal, mini ? 4 : 8)
+        .frame(width: size.width, height: size.height)
         .modifier(PillChrome(borderStyle: .active))
         .accessibilityElement()
         .accessibilityLabel("\(AppBrand.displayName) recording — tap to stop")
+    }
+
+    private func pausedPill(elapsedSeconds: Int) -> some View {
+        let mini = model.pillStyle == .mini
+        let size = Self.size(
+            for: .paused(elapsedSeconds: elapsedSeconds),
+            style: model.pillStyle
+        )
+
+        return HStack(spacing: mini ? 6 : 12) {
+            Image(systemName: "play.fill")
+                .font(.system(size: mini ? 9 : 11, weight: .semibold))
+                .foregroundColor(fgDim)
+                .frame(width: mini ? 24 : 28)
+
+            Text("Paused · \(Self.elapsedText(elapsedSeconds))")
+                .font(.system(size: mini ? 11 : 12, weight: .semibold))
+                .foregroundColor(fgDim)
+                .frame(maxWidth: .infinity)
+
+            stopGlyph(diameter: mini ? 22 : 24)
+        }
+        .padding(.horizontal, mini ? 4 : 8)
+        .frame(width: size.width, height: size.height)
+        .modifier(PillChrome(borderStyle: .active))
+        .accessibilityElement()
+        .accessibilityLabel("Recording paused at \(Self.elapsedText(elapsedSeconds))")
+    }
+
+    private func stopGlyph(diameter: CGFloat) -> some View {
+        Circle()
+            .fill(fgStop)
+            .frame(width: diameter, height: diameter)
+            .overlay(
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.white)
+                    .frame(width: diameter * 0.38, height: diameter * 0.38)
+            )
+    }
+
+    static func elapsedText(_ elapsedSeconds: Int) -> String {
+        let clamped = max(0, elapsedSeconds)
+        return "\(clamped / 60):\(String(format: "%02d", clamped % 60))"
     }
 
     // MARK: - Transcribing (spec §2d)

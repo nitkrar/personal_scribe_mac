@@ -37,6 +37,36 @@ final class PillOverlayViewSizeTests: XCTestCase {
         )
     }
 
+    func testMiniIdleAndRecordingSizesMatchMockupAtRestAndHover() {
+        XCTAssertEqual(
+            PillOverlayView.size(for: .idle, style: .mini, isHovered: false),
+            CGSize(width: 40, height: 16)
+        )
+        XCTAssertEqual(
+            PillOverlayView.size(for: .idle, style: .mini, isHovered: true),
+            CGSize(width: 66, height: 30)
+        )
+        XCTAssertEqual(
+            PillOverlayView.size(for: .recording, style: .mini, isHovered: false),
+            CGSize(width: 110, height: 20)
+        )
+        XCTAssertEqual(
+            PillOverlayView.size(for: .recording, style: .mini, isHovered: true),
+            CGSize(width: 170, height: 30)
+        )
+    }
+
+    func testPausedSizesMatchMockup() {
+        XCTAssertEqual(
+            PillOverlayView.size(for: .paused(elapsedSeconds: 23), style: .classic),
+            CGSize(width: 220, height: 36)
+        )
+        XCTAssertEqual(
+            PillOverlayView.size(for: .paused(elapsedSeconds: 23), style: .mini),
+            CGSize(width: 170, height: 30)
+        )
+    }
+
     func testSizeForTranscribingMatchesTranscribingSize() {
         XCTAssertEqual(
             PillOverlayView.size(for: .transcribing),

@@ -340,7 +340,7 @@ struct StatusItemMenuModel: Equatable {
         switch sessionState {
         case .idle, .completed, .shortExit, .error:
             return "Start Recording   \(chord)"
-        case .capturing, .holdRecording:
+        case .capturing, .holdRecording, .paused:
             return "Stop Recording   \(chord)"
         case .transcribing:
             return "Transcribing…"
@@ -371,7 +371,7 @@ struct StatusItemMenuModel: Equatable {
         switch sessionState {
         case .transcribing:
             return false
-        case .idle, .completed, .shortExit, .capturing, .holdRecording, .error:
+        case .idle, .completed, .shortExit, .capturing, .holdRecording, .paused, .error:
             return true
         }
     }
