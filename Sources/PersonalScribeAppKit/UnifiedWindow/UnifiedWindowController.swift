@@ -63,11 +63,14 @@ final class UnifiedWindowController: NSWindowController {
     private let menuBarVisibilityProvider: @MainActor () -> Bool
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
     private let openDiagnosticsWindow: @MainActor () -> Void
+    private let logger: PersonalScribeLogger
     private var windowTintObserver: NSObjectProtocol?
     private var appDidBecomeActiveObserver: NSObjectProtocol?
     private var appDidResignActiveObserver: NSObjectProtocol?
     private var activeSpaceDidChangeObserver: NSObjectProtocol?
     private var foregroundRecoveryState = UnifiedWindowForegroundRecoveryState()
+    private var frameMutationSource: String?
+    private var lastObservedWindowFrame: NSRect?
 
     init(
         defaults: UserDefaults = .standard,
@@ -85,7 +88,8 @@ final class UnifiedWindowController: NSWindowController {
         setActiveMode: (@MainActor (WorkflowMode) async -> Void)? = nil,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
-        openDiagnosticsWindow: @escaping @MainActor () -> Void = {}
+        openDiagnosticsWindow: @escaping @MainActor () -> Void = {},
+        logger: PersonalScribeLogger
     ) {
         self.defaults = defaults
         self.notificationCenter = notificationCenter
@@ -95,6 +99,7 @@ final class UnifiedWindowController: NSWindowController {
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.openDiagnosticsWindow = openDiagnosticsWindow
+        self.logger = logger
         self.homeViewModel = HomeTabViewModel(metrics: metricsStore, defaults: defaults)
         self.transcriptionsViewModel = TranscriptionsTabViewModel(
             reader: transcriptReader,
@@ -159,6 +164,9 @@ final class UnifiedWindowController: NSWindowController {
         window.collectionBehavior = [.fullScreenAuxiliary]
 
         super.init(window: window)
+
+        window.delegate = self
+        lastObservedWindowFrame = window.frame
 
         windowTintObserver = notificationCenter.addObserver(
             forName: UserDefaults.didChangeNotification,
@@ -230,12 +238,25 @@ final class UnifiedWindowController: NSWindowController {
 
         guard let window else { return }
 
+        let frameBeforeShow = window.frame
+        logWindowState(
+            event: "show_begin",
+            path: "showWindow",
+            source: "ours",
+            oldFrame: frameBeforeShow,
+            newFrame: frameBeforeShow
+        )
+
         // Bug #041: if the persisted frame's midpoint isn't on any screen
         // that currently exists (e.g. the user left a multi-monitor setup,
         // or the window is about to be dragged over from a dismissed
         // full-screen space) re-center it on the screen the user is
         // actually looking at.
-        reconcileWindowFrameIfNeeded(window, whenVisible: false)
+        reconcileWindowFrameIfNeeded(
+            window,
+            whenVisible: false,
+            path: "showWindow"
+        )
 
         // Join the current space while opening (#041), then stop following:
         // a window that always follows the active space isn't treated as part
@@ -247,8 +268,24 @@ final class UnifiedWindowController: NSWindowController {
         }
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
-        DispatchQueue.main.async { [weak window] in
-            window?.collectionBehavior.remove(.moveToActiveSpace)
+        logWindowState(
+            event: "show_end",
+            path: "showWindow",
+            source: "ours",
+            oldFrame: frameBeforeShow,
+            newFrame: window.frame
+        )
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self, let window else { return }
+            let oldFrame = window.frame
+            window.collectionBehavior.remove(.moveToActiveSpace)
+            self.logWindowState(
+                event: "move_to_active_space_removed",
+                path: "showWindow.async",
+                source: "ours",
+                oldFrame: oldFrame,
+                newFrame: window.frame
+            )
         }
     }
 
@@ -311,26 +348,61 @@ final class UnifiedWindowController: NSWindowController {
 
     private func recoverForegroundIfNeeded() {
         guard let window else { return }
+        let frameBeforeRecovery = window.frame
+        logWindowState(
+            event: "recover_begin",
+            path: "recoverForegroundIfNeeded",
+            source: "ours",
+            oldFrame: frameBeforeRecovery,
+            newFrame: frameBeforeRecovery
+        )
         guard foregroundRecoveryState.consumeRestoreRequest(
             appIsActive: NSApplication.shared.isActive,
             unifiedWindowIsVisible: window.isVisible
         ) else {
+            logWindowState(
+                event: "recover_skipped",
+                path: "recoverForegroundIfNeeded",
+                source: "ours",
+                oldFrame: frameBeforeRecovery,
+                newFrame: window.frame
+            )
             return
         }
 
-        reconcileWindowFrameIfNeeded(window, whenVisible: true)
+        reconcileWindowFrameIfNeeded(
+            window,
+            whenVisible: true,
+            path: "recoverForegroundIfNeeded"
+        )
         if window.isMiniaturized {
             window.deminiaturize(nil)
         }
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
+        logWindowState(
+            event: "recover_end",
+            path: "recoverForegroundIfNeeded",
+            source: "ours",
+            oldFrame: frameBeforeRecovery,
+            newFrame: window.frame
+        )
     }
 
     private func reconcileWindowFrameIfNeeded(
         _ window: NSWindow,
-        whenVisible shouldRunForVisibleWindow: Bool
+        whenVisible shouldRunForVisibleWindow: Bool,
+        path: String
     ) {
+        let oldFrame = window.frame
         guard shouldRunForVisibleWindow || !window.isVisible else {
+            logWindowState(
+                event: "reconcile_skipped_visible",
+                path: path,
+                source: "ours",
+                oldFrame: oldFrame,
+                newFrame: oldFrame
+            )
             return
         }
 
@@ -340,8 +412,73 @@ final class UnifiedWindowController: NSWindowController {
             activeScreenVisibleFrame: activeScreenFrame
         )
         if reconciled != window.frame {
+            logWindowState(
+                event: "set_frame_begin",
+                path: path,
+                source: "ours",
+                oldFrame: oldFrame,
+                newFrame: reconciled,
+                activeTargetVisibleFrame: activeScreenFrame
+            )
+            frameMutationSource = "ours:\(path).setFrame"
             window.setFrame(reconciled, display: false)
+            frameMutationSource = nil
+            lastObservedWindowFrame = window.frame
+            logWindowState(
+                event: "set_frame_end",
+                path: path,
+                source: "ours",
+                oldFrame: oldFrame,
+                newFrame: window.frame,
+                activeTargetVisibleFrame: activeScreenFrame
+            )
+        } else {
+            logWindowState(
+                event: "reconcile_unchanged",
+                path: path,
+                source: "ours",
+                oldFrame: oldFrame,
+                newFrame: oldFrame,
+                activeTargetVisibleFrame: activeScreenFrame
+            )
         }
+    }
+
+    private func logWindowState(
+        event: String,
+        path: String,
+        source: String,
+        oldFrame: NSRect,
+        newFrame: NSRect,
+        activeTargetVisibleFrame: NSRect? = nil
+    ) {
+        let screens = NSScreen.screens
+        let mouseLocation = NSEvent.mouseLocation
+        let mouseScreen = screens.first { $0.frame.contains(mouseLocation) }
+        let windowScreen = window?.screen
+        let target = activeTargetVisibleFrame.map(Self.describe) ?? "nil"
+        let allScreens = screens.enumerated().map { index, screen in
+            "\(index):frame=\(Self.describe(screen.frame)),visible=\(Self.describe(screen.visibleFrame))"
+        }.joined(separator: "|")
+
+        logger.debug(
+            "unified_window_frame event=\(event) path=\(path) source=\(source) "
+            + "old=\(Self.describe(oldFrame)) new=\(Self.describe(newFrame)) "
+            + "windowScreenFrame=\(Self.describe(windowScreen?.frame)) "
+            + "windowScreenVisible=\(Self.describe(windowScreen?.visibleFrame)) "
+            + "mouse=\(NSStringFromPoint(mouseLocation)) "
+            + "mouseScreenFrame=\(Self.describe(mouseScreen?.frame)) "
+            + "mouseScreenVisible=\(Self.describe(mouseScreen?.visibleFrame)) "
+            + "mainScreenFrame=\(Self.describe(NSScreen.main?.frame)) "
+            + "mainScreenVisible=\(Self.describe(NSScreen.main?.visibleFrame)) "
+            + "activeTargetVisible=\(target) screens=[\(allScreens)] "
+            + "isOnActiveSpace=\(window?.isOnActiveSpace ?? false) "
+            + "collectionBehavior=\(window?.collectionBehavior.rawValue ?? 0)"
+        )
+    }
+
+    private static func describe(_ rect: NSRect?) -> String {
+        rect.map(NSStringFromRect) ?? "nil"
     }
 
     private func applyWindowTint() {
@@ -376,6 +513,42 @@ final class UnifiedWindowController: NSWindowController {
         NSApplication.shared.effectiveAppearance.bestMatch(
             from: [.aqua, .darkAqua]
         ) == .darkAqua
+    }
+}
+
+extension UnifiedWindowController: NSWindowDelegate {
+    func windowDidMove(_ notification: Notification) {
+        guard let movedWindow = notification.object as? NSWindow,
+              movedWindow === window else {
+            return
+        }
+
+        let oldFrame = lastObservedWindowFrame ?? movedWindow.frame
+        logWindowState(
+            event: "did_move",
+            path: "NSWindowDelegate.windowDidMove",
+            source: frameMutationSource ?? "system",
+            oldFrame: oldFrame,
+            newFrame: movedWindow.frame
+        )
+        lastObservedWindowFrame = movedWindow.frame
+    }
+
+    func windowDidChangeScreen(_ notification: Notification) {
+        guard let changedWindow = notification.object as? NSWindow,
+              changedWindow === window else {
+            return
+        }
+
+        let oldFrame = lastObservedWindowFrame ?? changedWindow.frame
+        logWindowState(
+            event: "did_change_screen",
+            path: "NSWindowDelegate.windowDidChangeScreen",
+            source: frameMutationSource ?? "system",
+            oldFrame: oldFrame,
+            newFrame: changedWindow.frame
+        )
+        lastObservedWindowFrame = changedWindow.frame
     }
 }
 

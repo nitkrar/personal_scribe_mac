@@ -146,6 +146,33 @@ final class UnifiedWindowControllerTests: XCTestCase {
         )
     }
 
+    func testWindowMoveLogCapturesPlacementContext() async throws {
+        let sink = InMemoryTestSink()
+        let logger = PersonalScribeLogger(
+            category: PersonalScribeLogCategory.ui,
+            reporter: DiagnosticsReporter(sinks: [sink])
+        )
+        let controller = Self.makeController(logger: logger)
+        let window = try XCTUnwrap(controller.window)
+
+        controller.windowDidMove(
+            Notification(name: NSWindow.didMoveNotification, object: window)
+        )
+
+        let event = await Self.waitForWindowFrameEvent(in: sink)
+        XCTAssertEqual(event?.level, .debug)
+        XCTAssertTrue(event?.message.contains("event=did_move") == true)
+        XCTAssertTrue(event?.message.contains("source=system") == true)
+        XCTAssertTrue(event?.message.contains("old=") == true)
+        XCTAssertTrue(event?.message.contains("new=") == true)
+        XCTAssertTrue(event?.message.contains("windowScreenFrame=") == true)
+        XCTAssertTrue(event?.message.contains("mouseScreenFrame=") == true)
+        XCTAssertTrue(event?.message.contains("mainScreenFrame=") == true)
+        XCTAssertTrue(event?.message.contains("screens=[") == true)
+        XCTAssertTrue(event?.message.contains("isOnActiveSpace=") == true)
+        XCTAssertTrue(event?.message.contains("collectionBehavior=") == true)
+    }
+
     // MARK: - Pure-function tests for `reconciledFrame(for:activeScreenVisibleFrame:)`
 
     func testReconciledFrameReturnsSameFrameWhenMidpointInsideActiveScreen() {
@@ -213,7 +240,11 @@ final class UnifiedWindowControllerTests: XCTestCase {
     // MARK: - Helpers
 
     @MainActor
-    private static func makeController() -> UnifiedWindowController {
+    private static func makeController(
+        logger: PersonalScribeLogger = PersonalScribeLogger.testing(
+            category: PersonalScribeLogCategory.ui
+        )
+    ) -> UnifiedWindowController {
         let defaults = ephemeralDefaults()
         let modelService = ActiveModelService(
             activeIDsPreference: Preference<[ModelKind: String]>(
@@ -233,8 +264,23 @@ final class UnifiedWindowControllerTests: XCTestCase {
             ),
             permissionService: StubPermissionService(),
             inputDeviceProvider: NoOpAudioInputDeviceProvider(),
-            modelService: modelService
+            modelService: modelService,
+            logger: logger
         )
+    }
+
+    private static func waitForWindowFrameEvent(
+        in sink: InMemoryTestSink
+    ) async -> RedactedDiagnosticsEvent? {
+        for _ in 0..<100 {
+            if let event = await sink.snapshot().first(where: {
+                $0.message.contains("unified_window_frame")
+            }) {
+                return event
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return nil
     }
 
     private static func ephemeralDefaults() -> UserDefaults {
