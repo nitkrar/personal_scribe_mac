@@ -19,28 +19,66 @@ public struct MetricsWindow: Sendable, Equatable {
     }
 }
 
+public enum MetricsRange: String, CaseIterable, Codable, Identifiable, Sendable {
+    case lastSevenDays
+    case lastThirtyDays
+    case allTime
+
+    public static let userDefaultsKey = "HomeMetricsRange"
+    public static let `default` = MetricsRange.allTime
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .lastSevenDays: "Last 7 days"
+        case .lastThirtyDays: "Last 30 days"
+        case .allTime: "All time"
+        }
+    }
+
+    public func window(anchoredAt referenceDate: Date, calendar: Calendar) -> MetricsWindow {
+        let start: Date
+        switch self {
+        case .lastSevenDays:
+            start = calendar.date(byAdding: .day, value: -7, to: referenceDate)
+                ?? referenceDate.addingTimeInterval(-7 * 24 * 60 * 60)
+        case .lastThirtyDays:
+            start = calendar.date(byAdding: .day, value: -30, to: referenceDate)
+                ?? referenceDate.addingTimeInterval(-30 * 24 * 60 * 60)
+        case .allTime:
+            start = .distantPast
+        }
+        return MetricsWindow(start: start, end: referenceDate)
+    }
+
+    public static func preference(defaults: UserDefaults = .standard) -> Preference<Self> {
+        Preference(key: userDefaultsKey, default: .default, defaults: defaults)
+    }
+}
+
 public struct MetricsRollups: Sendable, Equatable {
-    public let recordingsThisWeek: Int
-    public let wordsThisWeek: Int
-    public let minutesSavedThisWeek: Double
-    public let averageWPMThisWeek: Double
+    public let recordings: Int
+    public let words: Int
+    public let minutesSaved: Double
+    public let averageWPM: Double
     public let sampleCount: Int
     public let windowStart: Date
     public let windowEnd: Date
 
     public init(
-        recordingsThisWeek: Int,
-        wordsThisWeek: Int,
-        minutesSavedThisWeek: Double,
-        averageWPMThisWeek: Double,
+        recordings: Int,
+        words: Int,
+        minutesSaved: Double,
+        averageWPM: Double,
         sampleCount: Int,
         windowStart: Date,
         windowEnd: Date
     ) {
-        self.recordingsThisWeek = recordingsThisWeek
-        self.wordsThisWeek = wordsThisWeek
-        self.minutesSavedThisWeek = minutesSavedThisWeek
-        self.averageWPMThisWeek = averageWPMThisWeek
+        self.recordings = recordings
+        self.words = words
+        self.minutesSaved = minutesSaved
+        self.averageWPM = averageWPM
         self.sampleCount = sampleCount
         self.windowStart = windowStart
         self.windowEnd = windowEnd
@@ -48,10 +86,10 @@ public struct MetricsRollups: Sendable, Equatable {
 
     public static func empty(window: MetricsWindow) -> Self {
         Self(
-            recordingsThisWeek: 0,
-            wordsThisWeek: 0,
-            minutesSavedThisWeek: 0,
-            averageWPMThisWeek: 0,
+            recordings: 0,
+            words: 0,
+            minutesSaved: 0,
+            averageWPM: 0,
             sampleCount: 0,
             windowStart: window.start,
             windowEnd: window.end
@@ -63,6 +101,7 @@ public enum MetricsRefreshReason: String, Sendable, Equatable {
     case initialLoad
     case windowFocus
     case transcriptCommit
+    case rangeChange
 }
 
 public struct MetricsSnapshot: Sendable, Equatable {

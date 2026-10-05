@@ -90,18 +90,18 @@ func makeMetricsTestCalendar() -> Calendar {
 }
 
 func makeMetricsRollups(
-    recordingsThisWeek: Int,
-    wordsThisWeek: Int,
-    minutesSavedThisWeek: Double,
-    averageWPMThisWeek: Double,
+    recordings: Int,
+    words: Int,
+    minutesSaved: Double,
+    averageWPM: Double,
     sampleCount: Int,
     window: MetricsWindow
 ) -> MetricsRollups {
     MetricsRollups(
-        recordingsThisWeek: recordingsThisWeek,
-        wordsThisWeek: wordsThisWeek,
-        minutesSavedThisWeek: minutesSavedThisWeek,
-        averageWPMThisWeek: averageWPMThisWeek,
+        recordings: recordings,
+        words: words,
+        minutesSaved: minutesSaved,
+        averageWPM: averageWPM,
         sampleCount: sampleCount,
         windowStart: window.start,
         windowEnd: window.end
@@ -110,21 +110,21 @@ func makeMetricsRollups(
 
 func makeMetricsSnapshot(
     window: MetricsWindow,
-    recordingsThisWeek: Int,
-    wordsThisWeek: Int,
-    minutesSavedThisWeek: Double,
-    averageWPMThisWeek: Double,
+    recordings: Int,
+    words: Int,
+    minutesSaved: Double,
+    averageWPM: Double,
     recentTranscriptions: [TranscriptEntry],
     lastUpdatedAt: Date,
     lastRefreshReason: MetricsRefreshReason
 ) -> MetricsSnapshot {
     MetricsSnapshot(
         rollups: makeMetricsRollups(
-            recordingsThisWeek: recordingsThisWeek,
-            wordsThisWeek: wordsThisWeek,
-            minutesSavedThisWeek: minutesSavedThisWeek,
-            averageWPMThisWeek: averageWPMThisWeek,
-            sampleCount: recordingsThisWeek,
+            recordings: recordings,
+            words: words,
+            minutesSaved: minutesSaved,
+            averageWPM: averageWPM,
+            sampleCount: recordings,
             window: window
         ),
         recentTranscriptions: recentTranscriptions,
@@ -173,20 +173,20 @@ struct ScriptedMetricsService: MetricsService, MetricsReading {
         snapshot
     }
 
-    func recordingsThisWeek() async throws -> Int {
-        snapshot.rollups.recordingsThisWeek
+    func recordings(in window: MetricsWindow) async throws -> Int {
+        snapshot.rollups.recordings
     }
 
-    func wordsThisWeek() async throws -> Int {
-        snapshot.rollups.wordsThisWeek
+    func words(in window: MetricsWindow) async throws -> Int {
+        snapshot.rollups.words
     }
 
-    func minsSavedThisWeek() async throws -> Duration {
-        .seconds(snapshot.rollups.minutesSavedThisWeek * 60)
+    func minutesSaved(in window: MetricsWindow) async throws -> Duration {
+        .seconds(snapshot.rollups.minutesSaved * 60)
     }
 
-    func wpmAverageThisWeek() async throws -> Double {
-        snapshot.rollups.averageWPMThisWeek
+    func averageWPM(in window: MetricsWindow) async throws -> Double {
+        snapshot.rollups.averageWPM
     }
 
     func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry] {
@@ -205,19 +205,19 @@ actor ControllableMetricsService: MetricsReading {
         }
     }
 
-    func recordingsThisWeek() async throws -> Int {
+    func recordings(in window: MetricsWindow) async throws -> Int {
         throw UnexpectedMetricsQueryInvocation()
     }
 
-    func wordsThisWeek() async throws -> Int {
+    func words(in window: MetricsWindow) async throws -> Int {
         throw UnexpectedMetricsQueryInvocation()
     }
 
-    func minsSavedThisWeek() async throws -> Duration {
+    func minutesSaved(in window: MetricsWindow) async throws -> Duration {
         throw UnexpectedMetricsQueryInvocation()
     }
 
-    func wpmAverageThisWeek() async throws -> Double {
+    func averageWPM(in window: MetricsWindow) async throws -> Double {
         throw UnexpectedMetricsQueryInvocation()
     }
 

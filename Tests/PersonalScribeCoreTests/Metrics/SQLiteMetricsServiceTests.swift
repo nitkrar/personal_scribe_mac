@@ -4,6 +4,78 @@ import XCTest
 
 @MainActor
 final class MetricsSnapshotStoreTests: XCTestCase {
+    func testStoreUsesPersistedRangeAndRefreshesWhenSelectionChanges() async throws {
+        let defaults = UserDefaults(
+            suiteName: "MetricsSnapshotStoreTests.\(#function).\(UUID().uuidString)"
+        )!
+        MetricsRange.preference(defaults: defaults).persist(.lastThirtyDays)
+        let calendar = makeMetricsTestCalendar()
+        let referenceDate = Date(timeIntervalSince1970: 800_000)
+        let metricsService = ControllableMetricsService()
+        let store = MetricsSnapshotStore(
+            reader: metricsService,
+            calendar: calendar,
+            referenceDateProvider: { referenceDate },
+            defaults: defaults,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
+
+        XCTAssertEqual(store.selectedRange, .lastThirtyDays)
+
+        let firstRefresh = Task { @MainActor in
+            await store.refresh(reason: .initialLoad)
+        }
+        try await waitForCondition(description: "persisted range load") {
+            await metricsService.loadRequestCount() == 1
+        }
+        let firstRequest = await metricsService.loadRequest(at: 0)
+        XCTAssertEqual(
+            firstRequest.window,
+            MetricsRange.lastThirtyDays.window(anchoredAt: referenceDate, calendar: calendar)
+        )
+        await metricsService.completeNextLoad(
+            with: .success(makeMetricsSnapshot(
+                window: firstRequest.window,
+                recordings: 0,
+                words: 0,
+                minutesSaved: 0,
+                averageWPM: 0,
+                recentTranscriptions: [],
+                lastUpdatedAt: referenceDate,
+                lastRefreshReason: .initialLoad
+            ))
+        )
+        _ = await firstRefresh.value
+
+        let selection = Task { @MainActor in
+            await store.selectRange(.lastSevenDays)
+        }
+        try await waitForCondition(description: "selected range load") {
+            await metricsService.loadRequestCount() == 2
+        }
+        let secondRequest = await metricsService.loadRequest(at: 1)
+        XCTAssertEqual(
+            secondRequest.window,
+            MetricsRange.lastSevenDays.window(anchoredAt: referenceDate, calendar: calendar)
+        )
+        await metricsService.completeNextLoad(
+            with: .success(makeMetricsSnapshot(
+                window: secondRequest.window,
+                recordings: 0,
+                words: 0,
+                minutesSaved: 0,
+                averageWPM: 0,
+                recentTranscriptions: [],
+                lastUpdatedAt: referenceDate,
+                lastRefreshReason: .rangeChange
+            ))
+        )
+        _ = await selection.value
+
+        XCTAssertEqual(MetricsRange.preference(defaults: defaults).resolve(), .lastSevenDays)
+        XCTAssertEqual(store.lastRefreshReason, .rangeChange)
+    }
+
     func testStoreRefreshesOnlyFromExplicitTriggersAndStopsObservingCleanly() async throws {
         let notificationCenter = NotificationCenter()
         let calendar = makeMetricsTestCalendar()
@@ -16,20 +88,20 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         )
         let initialSnapshot = makeMetricsSnapshot(
             window: window,
-            recordingsThisWeek: 1,
-            wordsThisWeek: 2,
-            minutesSavedThisWeek: 0,
-            averageWPMThisWeek: 4,
+            recordings: 1,
+            words: 2,
+            minutesSaved: 0,
+            averageWPM: 4,
             recentTranscriptions: [entry],
             lastUpdatedAt: referenceDate,
             lastRefreshReason: .initialLoad
         )
         let commitSnapshot = makeMetricsSnapshot(
             window: window,
-            recordingsThisWeek: 2,
-            wordsThisWeek: 4,
-            minutesSavedThisWeek: 0,
-            averageWPMThisWeek: 8,
+            recordings: 2,
+            words: 4,
+            minutesSaved: 0,
+            averageWPM: 8,
             recentTranscriptions: [entry],
             lastUpdatedAt: referenceDate.addingTimeInterval(30),
             lastRefreshReason: .transcriptCommit
@@ -43,7 +115,15 @@ final class MetricsSnapshotStoreTests: XCTestCase {
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
         )
 
-        XCTAssertEqual(store.rollups, MetricsRollups.empty(window: window))
+        XCTAssertEqual(
+            store.rollups,
+            MetricsRollups.empty(
+                window: MetricsRange.allTime.window(
+                    anchoredAt: referenceDate,
+                    calendar: calendar
+                )
+            )
+        )
         XCTAssertEqual(store.recentTranscriptions, [TranscriptEntry]())
         XCTAssertNil(store.lastUpdatedAt)
         XCTAssertNil(store.lastRefreshReason)
@@ -104,10 +184,10 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         )
         let snapshot = makeMetricsSnapshot(
             window: window,
-            recordingsThisWeek: 1,
-            wordsThisWeek: 2,
-            minutesSavedThisWeek: 0,
-            averageWPMThisWeek: 2,
+            recordings: 1,
+            words: 2,
+            minutesSaved: 0,
+            averageWPM: 2,
             recentTranscriptions: [entry],
             lastUpdatedAt: referenceDate,
             lastRefreshReason: .windowFocus
@@ -153,20 +233,20 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         let window = MetricsWindow.rollingSevenDays(anchoredAt: referenceDate, calendar: calendar)
         let firstSnapshot = makeMetricsSnapshot(
             window: window,
-            recordingsThisWeek: 1,
-            wordsThisWeek: 10,
-            minutesSavedThisWeek: 0,
-            averageWPMThisWeek: 20,
+            recordings: 1,
+            words: 10,
+            minutesSaved: 0,
+            averageWPM: 20,
             recentTranscriptions: [],
             lastUpdatedAt: referenceDate,
             lastRefreshReason: .windowFocus
         )
         let secondSnapshot = makeMetricsSnapshot(
             window: window,
-            recordingsThisWeek: 2,
-            wordsThisWeek: 20,
-            minutesSavedThisWeek: 1,
-            averageWPMThisWeek: 40,
+            recordings: 2,
+            words: 20,
+            minutesSaved: 1,
+            averageWPM: 40,
             recentTranscriptions: [],
             lastUpdatedAt: referenceDate.addingTimeInterval(1),
             lastRefreshReason: .transcriptCommit
@@ -215,6 +295,44 @@ final class MetricsSnapshotStoreTests: XCTestCase {
 private struct StubReadError: Error {}
 
 final class SQLiteMetricsServiceAppDatabaseInitTests: XCTestCase {
+    func testSnapshotRollupsUseOnlyEntriesInsideRequestedWindow() async throws {
+        let context = try makeMetricsAppDatabaseContext()
+        defer { cleanupMetricsAppDatabaseContext(context) }
+
+        let referenceDate = Date(timeIntervalSince1970: 3_000_000)
+        let inside = makeMetricsTestEntry(
+            timestamp: referenceDate.addingTimeInterval(-60),
+            text: repeatedMetricsWords(80),
+            audioDuration: 60
+        )
+        let outside = makeMetricsTestEntry(
+            timestamp: referenceDate.addingTimeInterval(-40 * 24 * 60 * 60),
+            text: repeatedMetricsWords(400),
+            audioDuration: 60
+        )
+        try await context.repository.append(inside)
+        try await context.repository.append(outside)
+        let service = SQLiteMetricsService(
+            appDatabase: context.database,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app),
+            referenceDateProvider: { referenceDate }
+        )
+
+        let snapshot = try await service.loadSnapshot(
+            window: MetricsRange.lastThirtyDays.window(
+                anchoredAt: referenceDate,
+                calendar: makeMetricsTestCalendar()
+            ),
+            recentLimit: 3
+        )
+
+        XCTAssertEqual(snapshot.rollups.recordings, 1)
+        XCTAssertEqual(snapshot.rollups.words, 80)
+        XCTAssertEqual(snapshot.rollups.averageWPM, 80)
+        XCTAssertEqual(snapshot.rollups.minutesSaved, 1)
+        XCTAssertEqual(snapshot.recentTranscriptions, [inside, outside])
+    }
+
     func testServiceConstructedFromAppDatabaseProducesRollupsMatchingRepositoryWrites() async throws {
         let context = try makeMetricsAppDatabaseContext()
         defer { cleanupMetricsAppDatabaseContext(context) }
@@ -238,8 +356,8 @@ final class SQLiteMetricsServiceAppDatabaseInitTests: XCTestCase {
         )
 
         let snapshot = try await service.loadSnapshot(window: window, recentLimit: 3)
-        XCTAssertEqual(snapshot.rollups.recordingsThisWeek, 1)
-        XCTAssertEqual(snapshot.rollups.wordsThisWeek, 80)
+        XCTAssertEqual(snapshot.rollups.recordings, 1)
+        XCTAssertEqual(snapshot.rollups.words, 80)
         XCTAssertEqual(snapshot.recentTranscriptions, [entry])
 
         let recent = try await service.recentTranscriptions(limit: 5)

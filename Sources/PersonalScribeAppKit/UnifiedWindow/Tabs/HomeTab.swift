@@ -98,26 +98,26 @@ struct HomeTab: View {
             StatCard(
                 label: "Words this week",
                 value: Self.integerFormatter.string(
-                    from: NSNumber(value: metrics.rollups.wordsThisWeek)
-                ) ?? "\(metrics.rollups.wordsThisWeek)"
+                    from: NSNumber(value: metrics.rollups.words)
+                ) ?? "\(metrics.rollups.words)"
             )
             StatCard(
                 label: "Recordings",
                 value: Self.integerFormatter.string(
-                    from: NSNumber(value: metrics.rollups.recordingsThisWeek)
-                ) ?? "\(metrics.rollups.recordingsThisWeek)"
+                    from: NSNumber(value: metrics.rollups.recordings)
+                ) ?? "\(metrics.rollups.recordings)"
             )
             StatCard(
                 label: "Mins saved",
                 value: Self.minutesFormatter.string(
-                    from: NSNumber(value: metrics.rollups.minutesSavedThisWeek.rounded())
-                ) ?? "\(Int(metrics.rollups.minutesSavedThisWeek.rounded()))"
+                    from: NSNumber(value: metrics.rollups.minutesSaved.rounded())
+                ) ?? "\(Int(metrics.rollups.minutesSaved.rounded()))"
             )
             StatCard(
                 label: "WPM avg",
                 value: Self.wpmFormatter.string(
-                    from: NSNumber(value: metrics.rollups.averageWPMThisWeek)
-                ) ?? String(format: "%.1f", metrics.rollups.averageWPMThisWeek)
+                    from: NSNumber(value: metrics.rollups.averageWPM)
+                ) ?? String(format: "%.1f", metrics.rollups.averageWPM)
             )
         }
     }
@@ -226,4 +226,3 @@ private struct StatCard: View {
         )
     }
 }
-

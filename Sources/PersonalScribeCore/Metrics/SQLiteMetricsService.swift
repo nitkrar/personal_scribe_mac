@@ -13,7 +13,6 @@ public final class SQLiteMetricsService: MetricsService, MetricsReading, @unchec
     public static let defaultRecentLimit = 3
 
     private let repository: TranscriptRepository
-    private let calendar: Calendar
     private let referenceDateProvider: @Sendable () -> Date
     private let recentLimit: Int
 
@@ -25,29 +24,25 @@ public final class SQLiteMetricsService: MetricsService, MetricsReading, @unchec
         recentLimit: Int = SQLiteMetricsService.defaultRecentLimit
     ) {
         self.repository = TranscriptRepository(database: appDatabase, logger: logger)
-        self.calendar = calendar
         self.referenceDateProvider = referenceDateProvider
         self.recentLimit = max(0, recentLimit)
     }
 
-    public func recordingsThisWeek() async throws -> Int {
-        let snapshot = try await currentSnapshot()
-        return snapshot.rollups.recordingsThisWeek
+    public func recordings(in window: MetricsWindow) async throws -> Int {
+        try await loadSnapshot(window: window, recentLimit: 0).rollups.recordings
     }
 
-    public func wordsThisWeek() async throws -> Int {
-        let snapshot = try await currentSnapshot()
-        return snapshot.rollups.wordsThisWeek
+    public func words(in window: MetricsWindow) async throws -> Int {
+        try await loadSnapshot(window: window, recentLimit: 0).rollups.words
     }
 
-    public func minsSavedThisWeek() async throws -> Duration {
-        let snapshot = try await currentSnapshot()
-        return .seconds(snapshot.rollups.minutesSavedThisWeek * 60)
+    public func minutesSaved(in window: MetricsWindow) async throws -> Duration {
+        let minutes = try await loadSnapshot(window: window, recentLimit: 0).rollups.minutesSaved
+        return .seconds(minutes * 60)
     }
 
-    public func wpmAverageThisWeek() async throws -> Double {
-        let snapshot = try await currentSnapshot()
-        return snapshot.rollups.averageWPMThisWeek
+    public func averageWPM(in window: MetricsWindow) async throws -> Double {
+        try await loadSnapshot(window: window, recentLimit: 0).rollups.averageWPM
     }
 
     public func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry] {
@@ -66,24 +61,24 @@ public final class SQLiteMetricsService: MetricsService, MetricsReading, @unchec
             ? await repository.recent(limit: recentLimit)
             : []
 
-        let wordsThisWeek = windowEntries.reduce(into: 0) { partial, entry in
+        let words = windowEntries.reduce(into: 0) { partial, entry in
             partial += Self.wordCount(in: entry.text)
         }
         let audioMinutes = windowEntries.reduce(into: 0.0) { partial, entry in
             partial += entry.audioDuration / 60
         }
         let minutesSaved = max(
-            (Double(wordsThisWeek) / Double(SQLiteMetricsService.assumedTypingWPM)) - audioMinutes,
+            (Double(words) / Double(SQLiteMetricsService.assumedTypingWPM)) - audioMinutes,
             0
         )
-        let averageWPM = audioMinutes > 0 ? Double(wordsThisWeek) / audioMinutes : 0
+        let averageWPM = audioMinutes > 0 ? Double(words) / audioMinutes : 0
 
         return MetricsSnapshot(
             rollups: MetricsRollups(
-                recordingsThisWeek: windowEntries.count,
-                wordsThisWeek: wordsThisWeek,
-                minutesSavedThisWeek: minutesSaved,
-                averageWPMThisWeek: averageWPM,
+                recordings: windowEntries.count,
+                words: words,
+                minutesSaved: minutesSaved,
+                averageWPM: averageWPM,
                 sampleCount: windowEntries.count,
                 windowStart: window.start,
                 windowEnd: window.end
@@ -92,14 +87,6 @@ public final class SQLiteMetricsService: MetricsService, MetricsReading, @unchec
             lastUpdatedAt: referenceDateProvider(),
             lastRefreshReason: .initialLoad
         )
-    }
-
-    private func currentSnapshot() async throws -> MetricsSnapshot {
-        let window = MetricsWindow.rollingSevenDays(
-            anchoredAt: referenceDateProvider(),
-            calendar: calendar
-        )
-        return try await loadSnapshot(window: window, recentLimit: recentLimit)
     }
 
     private static func wordCount(in text: String) -> Int {

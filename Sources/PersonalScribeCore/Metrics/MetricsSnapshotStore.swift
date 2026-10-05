@@ -8,6 +8,7 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
     @Published public private(set) var lastUpdatedAt: Date?
     @Published public private(set) var lastRefreshReason: MetricsRefreshReason?
     @Published public private(set) var isRefreshing = false
+    @Published public private(set) var selectedRange: MetricsRange
 
     private let reader: any MetricsReading
     private let notificationCenter: NotificationCenter
@@ -15,6 +16,7 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
     private let referenceDateProvider: @Sendable () -> Date
     private let recentLimit: Int
     private let logger: PersonalScribeLogger
+    private let rangePreference: Preference<MetricsRange>
     private var transcriptCommitObservation: NSObjectProtocol?
     private var pendingRefreshReason: MetricsRefreshReason?
     private var isObserving = false
@@ -25,6 +27,7 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
         calendar: Calendar = .current,
         referenceDateProvider: @escaping @Sendable () -> Date = Date.init,
         recentLimit: Int = SQLiteMetricsService.defaultRecentLimit,
+        defaults: UserDefaults = .standard,
         logger: PersonalScribeLogger
     ) {
         self.reader = reader
@@ -33,10 +36,13 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
         self.referenceDateProvider = referenceDateProvider
         self.recentLimit = max(0, recentLimit)
         self.logger = logger
+        let rangePreference = MetricsRange.preference(defaults: defaults)
+        let selectedRange = rangePreference.resolve()
+        self.rangePreference = rangePreference
+        self.selectedRange = selectedRange
 
-        let initialWindow = MetricsWindow.rollingSevenDays(
-            anchoredAt: referenceDateProvider(),
-            calendar: calendar
+        let initialWindow = selectedRange.window(
+            anchoredAt: referenceDateProvider(), calendar: calendar
         )
         self.rollups = MetricsRollups.empty(window: initialWindow)
         self.recentTranscriptions = []
@@ -71,6 +77,15 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
         }
 
         isRefreshing = false
+    }
+
+    public func selectRange(_ range: MetricsRange) async {
+        guard selectedRange != range else {
+            return
+        }
+        selectedRange = range
+        rangePreference.persist(range)
+        await refresh(reason: .rangeChange)
     }
 
     public func startObserving() {
@@ -115,10 +130,7 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
         refreshedAt: Date,
         reason: MetricsRefreshReason
     ) async throws -> MetricsSnapshot {
-        let window = MetricsWindow.rollingSevenDays(
-            anchoredAt: refreshedAt,
-            calendar: calendar
-        )
+        let window = selectedRange.window(anchoredAt: refreshedAt, calendar: calendar)
 
         let snapshot = try await reader.loadSnapshot(window: window, recentLimit: recentLimit)
         return MetricsSnapshot(

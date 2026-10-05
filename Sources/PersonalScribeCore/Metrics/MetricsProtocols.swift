@@ -6,9 +6,9 @@ public protocol MetricsReading: Sendable {
 }
 
 public protocol MetricsService: Sendable {
-    func recordingsThisWeek() async throws -> Int
-    func wordsThisWeek() async throws -> Int
-    func minsSavedThisWeek() async throws -> Duration
-    func wpmAverageThisWeek() async throws -> Double
+    func recordings(in window: MetricsWindow) async throws -> Int
+    func words(in window: MetricsWindow) async throws -> Int
+    func minutesSaved(in window: MetricsWindow) async throws -> Duration
+    func averageWPM(in window: MetricsWindow) async throws -> Double
     func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry]
 }
