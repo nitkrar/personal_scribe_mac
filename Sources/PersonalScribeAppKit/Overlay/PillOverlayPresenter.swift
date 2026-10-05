@@ -291,11 +291,13 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
             return
         }
 
-        if let action = actionAtPoint?(localPoint, bounds.size) {
-            onAction?(action)
-        } else {
-            onTap?()
+        if let actionAtPoint {
+            if let action = actionAtPoint(localPoint, bounds.size) {
+                onAction?(action)
+            }
+            return
         }
+        onTap?()
     }
 }
 

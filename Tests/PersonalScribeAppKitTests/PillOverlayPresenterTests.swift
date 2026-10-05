@@ -194,6 +194,26 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(tapCount, 0)
     }
 
+    func testRoutedNoActionDoesNotFallBackToWholePillTap() throws {
+        let (window, hostingView) = makeHostingView()
+        var tapCount = 0
+        var actionCount = 0
+        hostingView.onTap = { tapCount += 1 }
+        hostingView.onAction = { _ in actionCount += 1 }
+        hostingView.actionAtPoint = { _, _ in nil }
+        hostingView.isTapEnabled = { true }
+
+        hostingView.mouseDown(
+            with: try makeMouseEvent(.leftMouseDown, at: NSPoint(x: 60, y: 20), window: window)
+        )
+        hostingView.mouseUp(
+            with: try makeMouseEvent(.leftMouseUp, at: NSPoint(x: 60, y: 20), window: window)
+        )
+
+        XCTAssertEqual(tapCount, 0)
+        XCTAssertEqual(actionCount, 0)
+    }
+
     /// Test C — mouseDown -> drag past the 4pt threshold -> mouseUp must
     /// fire `onMouseDragged` and suppress `onTap`, even when tapping is
     /// otherwise enabled. Covers the hosting-view event path end-to-end
