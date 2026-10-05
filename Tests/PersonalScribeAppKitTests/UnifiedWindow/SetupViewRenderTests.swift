@@ -9,6 +9,52 @@ import XCTest
 
 @MainActor
 final class SetupViewRenderTests: XCTestCase {
+    func testPracticeEditorSizesDocumentViewAndPastesText() async throws {
+        let pasteboard = NSPasteboard.general
+        let priorPasteboardText = pasteboard.string(forType: .string)
+        defer {
+            pasteboard.clearContents()
+            if let priorPasteboardText {
+                pasteboard.setString(priorPasteboardText, forType: .string)
+            }
+        }
+
+        var boundText = ""
+        var reportedPaste = ""
+        let expectedText = "Visible pasted text"
+        let rootView = SetupPracticeTextEditor(
+            text: Binding(
+                get: { boundText },
+                set: { boundText = $0 }
+            ),
+            onPaste: { reportedPaste = $0 }
+        )
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 420, height: 100)
+        hostingView.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(20))
+        hostingView.layoutSubtreeIfNeeded()
+
+        let textView = try XCTUnwrap(firstDescendant(of: NSTextView.self, in: hostingView))
+        XCTAssertGreaterThan(textView.frame.width, 0)
+        XCTAssertTrue(textView.isVerticallyResizable)
+        XCTAssertTrue(textView.autoresizingMask.contains(.width))
+        XCTAssertTrue(try XCTUnwrap(textView.textContainer).widthTracksTextView)
+        let scrollView = try XCTUnwrap(textView.enclosingScrollView)
+        hostingView.frame.size.width = 280
+        hostingView.layoutSubtreeIfNeeded()
+        XCTAssertEqual(textView.frame.width, scrollView.contentSize.width, accuracy: 1)
+
+        pasteboard.clearContents()
+        pasteboard.setString(expectedText, forType: .string)
+        textView.setSelectedRange(NSRange(location: 0, length: 0))
+        textView.paste(nil)
+
+        XCTAssertEqual(textView.string, expectedText)
+        XCTAssertEqual(boundText, expectedText)
+        XCTAssertEqual(reportedPaste, expectedText)
+    }
+
     func testRenderOnboardingStates() async throws {
         guard let outputPath = ProcessInfo.processInfo.environment["NINIMMA_ONBOARDING_RENDER_DIR"],
               !outputPath.isEmpty else {
@@ -25,13 +71,19 @@ final class SetupViewRenderTests: XCTestCase {
                 let rootView = makeView(scenario: scenario, colorScheme: scheme.1)
                     .environment(\.colorScheme, scheme.1)
                     .windowTint(.warm)
-                    .padding(32)
-                    .frame(width: 1_000, height: 760, alignment: .topLeading)
+                    .frame(
+                        width: PersonalScribeTheme.Layout.windowMinWidth,
+                        height: PersonalScribeTheme.Layout.windowMinHeight,
+                        alignment: .topLeading
+                    )
                     .background(
                         PersonalScribeTheme.Palette.for(scheme: scheme.1).appBackground
                     )
                 let hostingView = NSHostingView(rootView: rootView)
-                let size = CGSize(width: 1_000, height: 760)
+                let size = CGSize(
+                    width: PersonalScribeTheme.Layout.windowMinWidth,
+                    height: PersonalScribeTheme.Layout.windowMinHeight
+                )
                 hostingView.frame = NSRect(origin: .zero, size: size)
                 hostingView.layoutSubtreeIfNeeded()
                 try await Task.sleep(for: .milliseconds(40))
@@ -120,59 +172,88 @@ final class SetupViewRenderTests: XCTestCase {
             flow.updatePracticeText("Hello Ninimma, this is my first dictation.")
             flow.recordPracticePaste("Hello Ninimma, this is my first dictation.")
         }
+        let detail: AnyView
         if scenario == .done {
-            return AnyView(makeDoneView(defaults: defaults, flow: flow, checklist: checklist))
-        }
-
-        let setup = SetupView(
-            flow: flow,
-            permissions: permissions,
-            microphone: microphone,
-            model: model,
-            checklist: checklist,
-            pillPreviewRenderDate: Date(timeIntervalSinceReferenceDate: 1),
-            onOpenShortcuts: {},
-            onClose: {}
-        )
-        if scenario == .permissionsSidebar {
-            return AnyView(
-                HStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack(spacing: 8) {
-                            PersonalScribeLogoView().frame(width: 24, height: 24)
-                            Text(AppBrand.displayName)
-                                .font(PersonalScribeTheme.Typography.title.font)
-                        }
-                        SetupSidebarRow(
-                            isActive: true,
-                            completedStepCount: flow.completedStepCount,
-                            windowTint: .warm,
-                            action: {}
-                        )
-                        VStack(alignment: .leading, spacing: 13) {
-                            ForEach(AppTab.sidebarListCases) { tab in
-                                Label(tab.rawValue, systemImage: tab.systemImageName)
-                                    .font(PersonalScribeTheme.Typography.body.font)
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        Spacer()
-                        Label(deviceProvider.device.name, systemImage: "mic")
-                            .font(PersonalScribeTheme.Typography.caption.font)
-                            .lineLimit(1)
-                        Label(AppTab.about.rawValue, systemImage: AppTab.about.systemImageName)
-                            .font(PersonalScribeTheme.Typography.caption.font)
-                    }
-                    .padding(16)
-                    .frame(width: PersonalScribeTheme.Layout.sidebarWidth)
-                    .background(UnifiedWindowChrome.sidebarBackground(scheme: colorScheme, tint: .warm))
-                    setup
-                        .padding(32)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
+            detail = AnyView(makeDoneView(defaults: defaults, flow: flow, checklist: checklist))
+        } else {
+            detail = AnyView(
+                SetupView(
+                    flow: flow,
+                    permissions: permissions,
+                    microphone: microphone,
+                    model: model,
+                    checklist: checklist,
+                    pillPreviewRenderDate: Date(timeIntervalSinceReferenceDate: 1),
+                    onOpenShortcuts: {},
+                    onClose: {}
+                )
             )
         }
-        return AnyView(setup)
+        return AnyView(
+            HStack(spacing: 0) {
+                renderSidebar(
+                    flow: flow,
+                    deviceName: deviceProvider.device.name,
+                    colorScheme: colorScheme
+                )
+                detail
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(PersonalScribeTheme.Spacing.xl)
+                    .background(
+                        UnifiedWindowChrome.detailBackground(scheme: colorScheme, tint: .warm)
+                    )
+            }
+        )
+    }
+
+    private func renderSidebar(
+        flow: SetupFlowState,
+        deviceName: String,
+        colorScheme: ColorScheme
+    ) -> some View {
+        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.lg) {
+            HStack(spacing: PersonalScribeTheme.Spacing.sm) {
+                PersonalScribeLogoView().frame(width: 24, height: 24)
+                Text(AppBrand.displayName)
+                    .font(PersonalScribeTheme.Typography.title.font)
+            }
+            if flow.isOpen {
+                SetupSidebarRow(
+                    isActive: true,
+                    completedStepCount: flow.completedStepCount,
+                    windowTint: .warm,
+                    action: {}
+                )
+            }
+            VStack(alignment: .leading, spacing: 13) {
+                ForEach(AppTab.sidebarListCases) { tab in
+                    Label(tab.rawValue, systemImage: tab.systemImageName)
+                        .font(PersonalScribeTheme.Typography.body.font)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 10)
+            Spacer(minLength: 0)
+            Label(deviceName, systemImage: "mic")
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .lineLimit(1)
+            Label(AppTab.about.rawValue, systemImage: AppTab.about.systemImageName)
+                .font(PersonalScribeTheme.Typography.caption.font)
+        }
+        .padding(PersonalScribeTheme.Spacing.lg)
+        .frame(
+            minWidth: PersonalScribeTheme.Layout.sidebarWidth,
+            idealWidth: PersonalScribeTheme.Layout.sidebarWidth,
+            maxWidth: PersonalScribeTheme.Layout.sidebarWidth,
+            maxHeight: .infinity,
+            alignment: .topLeading
+        )
+        .background(UnifiedWindowChrome.sidebarBackground(scheme: colorScheme, tint: .warm))
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(UnifiedWindowChrome.chromeSeparator(scheme: colorScheme, tint: .warm))
+                .frame(width: 1)
+        }
     }
 
     private func makeDoneView(
@@ -243,6 +324,21 @@ final class SetupViewRenderTests: XCTestCase {
         representation.size = size
         view.cacheDisplay(in: view.bounds, to: representation)
         return try XCTUnwrap(representation.representation(using: .png, properties: [:]))
+    }
+
+    private func firstDescendant<ViewType: NSView>(
+        of type: ViewType.Type,
+        in view: NSView
+    ) -> ViewType? {
+        if let match = view as? ViewType {
+            return match
+        }
+        for subview in view.subviews {
+            if let match = firstDescendant(of: type, in: subview) {
+                return match
+            }
+        }
+        return nil
     }
 
     private enum Scenario: String, CaseIterable {

@@ -43,7 +43,7 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 0) {
             progressHeader
             stepContent
-                .padding(.top, PersonalScribeTheme.Spacing.xl)
+                .padding(.top, PersonalScribeTheme.Spacing.lg)
             Spacer(minLength: PersonalScribeTheme.Spacing.lg)
             if flow.step == .tryShortcut, model.isReady, flow.practiceResult == nil {
                 SetupMicrophoneObserver(microphone: microphone) {
@@ -59,13 +59,12 @@ struct SetupView: View {
     }
 
     private var progressHeader: some View {
-        HStack(alignment: .center, spacing: 16) {
+        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.sm) {
             Text("GET STARTED · STEP \(flow.step.rawValue + 1) OF 5")
                 .font(PersonalScribeTheme.Typography.sectionLabel.font)
                 .foregroundStyle(palette.secondaryText)
                 .fixedSize()
-            Spacer(minLength: 8)
-            HStack(spacing: 4) {
+            HStack(spacing: PersonalScribeTheme.Spacing.sm) {
                 ForEach(SetupStep.allCases, id: \.rawValue) { step in
                     HStack(spacing: 4) {
                         ZStack {
@@ -86,19 +85,22 @@ struct SetupView: View {
                             }
                         }
                         .frame(width: 18, height: 18)
-                        Text(step.title)
-                            .font(PersonalScribeTheme.Typography.caption.font)
-                            .foregroundStyle(step == flow.step ? palette.primaryTextBase : palette.secondaryText)
-                            .fixedSize()
+                        if step == flow.step {
+                            Text(step.title)
+                                .font(PersonalScribeTheme.Typography.caption.font)
+                                .foregroundStyle(palette.primaryTextBase)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
                         if step != SetupStep.allCases.last {
                             Rectangle()
                                 .fill(palette.secondaryText.opacity(0.35))
-                                .frame(width: 18, height: 1)
-                                .fixedSize()
+                                .frame(minWidth: 8, maxWidth: 24, minHeight: 1, maxHeight: 1)
                         }
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -179,7 +181,7 @@ struct SetupView: View {
     }
 
     private var microphoneStep: some View {
-        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.lg) {
+        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
             title("Check your microphone", subtitle: "Pick the mic you'll dictate with, then say something. The meter should move.")
             VStack(alignment: .leading, spacing: 7) {
                 Text("INPUT DEVICE")
@@ -368,7 +370,7 @@ struct SetupView: View {
                         )
                         .padding(8)
                     }
-                    .frame(height: 100)
+                    .frame(height: 84)
                     .background(
                         RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.md, style: .continuous)
                             .fill(Color.clear)
@@ -452,7 +454,7 @@ struct SetupView: View {
     }
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: PersonalScribeTheme.Spacing.sm) {
             ActionButton(title: "Skip setup", variant: .secondary) {
                 flow.skip(satisfaction: currentSatisfaction)
                 onClose()
@@ -460,7 +462,10 @@ struct SetupView: View {
             Text("Menu bar works without finishing setup")
                 .font(PersonalScribeTheme.Typography.caption.font)
                 .foregroundStyle(palette.secondaryText)
-            Spacer()
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .layoutPriority(-1)
+            Spacer(minLength: 0)
             if flow.canGoBack {
                 ActionButton(title: "Back", variant: .secondary) { flow.goBack() }
             }
@@ -569,7 +574,7 @@ private extension View {
     }
 }
 
-private struct SetupPracticeTextEditor: NSViewRepresentable {
+struct SetupPracticeTextEditor: NSViewRepresentable {
     @Binding var text: String
     let onPaste: @MainActor (String) -> Void
 
@@ -583,12 +588,28 @@ private struct SetupPracticeTextEditor: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.borderType = .noBorder
 
-        let textView = PasteAwareTextView()
+        let contentSize = scrollView.contentSize
+        let textView = PasteAwareTextView(
+            frame: NSRect(origin: .zero, size: contentSize)
+        )
         textView.delegate = context.coordinator
         textView.onPaste = context.coordinator.onPaste
         textView.isEditable = true
         textView.isSelectable = true
         textView.drawsBackground = false
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.minSize = NSSize(width: 0, height: contentSize.height)
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.textContainer?.containerSize = NSSize(
+            width: contentSize.width,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.textContainer?.widthTracksTextView = true
         textView.font = NSFont.preferredFont(forTextStyle: .body)
         textView.textContainerInset = NSSize(width: 4, height: 5)
         textView.string = text

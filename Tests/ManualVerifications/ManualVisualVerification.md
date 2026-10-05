@@ -674,7 +674,9 @@ below once per dogfood cycle:
   and confirm the unified window opens on Get started step 1/5. With
   `OnboardingCompleted` already true, relaunch and confirm Home opens
   without a Get started row. During setup, Get started — not Home — is
-  the selected sidebar row, and every stepper label remains on one line.
+  the selected sidebar row. At the 760×520 minimum window size, the step
+  counter sits above a single-line, connected stepper and no setup content,
+  sidebar, or footer control clips outside the window.
 - [ ] **MV-ONBOARDING-2** On Permissions, confirm pending Microphone
   raises the macOS prompt, denied Microphone opens System Settings,
   Accessibility is marked optional with clipboard fallback, opens its
@@ -698,7 +700,8 @@ below once per dogfood cycle:
   preparation with Parakeet, WhisperKit, and whisper.cpp active in turn;
   each recording joins the in-flight prepare without a second download.
 - [ ] **MV-ONBOARDING-6** On Try it, confirm the practice editor already
-  has keyboard focus, then use the displayed configured shortcut. Change
+  has keyboard focus, occupies the full outlined practice box, and shows
+  pasted text, then use the displayed configured shortcut. Change
   the shortcut in Settings and
   confirm this screen updates live. Typing does not complete the step;
   silence/empty results and later manual paste do not complete it; only a
