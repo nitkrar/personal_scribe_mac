@@ -15,7 +15,8 @@ public struct GeneralTab: View {
 
     public init(
         defaults: UserDefaults = .standard,
-        shortcutsNavigationRequest: Int = 0,
+        shortcutsNavigationRequest: Int? = nil,
+        onConsumeShortcutsNavigationRequest: @escaping @MainActor (Int?) -> Void = { _ in },
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
         launchAtLoginService: any LaunchAtLoginServicing = SystemLaunchAtLoginService(),
@@ -26,6 +27,7 @@ public struct GeneralTab: View {
         modelService: ActiveModelService = AppComposition.modelService
     ) {
         self.shortcutsNavigationRequest = shortcutsNavigationRequest
+        self.onConsumeShortcutsNavigationRequest = onConsumeShortcutsNavigationRequest
         _viewModel = StateObject(
             wrappedValue: GeneralTabViewModel(
                 defaults: defaults,
@@ -44,7 +46,8 @@ public struct GeneralTab: View {
     public var body: some View {
         SettingsTabContainer(
             scrollTarget: "settings-shortcuts",
-            scrollRequest: shortcutsNavigationRequest
+            scrollRequest: shortcutsNavigationRequest,
+            onScrollRequestConsumed: onConsumeShortcutsNavigationRequest
         ) {
             SettingsSection(
                 title: "General",
@@ -81,7 +84,8 @@ public struct GeneralTab: View {
         }
     }
 
-    private let shortcutsNavigationRequest: Int
+    private let shortcutsNavigationRequest: Int?
+    private let onConsumeShortcutsNavigationRequest: @MainActor (Int?) -> Void
 
     /// RECORDING WINDOW section — mockup-gaps D.1 centerpiece.
     /// Live SwiftUI pill previews, one card per `PillStyle` case,

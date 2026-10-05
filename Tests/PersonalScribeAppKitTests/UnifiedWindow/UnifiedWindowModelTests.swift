@@ -21,18 +21,32 @@ final class UnifiedWindowModelTests: XCTestCase {
         XCTAssertEqual(model.activeTab, .settings)
     }
 
-    func testOpenSettingsShortcutsSelectsSettingsAndIssuesFreshRequest() {
+    func testSettingsShortcutRequestIsConsumedOnce() {
         let model = UnifiedWindowModel()
 
         model.openSettingsShortcuts()
-        let firstRequest = model.settingsShortcutsRequest
+        let request = model.settingsShortcutsRequest
 
         XCTAssertEqual(model.activeTab, .settings)
-        XCTAssertGreaterThan(firstRequest, 0)
+        XCTAssertNotNil(request)
 
+        model.consumeSettingsShortcutsRequest(request)
+        model.setActiveTab(.home)
+        model.setActiveTab(.settings)
+
+        XCTAssertNil(model.settingsShortcutsRequest)
+    }
+
+    func testStaleSettingsShortcutConsumptionKeepsNewerRequest() {
+        let model = UnifiedWindowModel()
         model.openSettingsShortcuts()
+        let firstRequest = model.settingsShortcutsRequest
+        model.openSettingsShortcuts()
+        let secondRequest = model.settingsShortcutsRequest
 
-        XCTAssertGreaterThan(model.settingsShortcutsRequest, firstRequest)
+        model.consumeSettingsShortcutsRequest(firstRequest)
+
+        XCTAssertEqual(model.settingsShortcutsRequest, secondRequest)
     }
 
     // MARK: - AppTab contract

@@ -8,7 +8,8 @@ public struct SettingsTab: View {
 
     private let defaults: UserDefaults
     private let permissionService: any PermissionService
-    private let shortcutsNavigationRequest: Int
+    private let shortcutsNavigationRequest: Int?
+    private let onConsumeShortcutsNavigationRequest: @MainActor (Int?) -> Void
     private let menuBarVisibilityProvider: @MainActor () -> Bool
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
     private let openDiagnosticsWindow: @MainActor () -> Void
@@ -16,7 +17,8 @@ public struct SettingsTab: View {
     public init(
         defaults: UserDefaults = .standard,
         permissionService: any PermissionService,
-        shortcutsNavigationRequest: Int = 0,
+        shortcutsNavigationRequest: Int? = nil,
+        onConsumeShortcutsNavigationRequest: @escaping @MainActor (Int?) -> Void = { _ in },
         // Default to a no-op + always-visible reading. Production
         // wiring lives in `PersonalScribeAppMain` and points at
         // `StatusItemControllerHost.{isMenuBarVisible, setMenuBarVisible}`.
@@ -29,6 +31,7 @@ public struct SettingsTab: View {
         self.defaults = defaults
         self.permissionService = permissionService
         self.shortcutsNavigationRequest = shortcutsNavigationRequest
+        self.onConsumeShortcutsNavigationRequest = onConsumeShortcutsNavigationRequest
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.openDiagnosticsWindow = openDiagnosticsWindow
@@ -50,6 +53,7 @@ public struct SettingsTab: View {
                     GeneralTab(
                         defaults: defaults,
                         shortcutsNavigationRequest: shortcutsNavigationRequest,
+                        onConsumeShortcutsNavigationRequest: onConsumeShortcutsNavigationRequest,
                         menuBarVisibilityProvider: menuBarVisibilityProvider,
                         menuBarVisibilitySetter: menuBarVisibilitySetter
                     )
@@ -85,7 +89,7 @@ public struct SettingsTab: View {
             selectedSubTab = .general
         }
         .onAppear {
-            if shortcutsNavigationRequest > 0 {
+            if shortcutsNavigationRequest != nil {
                 selectedSubTab = .general
             }
         }

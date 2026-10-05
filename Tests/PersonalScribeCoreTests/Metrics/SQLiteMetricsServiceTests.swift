@@ -80,7 +80,10 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         let notificationCenter = NotificationCenter()
         let calendar = makeMetricsTestCalendar()
         let referenceDate = Date(timeIntervalSince1970: 500_000)
-        let window = MetricsWindow.rollingSevenDays(anchoredAt: referenceDate, calendar: calendar)
+        let window = MetricsRange.lastSevenDays.window(
+            anchoredAt: referenceDate,
+            calendar: calendar
+        )
         let entry = makeMetricsTestEntry(
             timestamp: referenceDate.addingTimeInterval(-60),
             text: "metrics entry",
@@ -107,11 +110,15 @@ final class MetricsSnapshotStoreTests: XCTestCase {
             lastRefreshReason: .transcriptCommit
         )
         let metricsService = ControllableMetricsService()
+        let defaults = UserDefaults(
+            suiteName: "MetricsSnapshotStoreTests.\(#function).\(UUID().uuidString)"
+        )!
         let store = MetricsSnapshotStore(
             reader: metricsService,
             notificationCenter: notificationCenter,
             calendar: calendar,
             referenceDateProvider: { referenceDate },
+            defaults: defaults,
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
         )
 
@@ -176,7 +183,10 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         let notificationCenter = NotificationCenter()
         let calendar = makeMetricsTestCalendar()
         let referenceDate = Date(timeIntervalSince1970: 600_000)
-        let window = MetricsWindow.rollingSevenDays(anchoredAt: referenceDate, calendar: calendar)
+        let window = MetricsRange.lastSevenDays.window(
+            anchoredAt: referenceDate,
+            calendar: calendar
+        )
         let entry = makeMetricsTestEntry(
             timestamp: referenceDate.addingTimeInterval(-120),
             text: "steady snapshot",
@@ -230,7 +240,10 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         let notificationCenter = NotificationCenter()
         let calendar = makeMetricsTestCalendar()
         let referenceDate = Date(timeIntervalSince1970: 700_000)
-        let window = MetricsWindow.rollingSevenDays(anchoredAt: referenceDate, calendar: calendar)
+        let window = MetricsRange.lastSevenDays.window(
+            anchoredAt: referenceDate,
+            calendar: calendar
+        )
         let firstSnapshot = makeMetricsSnapshot(
             window: window,
             recordings: 1,
@@ -295,6 +308,36 @@ final class MetricsSnapshotStoreTests: XCTestCase {
 private struct StubReadError: Error {}
 
 final class SQLiteMetricsServiceAppDatabaseInitTests: XCTestCase {
+    func testAllTimeSnapshotIncludesOldEntries() async throws {
+        let context = try makeMetricsAppDatabaseContext()
+        defer { cleanupMetricsAppDatabaseContext(context) }
+
+        let referenceDate = Date(timeIntervalSince1970: 4_000_000)
+        let oldEntry = makeMetricsTestEntry(
+            timestamp: Date(timeIntervalSince1970: 100),
+            text: repeatedMetricsWords(40),
+            audioDuration: 60
+        )
+        try await context.repository.append(oldEntry)
+        let service = SQLiteMetricsService(
+            appDatabase: context.database,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app),
+            referenceDateProvider: { referenceDate }
+        )
+
+        let snapshot = try await service.loadSnapshot(
+            window: MetricsRange.allTime.window(
+                anchoredAt: referenceDate,
+                calendar: makeMetricsTestCalendar()
+            ),
+            recentLimit: 3
+        )
+
+        XCTAssertEqual(snapshot.rollups.recordings, 1)
+        XCTAssertEqual(snapshot.rollups.words, 40)
+        XCTAssertEqual(snapshot.recentTranscriptions, [oldEntry])
+    }
+
     func testSnapshotRollupsUseOnlyEntriesInsideRequestedWindow() async throws {
         let context = try makeMetricsAppDatabaseContext()
         defer { cleanupMetricsAppDatabaseContext(context) }
@@ -339,7 +382,10 @@ final class SQLiteMetricsServiceAppDatabaseInitTests: XCTestCase {
 
         let calendar = makeMetricsTestCalendar()
         let referenceDate = Date(timeIntervalSince1970: 310_000)
-        let window = MetricsWindow.rollingSevenDays(anchoredAt: referenceDate, calendar: calendar)
+        let window = MetricsRange.lastSevenDays.window(
+            anchoredAt: referenceDate,
+            calendar: calendar
+        )
         let entry = makeMetricsTestEntry(
             timestamp: referenceDate.addingTimeInterval(-30),
             text: repeatedMetricsWords(80),
@@ -351,7 +397,6 @@ final class SQLiteMetricsServiceAppDatabaseInitTests: XCTestCase {
         let service = SQLiteMetricsService(
             appDatabase: context.database,
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app),
-            calendar: calendar,
             referenceDateProvider: { referenceDate }
         )
 

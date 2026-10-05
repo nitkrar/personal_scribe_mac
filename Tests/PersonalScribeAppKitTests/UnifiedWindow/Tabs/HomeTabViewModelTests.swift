@@ -61,7 +61,7 @@ final class HomeTabViewModelTests: XCTestCase {
         XCTAssertFalse(checklist.isVisible)
     }
 
-    func testRefreshChecklistUsesRecentHistoryHotkeyAndCustomModeSignals() {
+    func testChecklistInitializesFromPersistedHotkeySignal() {
         let defaults = Self.ephemeralDefaults()
         Self.customHotkey.persist(to: defaults)
         let metrics = MetricsSnapshotStore(
@@ -71,16 +71,93 @@ final class HomeTabViewModelTests: XCTestCase {
         )
         let viewModel = HomeTabViewModel(
             metrics: metrics,
-            defaults: defaults,
-            hasCustomModes: { true }
+            defaults: defaults
         )
-
-        viewModel.refreshChecklist()
 
         XCTAssertEqual(
             viewModel.checklist.completedItems,
-            [.customizeShortcut, .createMode]
+            [.customizeShortcut]
         )
+    }
+
+    func testChecklistEarnsSignalsWhileHomeIsClosed() async throws {
+        let defaults = Self.ephemeralDefaults()
+        let referenceDate = Date(timeIntervalSince1970: 2_000_000)
+        let window = MetricsWindow(start: .distantPast, end: referenceDate)
+        let entry = TranscriptEntry(
+            id: UUID(),
+            timestamp: referenceDate.addingTimeInterval(-60),
+            text: "earned while closed",
+            audioDuration: 10,
+            processingDuration: 0.1
+        )
+        let snapshot = MetricsSnapshot(
+            rollups: MetricsRollups(
+                recordings: 1,
+                words: 3,
+                minutesSaved: 0,
+                averageWPM: 18,
+                sampleCount: 1,
+                windowStart: window.start,
+                windowEnd: window.end
+            ),
+            recentTranscriptions: [entry],
+            lastUpdatedAt: referenceDate,
+            lastRefreshReason: .transcriptCommit
+        )
+        let metrics = MetricsSnapshotStore(
+            reader: FixedHomeMetricsReader(snapshot: snapshot),
+            referenceDateProvider: { referenceDate },
+            defaults: defaults,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
+        )
+        let (modeUpdates, modeContinuation) = AsyncStream<[WorkflowMode]>.makeStream()
+        let checklist = HomeChecklistState(defaults: defaults)
+        checklist.startObserving(metrics: metrics, customModes: modeUpdates)
+
+        Self.customHotkey.persist(to: defaults)
+        HotkeyPreference.default.persist(to: defaults)
+        modeContinuation.yield([.dictation])
+        modeContinuation.yield([])
+        await metrics.refresh(reason: .transcriptCommit)
+        for _ in 0..<10 where !checklist.isComplete {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(checklist.completedItems, Set(HomeChecklistItem.allCases))
+        XCTAssertEqual(checklist.recordingHotkey, .default)
+        XCTAssertEqual(
+            HomeChecklistState(defaults: defaults).completedItems,
+            Set(HomeChecklistItem.allCases)
+        )
+    }
+
+    func testHotkeyChangesUpdateHintLiveAndKeepEarnedTick() {
+        let defaults = Self.ephemeralDefaults()
+        let checklist = HomeChecklistState(defaults: defaults)
+        let viewModel = HomeTabViewModel(
+            metrics: MetricsSnapshotStore(
+                reader: EmptyMetricsReading(),
+                defaults: defaults,
+                logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
+            ),
+            defaults: defaults,
+            checklist: checklist
+        )
+
+        Self.customHotkey.persist(to: defaults)
+        XCTAssertEqual(
+            viewModel.emptyStateHotkeyHint,
+            HotkeyShortcutFormatter.displayString(for: Self.customHotkey)
+        )
+
+        HotkeyPreference.default.persist(to: defaults)
+
+        XCTAssertEqual(
+            viewModel.emptyStateHotkeyHint,
+            HotkeyShortcutFormatter.displayString(for: .default)
+        )
+        XCTAssertTrue(checklist.completedItems.contains(.customizeShortcut))
     }
 
     func testChecklistActionsRouteShortcutAndModeRows() {
@@ -105,6 +182,8 @@ final class HomeTabViewModelTests: XCTestCase {
         XCTAssertEqual(HomeTab.timeSavedText(minutes: 0), "0m")
         XCTAssertEqual(HomeTab.timeSavedText(minutes: 42), "42m")
         XCTAssertEqual(HomeTab.timeSavedText(minutes: 222), "3h 42m")
+        XCTAssertEqual(HomeTab.timeSavedText(minutes: 59.6), "1h 0m")
+        XCTAssertEqual(HomeTab.timeSavedText(minutes: 60), "1h 0m")
     }
 
     func testEmptyStateHotkeyHintDefaultsToConfiguredPreference() {
@@ -170,4 +249,16 @@ private struct EmptyMetricsReading: MetricsReading {
     }
 
     func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry] { [] }
+}
+
+private struct FixedHomeMetricsReader: MetricsReading {
+    let snapshot: MetricsSnapshot
+
+    func loadSnapshot(window: MetricsWindow, recentLimit: Int) async throws -> MetricsSnapshot {
+        snapshot
+    }
+
+    func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry] {
+        Array(snapshot.recentTranscriptions.prefix(limit))
+    }
 }

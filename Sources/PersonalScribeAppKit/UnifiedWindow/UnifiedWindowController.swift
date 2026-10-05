@@ -76,6 +76,7 @@ final class UnifiedWindowController: NSWindowController {
         model: UnifiedWindowModel = UnifiedWindowModel(),
         transcriptReader: any TranscriptReading,
         metricsStore: MetricsSnapshotStore,
+        homeChecklist: HomeChecklistState? = nil,
         permissionService: any PermissionService,
         inputDeviceProvider: any AudioInputDeviceProviding,
         modes: [WorkflowMode] = WorkflowModeRegistry.builtInModes,
@@ -98,9 +99,7 @@ final class UnifiedWindowController: NSWindowController {
         self.homeViewModel = HomeTabViewModel(
             metrics: metricsStore,
             defaults: defaults,
-            hasCustomModes: {
-                !AppComposition.workflowModeRegistry.customModes.isEmpty
-            },
+            checklist: homeChecklist,
             openShortcuts: {
                 model.openSettingsShortcuts()
             },

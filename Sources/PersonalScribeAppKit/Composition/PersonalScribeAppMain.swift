@@ -215,6 +215,11 @@ struct PersonalScribeAppMain: App {
             logger: AppComposition.makeLogger(PersonalScribeLogCategory.app)
         )
         metricsStore.startObserving()
+        let homeChecklist = HomeChecklistState(defaults: defaults)
+        homeChecklist.startObserving(
+            metrics: metricsStore,
+            customModes: AppComposition.workflowModeRegistry.customModesStream()
+        )
         let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader(
             logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
         )
@@ -246,6 +251,7 @@ struct PersonalScribeAppMain: App {
                     defaults: defaults,
                     transcriptReader: unifiedTranscriptReader,
                     metricsStore: metricsStore,
+                    homeChecklist: homeChecklist,
                     permissionService: appPermissionService,
                     inputDeviceProvider: inputDeviceProvider,
                     modes: WorkflowModeRegistry.builtInModes,

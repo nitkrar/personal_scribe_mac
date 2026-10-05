@@ -32,6 +32,7 @@ final class HomeTabRenderTests: XCTestCase {
             for scenario in scenarios {
                 let rootView = try await makeHomeTab(scenario: scenario)
                     .environment(\.colorScheme, scheme.value)
+                    .windowTint(.warm)
                     .padding(32)
                     .frame(width: 1_000, height: 760, alignment: .topLeading)
                     .background(
@@ -109,7 +110,7 @@ final class HomeTabRenderTests: XCTestCase {
         let viewModel = HomeTabViewModel(
             metrics: store,
             defaults: defaults,
-            hasCustomModes: { scenario.checklist == .allComplete }
+            checklist: checklist
         )
         return HomeTab(viewModel: viewModel, referenceDate: referenceDate)
     }

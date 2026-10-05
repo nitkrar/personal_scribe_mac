@@ -9,14 +9,6 @@ public struct MetricsWindow: Sendable, Equatable {
         self.end = end
     }
 
-    public static func rollingSevenDays(
-        anchoredAt referenceDate: Date,
-        calendar: Calendar
-    ) -> Self {
-        let start = calendar.date(byAdding: .day, value: -7, to: referenceDate)
-            ?? referenceDate.addingTimeInterval(-7 * 24 * 60 * 60)
-        return Self(start: start, end: referenceDate)
-    }
 }
 
 public enum MetricsRange: String, CaseIterable, Codable, Identifiable, Sendable {

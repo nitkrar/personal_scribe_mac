@@ -30,15 +30,18 @@ struct SettingsTabContainer<Content: View>: View {
 
     private let content: Content
     private let scrollTarget: String?
-    private let scrollRequest: Int
+    private let scrollRequest: Int?
+    private let onScrollRequestConsumed: @MainActor (Int?) -> Void
 
     init(
         scrollTarget: String? = nil,
-        scrollRequest: Int = 0,
+        scrollRequest: Int? = nil,
+        onScrollRequestConsumed: @escaping @MainActor (Int?) -> Void = { _ in },
         @ViewBuilder content: () -> Content
     ) {
         self.scrollTarget = scrollTarget
         self.scrollRequest = scrollRequest
+        self.onScrollRequestConsumed = onScrollRequestConsumed
         self.content = content()
     }
 
@@ -65,12 +68,13 @@ struct SettingsTabContainer<Content: View>: View {
     }
 
     private func scrollIfRequested(proxy: ScrollViewProxy) {
-        guard scrollRequest > 0, let scrollTarget else {
+        guard let scrollRequest, let scrollTarget else {
             return
         }
         Task { @MainActor in
             await Task.yield()
             proxy.scrollTo(scrollTarget, anchor: .top)
+            onScrollRequestConsumed(scrollRequest)
         }
     }
 }

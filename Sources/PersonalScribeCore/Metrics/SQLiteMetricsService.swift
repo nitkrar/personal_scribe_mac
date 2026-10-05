@@ -14,18 +14,14 @@ public final class SQLiteMetricsService: MetricsService, MetricsReading, @unchec
 
     private let repository: TranscriptRepository
     private let referenceDateProvider: @Sendable () -> Date
-    private let recentLimit: Int
 
     public init(
         appDatabase: AppDatabase,
         logger: PersonalScribeLogger,
-        calendar: Calendar = .current,
-        referenceDateProvider: @escaping @Sendable () -> Date = Date.init,
-        recentLimit: Int = SQLiteMetricsService.defaultRecentLimit
+        referenceDateProvider: @escaping @Sendable () -> Date = Date.init
     ) {
         self.repository = TranscriptRepository(database: appDatabase, logger: logger)
         self.referenceDateProvider = referenceDateProvider
-        self.recentLimit = max(0, recentLimit)
     }
 
     public func recordings(in window: MetricsWindow) async throws -> Int {

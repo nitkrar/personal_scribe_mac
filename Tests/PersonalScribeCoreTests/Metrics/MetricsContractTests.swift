@@ -53,29 +53,17 @@ final class MetricsContractTests: XCTestCase {
         )
     }
 
-    func testRollingSevenDayWindowAnchorsAtRefreshTime() {
-        let calendar = makeMetricsTestCalendar()
-        let anchor = Date(timeIntervalSince1970: 10_000)
-        let window = MetricsWindow.rollingSevenDays(anchoredAt: anchor, calendar: calendar)
-
-        XCTAssertEqual(window.end, anchor)
-        XCTAssertEqual(
-            window.start,
-            calendar.date(byAdding: .day, value: -7, to: anchor)
-        )
-    }
-
     func testMetricsRangesProduceRequestedWindows() {
         let calendar = makeMetricsTestCalendar()
         let anchor = Date(timeIntervalSince1970: 4_000_000)
 
         XCTAssertEqual(
             MetricsRange.lastSevenDays.window(anchoredAt: anchor, calendar: calendar).start,
-            calendar.date(byAdding: .day, value: -7, to: anchor)
+            Date(timeIntervalSince1970: 3_395_200)
         )
         XCTAssertEqual(
             MetricsRange.lastThirtyDays.window(anchoredAt: anchor, calendar: calendar).start,
-            calendar.date(byAdding: .day, value: -30, to: anchor)
+            Date(timeIntervalSince1970: 1_408_000)
         )
         XCTAssertEqual(
             MetricsRange.allTime.window(anchoredAt: anchor, calendar: calendar),

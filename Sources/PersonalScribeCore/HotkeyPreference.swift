@@ -24,6 +24,10 @@ public struct HotkeyPreference: Codable, Sendable, Equatable {
     public let modifiers: NSEvent.ModifierFlags.RawValue
 
     public static let userDefaultsKey = "RecordingHotkey"
+    public static let didPersistNotification = Notification.Name(
+        "PersonalScribe.hotkeyPreference.didPersist"
+    )
+    public static let notificationPreferenceKey = "preference"
     /// keyCode 44 is `/` on a US keyboard. `.option.rawValue` in the
     /// deviceIndependentFlagsMask bit set is stored as an integer.
     public static let `default` = HotkeyPreference(
@@ -56,6 +60,11 @@ public struct HotkeyPreference: Codable, Sendable, Equatable {
 
     public func persist(to defaults: UserDefaults = .standard) {
         Self.preference(defaults: defaults).persist(self)
+        NotificationCenter.default.post(
+            name: Self.didPersistNotification,
+            object: defaults,
+            userInfo: [Self.notificationPreferenceKey: self]
+        )
     }
 
     public var modifierFlags: NSEvent.ModifierFlags {

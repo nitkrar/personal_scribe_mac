@@ -11,7 +11,8 @@ import Foundation
 @MainActor
 public final class UnifiedWindowModel: ObservableObject {
     @Published public private(set) var activeTab: AppTab
-    @Published public private(set) var settingsShortcutsRequest = 0
+    @Published public private(set) var settingsShortcutsRequest: Int?
+    private var nextSettingsShortcutsRequest = 0
 
     public init(initialTab: AppTab = .home) {
         self.activeTab = initialTab
@@ -23,6 +24,14 @@ public final class UnifiedWindowModel: ObservableObject {
 
     public func openSettingsShortcuts() {
         activeTab = .settings
-        settingsShortcutsRequest += 1
+        nextSettingsShortcutsRequest += 1
+        settingsShortcutsRequest = nextSettingsShortcutsRequest
+    }
+
+    public func consumeSettingsShortcutsRequest(_ request: Int?) {
+        guard settingsShortcutsRequest == request else {
+            return
+        }
+        settingsShortcutsRequest = nil
     }
 }
