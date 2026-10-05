@@ -312,6 +312,19 @@ final class PillOverlayViewModelTests: XCTestCase {
 
     // MARK: - Pill style
 
+    func testHoverStatePublishesOnlyWhenItChanges() {
+        let viewModel = PillOverlayViewModel()
+        var values: [Bool] = []
+        let cancellable = viewModel.$isHovered.dropFirst().sink { values.append($0) }
+
+        viewModel.setHovered(true)
+        viewModel.setHovered(true)
+        viewModel.setHovered(false)
+
+        XCTAssertEqual(values, [true, false])
+        _ = cancellable
+    }
+
     func testNoneStyleNeverShowsThePillAndOtherStylesRestoreIt() {
         let viewModel = PillOverlayViewModel()
         viewModel.apply(visibility: .recording)

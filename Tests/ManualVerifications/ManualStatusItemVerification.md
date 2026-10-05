@@ -68,7 +68,7 @@ or `StatusItemIconLoader`.
 
 ## Quit teardown
 
-- [ ] **MV-SI-MIC-1** Select a USB/Bluetooth mic in the Microphone submenu, then disconnect it. The submenu checks the system default, the window footer names it, and a recording uses it. Reconnect: the submenu and footer return to the chosen mic without re-selecting.
+- [x] **MV-SI-MIC-1** Select a USB/Bluetooth mic in the Microphone submenu, then disconnect it. The submenu checks the system default, the window footer names it, and a recording uses it. Reconnect: the submenu and footer return to the chosen mic without re-selecting.
 - [ ] **MV-SI-16** Set the active ASR model to a `whisper.cpp` descriptor, let the model prewarm (or record once), then quit from the status-item menu three times. The app exits cleanly each time with no `ggml_metal_rsets_free` / `ggml_abort` crash on exit.
 - [ ] **MV-SI-17** With a `whisper.cpp` ASR model active, start and stop a short recording so the status item enters the orange transcribing state, then click **Quit**. The app may pause briefly to let shutdown drain, but it exits cleanly without the Metal teardown crash.
 - [ ] **MV-SI-18** After quitting via the status-item menu and relaunching, confirm the unified log contains `application_terminating_via_fast_exit` for the prior quit. Example: `log show --last 2m --predicate 'eventMessage CONTAINS "application_terminating_via_fast_exit"' --style compact | tail`.

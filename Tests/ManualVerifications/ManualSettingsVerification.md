@@ -130,14 +130,14 @@ handed the base directory via `activateFileViewerSelecting([url])`,
 which opens the PARENT folder with `personal_scribe` highlighted
 instead of its contents.
 
-- [ ] **MV-BASE-DIR-1 — Single-line compact row:** open `Settings >
+- [x] **MV-BASE-DIR-1 — Single-line compact row:** open `Settings >
   Advanced` at the default window width. The base-directory row
   renders on ONE visual line: bold caption `Base directory`, the
   resolved path in a middle-truncated monospaced label (so long paths
   show `/Users/…/personal_scribe`), followed by two icon-only buttons
   (magnifying-glass + folder). The row must NOT wrap to two lines; the
   two buttons must NOT be full-width pill buttons.
-- [ ] **MV-BASE-DIR-2 — Open-in-Finder opens the folder, not the
+- [x] **MV-BASE-DIR-2 — Open-in-Finder opens the folder, not the
   parent:** click the magnifying-glass icon in the base-directory row.
   Finder opens a window titled `personal_scribe` whose contents
   (`models/`, `modes/`, `recordings/`, etc.) are visible. Finder must

@@ -13,6 +13,7 @@ public final class PillOverlayViewModel: ObservableObject {
     private var sessionVisibility: Visibility
     @Published public private(set) var visibilityMode: PillVisibility
     @Published public var audioLevel: Double = 0
+    @Published public private(set) var isHovered = false
     /// Side of the panel the pill content is pinned to (set by the
     /// presenter from the pill's `PillAnchor`).
     @Published var contentAlignment: Alignment = .bottom
@@ -20,6 +21,11 @@ public final class PillOverlayViewModel: ObservableObject {
     /// Invoked when the user clicks Resume on the Cancel Card. The pipeline
     /// owns the card's lifetime; this only forwards the command.
     public var onResumeCancelledRecording: (@MainActor () -> Void)?
+    public var onMode: (@MainActor () -> Void)?
+    public var onRecord: (@MainActor () -> Void)?
+    public var onPause: (@MainActor () -> Void)?
+    public var onResume: (@MainActor () -> Void)?
+    public var onStop: (@MainActor () -> Void)?
 
     public var isAudioActive: Bool {
         visibility == .recording || visibility == .holdToRecord
@@ -49,6 +55,31 @@ public final class PillOverlayViewModel: ObservableObject {
         guard style != pillStyle else { return }
         pillStyle = style
         visibility = style == .none ? .hidden : sessionVisibility
+    }
+
+    public func setHovered(_ hovered: Bool) {
+        guard hovered != isHovered else { return }
+        isHovered = hovered
+    }
+
+    func performInteraction(
+        _ action: PillInteractionAction,
+        fallbackToggle: @MainActor () -> Void
+    ) {
+        switch action {
+        case .mode:
+            onMode?()
+        case .record:
+            if let onRecord { onRecord() } else { fallbackToggle() }
+        case .pause:
+            onPause?()
+        case .resume:
+            onResume?()
+        case .stop:
+            if let onStop { onStop() } else { fallbackToggle() }
+        case .toggle:
+            fallbackToggle()
+        }
     }
 
     public func resumeCancelledRecording() {

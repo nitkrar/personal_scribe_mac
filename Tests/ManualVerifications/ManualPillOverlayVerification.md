@@ -6,6 +6,7 @@ inspection. Tick each box the first time you dogfood a change that
 touches the pill overlay.
 
 Reference mockups live at:
+- `plans/backlog/pill-redesign-mockups.png`
 - `plans/seshat_agent_bundle/03_Surfaces/PillOverlayWindow/architecture.png`
 - `plans/seshat_agent_bundle/03_Surfaces/PillOverlayWindow/command_mode_states.png`
 - `plans/seshat_agent_bundle/03_Surfaces/PillOverlayWindow/recording_states.png`
@@ -226,8 +227,9 @@ rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
   your voice (silence → minimum-height baseline, speaking → taller
   bars). Release the key — pill transitions to transcribing.
 - [ ] **MV-PUX-3 (recording — committed via tap)** Tap `opt + /` once
-  (press + release under 300ms). Pill becomes 220×36 with ✕ on the
-  left, sine waveform centre, red stop ⏹ on the right. Clay border.
+  (press + release under 300ms). The Classic pill becomes 220×36 with
+  pause on the left, sine waveform centre, and red stop ⏹ on the right.
+  Clay border.
   Tap `opt + /` again or click ⏹ to stop.
 - [ ] **MV-PUX-4 (transcribing)** After stop, pill becomes 220×36 with
   a spinner + "Transcribing…" text. 1px Champagne @ 40% opacity
@@ -405,15 +407,6 @@ paste whenever the focus owner is not Ninimma's pid.
   and ⌘V pastes manually. (This is the `Ninimma-frontmost AND AX
   focus-in-self` path the PID check defends against.)
 
-## Known spec deviations (flagged in commits)
-
-- **#002 landed 2026-04-22** (spec-literal Esc true-discard). Esc now
-  calls `SessionCoordinator.cancelIfActive()` — buffered audio is
-  dropped, no transcribe, no paste. The ✕ glyph on the recording pill
-  is still visual-only: making it a distinct tap target would be
-  thrown away under #070 (pause/play replacement), so it's deferred.
-  Only interactive discard path today is Esc.
-
 ## Notes
 
 - Manual checklist entries above are the only verification path for the
@@ -425,11 +418,11 @@ paste whenever the focus owner is not Ninimma's pid.
 
 ## Cancel card: Resume
 
-Esc / ✕ during a recording keeps its audio while the Cancel card is up
+Esc during a recording keeps its audio while the Cancel card is up
 (Settings → Behavior → "Cancel card duration", default 3s). Resume
 continues the same recording; stop transcribes both parts as one.
 
-- [ ] **MV-PILL-RESUME-1** Dictate a sentence, press Esc, click Resume,
+- [x] **MV-PILL-RESUME-1** Dictate a sentence, press Esc, click Resume,
   dictate a second sentence, stop. One paste containing both sentences.
 - [ ] **MV-PILL-RESUME-2** Press Esc and let the card expire. Nothing is
   pasted or copied; the next recording starts fresh (no old audio).
@@ -437,6 +430,35 @@ continues the same recording; stop transcribes both parts as one.
 
 ## Pill style
 
-- [ ] **MV-PILL-STYLE-1** Settings → Recording window → Style = Mini. The idle pill shrinks immediately; recording, transcribing and the Cancel card render as the same design at about three-quarters size, with nothing clipped.
-- [ ] **MV-PILL-STYLE-2** Style = None. The pill never shows, including while recording; the shortcut and menu bar still start and stop dictation. Pill visibility is a single "Auto-hide pill" toggle (on: the pill shows only while recording), disabled while Style is None.
-- [ ] **MV-PILL-STYLE-3** Back to Classic while recording. The full-size recording pill returns without restarting the session.
+- [ ] **MV-PILL-STYLE-1** Settings → Recording window → Style = Mini.
+  At rest, idle is a 40×16 quill and recording is a 110×20 waveform.
+  Hover idle to reveal mode + record in a 66×30 pill; hover recording
+  to reveal pause + waveform + stop in a 170×30 pill. Nothing clips.
+- [x] **MV-PILL-STYLE-2** Style = None. The pill never shows, including while recording; the shortcut and menu bar still start and stop dictation. Pill visibility is a single "Auto-hide pill" toggle (on: the pill shows only while recording), disabled while Style is None.
+- [ ] **MV-PILL-STYLE-3** Back to Classic while recording. The
+  220×36 pause + waveform + stop pill returns without restarting the
+  session.
+- [ ] **MV-PILL-STYLE-4** In Mini idle hover, the mode button opens the
+  same valid built-in and custom modes as the menu bar. Choosing one
+  applies it to the next recording. The record button starts recording
+  and shows the `Start recording` tooltip on hover.
+
+## Pill controls and pause
+
+- [ ] **MV-PILL-PAUSE-1** In Classic recording, click pause, the middle
+  waveform, and stop in separate recordings. Pause holds the session,
+  the middle stops, and stop stops; dragging any non-button area moves
+  the pill without firing a control.
+- [ ] **MV-PILL-PAUSE-2** Pause and resume at least twice, then stop.
+  `Paused · m:ss` stays frozen at cumulative captured-audio time while
+  paused. One ordered transcript is pasted and one History row is saved.
+- [ ] **MV-PILL-PAUSE-3** While paused, click the middle time label.
+  Nothing happens. Click resume to begin a fresh captured segment; VAD
+  silence auto-stop does not run during the pause.
+- [ ] **MV-PILL-PAUSE-4** Leave a session paused until its configured
+  timeout. One History row is saved, the joined text remains on the
+  clipboard without a synthetic paste, and a `Saved to History` notice
+  appears.
+- [ ] **MV-PILL-PAUSE-5** While paused, choose another mode, then repeat
+  and quit. Each path finalizes to History + clipboard with no paste
+  before switching mode or exiting.

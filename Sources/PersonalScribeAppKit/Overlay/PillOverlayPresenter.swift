@@ -3,6 +3,47 @@ import Combine
 import SwiftUI
 import PersonalScribeCore
 
+enum PillInteractionAction: Equatable {
+    case mode
+    case record
+    case pause
+    case resume
+    case stop
+    case toggle
+}
+
+enum PillInteractionRouter {
+    static func action(
+        at point: NSPoint,
+        size: CGSize,
+        visibility: PillVisibilityState,
+        style: PillStyle,
+        isHovered: Bool
+    ) -> PillInteractionAction? {
+        guard NSRect(origin: .zero, size: size).contains(point) else { return nil }
+
+        switch visibility {
+        case .idle:
+            if style == .mini, isHovered {
+                return point.x < size.width / 2 ? .mode : .record
+            }
+            return .toggle
+        case .recording:
+            if style == .mini, !isHovered {
+                return .toggle
+            }
+            let controlWidth = min(44, size.width / 3)
+            if point.x < controlWidth { return .pause }
+            if point.x >= size.width - controlWidth { return .stop }
+            return .toggle
+        case .holdToRecord:
+            return .toggle
+        case .hidden, .downloading, .loading, .transcribing, .done, .cancelled, .error:
+            return nil
+        }
+    }
+}
+
 struct OverlayPanelInteractionState: Equatable {
     private let dragThreshold: CGFloat = 4
     private var mouseDownPoint: NSPoint?
@@ -154,6 +195,9 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     /// its dropped position.
     var onMouseDragged: (() -> Void)?
     var onTap: (() -> Void)?
+    var onAction: ((PillInteractionAction) -> Void)?
+    var actionAtPoint: ((NSPoint, CGSize) -> PillInteractionAction?)?
+    var onHoverChanged: ((Bool) -> Void)?
     var isTapEnabled: (() -> Bool)?
     /// When true, clicks go to the Cancel Card's SwiftUI content instead
     /// of the pill's tap and drag handling.
@@ -163,6 +207,30 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     /// Screen-space cursor and panel origin at mouse-down; the drag moves
     /// the panel by the cursor's offset from here.
     private var dragAnchor: (mouse: NSPoint, origin: NSPoint)?
+    private var hoverTrackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        hoverTrackingArea = area
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHoverChanged?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHoverChanged?(false)
+    }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
@@ -218,7 +286,11 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
             return
         }
 
-        onTap?()
+        if let action = actionAtPoint?(localPoint, bounds.size) {
+            onAction?(action)
+        } else {
+            onTap?()
+        }
     }
 }
 
@@ -308,6 +380,22 @@ struct AppKitPillOverlayPanelBuilder: PillOverlayPanelBuilding {
         )
         hostingView.onMouseDragged = onMouseDragged
         hostingView.onTap = onTap
+        hostingView.onAction = { [weak model] action in
+            model?.performInteraction(action, fallbackToggle: onTap)
+        }
+        hostingView.actionAtPoint = { [weak model] point, size in
+            guard let model else { return nil }
+            return PillInteractionRouter.action(
+                at: point,
+                size: size,
+                visibility: model.visibility,
+                style: model.pillStyle,
+                isHovered: model.isHovered
+            )
+        }
+        hostingView.onHoverChanged = { [weak model] hovered in
+            model?.setHovered(hovered)
+        }
         hostingView.isTapEnabled = isTapEnabled
         hostingView.passesClicksToContent = { [weak model] in
             model?.visibility == .cancelled

@@ -6,6 +6,81 @@ import PersonalScribeCore
 
 @MainActor
 final class PillOverlayPresenterTests: XCTestCase {
+    func testMiniIdleHoverRoutesModeAndRecordButtonsIndependently() {
+        let size = CGSize(width: 66, height: 30)
+
+        XCTAssertEqual(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 16, y: 15),
+                size: size,
+                visibility: .idle,
+                style: .mini,
+                isHovered: true
+            ),
+            .mode
+        )
+        XCTAssertEqual(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 50, y: 15),
+                size: size,
+                visibility: .idle,
+                style: .mini,
+                isHovered: true
+            ),
+            .record
+        )
+    }
+
+    func testRecordingRoutesPauseMiddleToggleAndStopIndependently() {
+        let size = CGSize(width: 220, height: 36)
+
+        XCTAssertEqual(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 20, y: 18),
+                size: size,
+                visibility: .recording,
+                style: .classic,
+                isHovered: false
+            ),
+            .pause
+        )
+        XCTAssertEqual(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 110, y: 18),
+                size: size,
+                visibility: .recording,
+                style: .classic,
+                isHovered: false
+            ),
+            .toggle
+        )
+        XCTAssertEqual(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 200, y: 18),
+                size: size,
+                visibility: .recording,
+                style: .classic,
+                isHovered: false
+            ),
+            .stop
+        )
+    }
+
+    func testMiniRecordingAtRestRoutesWholeWaveformToToggle() {
+        let size = CGSize(width: 110, height: 20)
+
+        XCTAssertEqual(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 8, y: 10),
+                size: size,
+                visibility: .recording,
+                style: .mini,
+                isHovered: false
+            ),
+            .toggle
+        )
+    }
+
     func testSmallMovementEndsAsClick() {
         var state = OverlayPanelInteractionState()
 
