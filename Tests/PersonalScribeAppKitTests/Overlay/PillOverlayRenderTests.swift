@@ -48,8 +48,7 @@ final class PillOverlayRenderTests: XCTestCase {
                     let size = PillOverlayView.size(
                         for: state.visibility,
                         style: style,
-                        isHovered: state.hovered,
-                        showsModeButton: model.showsModeButton
+                        isHovered: state.hovered
                     )
                     let rootView = PillOverlayView(model: model)
                         .environment(\.colorScheme, scheme.value)

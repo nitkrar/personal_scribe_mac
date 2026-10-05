@@ -639,8 +639,7 @@ public final class PillOverlayPresenter {
         let newSize = PillOverlayView.size(
             for: visibility,
             style: model.pillStyle,
-            isHovered: model.isHovered,
-            showsModeButton: model.showsModeButton
+            isHovered: model.isHovered
         )
         guard newSize != .zero else {
             // `.hidden` is routed to `hide()` already — defensive no-op.
@@ -769,8 +768,7 @@ public final class PillOverlayPresenter {
                 for: PillOverlayView.size(
                     for: visibility,
                     style: model.pillStyle,
-                    isHovered: model.isHovered,
-                    showsModeButton: model.showsModeButton
+                    isHovered: model.isHovered
                 ),
                 within: bounds
             )

@@ -130,6 +130,11 @@ struct PersonalScribeAppMain: App {
         pillController.configureModeMenu(
             modesProvider: selectableModesProvider,
             modeUpdates: AppComposition.workflowModeRegistry.customModesStream(),
+            modeAvailabilityUpdates: AppComposition.modelService.$activeModelIDs
+                .map { _ in () }
+                .merge(with: AppComposition.modelService.$downloadStates.map { _ in () })
+                .dropFirst(2)
+                .eraseToAnyPublisher(),
             currentModeIDProvider: {
                 AppComposition.workflowModeRegistry.currentMode.id
             },

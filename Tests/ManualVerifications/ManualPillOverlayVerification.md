@@ -447,8 +447,9 @@ continues the same recording; stop transcribes both parts as one.
   opens the same valid modes as the menu bar and a choice applies to the
   next recording. Add or remove modes while the app runs and confirm the
   hover layout updates. With zero or one selectable mode, hover shows only
-  the record circle and shrinks to one-button width. Clicking anywhere in
-  it starts recording and the `Start recording` tooltip appears.
+  the record circle centred in the same hover footprint (no resize or
+  enter/exit flicker). Clicking anywhere in it starts recording and the
+  `Start recording` tooltip appears.
 
 ## Pill controls and pause
 

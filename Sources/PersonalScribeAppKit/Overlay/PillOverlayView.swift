@@ -5,17 +5,19 @@ import PersonalScribeCore
 /// transcribing / download visual states.
 ///
 /// ## Visual spec (Sprint 2 dogfood redesign, 2026-04-18)
-/// Claude's WisprFlow-inspired compact pill, four main states:
+/// Shared state layouts rendered at Classic or Mini metrics:
 ///
 /// | State         | Size    | Content                                              |
 /// |---------------|---------|------------------------------------------------------|
-/// | `.idle`       | 80×28pt | champagne quill mark centered; no text               |
-/// | `.recording`  | 220×36  | pause | animated sine wave | red stop button       |
-/// | `.transcribing` | 140×36 | small spinner + "Transcribing…" caption             |
+/// | `.idle`       | 80×28 / 40×16 | champagne quill centered                    |
+/// | `.idle` hover | 82×30 / 66×30 | mode (when useful) + record circles         |
+/// | `.recording`  | 220×36 / 110×20 | pause + waveform + stop; Mini expands on hover |
+/// | `.paused`     | 220×36 / 170×30 | resume + elapsed time + stop               |
+/// | `.transcribing` | 220×36 / 110×20 | centered spinner at recording-rest size  |
 ///
 /// ## Non-main-flow states
-/// * `.downloading(fraction)` — 240×36 with progress bar (model download).
-/// * `.loading` — 140×36 with spinner (model warm-up).
+/// * `.downloading(fraction)` — progress bar for model download.
+/// * `.loading` — spinner for model warm-up.
 /// * `.hidden` — `EmptyView()` (pill not rendered).
 ///
 /// ## Theme compliance
@@ -33,28 +35,6 @@ public struct PillOverlayView: View {
     /// Live: Settings writes the raw value; the pill re-renders on change.
     @AppStorage(WaveformPalette.userDefaultsKey) private var waveformPaletteRaw = WaveformPalette.default.rawValue
 
-    // Pill dimension constants. Both width and height come from
-    // `PersonalScribeTheme.Pill.Width` and `.Height` banding so future edits
-    // can't silently drift one state out of its band. To change a state's
-    // footprint, either reassign it to a different band or edit the band's
-    // value; never drop a literal in here.
-    static let idleSize = PillStyleMetrics.classic.idleSize
-    /// Hold-to-Record. 7-bar equaliser + clay border. Matches `.recording`
-    /// dimensions (medium × active) — both are live-session pills.
-    static let holdToRecordSize = PillStyleMetrics.classic.holdToRecordSize
-    /// Committed Recording.
-    static let recordingSize = PillStyleMetrics.classic.recordingSize
-    static let pausedSize = PillStyleMetrics.classic.pausedSize
-    static let miniIdleSize = PillStyleMetrics.mini.idleSize
-    static let miniIdleHoverSize = PillStyleMetrics.mini.idleHoverSize
-    static let miniRecordingSize = PillStyleMetrics.mini.recordingSize
-    static let miniRecordingHoverSize = PillStyleMetrics.mini.recordingHoverSize
-    static let miniPausedSize = PillStyleMetrics.mini.pausedSize
-    /// Transcribing.
-    static let transcribingSize = PillStyleMetrics.classic.transcribingSize
-    static let downloadingSize = PillStyleMetrics.classic.downloadingSize
-    static let loadingSize = PillStyleMetrics.classic.loadingSize
-    static let errorSize = PillStyleMetrics.classic.errorSize
     /// Cancel Card. Not a pill — the panel resizes to this footprint at the
     /// same anchor origin when visibility transitions to `.cancelled`.
     static let cancelCardSize = CGSize(
@@ -64,10 +44,19 @@ public struct PillOverlayView: View {
 
     /// Widest and tallest footprint across all states; decides whether
     /// the pill sits "next to an edge" (see `PillAnchor`).
-    static let largestSize: CGSize = [
-        idleSize, holdToRecordSize, recordingSize, pausedSize, transcribingSize,
-        downloadingSize, loadingSize, errorSize, cancelCardSize,
-    ].reduce(.zero) { CGSize(width: max($0.width, $1.width), height: max($0.height, $1.height)) }
+    static let largestSize: CGSize = [PillStyleMetrics.classic, .mini]
+        .flatMap { metrics in
+            [
+                metrics.idleSize, metrics.idleHoverSize,
+                metrics.holdToRecordSize, metrics.recordingSize,
+                metrics.recordingHoverSize, metrics.pausedSize,
+                metrics.transcribingSize, metrics.downloadingSize,
+                metrics.loadingSize, metrics.errorSize,
+            ]
+        }
+        .reduce(cancelCardSize) {
+            CGSize(width: max($0.width, $1.width), height: max($0.height, $1.height))
+        }
 
     /// Pure mapping from a `PillOverlayVisibility` case to the panel
     /// footprint the overlay must render at. Used by
@@ -79,36 +68,10 @@ public struct PillOverlayView: View {
     /// `.hidden` returns `.zero` because nothing is rendered; the
     /// presenter short-circuits to `orderOut` on that case and never
     /// resizes the panel to zero in practice.
-    public static func size(for visibility: PillVisibilityState) -> CGSize {
-        switch visibility {
-        case .hidden:
-            return .zero
-        case .idle:
-            return idleSize
-        case .holdToRecord:
-            return holdToRecordSize
-        case .recording:
-            return recordingSize
-        case .paused:
-            return pausedSize
-        case .transcribing:
-            return transcribingSize
-        case .downloading:
-            return downloadingSize
-        case .loading:
-            return loadingSize
-        case .error:
-            return errorSize
-        case .cancelled:
-            return cancelCardSize
-        }
-    }
-
     public static func size(
         for visibility: PillVisibilityState,
         style: PillStyle,
-        isHovered: Bool = false,
-        showsModeButton: Bool = true
+        isHovered: Bool = false
     ) -> CGSize {
         let metrics = style.metrics
         switch visibility {
@@ -116,7 +79,7 @@ public struct PillOverlayView: View {
             return .zero
         case .idle:
             guard isHovered else { return metrics.idleSize }
-            return showsModeButton ? metrics.idleHoverSize : metrics.idleSingleButtonSize
+            return metrics.idleHoverSize
         case .holdToRecord:
             return metrics.holdToRecordSize
         case .recording:
@@ -135,15 +98,6 @@ public struct PillOverlayView: View {
             return cancelCardSize
         }
     }
-
-    /// Corner radius for idle (spec §2a — 14pt) and a few non-spec
-    /// states. `PillChrome(state:)` picks this per state; the
-    /// hold-to-record / recording / transcribing variants use 18pt per
-    /// spec §2b-d.
-    static let cornerRadius: CGFloat = 14
-    /// 18pt corner radius for the active-recording family of pills
-    /// (hold-to-record, recording, transcribing). Spec §2b, §2c, §2d.
-    static let activeCornerRadius: CGFloat = 18
 
     // Pill foreground tokens — selected based on the resolved panel
     // appearance (which follows the user's Dark / Light / System
@@ -226,16 +180,19 @@ public struct PillOverlayView: View {
 
     private var idlePill: some View {
         let metrics = model.pillStyle.metrics
+        let controlsLayout = PillIdleControlsLayout(
+            metrics: metrics,
+            showsModeButton: model.showsModeButton
+        )
         let size = Self.size(
             for: .idle,
             style: model.pillStyle,
-            isHovered: model.isHovered,
-            showsModeButton: model.showsModeButton
+            isHovered: model.isHovered
         )
 
         return Group {
             if model.isHovered {
-                HStack(spacing: metrics.idleControlsSpacing) {
+                ZStack(alignment: .topLeading) {
                     if model.showsModeButton {
                         Circle()
                             .fill(fgDim.opacity(colorScheme == .dark ? 0.18 : 0.14))
@@ -244,7 +201,11 @@ public struct PillOverlayView: View {
                                     .font(.system(size: metrics.modeIconSize, weight: .medium))
                                     .foregroundColor(fgDim)
                             )
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .frame(width: metrics.idleModeDiameter, height: metrics.idleModeDiameter)
+                            .position(
+                                x: controlsLayout.modeFrame?.midX ?? 0,
+                                y: controlsLayout.modeFrame?.midY ?? 0
+                            )
                     }
 
                     Circle()
@@ -255,9 +216,17 @@ public struct PillOverlayView: View {
                             )
                             .frame(width: metrics.recordLogoSize, height: metrics.recordLogoSize)
                         )
+                        .frame(
+                            width: metrics.idleRecordDiameter,
+                            height: metrics.idleRecordDiameter
+                        )
+                        .position(
+                            x: controlsLayout.recordFrame.midX,
+                            y: controlsLayout.recordFrame.midY
+                        )
                         .help("Start recording")
                 }
-                .padding(metrics.idleControlsInset)
+                .frame(width: size.width, height: size.height)
             } else {
                 PersonalScribeLogoView(color: fg.opacity(0.9))
                     .frame(width: metrics.idleLogoSize, height: metrics.idleLogoSize)
@@ -321,7 +290,9 @@ public struct PillOverlayView: View {
             )
             .frame(
                 width: showsControls ? metrics.waveformControlsWidth : metrics.waveformRestWidth,
-                height: metrics.controlsOnHover ? size.height : 34
+                height: showsControls
+                    ? metrics.waveformControlsHeight
+                    : metrics.waveformRestHeight
             )
 
             if showsControls {
@@ -416,7 +387,7 @@ public struct PillOverlayView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Downloading model \(percent)%")
-                    .font(.system(size: metrics.statusFontSize - 1, weight: .medium))
+                    .font(.system(size: metrics.downloadStatusFontSize, weight: .medium))
                     .foregroundColor(fg)
 
                 ProgressView(value: max(0, min(fraction, 1)))
@@ -481,12 +452,6 @@ struct PillBorderStyle: Equatable {
     let lineWidth: CGFloat
     let cornerRadius: CGFloat
 
-    // Corner radii are inlined here rather than referenced from
-    // `PillOverlayView.cornerRadius` etc. — `PillOverlayView` is
-    // MainActor-isolated so its static members can't be used in a
-    // non-isolated static initializer. Values stay in sync with the
-    // `PillOverlayView.*CornerRadius` constants; the spec table is
-    // the authoritative source (§2).
     /// 14pt, 1px white 8% — idle / neutral states.
     static let idle = PillBorderStyle(
         strokeColor: PersonalScribeTheme.Pill.Border.idleColor,
@@ -522,8 +487,8 @@ struct PillBorderStyle: Equatable {
 /// The `borderStyle` parameter selects stroke colour + width + corner
 /// radius per state. Idle / downloading / loading / error reuse the
 /// `PillBorderStyle.idle` neutral rim; hold-to-record and committed
-/// recording use `.active` (clay 1.5px); transcribing uses
-/// `.transcribing` uses its champagne 40% border.
+/// recording use `.active` (clay 1.5px); transcribing uses its
+/// `.transcribing` champagne 40% border.
 ///
 /// ## Fuzzy-edge fix (2026-04-18)
 /// NSPanel shadow disabled at the panel layer; `.clipShape` applied

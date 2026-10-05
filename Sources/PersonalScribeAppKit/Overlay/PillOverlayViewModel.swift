@@ -67,7 +67,7 @@ public final class PillOverlayViewModel: ObservableObject {
     }
 
     public func setAvailableModeCount(_ count: Int) {
-        availableModeCount = max(0, count)
+        availableModeCount = count
     }
 
     func performInteraction(

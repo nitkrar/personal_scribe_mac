@@ -12,6 +12,7 @@ public final class PillOverlayController: ObservableObject {
     private let presenter: PillOverlayPresenter
     private var modeMenuPresenter: PillModeMenuPresenter?
     private var modeObservationTask: Task<Void, Never>?
+    private var modeAvailabilityCancellable: AnyCancellable?
     private var cancellables: Set<AnyCancellable> = []
     /// True between a logged stream-card show and its logged hide.
     private var isStreamCardLogOpen = false
@@ -219,6 +220,7 @@ public final class PillOverlayController: ObservableObject {
     public func configureModeMenu(
         modesProvider: @escaping @MainActor () -> [WorkflowMode],
         modeUpdates: AsyncStream<[WorkflowMode]>? = nil,
+        modeAvailabilityUpdates: AnyPublisher<Void, Never>? = nil,
         currentModeIDProvider: @escaping @MainActor () -> String?,
         onSelect: @escaping @MainActor (WorkflowMode) async -> Void
     ) {
@@ -238,9 +240,21 @@ public final class PillOverlayController: ObservableObject {
                 }
             }
         }
+        modeAvailabilityCancellable = modeAvailabilityUpdates?
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.viewModel.setAvailableModeCount(modesProvider().count)
+                }
+            }
         viewModel.onMode = { [weak presenter] in
             presenter?.present()
         }
+    }
+
+    isolated deinit {
+        modeObservationTask?.cancel()
+        modeAvailabilityCancellable?.cancel()
     }
 
     /// Late-binding install for the Settings-deep-link closure. Called by

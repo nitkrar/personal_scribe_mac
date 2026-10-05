@@ -36,7 +36,6 @@ public enum PillStyle: String, CaseIterable, Identifiable, Codable, Sendable, St
 struct PillStyleMetrics: Equatable {
     let idleSize: CGSize
     let idleHoverSize: CGSize
-    let idleSingleButtonSize: CGSize
     let holdToRecordSize: CGSize
     let recordingSize: CGSize
     let recordingHoverSize: CGSize
@@ -48,7 +47,8 @@ struct PillStyleMetrics: Equatable {
     let controlsOnHover: Bool
     let idleLogoSize: CGFloat
     let idleControlsSpacing: CGFloat
-    let idleControlsInset: CGFloat
+    let idleModeDiameter: CGFloat
+    let idleRecordDiameter: CGFloat
     let modeIconSize: CGFloat
     let recordLogoSize: CGFloat
     let recordingSpacing: CGFloat
@@ -57,17 +57,19 @@ struct PillStyleMetrics: Equatable {
     let recordingHorizontalInset: CGFloat
     let waveformRestWidth: CGFloat
     let waveformControlsWidth: CGFloat
+    let waveformRestHeight: CGFloat
+    let waveformControlsHeight: CGFloat
     let pausedSpacing: CGFloat
     let pausedHorizontalInset: CGFloat
     let pausedFontSize: CGFloat
     let statusSpacing: CGFloat
     let statusHorizontalInset: CGFloat
     let statusFontSize: CGFloat
+    let downloadStatusFontSize: CGFloat
 
     static let classic = PillStyleMetrics(
         idleSize: CGSize(width: 80, height: 28),
-        idleHoverSize: CGSize(width: 80, height: 36),
-        idleSingleButtonSize: CGSize(width: 36, height: 36),
+        idleHoverSize: CGSize(width: 82, height: 30),
         holdToRecordSize: CGSize(width: 220, height: 36),
         recordingSize: CGSize(width: 220, height: 36),
         recordingHoverSize: CGSize(width: 220, height: 36),
@@ -79,7 +81,8 @@ struct PillStyleMetrics: Equatable {
         controlsOnHover: false,
         idleLogoSize: 14,
         idleControlsSpacing: 6,
-        idleControlsInset: 4,
+        idleModeDiameter: 22,
+        idleRecordDiameter: 20,
         modeIconSize: 12,
         recordLogoSize: 14,
         recordingSpacing: 8,
@@ -88,18 +91,20 @@ struct PillStyleMetrics: Equatable {
         recordingHorizontalInset: 8,
         waveformRestWidth: 132,
         waveformControlsWidth: 132,
+        waveformRestHeight: 34,
+        waveformControlsHeight: 34,
         pausedSpacing: 12,
         pausedHorizontalInset: 15,
         pausedFontSize: 12,
         statusSpacing: 8,
         statusHorizontalInset: 12,
-        statusFontSize: 12
+        statusFontSize: 12,
+        downloadStatusFontSize: 11
     )
 
     static let mini = PillStyleMetrics(
         idleSize: CGSize(width: 40, height: 16),
         idleHoverSize: CGSize(width: 66, height: 30),
-        idleSingleButtonSize: CGSize(width: 30, height: 30),
         holdToRecordSize: CGSize(width: 165, height: 27),
         recordingSize: CGSize(width: 110, height: 20),
         recordingHoverSize: CGSize(width: 170, height: 30),
@@ -111,7 +116,8 @@ struct PillStyleMetrics: Equatable {
         controlsOnHover: true,
         idleLogoSize: 10,
         idleControlsSpacing: 4,
-        idleControlsInset: 3,
+        idleModeDiameter: 24,
+        idleRecordDiameter: 22,
         modeIconSize: 10,
         recordLogoSize: 11,
         recordingSpacing: 6,
@@ -120,11 +126,52 @@ struct PillStyleMetrics: Equatable {
         recordingHorizontalInset: 4,
         waveformRestWidth: 90,
         waveformControlsWidth: 98,
+        waveformRestHeight: 20,
+        waveformControlsHeight: 30,
         pausedSpacing: 6,
         pausedHorizontalInset: 7,
         pausedFontSize: 11,
         statusSpacing: 6,
         statusHorizontalInset: 9,
-        statusFontSize: 10
+        statusFontSize: 10,
+        downloadStatusFontSize: 9
     )
+}
+
+struct PillIdleControlsLayout: Equatable {
+    let size: CGSize
+    let modeFrame: CGRect?
+    let recordFrame: CGRect
+
+    init(metrics: PillStyleMetrics, showsModeButton: Bool) {
+        size = metrics.idleHoverSize
+        let recordY = (size.height - metrics.idleRecordDiameter) / 2
+        guard showsModeButton else {
+            modeFrame = nil
+            recordFrame = CGRect(
+                x: (size.width - metrics.idleRecordDiameter) / 2,
+                y: recordY,
+                width: metrics.idleRecordDiameter,
+                height: metrics.idleRecordDiameter
+            )
+            return
+        }
+
+        let controlsWidth = metrics.idleModeDiameter
+            + metrics.idleControlsSpacing
+            + metrics.idleRecordDiameter
+        let leading = (size.width - controlsWidth) / 2
+        modeFrame = CGRect(
+            x: leading,
+            y: (size.height - metrics.idleModeDiameter) / 2,
+            width: metrics.idleModeDiameter,
+            height: metrics.idleModeDiameter
+        )
+        recordFrame = CGRect(
+            x: leading + metrics.idleModeDiameter + metrics.idleControlsSpacing,
+            y: recordY,
+            width: metrics.idleRecordDiameter,
+            height: metrics.idleRecordDiameter
+        )
+    }
 }

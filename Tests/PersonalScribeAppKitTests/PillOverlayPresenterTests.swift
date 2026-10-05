@@ -7,7 +7,7 @@ import PersonalScribeCore
 @MainActor
 final class PillOverlayPresenterTests: XCTestCase {
     func testMiniIdleHoverRoutesModeAndRecordButtonsIndependently() {
-        let size = CGSize(width: 66, height: 30)
+        let size = PillOverlayView.size(for: .idle, style: .mini, isHovered: true)
 
         XCTAssertEqual(
             PillInteractionRouter.action(
@@ -32,7 +32,7 @@ final class PillOverlayPresenterTests: XCTestCase {
     }
 
     func testClassicIdleHoverRoutesModeAndRecordButtonsIndependently() {
-        let size = CGSize(width: 80, height: 36)
+        let size = PillOverlayView.size(for: .idle, style: .classic, isHovered: true)
 
         XCTAssertEqual(
             PillInteractionRouter.action(
@@ -60,7 +60,11 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(
             PillInteractionRouter.action(
                 at: NSPoint(x: 5, y: 15),
-                size: CGSize(width: 30, height: 30),
+                size: PillOverlayView.size(
+                    for: .idle,
+                    style: .mini,
+                    isHovered: true
+                ),
                 visibility: .idle,
                 style: .mini,
                 isHovered: true,
@@ -633,7 +637,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertFalse(panelBuilder.panel.setFrameCalls.isEmpty,
                        "Presenter must resize the panel on first show")
         let idleCall = panelBuilder.panel.setFrameCalls.last!
-        XCTAssertEqual(idleCall.frame.size, PillOverlayView.idleSize)
+        XCTAssertEqual(idleCall.frame.size, PillOverlayView.size(for: .idle, style: .classic))
         XCTAssertFalse(idleCall.animate,
                        "First sizing after show must be non-animated")
 
@@ -643,7 +647,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         // animated (pill↔pill morph owned by AppKit).
         XCTAssertGreaterThanOrEqual(panelBuilder.panel.setFrameCalls.count, 2)
         let recordingCall = panelBuilder.panel.setFrameCalls.last!
-        XCTAssertEqual(recordingCall.frame.size, PillOverlayView.recordingSize)
+        XCTAssertEqual(recordingCall.frame.size, PillOverlayView.size(for: .recording, style: .classic))
         XCTAssertTrue(recordingCall.animate,
                       "Pill↔pill morph must animate via NSPanel.setFrame(animate:)")
     }
@@ -678,7 +682,7 @@ final class PillOverlayPresenterTests: XCTestCase {
                        "bottom-center x must remain fixed during pill↔pill morph")
         XCTAssertEqual(recordingFrame.minY, baselineMinY, accuracy: 0.5,
                        "bottom y must remain fixed during pill↔pill morph")
-        XCTAssertEqual(recordingFrame.size, PillOverlayView.recordingSize)
+        XCTAssertEqual(recordingFrame.size, PillOverlayView.size(for: .recording, style: .classic))
     }
 
     /// A pill parked at the right screen edge that grows (idle →
@@ -699,7 +703,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         viewModel.apply(visibility: PillVisibilityState.recording)
 
         let recordingFrame = panelBuilder.panel.setFrameCalls.last!.frame
-        XCTAssertEqual(recordingFrame.size, PillOverlayView.recordingSize)
+        XCTAssertEqual(recordingFrame.size, PillOverlayView.size(for: .recording, style: .classic))
         XCTAssertLessThanOrEqual(recordingFrame.maxX, screen.maxX - OverlayPlacement.screenMargin)
         XCTAssertEqual(recordingFrame.minY, idle.minY)
     }
@@ -741,7 +745,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.cancelCardSize, "no shrink mid-crossfade")
 
         try await Task.sleep(for: .milliseconds(Int(PillOverlayPresenter.cancelCrossfadeDuration * 1000) + 150))
-        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.idleSize)
+        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.size(for: .idle, style: .classic))
     }
 
     func testDragDuringCancelCrossfadeIsNotUndoneByTheDeferredShrink() async throws {
@@ -757,7 +761,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(Int(PillOverlayPresenter.cancelCrossfadeDuration * 1000) + 150))
 
         let frame = panelBuilder.panel.frame
-        XCTAssertEqual(frame.size, PillOverlayView.idleSize)
+        XCTAssertEqual(frame.size, PillOverlayView.size(for: .idle, style: .classic))
         XCTAssertTrue(dragged.intersects(frame), "pill stays where it was dragged, got \(frame) vs \(dragged)")
     }
 
@@ -772,13 +776,21 @@ final class PillOverlayPresenterTests: XCTestCase {
         _ = presenter
 
         viewModel.apply(visibility: PillVisibilityState.transcribing)
-        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.transcribingSize, "grow is immediate")
+        XCTAssertEqual(
+            panelBuilder.panel.frame.size,
+            PillOverlayView.size(for: .transcribing, style: .classic),
+            "grow is immediate"
+        )
 
         viewModel.apply(visibility: PillVisibilityState.idle)
-        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.transcribingSize, "shrink waits for the content")
+        XCTAssertEqual(
+            panelBuilder.panel.frame.size,
+            PillOverlayView.size(for: .transcribing, style: .classic),
+            "shrink waits for the content"
+        )
         for _ in 0..<5 { await Task.yield() }
         try? await Task.sleep(for: .milliseconds(20))
-        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.idleSize)
+        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.size(for: .idle, style: .classic))
     }
 
     func testMiniHoverResizeUpdatesPanelWithoutAnimation() async {
@@ -792,14 +804,17 @@ final class PillOverlayPresenterTests: XCTestCase {
         for _ in 0..<5 { await Task.yield() }
 
         let expanded = panelBuilder.panel.setFrameCalls.last!
-        XCTAssertEqual(expanded.frame.size, PillOverlayView.miniIdleHoverSize)
+        XCTAssertEqual(
+            expanded.frame.size,
+            PillOverlayView.size(for: .idle, style: .mini, isHovered: true)
+        )
         XCTAssertFalse(expanded.animate)
 
         viewModel.setHovered(false)
         for _ in 0..<5 { await Task.yield() }
 
         let resting = panelBuilder.panel.setFrameCalls.last!
-        XCTAssertEqual(resting.frame.size, PillOverlayView.miniIdleSize)
+        XCTAssertEqual(resting.frame.size, PillOverlayView.size(for: .idle, style: .mini))
         XCTAssertFalse(resting.animate)
     }
 
@@ -820,7 +835,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         viewModel.apply(visibility: PillVisibilityState.recording)
 
         XCTAssertEqual(panelBuilder.panel.frame.minX, idleFrame.minX)
-        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.recordingSize)
+        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.size(for: .recording, style: .classic))
         XCTAssertEqual(viewModel.contentAlignment, .bottomLeading)
     }
 
@@ -870,7 +885,7 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(panelBuilder.makePanelCallCount, 1)
         XCTAssertFalse(panelBuilder.panel.setFrameCalls.isEmpty)
         let first = panelBuilder.panel.setFrameCalls.last!
-        XCTAssertEqual(first.frame.size, PillOverlayView.recordingSize,
+        XCTAssertEqual(first.frame.size, PillOverlayView.size(for: .recording, style: .classic),
                        "Panel must arrive at target-state size on first show, not default canvas")
         XCTAssertFalse(first.animate,
                        "First sizing after show must be non-animated")
@@ -902,7 +917,7 @@ final class PillOverlayPresenterTests: XCTestCase {
             "Response card must reanchor above the pill's new frame on resize"
         )
         let lastPillFrame = responseCardBuilder.card.reanchorCalls.last!
-        XCTAssertEqual(lastPillFrame.size, PillOverlayView.transcribingSize,
+        XCTAssertEqual(lastPillFrame.size, PillOverlayView.size(for: .transcribing, style: .classic),
                        "Reanchor frame must be the freshly-resized pill frame")
     }
 
@@ -927,7 +942,7 @@ final class PillOverlayPresenterTests: XCTestCase {
             "Stream card must reanchor above the pill's new frame on resize"
         )
         let lastPillFrame = streamCardBuilder.card.reanchorCalls.last!
-        XCTAssertEqual(lastPillFrame.size, PillOverlayView.transcribingSize)
+        XCTAssertEqual(lastPillFrame.size, PillOverlayView.size(for: .transcribing, style: .classic))
     }
 
     // MARK: - Non-activating panel contract (Issue 6)

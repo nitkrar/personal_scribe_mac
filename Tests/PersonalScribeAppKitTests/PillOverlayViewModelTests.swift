@@ -343,7 +343,7 @@ final class PillOverlayViewModelTests: XCTestCase {
         let full = PillOverlayView.size(for: .recording, style: .classic)
         let mini = PillOverlayView.size(for: .recording, style: .mini)
 
-        XCTAssertEqual(full, PillOverlayView.size(for: .recording))
+        XCTAssertEqual(full, PillOverlayView.size(for: .recording, style: .classic))
         XCTAssertEqual(mini, CGSize(width: 110, height: 20))
         XCTAssertNotEqual(mini.width / full.width, mini.height / full.height)
     }

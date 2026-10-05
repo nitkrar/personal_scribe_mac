@@ -42,6 +42,13 @@ final class PillStyleTests: XCTestCase {
         XCTAssertEqual(PillStyle.userDefaultsKey, "PillStyle")
     }
 
+    func testClassicIdleControlsMatchRecordingControlDiameters() {
+        let metrics = PillStyle.classic.metrics
+
+        XCTAssertEqual(metrics.idleModeDiameter, metrics.controlDiameter)
+        XCTAssertEqual(metrics.idleRecordDiameter, metrics.stopDiameter)
+    }
+
     // MARK: - Helpers
 
     private static func isolatedDefaults() -> UserDefaults {

@@ -16,24 +16,27 @@ final class PillOverlayViewSizeTests: XCTestCase {
         // `.zero` (not `nil`) keeps the return type total for callers
         // that still want to pass it to `setFrame`; presenter logic
         // short-circuits on `.hidden` before calling the helper.
-        XCTAssertEqual(PillOverlayView.size(for: .hidden), .zero)
+        XCTAssertEqual(PillOverlayView.size(for: .hidden, style: .classic), .zero)
     }
 
     func testSizeForIdleMatchesIdleSize() {
-        XCTAssertEqual(PillOverlayView.size(for: .idle), PillOverlayView.idleSize)
+        XCTAssertEqual(
+            PillOverlayView.size(for: .idle, style: .classic),
+            CGSize(width: 80, height: 28)
+        )
     }
 
     func testSizeForHoldToRecordMatchesHoldSize() {
         XCTAssertEqual(
-            PillOverlayView.size(for: .holdToRecord),
-            PillOverlayView.holdToRecordSize
+            PillOverlayView.size(for: .holdToRecord, style: .classic),
+            CGSize(width: 220, height: 36)
         )
     }
 
     func testSizeForRecordingMatchesRecordingSize() {
         XCTAssertEqual(
-            PillOverlayView.size(for: .recording),
-            PillOverlayView.recordingSize
+            PillOverlayView.size(for: .recording, style: .classic),
+            CGSize(width: 220, height: 36)
         )
     }
 
@@ -56,25 +59,26 @@ final class PillOverlayViewSizeTests: XCTestCase {
         )
     }
 
-    func testIdleHoverShrinksToOneButtonWhenThereIsNoModeChoice() {
-        XCTAssertEqual(
-            PillOverlayView.size(
-                for: .idle,
-                style: .mini,
-                isHovered: true,
+    func testIdleHoverKeepsItsFootprintAndCentersTheOnlyRecordButton() {
+        for style in [PillStyle.mini, .classic] {
+            let recordOnly = PillIdleControlsLayout(
+                metrics: style.metrics,
                 showsModeButton: false
-            ),
-            CGSize(width: 30, height: 30)
-        )
-        XCTAssertEqual(
-            PillOverlayView.size(
-                for: .idle,
-                style: .classic,
-                isHovered: true,
-                showsModeButton: false
-            ),
-            CGSize(width: 36, height: 36)
-        )
+            )
+            let twoButtons = PillIdleControlsLayout(
+                metrics: style.metrics,
+                showsModeButton: true
+            )
+
+            XCTAssertEqual(recordOnly.size, twoButtons.size)
+            XCTAssertEqual(
+                recordOnly.size,
+                PillOverlayView.size(for: .idle, style: style, isHovered: true)
+            )
+            XCTAssertNil(recordOnly.modeFrame)
+            XCTAssertEqual(recordOnly.recordFrame.midX, recordOnly.size.width / 2)
+            XCTAssertEqual(recordOnly.recordFrame.midY, recordOnly.size.height / 2)
+        }
     }
 
     func testPausedSizesMatchMockup() {
@@ -90,8 +94,8 @@ final class PillOverlayViewSizeTests: XCTestCase {
 
     func testSizeForTranscribingMatchesTranscribingSize() {
         XCTAssertEqual(
-            PillOverlayView.size(for: .transcribing),
-            PillOverlayView.transcribingSize
+            PillOverlayView.size(for: .transcribing, style: .classic),
+            PillOverlayView.size(for: .recording, style: .classic)
         )
         XCTAssertEqual(
             PillOverlayView.size(for: .transcribing, style: .mini),
@@ -105,27 +109,33 @@ final class PillOverlayViewSizeTests: XCTestCase {
 
     func testSizeForDownloadingMatchesDownloadingSize() {
         XCTAssertEqual(
-            PillOverlayView.size(for: .downloading(fractionCompleted: 0.5)),
-            PillOverlayView.downloadingSize
+            PillOverlayView.size(
+                for: .downloading(fractionCompleted: 0.5),
+                style: .classic
+            ),
+            CGSize(width: 220, height: 36)
         )
     }
 
     func testSizeForLoadingMatchesLoadingSize() {
-        XCTAssertEqual(PillOverlayView.size(for: .loading), PillOverlayView.loadingSize)
+        XCTAssertEqual(
+            PillOverlayView.size(for: .loading, style: .classic),
+            CGSize(width: 220, height: 36)
+        )
     }
 
     func testSizeForErrorMatchesErrorSize() {
         XCTAssertEqual(
-            PillOverlayView.size(for: .error(message: "boom")),
-            PillOverlayView.errorSize
+            PillOverlayView.size(for: .error(message: "boom"), style: .classic),
+            CGSize(width: 220, height: 36)
         )
     }
 
     func testSizeForCancelledMatchesCancelCardSize() {
         // Cancel Card is not a pill but shares the resize path — the
-        // panel grows to 280×44 at the same bottom-center anchor.
+        // panel grows to 264×36 at the same bottom-center anchor.
         XCTAssertEqual(
-            PillOverlayView.size(for: .cancelled),
+            PillOverlayView.size(for: .cancelled, style: .classic),
             PillOverlayView.cancelCardSize
         )
     }

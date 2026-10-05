@@ -186,6 +186,29 @@ final class PillOverlayControllerTests: XCTestCase {
         XCTAssertTrue(controller.viewModel.showsModeButton)
         continuation?.finish()
     }
+
+    func testModeAvailabilityTracksModelServiceUpdates() async throws {
+        let controller = PillOverlayController(
+            appStore: try makeAppStore(),
+            defaults: .standard,
+            panelBuilder: RecordingPanelBuilder()
+        )
+        let modes = MutableModes([.dictation])
+        let modelUpdates = PassthroughSubject<Void, Never>()
+        controller.configureModeMenu(
+            modesProvider: { modes.value },
+            modeAvailabilityUpdates: modelUpdates.eraseToAnyPublisher(),
+            currentModeIDProvider: { nil },
+            onSelect: { _ in }
+        )
+        XCTAssertFalse(controller.viewModel.showsModeButton)
+
+        modes.value.append(.dictation)
+        modelUpdates.send()
+        await settle()
+
+        XCTAssertTrue(controller.viewModel.showsModeButton)
+    }
 }
 
 @MainActor
