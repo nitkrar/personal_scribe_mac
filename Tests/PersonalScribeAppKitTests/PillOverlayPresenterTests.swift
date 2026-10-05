@@ -214,6 +214,57 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(actionCount, 0)
     }
 
+    func testRoutedActionIsKeptFromMouseDownThroughHoverResize() throws {
+        let (window, hostingView) = makeHostingView()
+        var actions: [PillInteractionAction] = []
+        hostingView.onAction = { actions.append($0) }
+        hostingView.actionAtPoint = { _, _ in .mode }
+        hostingView.isTapEnabled = { true }
+        let screenPoint = window.convertPoint(toScreen: NSPoint(x: 20, y: 10))
+
+        hostingView.mouseDown(
+            with: try makeMouseEvent(.leftMouseDown, at: NSPoint(x: 20, y: 10), window: window)
+        )
+        hostingView.actionAtPoint = { _, _ in nil }
+        window.setContentSize(NSSize(width: 40, height: 16))
+        hostingView.mouseUp(
+            with: try makeMouseEvent(
+                .leftMouseUp,
+                at: window.convertPoint(fromScreen: screenPoint),
+                window: window
+            )
+        )
+
+        XCTAssertEqual(actions, [.mode])
+    }
+
+    func testHoverTrackingAreaSurvivesHostingViewResize() throws {
+        let (_, hostingView) = makeHostingView()
+        hostingView.updateTrackingAreas()
+        let first = try XCTUnwrap(hostingView.trackingAreas.first { $0.owner === hostingView })
+
+        hostingView.frame.size = NSSize(width: 66, height: 30)
+        hostingView.updateTrackingAreas()
+        let second = try XCTUnwrap(hostingView.trackingAreas.first { $0.owner === hostingView })
+
+        XCTAssertTrue(first === second)
+        XCTAssertTrue(second.options.contains(.inVisibleRect))
+    }
+
+    func testHostingViewResizeClearsStaleHoverWhenPointerIsOutsidePanel() {
+        let (window, hostingView) = makeHostingView()
+        let viewModel = PillOverlayViewModel()
+        hostingView.onHoverChanged = { viewModel.setHovered($0) }
+        hostingView.screenMouseLocation = {
+            NSPoint(x: window.frame.maxX + 100, y: window.frame.maxY + 100)
+        }
+        viewModel.setHovered(true)
+
+        hostingView.frame.size = NSSize(width: 66, height: 30)
+
+        XCTAssertFalse(viewModel.isHovered)
+    }
+
     /// Test C — mouseDown -> drag past the 4pt threshold -> mouseUp must
     /// fire `onMouseDragged` and suppress `onTap`, even when tapping is
     /// otherwise enabled. Covers the hosting-view event path end-to-end
@@ -689,6 +740,28 @@ final class PillOverlayPresenterTests: XCTestCase {
         for _ in 0..<5 { await Task.yield() }
         try? await Task.sleep(for: .milliseconds(20))
         XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.doneSize)
+    }
+
+    func testMiniHoverResizeUpdatesPanelWithoutAnimation() async {
+        let viewModel = PillOverlayViewModel(visibility: .idle, visibilityMode: .alwaysOn)
+        viewModel.setPillStyle(.mini)
+        let panelBuilder = RecordingPanelBuilder()
+        let presenter = PillOverlayPresenter(model: viewModel, panelBuilder: panelBuilder)
+        _ = presenter
+
+        viewModel.setHovered(true)
+        for _ in 0..<5 { await Task.yield() }
+
+        let expanded = panelBuilder.panel.setFrameCalls.last!
+        XCTAssertEqual(expanded.frame.size, PillOverlayView.miniIdleHoverSize)
+        XCTAssertFalse(expanded.animate)
+
+        viewModel.setHovered(false)
+        for _ in 0..<5 { await Task.yield() }
+
+        let resting = panelBuilder.panel.setFrameCalls.last!
+        XCTAssertEqual(resting.frame.size, PillOverlayView.miniIdleSize)
+        XCTAssertFalse(resting.animate)
     }
 
     /// Near the left edge the pill keeps its left side and grows right.

@@ -203,30 +203,44 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     var onAction: ((PillInteractionAction) -> Void)?
     var actionAtPoint: ((NSPoint, CGSize) -> PillInteractionAction?)?
     var onHoverChanged: ((Bool) -> Void)?
+    var screenMouseLocation: () -> NSPoint = { NSEvent.mouseLocation }
     var isTapEnabled: (() -> Bool)?
     /// When true, clicks go to the Cancel Card's SwiftUI content instead
     /// of the pill's tap and drag handling.
     var passesClicksToContent: (() -> Bool)?
     private var contentOwnsClick = false
     private var interactionState = OverlayPanelInteractionState()
+    private var mouseDownAction: PillInteractionAction?
+    private var routesMouseDownToAction = false
     /// Screen-space cursor and panel origin at mouse-down; the drag moves
     /// the panel by the cursor's offset from here.
     private var dragAnchor: (mouse: NSPoint, origin: NSPoint)?
     private var hoverTrackingArea: NSTrackingArea?
 
     override func updateTrackingAreas() {
-        if let hoverTrackingArea {
-            removeTrackingArea(hoverTrackingArea)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        hoverTrackingArea = area
         super.updateTrackingAreas()
+        if hoverTrackingArea == nil {
+            // Replacing this during a resize can emit a false mouse-exit.
+            let area = NSTrackingArea(
+                rect: .zero,
+                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+            addTrackingArea(area)
+            hoverTrackingArea = area
+        }
+        reconcileHoverWithPointer()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        reconcileHoverWithPointer()
+    }
+
+    private func reconcileHoverWithPointer() {
+        guard let window else { return }
+        onHoverChanged?(window.frame.contains(screenMouseLocation()))
     }
 
     override func mouseEntered(with event: NSEvent) {
@@ -244,10 +258,16 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     override func mouseDown(with event: NSEvent) {
         contentOwnsClick = passesClicksToContent?() == true
         if contentOwnsClick {
+            routesMouseDownToAction = false
+            mouseDownAction = nil
             super.mouseDown(with: event)
             return
         }
-        interactionState.begin(at: convert(event.locationInWindow, from: nil))
+        let localPoint = convert(event.locationInWindow, from: nil)
+        // A panel resize changes local coordinates under a stationary cursor.
+        interactionState.begin(at: window?.convertPoint(toScreen: event.locationInWindow) ?? localPoint)
+        routesMouseDownToAction = actionAtPoint != nil
+        mouseDownAction = actionAtPoint?(localPoint, bounds.size)
         if let window {
             dragAnchor = (window.convertPoint(toScreen: event.locationInWindow), window.frame.origin)
         }
@@ -259,7 +279,8 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
             return
         }
         let localPoint = convert(event.locationInWindow, from: nil)
-        _ = interactionState.drag(to: localPoint)
+        let interactionPoint = window?.convertPoint(toScreen: event.locationInWindow) ?? localPoint
+        _ = interactionState.drag(to: interactionPoint)
         // Move the panel directly so mouse-up reports the dropped frame.
         guard interactionState.isDragging, let window, let dragAnchor else {
             return
@@ -278,9 +299,14 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
             return
         }
         let localPoint = convert(event.locationInWindow, from: nil)
+        let interactionPoint = window?.convertPoint(toScreen: event.locationInWindow) ?? localPoint
         let wasDragging = interactionState.isDragging
+        let routesToAction = routesMouseDownToAction
+        let action = mouseDownAction
         dragAnchor = nil
-        guard interactionState.end(at: localPoint) else {
+        routesMouseDownToAction = false
+        mouseDownAction = nil
+        guard interactionState.end(at: interactionPoint) else {
             if wasDragging {
                 onMouseDragged?()
             }
@@ -291,8 +317,8 @@ final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
             return
         }
 
-        if let actionAtPoint {
-            if let action = actionAtPoint(localPoint, bounds.size) {
+        if routesToAction {
+            if let action {
                 onAction?(action)
             }
             return
@@ -554,7 +580,10 @@ public final class PillOverlayPresenter {
             .sink { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self, self.isVisible else { return }
-                    self.applyVisibilityResize(to: self.model.visibility)
+                    self.applyVisibilityResize(
+                        to: self.model.visibility,
+                        allowsAnimation: false
+                    )
                 }
             }
     }
@@ -586,7 +615,10 @@ public final class PillOverlayPresenter {
     /// suppressed for pill↔CancelCard crossfades (SwiftUI owns that
     /// fade via the `.animation(_, value:isCancelled)` in
     /// `PillOverlayView`).
-    private func applyVisibilityResize(to visibility: PillOverlayViewModel.Visibility) {
+    private func applyVisibilityResize(
+        to visibility: PillOverlayViewModel.Visibility,
+        allowsAnimation: Bool = true
+    ) {
         guard let panel else {
             return
         }
@@ -618,7 +650,7 @@ public final class PillOverlayPresenter {
         let wasCancelled = (lastSizedVisibility == .cancelled)
         let becomingCancelled = (visibility == .cancelled)
         let involvesCancelCrossfade = wasCancelled || becomingCancelled
-        let shouldAnimate = !isFirstSizing && !involvesCancelCrossfade
+        let shouldAnimate = allowsAnimation && !isFirstSizing && !involvesCancelCrossfade
 
         let isShrinking = newSize.width < panel.frame.width || newSize.height < panel.frame.height
         lastSizedVisibility = visibility

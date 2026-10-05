@@ -432,15 +432,19 @@ continues the same recording; stop transcribes both parts as one.
 
 - [ ] **MV-PILL-STYLE-1** Settings → Recording window → Style = Mini.
   At rest, idle is a 40×16 quill and recording is a 110×20 waveform.
-  Hover idle to reveal mode + record in a 66×30 pill; hover recording
-  to reveal pause + waveform + stop in a 170×30 pill. Nothing clips.
 - [x] **MV-PILL-STYLE-2** Style = None. The pill never shows, including while recording; the shortcut and menu bar still start and stop dictation. Pill visibility is a single "Auto-hide pill" toggle (on: the pill shows only while recording), disabled while Style is None.
 - [ ] **MV-PILL-STYLE-3** Back to Classic while recording. The
   220×36 pause + waveform + stop pill returns without restarting the
   session.
-- [ ] **MV-PILL-STYLE-4** In Mini idle hover, the mode button opens the
-  same valid built-in and custom modes as the menu bar. Choosing one
-  applies it to the next recording. The record button starts recording
+- [ ] **MV-PILL-STYLE-4** Move the cursor into and out of the Mini idle
+  pill from its top and both sides at least ten times. It stays expanded
+  at 66×30 while the cursor is over either footprint, never flickers or
+  shows clipped edges, and returns to 40×16 after exit. Repeat while
+  recording: hover stays at 170×30 with intact rounded edges and exit
+  returns to 110×20.
+- [ ] **MV-PILL-STYLE-5** In Mini idle hover, click the mode button. It
+  opens the same valid built-in and custom modes as the menu bar. Choosing
+  one applies it to the next recording. The record button starts recording
   and shows the `Start recording` tooltip on hover.
 
 ## Pill controls and pause
