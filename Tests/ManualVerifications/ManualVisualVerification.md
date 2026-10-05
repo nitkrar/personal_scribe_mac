@@ -668,6 +668,36 @@ below once per dogfood cycle:
   inputs. Reconnecting the device + reopening the window brings the
   name back.
 
+## #112 — Setup inside the unified window
+
+- [ ] **MV-ONBOARDING-1** Clear `OnboardingCompleted`, launch Ninimma,
+  and confirm the unified window opens on Get started step 1/5. With
+  `OnboardingCompleted` already true, relaunch and confirm Home opens
+  without a Get started row.
+- [ ] **MV-ONBOARDING-2** On Permissions, confirm pending Microphone
+  raises the macOS prompt, denied Microphone opens System Settings,
+  Accessibility opens its privacy pane, and both statuses update live.
+- [ ] **MV-ONBOARDING-3** On Microphone, switch input devices and speak.
+  The meter moves; leaving the step stops the meter. Starting a real
+  recording from the hotkey or menu bar also stops it before capture.
+- [ ] **MV-ONBOARDING-4** On Voice model, confirm the RAM-recommended
+  model is selected, startup-download progress moves in the row, no
+  second download starts, and Show all models opens Settings models.
+- [ ] **MV-ONBOARDING-5** Move forward while a model downloads and
+  confirm the download continues. Try it remains in its waiting state
+  until the selected model is ready.
+- [ ] **MV-ONBOARDING-6** On Try it, click the practice editor and use
+  the displayed configured shortcut. The normal recording path pastes
+  into the Ninimma editor and shows the word-count/time success card;
+  Try again clears it.
+- [ ] **MV-ONBOARDING-7** While setup is open, use Home and Settings,
+  then return via the Get started sidebar row. Grant permissions during
+  setup and confirm the open flow does not disappear.
+- [ ] **MV-ONBOARDING-8** Finish and confirm Home shows one dismissible
+  You're set up banner. Skip with missing permissions/model/untried
+  shortcut and confirm only those applicable items join the pending-only
+  Home Get started card; satisfying them later removes them.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift

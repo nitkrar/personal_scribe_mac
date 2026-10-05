@@ -218,14 +218,23 @@ struct SetupView: View {
                     .foregroundStyle(palette.secondaryText)
             }
             if model.isReady {
-                TextEditor(text: Binding(
-                    get: { flow.practiceText },
-                    set: { flow.recordPracticeText($0) }
-                ))
-                .font(PersonalScribeTheme.Typography.body.font)
+                ZStack(alignment: .topLeading) {
+                    if flow.practiceText.isEmpty {
+                        Text("Click here, use \(HotkeyShortcutFormatter.displayString(for: hotkey)), and say “Hello Ninimma, this is my first dictation.”")
+                            .font(PersonalScribeTheme.Typography.body.font)
+                            .foregroundStyle(palette.secondaryText)
+                            .padding(14)
+                            .allowsHitTesting(false)
+                    }
+                    TextEditor(text: Binding(
+                        get: { flow.practiceText },
+                        set: { flow.recordPracticeText($0) }
+                    ))
+                    .font(PersonalScribeTheme.Typography.body.font)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                }
                 .frame(height: 100)
-                .padding(8)
-                .scrollContentBackground(.hidden)
                 .setupCard(palette: palette)
                 .onAppear { flow.beginPractice() }
                 if let result = flow.practiceResult {
