@@ -10,7 +10,7 @@ import PersonalScribeCore
 /// | State         | Size    | Content                                              |
 /// |---------------|---------|------------------------------------------------------|
 /// | `.idle`       | 80×28 / 40×16 | champagne quill centered                    |
-/// | `.idle` hover | 82×30 / 66×30 | mode (when useful) + record circles         |
+/// | `.idle` hover | 82×36 / 66×30 | mode (when useful) + record circles         |
 /// | `.recording`  | 220×36 / 110×20 | pause + waveform + stop; Mini expands on hover |
 /// | `.paused`     | 220×36 / 170×30 | resume + elapsed time + stop               |
 /// | `.transcribing` | 220×36 / 110×20 | centered spinner at recording-rest size  |

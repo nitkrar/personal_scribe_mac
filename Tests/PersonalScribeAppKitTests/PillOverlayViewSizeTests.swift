@@ -81,6 +81,13 @@ final class PillOverlayViewSizeTests: XCTestCase {
         }
     }
 
+    func testClassicIdleHoverIsAsTallAsRecording() {
+        XCTAssertEqual(
+            PillOverlayView.size(for: .idle, style: .classic, isHovered: true).height,
+            PillOverlayView.size(for: .recording, style: .classic).height
+        )
+    }
+
     func testPausedSizesMatchMockup() {
         XCTAssertEqual(
             PillOverlayView.size(for: .paused(elapsedSeconds: 23), style: .classic),

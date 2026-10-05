@@ -69,7 +69,7 @@ struct PillStyleMetrics: Equatable {
 
     static let classic = PillStyleMetrics(
         idleSize: CGSize(width: 80, height: 28),
-        idleHoverSize: CGSize(width: 82, height: 30),
+        idleHoverSize: CGSize(width: 82, height: 36),
         holdToRecordSize: CGSize(width: 220, height: 36),
         recordingSize: CGSize(width: 220, height: 36),
         recordingHoverSize: CGSize(width: 220, height: 36),
