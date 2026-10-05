@@ -4,6 +4,66 @@ import PersonalScribeTestSupport
 @testable import PersonalScribeSession
 
 final class SessionCoordinatorErrorTests: XCTestCase {
+    func testPersistenceFailureLogIncludesUnderlyingDatabaseDescription() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SessionCoordinatorErrorTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let locator = AppStorageLocator(
+            environment: [:],
+            testingBaseDirectoryOverrideProvider: { temporaryDirectory }
+        )
+        let database = try AppDatabase(locator: locator)
+        let repository = TranscriptRepository(
+            database: database,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
+        try await database.write { database in
+            try database.execute(sql: "DROP TABLE transcripts")
+        }
+
+        let sink = InMemoryTestSink()
+        let coordinator = SessionCoordinator(
+            capture: FakeAudioCapturer(
+                buffers: [
+                    try PCMBuffer(
+                        samples: Array(repeating: 0.1, count: 16_000),
+                        timestamp: ContinuousClock().now
+                    ),
+                ]
+            ),
+            transcriber: FakeTranscriber(
+                result: .init(
+                    text: "persistence failure",
+                    audioDuration: .seconds(1),
+                    processingDuration: .zero
+                )
+            ),
+            logger: PersonalScribeLogger(
+                category: PersonalScribeLogCategory.session,
+                reporter: DiagnosticsReporter(sinks: [sink])
+            ),
+            transcriptRepository: repository
+        )
+
+        await coordinator.toggle()
+        await coordinator.toggle()
+
+        let event = try await withTimeout(.seconds(1)) {
+            while true {
+                if let event = await sink.snapshot().first(where: {
+                    $0.message == "Failed to persist transcript to TranscriptRepository"
+                }) {
+                    return event
+                }
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+        XCTAssertTrue(
+            event.metadata["underlyingErrorDescription"]?.contains("no such table: transcripts") == true
+        )
+    }
+
     func testCaptureFailureMapsToErrorAndNextToggleRetries() async throws {
         let capture = FakeAudioCapturer(error: .audioEngineFailure)
         let transcriber = FakeTranscriber(

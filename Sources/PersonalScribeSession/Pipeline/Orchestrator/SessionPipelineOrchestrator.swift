@@ -1089,8 +1089,13 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         pausedTimeoutTask = Task { [weak self] in
             try? await Task.sleep(for: timeout)
             guard !Task.isCancelled else { return }
-            await self?.finalizePausedSessionWithoutPaste()
+            await self?.pausedTimeoutElapsed()
         }
+    }
+
+    private func pausedTimeoutElapsed() async {
+        pausedTimeoutTask = nil
+        await finalizePausedSessionWithoutPaste()
     }
 
     private func finalizePausedSegments(

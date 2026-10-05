@@ -656,9 +656,23 @@ public actor SessionCoordinator {
             do {
                 try await transcriptRepository.append(entry)
             } catch {
-                logger.error("Failed to persist transcript to TranscriptRepository", error: error)
+                logger.error(
+                    "Failed to persist transcript to TranscriptRepository",
+                    error: error,
+                    metadata: [
+                        "underlyingErrorDescription": persistenceErrorDescription(error),
+                    ]
+                )
             }
         }
+    }
+
+    private static func persistenceErrorDescription(_ error: any Error) -> String {
+        if let storageError = error as? TranscriptStorageError,
+           case .queryFailed(let underlying) = storageError {
+            return String(describing: underlying)
+        }
+        return String(describing: error)
     }
 
     /// Update the cached audio level and fan out to all subscribers.

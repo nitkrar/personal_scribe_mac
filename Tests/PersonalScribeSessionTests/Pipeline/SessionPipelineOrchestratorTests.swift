@@ -590,6 +590,50 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(noticeCount, 1)
     }
 
+    func testPausedTimeoutPersistsOnceThroughRealTranscriptRepository() async throws {
+        let temporaryDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let repository = try makeRepository(in: temporaryDirectory)
+        let sink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: [try makeBuffer(sampleCount: 16_000, sampleValue: 0.1)]
+            ),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(
+                    text: "timeout text",
+                    audioDuration: .seconds(1),
+                    processingDuration: .zero
+                )
+            ),
+            transcriptRepository: repository,
+            postProcessingPipeline: IdentityPostProcessingPipeline(),
+            outputSink: sink,
+            pausedRecordingTimeout: .milliseconds(20)
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+        try await withTimeout(.seconds(1)) {
+            while true {
+                let state = await orchestrator.snapshot().sessionState
+                if state == .completed || state == .error(.transcriptionFailure) {
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+
+        let snapshot = await orchestrator.snapshot()
+        let entries = await repository.recent(limit: 10)
+        let finalSinks = await sink.finalDeliverySinks()
+        XCTAssertEqual(snapshot.sessionState, .completed)
+        XCTAssertEqual(entries.map(\.text), ["timeout text"])
+        XCTAssertEqual(finalSinks, [[.clipboard(restoreEnabled: false)]])
+    }
+
     func testSnapshotStreamDeliversInitialIdleSnapshotImmediately() async {
         let context = makeContext(streamingOutputEnabled: false)
         let orchestrator = makeOrchestrator(context: context)
