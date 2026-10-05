@@ -101,6 +101,18 @@ public struct ModelPerformance: Sendable, Equatable, Codable {
     }
 }
 
+/// A companion repo folder (FluidAudio `Repo.folderName`) and the files
+/// that must exist in it, relative to the folder.
+public struct AuxiliaryModelRepo: Sendable, Equatable {
+    public let folderName: String
+    public let requiredRelativePaths: [String]
+
+    public init(folderName: String, requiredRelativePaths: [String]) {
+        self.folderName = folderName
+        self.requiredRelativePaths = requiredRelativePaths
+    }
+}
+
 public struct ModelDescriptor: Sendable, Equatable {
     public let id: String                  // "parakeet-tdt-0.6b-v2" — user-facing identity, persisted in UserDefaults
     public let displayName: String         // "Parakeet TDT 0.6B" — surfaces in Settings UI
@@ -166,22 +178,13 @@ public struct ModelDescriptor: Sendable, Equatable {
     /// `nil` means the UI should hide the picker for this descriptor.
     public let supportedLanguages: [String]?
 
-    /// Companion repos this descriptor's runtime needs in addition to
-    /// `repoFolderName`. Folder names match FluidAudio's `Repo.folderName`
-    /// for the auxiliary repos.
-    ///
-    /// Today only the Parakeet TDT-CTC 110m hybrid declares one — its
-    /// runtime loads the CTC head from `parakeet-ctc-110m-coreml`
-    /// alongside the TDT bundle at `parakeet-tdt-ctc-110m`. Without
-    /// declaring the auxiliary, "Download" misses ~98MB the model
-    /// actually needs (FluidAudio fetches it implicitly on first
-    /// activate) and "Delete" leaves that 98MB stranded.
-    ///
-    /// Provider iterates `repoFolderName + auxiliaryRepoFolderNames`
-    /// for `removeDownloadedFiles`. The adapter's `downloadIfNeeded`
-    /// pulls the auxiliaries in the same pass as the primary so all
-    /// bytes a model needs land at Download time, not at Activate.
-    public let auxiliaryRepoFolderNames: [String]
+    /// Companion repos the runtime loads next to `repoFolderName`;
+    /// download, validation, and delete cover them too.
+    public let auxiliaryRepos: [AuxiliaryModelRepo]
+
+    public var auxiliaryRepoFolderNames: [String] {
+        auxiliaryRepos.map(\.folderName)
+    }
 
     public init(
         id: String,
@@ -208,7 +211,7 @@ public struct ModelDescriptor: Sendable, Equatable {
         tokenizerSource: String? = nil,
         requiredChipFamily: ChipFamily? = nil,
         supportedLanguages: [String]?,
-        auxiliaryRepoFolderNames: [String] = []
+        auxiliaryRepos: [AuxiliaryModelRepo] = []
     ) {
         self.id = id
         self.displayName = displayName
@@ -229,7 +232,7 @@ public struct ModelDescriptor: Sendable, Equatable {
         self.tokenizerSource = tokenizerSource
         self.requiredChipFamily = requiredChipFamily
         self.supportedLanguages = supportedLanguages
-        self.auxiliaryRepoFolderNames = auxiliaryRepoFolderNames
+        self.auxiliaryRepos = auxiliaryRepos
     }
 
     public init(
@@ -251,7 +254,7 @@ public struct ModelDescriptor: Sendable, Equatable {
         license: String? = nil,
         tokenizerSource: String? = nil,
         requiredChipFamily: ChipFamily? = nil,
-        auxiliaryRepoFolderNames: [String] = []
+        auxiliaryRepos: [AuxiliaryModelRepo] = []
     ) {
         self.init(
             id: id,
@@ -273,7 +276,7 @@ public struct ModelDescriptor: Sendable, Equatable {
             tokenizerSource: tokenizerSource,
             requiredChipFamily: requiredChipFamily,
             supportedLanguages: nil,
-            auxiliaryRepoFolderNames: auxiliaryRepoFolderNames
+            auxiliaryRepos: auxiliaryRepos
         )
     }
 

@@ -12,7 +12,30 @@ public enum ModelArtifactValidation {
         descriptor: ModelDescriptor,
         fileManager: FileManager = .default
     ) -> Bool {
-        let requiredPaths = descriptor.requiredRelativePaths.map {
+        areValid(descriptor.requiredRelativePaths, in: directory, fileManager: fileManager)
+    }
+
+    /// Checks each `auxiliaryRepos` folder under `modelsRoot`.
+    public static func auxiliaryReposAreValid(
+        in modelsRoot: URL,
+        descriptor: ModelDescriptor,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        descriptor.auxiliaryRepos.allSatisfy { repo in
+            areValid(
+                repo.requiredRelativePaths,
+                in: modelsRoot.appendingPathComponent(repo.folderName, isDirectory: true),
+                fileManager: fileManager
+            )
+        }
+    }
+
+    private static func areValid(
+        _ relativePaths: [String],
+        in directory: URL,
+        fileManager: FileManager
+    ) -> Bool {
+        let requiredPaths = relativePaths.map {
             directory.appendingPathComponent($0, isDirectory: false)
         }
 

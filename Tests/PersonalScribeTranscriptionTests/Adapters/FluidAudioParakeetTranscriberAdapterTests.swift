@@ -140,7 +140,7 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(auxCalls.count, 1)
         XCTAssertEqual(auxCalls.first?.aux, .ctc110m)
         XCTAssertEqual(auxCalls.first?.directory, expectedParentDirectory)
-        XCTAssertEqual(auxCalls.first?.requiredSubdirectories, ["CtcHead.mlmodelc"])
+        XCTAssertTrue(auxCalls.first?.requiredSubdirectories.contains("CtcHead.mlmodelc") ?? false)
 
         XCTAssertEqual(collected.last?.phase, .finished)
     }
@@ -177,7 +177,7 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         let auxCalls = await manager.auxiliaryDownloadCalls()
         XCTAssertEqual(auxCalls.count, 1)
         XCTAssertEqual(auxCalls.first?.aux, .ctc110m)
-        XCTAssertEqual(auxCalls.first?.requiredSubdirectories, ["CtcHead.mlmodelc"])
+        XCTAssertTrue(auxCalls.first?.requiredSubdirectories.contains("CtcHead.mlmodelc") ?? false)
     }
 
     /// Complete local artifacts must prepare without a repository query.
@@ -211,11 +211,11 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
             for: descriptor,
             in: modelsRoot.appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
         )
-        for folder in descriptor.auxiliaryRepoFolderNames {
-            let aux = modelsRoot.appendingPathComponent(folder, isDirectory: true)
-            let ctcHead = aux.appendingPathComponent("CtcHead.mlmodelc", isDirectory: true)
-            try FileManager.default.createDirectory(at: ctcHead, withIntermediateDirectories: true)
-            try Data("coreml".utf8).write(to: ctcHead.appendingPathComponent("coremldata.bin"))
+        let aux = modelsRoot.appendingPathComponent("parakeet-ctc-110m-coreml", isDirectory: true)
+        for bundle in ["MelSpectrogram.mlmodelc", "AudioEncoder.mlmodelc", "CtcHead.mlmodelc"] {
+            let directory = aux.appendingPathComponent(bundle, isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try Data("coreml".utf8).write(to: directory.appendingPathComponent("coremldata.bin"))
         }
 
         let manager = StubFluidAudioParakeetManager()
@@ -231,6 +231,39 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(downloadCount, 0)
         let auxCalls = await manager.auxiliaryDownloadCalls()
         XCTAssertEqual(auxCalls.count, 0)
+    }
+
+    /// The on-disk state FluidAudio's CTC repo download leaves behind:
+    /// encoder bundles present, CtcHead missing.
+    func testPrepareFetchesCtcHeadWhenAuxiliaryRepoLacksIt() async throws {
+        let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
+        let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
+        let modelsRoot = storageLocator.url(for: .models)
+        try writeValidArtifacts(
+            for: descriptor,
+            in: modelsRoot.appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
+        )
+        let aux = modelsRoot.appendingPathComponent("parakeet-ctc-110m-coreml", isDirectory: true)
+        for bundle in ["MelSpectrogram.mlmodelc", "AudioEncoder.mlmodelc"] {
+            let directory = aux.appendingPathComponent(bundle, isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try Data("coreml".utf8).write(to: directory.appendingPathComponent("coremldata.bin"))
+        }
+
+        let manager = StubFluidAudioParakeetManager()
+        let adapter = FluidAudioParakeetTranscriberAdapter(
+            descriptor: descriptor,
+            storageLocator: storageLocator,
+            manager: manager
+        )
+
+        try await adapter.prepare()
+
+        let downloadCount = await manager.downloadIfNeededCallCount()
+        XCTAssertEqual(downloadCount, 0)
+        let auxCalls = await manager.auxiliaryDownloadCalls()
+        XCTAssertEqual(auxCalls.count, 1)
+        XCTAssertTrue(auxCalls.first?.requiredSubdirectories.contains("CtcHead.mlmodelc") ?? false)
     }
 
     private func writeValidArtifacts(for descriptor: ModelDescriptor, in directory: URL) throws {

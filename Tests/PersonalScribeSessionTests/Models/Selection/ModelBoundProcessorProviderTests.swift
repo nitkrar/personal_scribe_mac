@@ -374,6 +374,42 @@ final class ModelBoundProcessorProviderTests: XCTestCase {
             "FluidAudio's Qwen layout should be treated as downloaded"
         )
     }
+
+    /// FluidAudio's CTC repo download omits CtcHead.mlmodelc, which the
+    /// 110m hybrid loads; a model missing it is not downloaded.
+    func testIsDownloadedRequiresCtcHeadInParakeet110mAuxiliaryRepo() throws {
+        let storageLocator = TestStorageLocator.make()
+        let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
+        let provider = ModelBoundProcessorProvider(
+            storageLocator: storageLocator,
+            adapterFactory: { d in
+                AdapterRecord(descriptorID: d.id, transcriber: MarkerTranscriber())
+            },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+        let modelsRoot = storageLocator.url(for: .models)
+        let primary = modelsRoot.appendingPathComponent(descriptor.repoFolderName, isDirectory: true)
+        for path in descriptor.requiredRelativePaths {
+            try writeArtifact(primary.appendingPathComponent(path))
+        }
+        let aux = modelsRoot.appendingPathComponent("parakeet-ctc-110m-coreml", isDirectory: true)
+        for bundle in ["MelSpectrogram.mlmodelc", "AudioEncoder.mlmodelc"] {
+            try writeArtifact(aux.appendingPathComponent(bundle).appendingPathComponent("coremldata.bin"))
+        }
+
+        XCTAssertFalse(provider.isDownloaded(descriptor))
+
+        try writeArtifact(aux.appendingPathComponent("CtcHead.mlmodelc/coremldata.bin"))
+        XCTAssertTrue(provider.isDownloaded(descriptor))
+    }
+
+    private func writeArtifact(_ file: URL) throws {
+        try FileManager.default.createDirectory(
+            at: file.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data((file.pathExtension == "json" ? "{}" : "coreml").utf8).write(to: file)
+    }
 }
 
 private final class MarkerTranscriber: @unchecked Sendable, Transcriber {

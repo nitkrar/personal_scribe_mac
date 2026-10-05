@@ -140,6 +140,9 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
         return ModelArtifactValidation.areValid(
             in: modelDirectory(for: canonical),
             descriptor: canonical
+        ) && ModelArtifactValidation.auxiliaryReposAreValid(
+            in: storageLocator.url(for: .models).standardizedFileURL,
+            descriptor: canonical
         )
     }
 

@@ -88,11 +88,18 @@ public enum BuiltInModelCatalog {
         worksWith: "English",
         goodFor: "Quick dictation, battery-conscious use",
         license: "CC-BY-4.0",
-        // Hybrid TDT-CTC: FluidAudio loads the CTC head from a
-        // separate repo at runtime. Without declaring this aux,
-        // Download misses ~98MB the model needs and Delete leaves
-        // those bytes stranded on disk.
-        auxiliaryRepoFolderNames: ["parakeet-ctc-110m-coreml"]
+        // FluidAudio loads the CTC head (custom vocabulary) from this
+        // repo; its own CTC file list omits CtcHead.mlmodelc.
+        auxiliaryRepos: [
+            AuxiliaryModelRepo(
+                folderName: "parakeet-ctc-110m-coreml",
+                requiredRelativePaths: [
+                    "MelSpectrogram.mlmodelc/coremldata.bin",
+                    "AudioEncoder.mlmodelc/coremldata.bin",
+                    "CtcHead.mlmodelc/coremldata.bin",
+                ]
+            ),
+        ]
     )
 
     public static let parakeetTDT06Bv3 = ModelDescriptor(

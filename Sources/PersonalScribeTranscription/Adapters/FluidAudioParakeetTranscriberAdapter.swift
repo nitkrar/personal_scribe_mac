@@ -119,7 +119,7 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
                 try await manager.downloadAuxiliary(
                     .ctc110m,
                     to: modelsRoot,
-                    requiredSubdirectories: [Self.ctcHeadBundleName],
+                    requiredSubdirectories: auxiliaryBundleNames,
                     progressHandler: { snapshot in
                         self.progressBroadcaster.emit(snapshot)
                     }
@@ -294,11 +294,11 @@ extension FluidAudioParakeetTranscriberAdapter {
             // Activate-time chain (prepare) is symmetric with the
             // Download-button chain. Same on-disk short-circuit.
             if runtimeVariant.asrModelVersion == .tdtCtc110m,
-               !auxiliaryReposPresent(in: modelsRoot) {
+               !ModelArtifactValidation.auxiliaryReposAreValid(in: modelsRoot, descriptor: descriptor) {
                 try await manager.downloadAuxiliary(
                     .ctc110m,
                     to: modelsRoot,
-                    requiredSubdirectories: [Self.ctcHeadBundleName],
+                    requiredSubdirectories: auxiliaryBundleNames,
                     progressHandler: { snapshot in
                         self.progressBroadcaster.emit(snapshot)
                     }
@@ -319,22 +319,14 @@ extension FluidAudioParakeetTranscriberAdapter {
         progressBroadcaster.emit(.finished)
     }
 
-    func auxiliaryReposPresent(in modelsRoot: URL) -> Bool {
-        descriptor.auxiliaryRepoFolderNames.allSatisfy { folder in
-            let root = modelsRoot.appendingPathComponent(folder, isDirectory: true)
-            if descriptor.id == BuiltInModelCatalog.parakeetTDTCTC110M.id {
-                return FileManager.default.fileExists(
-                    atPath: root
-                        .appendingPathComponent(Self.ctcHeadBundleName, isDirectory: true)
-                        .appendingPathComponent("coremldata.bin", isDirectory: false)
-                        .path
-                )
-            }
-            return FileManager.default.fileExists(atPath: root.path)
+    /// `.mlmodelc` bundles the registry requires in auxiliary repos;
+    /// FluidAudio's repo download doesn't fetch all of them.
+    var auxiliaryBundleNames: [String] {
+        descriptor.auxiliaryRepos.flatMap(\.requiredRelativePaths).compactMap { path in
+            let bundle = path.split(separator: "/").first.map(String.init)
+            return bundle?.hasSuffix(".mlmodelc") == true ? bundle : nil
         }
     }
-
-    static let ctcHeadBundleName = "CtcHead.mlmodelc"
 
     func modelDirectory() throws -> URL {
         try storageLocator.ensureDirectoriesExist()
@@ -514,7 +506,9 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
             progressHandler: progressHandler
         )
         let repoDirectory = directory.appendingPathComponent(repo.folderName, isDirectory: true)
-        for subdirectory in requiredSubdirectories {
+        for subdirectory in requiredSubdirectories where !FileManager.default.fileExists(
+            atPath: repoDirectory.appendingPathComponent(subdirectory).appendingPathComponent("coremldata.bin").path
+        ) {
             try await DownloadUtils.downloadSubdirectory(
                 repo,
                 subdirectory: subdirectory,
