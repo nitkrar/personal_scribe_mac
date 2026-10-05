@@ -58,23 +58,17 @@ final class HomeTabRenderTests: XCTestCase {
         let suite = "HomeTabRenderTests.\(scenario.name).\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
-        let checklist = HomeChecklistState(defaults: defaults)
         switch scenario.checklist {
         case .noneComplete:
             break
         case .oneComplete:
-            checklist.update(
-                hasTranscript: true,
-                hasCustomHotkey: false,
-                hasCustomMode: false
-            )
+            defaults.set(true, forKey: "HomeChecklistStartRecordingComplete")
         case .allComplete, .dismissed:
-            checklist.update(
-                hasTranscript: true,
-                hasCustomHotkey: true,
-                hasCustomMode: true
-            )
+            defaults.set(true, forKey: "HomeChecklistStartRecordingComplete")
+            defaults.set(true, forKey: "HomeChecklistCustomizeShortcutComplete")
+            defaults.set(true, forKey: "HomeChecklistCreateModeComplete")
         }
+        let checklist = HomeChecklistState(defaults: defaults)
         if scenario.checklist == .dismissed {
             checklist.dismiss()
         }

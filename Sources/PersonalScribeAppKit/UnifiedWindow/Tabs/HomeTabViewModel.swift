@@ -15,7 +15,6 @@ final class HomeChecklistState: ObservableObject {
     @Published private(set) var recordingHotkey: HotkeyPreference
 
     private let defaults: UserDefaults
-    private let notificationCenter: NotificationCenter
     private let startRecordingPreference: Preference<Bool>
     private let customizeShortcutPreference: Preference<Bool>
     private let createModePreference: Preference<Bool>
@@ -24,12 +23,8 @@ final class HomeChecklistState: ObservableObject {
     private var metricsObservation: AnyCancellable?
     private var customModesTask: Task<Void, Never>?
 
-    init(
-        defaults: UserDefaults = .standard,
-        notificationCenter: NotificationCenter = .default
-    ) {
+    init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.notificationCenter = notificationCenter
         startRecordingPreference = Preference(
             key: "HomeChecklistStartRecordingComplete",
             default: false,
@@ -70,7 +65,7 @@ final class HomeChecklistState: ObservableObject {
         self.completedItems = completedItems
         self.isDismissed = dismissedPreference.resolve()
 
-        hotkeyObservation = notificationCenter.addObserver(
+        hotkeyObservation = NotificationCenter.default.addObserver(
             forName: HotkeyPreference.didPersistNotification,
             object: defaults,
             queue: .main
@@ -122,22 +117,6 @@ final class HomeChecklistState: ObservableObject {
         }
     }
 
-    func update(
-        hasTranscript: Bool,
-        hasCustomHotkey: Bool,
-        hasCustomMode: Bool
-    ) {
-        if hasTranscript {
-            earn(.startRecording, preference: startRecordingPreference)
-        }
-        if hasCustomHotkey {
-            earn(.customizeShortcut, preference: customizeShortcutPreference)
-        }
-        if hasCustomMode {
-            earn(.createMode, preference: createModePreference)
-        }
-    }
-
     func dismiss() {
         guard isComplete else {
             return
@@ -155,7 +134,7 @@ final class HomeChecklistState: ObservableObject {
 
     isolated deinit {
         if let hotkeyObservation {
-            notificationCenter.removeObserver(hotkeyObservation)
+            NotificationCenter.default.removeObserver(hotkeyObservation)
         }
         customModesTask?.cancel()
     }

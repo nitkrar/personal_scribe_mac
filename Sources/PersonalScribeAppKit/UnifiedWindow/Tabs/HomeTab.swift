@@ -23,6 +23,7 @@ struct HomeTab: View {
             VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.xl) {
                 Text("Home")
                     .font(PersonalScribeTheme.Typography.largeTitle.font)
+                    .foregroundStyle(palette.primaryTextBase)
 
                 dictationCard
 
@@ -51,26 +52,7 @@ struct HomeTab: View {
 
                 Spacer()
 
-                Menu {
-                    ForEach(MetricsRange.allCases) { range in
-                        Button(range.title) {
-                            selectRange(range)
-                        }
-                    }
-                } label: {
-                    Text("\(metrics.selectedRange.title) ⌄")
-                    .font(PersonalScribeTheme.Typography.body.font)
-                    .foregroundStyle(palette.primaryTextBase)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.sm)
-                            .strokeBorder(palette.secondaryText.opacity(0.35), lineWidth: 0.5)
-                    )
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
+                rangeMenu
             }
 
             HStack(spacing: 0) {
@@ -118,7 +100,7 @@ struct HomeTab: View {
                     }
                     .buttonStyle(.plain)
                     .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
-                    .foregroundStyle(palette.statusLink)
+                    .foregroundStyle(palette.brandChampagne)
                 } else {
                     Text("Dismiss when all done")
                         .font(PersonalScribeTheme.Typography.body.font)
@@ -360,6 +342,43 @@ struct HomeTab: View {
         Task { @MainActor in
             await metrics.selectRange(range)
         }
+    }
+
+    private var rangeMenu: some View {
+        rangeMenuLabel
+            .overlay(
+                Capsule()
+                    .strokeBorder(palette.secondaryText.opacity(0.35), lineWidth: 0.5)
+            )
+            .overlay {
+                Menu {
+                    ForEach(MetricsRange.allCases) { range in
+                        Button(range.title) {
+                            selectRange(range)
+                        }
+                    }
+                } label: {
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Capsule())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+            }
+            .fixedSize()
+    }
+
+    private var rangeMenuLabel: some View {
+        HStack(spacing: 6) {
+            Text(metrics.selectedRange.title)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+        }
+        .font(PersonalScribeTheme.Typography.body.font)
+        .foregroundStyle(palette.primaryTextBase)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .contentShape(Capsule())
     }
 
     private var formattedWPM: String {

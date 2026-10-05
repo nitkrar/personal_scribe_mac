@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import XCTest
 @testable import PersonalScribeAppKit
@@ -6,36 +7,12 @@ import PersonalScribeCore
 
 @MainActor
 final class HomeTabViewModelTests: XCTestCase {
-    func testChecklistMarksAchievementsAndKeepsThemAfterSignalsDisappear() {
-        let defaults = Self.ephemeralDefaults()
-        let checklist = HomeChecklistState(defaults: defaults)
-
-        checklist.update(
-            hasTranscript: true,
-            hasCustomHotkey: true,
-            hasCustomMode: true
-        )
-        checklist.update(
-            hasTranscript: false,
-            hasCustomHotkey: false,
-            hasCustomMode: false
-        )
-
-        XCTAssertEqual(checklist.completedItems, Set(HomeChecklistItem.allCases))
-        XCTAssertEqual(checklist.completedCount, 3)
-        XCTAssertTrue(checklist.isComplete)
-    }
-
     func testChecklistRestoresEachPersistedAchievement() {
         let defaults = Self.ephemeralDefaults()
-        var checklist = HomeChecklistState(defaults: defaults)
-        checklist.update(
-            hasTranscript: true,
-            hasCustomHotkey: false,
-            hasCustomMode: true
-        )
+        defaults.set(true, forKey: "HomeChecklistStartRecordingComplete")
+        defaults.set(true, forKey: "HomeChecklistCreateModeComplete")
 
-        checklist = HomeChecklistState(defaults: defaults)
+        let checklist = HomeChecklistState(defaults: defaults)
 
         XCTAssertEqual(checklist.completedItems, [.startRecording, .createMode])
         XCTAssertEqual(checklist.completedCount, 2)
@@ -48,11 +25,10 @@ final class HomeTabViewModelTests: XCTestCase {
         checklist.dismiss()
         XCTAssertFalse(checklist.isDismissed)
 
-        checklist.update(
-            hasTranscript: true,
-            hasCustomHotkey: true,
-            hasCustomMode: true
-        )
+        defaults.set(true, forKey: "HomeChecklistStartRecordingComplete")
+        defaults.set(true, forKey: "HomeChecklistCustomizeShortcutComplete")
+        defaults.set(true, forKey: "HomeChecklistCreateModeComplete")
+        checklist = HomeChecklistState(defaults: defaults)
         checklist.dismiss()
         XCTAssertTrue(checklist.isDismissed)
 
@@ -114,15 +90,18 @@ final class HomeTabViewModelTests: XCTestCase {
         let (modeUpdates, modeContinuation) = AsyncStream<[WorkflowMode]>.makeStream()
         let checklist = HomeChecklistState(defaults: defaults)
         checklist.startObserving(metrics: metrics, customModes: modeUpdates)
+        let completed = expectation(description: "All checklist signals are observed")
+        let completionObservation = checklist.$completedItems
+            .filter { $0 == Set(HomeChecklistItem.allCases) }
+            .prefix(1)
+            .sink { _ in completed.fulfill() }
 
         Self.customHotkey.persist(to: defaults)
         HotkeyPreference.default.persist(to: defaults)
         modeContinuation.yield([.dictation])
         modeContinuation.yield([])
         await metrics.refresh(reason: .transcriptCommit)
-        for _ in 0..<10 where !checklist.isComplete {
-            await Task.yield()
-        }
+        await fulfillment(of: [completed], timeout: 1)
 
         XCTAssertEqual(checklist.completedItems, Set(HomeChecklistItem.allCases))
         XCTAssertEqual(checklist.recordingHotkey, .default)
@@ -130,6 +109,7 @@ final class HomeTabViewModelTests: XCTestCase {
             HomeChecklistState(defaults: defaults).completedItems,
             Set(HomeChecklistItem.allCases)
         )
+        withExtendedLifetime(completionObservation) {}
     }
 
     func testHotkeyChangesUpdateHintLiveAndKeepEarnedTick() {
