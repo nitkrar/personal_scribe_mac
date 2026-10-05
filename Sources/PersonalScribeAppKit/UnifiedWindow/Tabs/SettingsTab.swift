@@ -9,7 +9,9 @@ public struct SettingsTab: View {
     private let defaults: UserDefaults
     private let permissionService: any PermissionService
     private let shortcutsNavigationRequest: Int?
+    private let modelsNavigationRequest: Int?
     private let onConsumeShortcutsNavigationRequest: @MainActor (Int?) -> Void
+    private let onConsumeModelsNavigationRequest: @MainActor (Int?) -> Void
     private let menuBarVisibilityProvider: @MainActor () -> Bool
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
     private let openDiagnosticsWindow: @MainActor () -> Void
@@ -18,7 +20,9 @@ public struct SettingsTab: View {
         defaults: UserDefaults = .standard,
         permissionService: any PermissionService,
         shortcutsNavigationRequest: Int? = nil,
+        modelsNavigationRequest: Int? = nil,
         onConsumeShortcutsNavigationRequest: @escaping @MainActor (Int?) -> Void = { _ in },
+        onConsumeModelsNavigationRequest: @escaping @MainActor (Int?) -> Void = { _ in },
         // Default to a no-op + always-visible reading. Production
         // wiring lives in `PersonalScribeAppMain` and points at
         // `StatusItemControllerHost.{isMenuBarVisible, setMenuBarVisible}`.
@@ -31,7 +35,9 @@ public struct SettingsTab: View {
         self.defaults = defaults
         self.permissionService = permissionService
         self.shortcutsNavigationRequest = shortcutsNavigationRequest
+        self.modelsNavigationRequest = modelsNavigationRequest
         self.onConsumeShortcutsNavigationRequest = onConsumeShortcutsNavigationRequest
+        self.onConsumeModelsNavigationRequest = onConsumeModelsNavigationRequest
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.openDiagnosticsWindow = openDiagnosticsWindow
@@ -88,8 +94,15 @@ public struct SettingsTab: View {
         .onChange(of: shortcutsNavigationRequest) {
             selectedSubTab = .general
         }
+        .onChange(of: modelsNavigationRequest) {
+            selectedSubTab = .aiModels
+            onConsumeModelsNavigationRequest(modelsNavigationRequest)
+        }
         .onAppear {
-            if shortcutsNavigationRequest != nil {
+            if modelsNavigationRequest != nil {
+                selectedSubTab = .aiModels
+                onConsumeModelsNavigationRequest(modelsNavigationRequest)
+            } else if shortcutsNavigationRequest != nil {
                 selectedSubTab = .general
             }
         }

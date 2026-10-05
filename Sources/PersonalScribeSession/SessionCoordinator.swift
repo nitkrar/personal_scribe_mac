@@ -35,6 +35,7 @@ public actor SessionCoordinator {
     private var audioLevelContinuations: [UUID: AsyncStream<Float>.Continuation] = [:]
     private var currentAudioLevel: Float = 0.0
     private var audioLevelTask: Task<Void, Never>?
+    private var beforeCaptureStarts: (@Sendable () async -> Void)?
 
     /// Test-only init. Wraps `transcriber` as the asr processor of a
     /// built-in batch dictation recipe and binds that recipe to every
@@ -141,6 +142,12 @@ public actor SessionCoordinator {
         _ handler: @escaping @Sendable () async -> Void
     ) async {
         await pipeline.setPausedAutoFinalizeHandler(handler)
+    }
+
+    public func setBeforeCaptureStartsHandler(
+        _ handler: @escaping @Sendable () async -> Void
+    ) {
+        beforeCaptureStarts = handler
     }
 
     public func finalizePausedForExternalInterruption() async {
@@ -500,6 +507,7 @@ public actor SessionCoordinator {
     }
 
     private func performStart() async {
+        await beforeCaptureStarts?()
         await bindRecipeBeforeStart()
         await performToggle()
     }
@@ -514,6 +522,7 @@ public actor SessionCoordinator {
     }
 
     private func performHoldStart() async {
+        await beforeCaptureStarts?()
         await bindRecipeBeforeStart()
         await startAudioLevelRelayIfNeeded()
         await pipeline.startHoldCapture()

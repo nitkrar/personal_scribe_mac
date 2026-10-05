@@ -12,6 +12,7 @@ struct PersonalScribeAppMain: App {
     let coordinator: SessionCoordinator
     let startupCoordinator: AppStartupCoordinator
     let onboardingCompletionObserver: OnboardingCompletionObserver
+    let homeChecklistSetupObservation: AnyCancellable
 
     @NSApplicationDelegateAdaptor(FastExitApplicationTerminationDelegate.self)
     private var applicationTerminationDelegate
@@ -219,10 +220,24 @@ struct PersonalScribeAppMain: App {
         homeChecklist.startObserving(
             customModes: AppComposition.workflowModeRegistry.customModesStream()
         )
+        let setupFlow = SetupFlowState(defaults: defaults, checklist: homeChecklist)
         let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader(
             logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
         )
         let modelService = AppComposition.modelService
+        self.homeChecklistSetupObservation = Publishers.CombineLatest3(
+            appPermissionService.$statuses,
+            modelService.$downloadStates,
+            setupFlow.$satisfaction
+        )
+        .sink { statuses, _, setupSatisfaction in
+            homeChecklist.refreshSetupSatisfaction(
+                permissionsGranted: statuses[.microphone] == .granted
+                    && statuses[.accessibility] == .granted,
+                modelDownloaded: modelService.hasDownloadedModel(for: .asr),
+                shortcutTried: setupSatisfaction.shortcutTried
+            )
+        }
         // Shared input-device provider — one `AVFoundationInputDeviceProvider`
         // instance backs both the menu-bar Microphone submenu AND the
         // unified-window sidebar footer readout (#008). The provider is
@@ -230,6 +245,14 @@ struct PersonalScribeAppMain: App {
         // so sharing is safe and keeps both surfaces in sync.
         let inputDeviceProvider: any AudioInputDeviceProviding =
             AVFoundationInputDeviceProvider(defaults: defaults)
+        let setupLevelMonitor = StandaloneAudioLevelMonitor(
+            inputDeviceProvider: inputDeviceProvider
+        )
+        Task {
+            await coordinator.setBeforeCaptureStartsHandler {
+                await setupLevelMonitor.stop()
+            }
+        }
         let offlineRetranscriptionAction = AppComposition.offlineTranscriptionCoordinator.map { coordinator in
             OfflineRetranscriptionAction(
                 transcriptReader: unifiedTranscriptReader,
@@ -251,8 +274,10 @@ struct PersonalScribeAppMain: App {
                     transcriptReader: unifiedTranscriptReader,
                     metricsStore: metricsStore,
                     homeChecklist: homeChecklist,
+                    setupFlow: setupFlow,
                     permissionService: appPermissionService,
                     inputDeviceProvider: inputDeviceProvider,
+                    setupLevelMonitor: setupLevelMonitor,
                     modes: WorkflowModeRegistry.builtInModes,
                     modelService: modelService,
                     offlineTranscriptionCoordinator: AppComposition.offlineTranscriptionCoordinator,
@@ -277,6 +302,9 @@ struct PersonalScribeAppMain: App {
                     },
                     openDiagnosticsWindow: {
                         diagnosticsOverlayController.openWindow()
+                    },
+                    prepareActiveModel: {
+                        try? await coordinator.prepareTranscriber()
                     }
                 )
             }
@@ -400,6 +428,7 @@ struct PersonalScribeAppMain: App {
         // during first session" case (observer fires on publish). Once
         // flipped, the observer self-terminates — later revokes in
         // System Settings don't churn the flag.
+        let shouldOpenSetupAtLaunch = setupFlow.isOpen
         let observer = OnboardingCompletionObserver(
             permissionService: resolvedPermissionService,
             defaults: defaults
@@ -407,12 +436,13 @@ struct PersonalScribeAppMain: App {
         observer.start()
         self.onboardingCompletionObserver = observer
 
-        // Read after `observer.start()`, which may complete onboarding
-        // synchronously when permissions are already granted.
-        let launchTab = Self.launchTab(isOnboardingComplete: isOnboardingCompleteProvider())
         if showWindowAtLaunch {
             Task { @MainActor in
-                unifiedWindowControllerHost.showWindow(selecting: launchTab)
+                if shouldOpenSetupAtLaunch {
+                    unifiedWindowControllerHost.showSetup()
+                } else {
+                    unifiedWindowControllerHost.showWindow(selecting: .home)
+                }
             }
         }
 
@@ -451,9 +481,8 @@ struct PersonalScribeAppMain: App {
 }
 
 extension PersonalScribeAppMain {
-    /// Settings (for permissions) until onboarding completes, then Home.
-    static func launchTab(isOnboardingComplete: Bool) -> AppTab {
-        isOnboardingComplete ? .home : .settings
+    static func shouldOpenSetupAtLaunch(isOnboardingComplete: Bool) -> Bool {
+        !isOnboardingComplete
     }
 
     static func defaultTranscriptReader(

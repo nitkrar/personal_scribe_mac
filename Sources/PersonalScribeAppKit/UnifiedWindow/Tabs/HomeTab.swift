@@ -21,6 +21,11 @@ struct HomeTab: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                if viewModel.isCompletionBannerVisible {
+                    completionBanner
+                        .padding(.bottom, PersonalScribeTheme.Spacing.lg)
+                }
+
                 Text("Home")
                     .font(PersonalScribeTheme.Typography.largeTitle.font)
                     .foregroundStyle(palette.primaryTextBase)
@@ -41,6 +46,31 @@ struct HomeTab: View {
         .onAppear {
             viewModel.refreshHotkey()
         }
+    }
+
+    private var completionBanner: some View {
+        HStack(spacing: PersonalScribeTheme.Spacing.md) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(PersonalScribeTheme.Status.success)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("You're set up")
+                    .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+                Text("Use your shortcut in any app to dictate. Ninimma lives in the menu bar.")
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(palette.secondaryText)
+            }
+            Spacer()
+            Button { viewModel.dismissCompletionBanner() } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss setup complete")
+        }
+        .padding(PersonalScribeTheme.Spacing.md)
+        .homeCard(
+            background: cardSurface,
+            border: PersonalScribeTheme.Status.success.opacity(0.45)
+        )
     }
 
     private var dictationCard: some View {

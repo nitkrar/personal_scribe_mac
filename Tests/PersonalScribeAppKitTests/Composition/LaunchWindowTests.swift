@@ -3,11 +3,11 @@ import XCTest
 
 @MainActor
 final class LaunchWindowTests: XCTestCase {
-    func testLaunchOpensHomeOnceOnboardingIsComplete() {
-        XCTAssertEqual(PersonalScribeAppMain.launchTab(isOnboardingComplete: true), .home)
+    func testLaunchSkipsSetupOnceOnboardingIsComplete() {
+        XCTAssertFalse(PersonalScribeAppMain.shouldOpenSetupAtLaunch(isOnboardingComplete: true))
     }
 
-    func testLaunchOpensSettingsWhileOnboardingIsIncomplete() {
-        XCTAssertEqual(PersonalScribeAppMain.launchTab(isOnboardingComplete: false), .settings)
+    func testLaunchOpensSetupWhileOnboardingIsIncomplete() {
+        XCTAssertTrue(PersonalScribeAppMain.shouldOpenSetupAtLaunch(isOnboardingComplete: false))
     }
 }

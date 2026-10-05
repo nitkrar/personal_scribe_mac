@@ -1,4 +1,5 @@
 import AppKit
+import PersonalScribeAudio
 import PersonalScribeCore
 import PersonalScribeSession
 import SwiftUI
@@ -59,6 +60,10 @@ final class UnifiedWindowController: NSWindowController {
     private let offlineTranscriptionViewModel: OfflineTranscriptionTabViewModel
     private let modesViewModel: ModesListViewModel
     private let microphoneFooterViewModel: MicrophoneFooterViewModel
+    private let setupFlow: SetupFlowState
+    private let setupPermissionsViewModel: PermissionsSubTabViewModel
+    private let setupMicrophoneViewModel: SetupMicrophoneViewModel
+    private let setupModelViewModel: SetupModelViewModel
     private let permissionService: any PermissionService
     private let menuBarVisibilityProvider: @MainActor () -> Bool
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
@@ -77,8 +82,10 @@ final class UnifiedWindowController: NSWindowController {
         transcriptReader: any TranscriptReading,
         metricsStore: MetricsSnapshotStore,
         homeChecklist: HomeChecklistState? = nil,
+        setupFlow: SetupFlowState? = nil,
         permissionService: any PermissionService,
         inputDeviceProvider: any AudioInputDeviceProviding,
+        setupLevelMonitor: (any AudioLevelMonitoring)? = nil,
         modes: [WorkflowMode] = WorkflowModeRegistry.builtInModes,
         modelService: ActiveModelService,
         offlineTranscriptionCoordinator: (any OfflineTranscriptionJobManaging)? = nil,
@@ -86,7 +93,8 @@ final class UnifiedWindowController: NSWindowController {
         setActiveMode: (@MainActor (WorkflowMode) async -> Void)? = nil,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
-        openDiagnosticsWindow: @escaping @MainActor () -> Void = {}
+        openDiagnosticsWindow: @escaping @MainActor () -> Void = {},
+        prepareActiveModel: @escaping @MainActor () async -> Void = {}
     ) {
         self.defaults = defaults
         self.notificationCenter = notificationCenter
@@ -96,10 +104,17 @@ final class UnifiedWindowController: NSWindowController {
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.openDiagnosticsWindow = openDiagnosticsWindow
+        let resolvedChecklist = homeChecklist ?? HomeChecklistState(defaults: defaults)
+        let resolvedSetupFlow = setupFlow ?? SetupFlowState(
+            defaults: defaults,
+            checklist: resolvedChecklist
+        )
+        self.setupFlow = resolvedSetupFlow
         self.homeViewModel = HomeTabViewModel(
             metrics: metricsStore,
             defaults: defaults,
-            checklist: homeChecklist,
+            checklist: resolvedChecklist,
+            setupFlow: resolvedSetupFlow,
             openShortcuts: {
                 model.openSettingsShortcuts()
             },
@@ -125,6 +140,19 @@ final class UnifiedWindowController: NSWindowController {
             provider: inputDeviceProvider,
             defaults: defaults
         )
+        self.setupPermissionsViewModel = PermissionsSubTabViewModel(
+            permissionService: permissionService
+        )
+        self.setupMicrophoneViewModel = SetupMicrophoneViewModel(
+            inputDeviceProvider: inputDeviceProvider,
+            levelMonitor: setupLevelMonitor
+                ?? StandaloneAudioLevelMonitor(inputDeviceProvider: inputDeviceProvider)
+        )
+        self.setupModelViewModel = SetupModelViewModel(
+            service: modelService,
+            prepareActiveModel: prepareActiveModel,
+            showAllModels: { model.openSettingsModels() }
+        )
 
         let initialTint = WindowTint.resolve(from: defaults)
         let rootView = UnifiedWindowView(
@@ -135,11 +163,16 @@ final class UnifiedWindowController: NSWindowController {
             offlineTranscriptionViewModel: offlineTranscriptionViewModel,
             modesViewModel: modesViewModel,
             microphoneFooterViewModel: microphoneFooterViewModel,
+            setupFlow: resolvedSetupFlow,
+            setupPermissionsViewModel: setupPermissionsViewModel,
+            setupMicrophoneViewModel: setupMicrophoneViewModel,
+            setupModelViewModel: setupModelViewModel,
             permissionService: permissionService,
             defaults: defaults,
             menuBarVisibilityProvider: menuBarVisibilityProvider,
             menuBarVisibilitySetter: menuBarVisibilitySetter,
-            openDiagnosticsWindow: openDiagnosticsWindow
+            openDiagnosticsWindow: openDiagnosticsWindow,
+            hotkey: HotkeyPreference.resolve(from: defaults)
         )
         let hostingController = NSHostingController(rootView: rootView)
         self.hostingController = hostingController
@@ -273,6 +306,11 @@ final class UnifiedWindowController: NSWindowController {
         showWindow(nil)
     }
 
+    func showSetup() {
+        model.showSetup()
+        showWindow(nil)
+    }
+
     static func frameForShowing(
         _ windowFrame: NSRect,
         mainScreenVisibleFrame: NSRect
@@ -336,11 +374,16 @@ final class UnifiedWindowController: NSWindowController {
             offlineTranscriptionViewModel: offlineTranscriptionViewModel,
             modesViewModel: modesViewModel,
             microphoneFooterViewModel: microphoneFooterViewModel,
+            setupFlow: setupFlow,
+            setupPermissionsViewModel: setupPermissionsViewModel,
+            setupMicrophoneViewModel: setupMicrophoneViewModel,
+            setupModelViewModel: setupModelViewModel,
             permissionService: permissionService,
             defaults: defaults,
             menuBarVisibilityProvider: menuBarVisibilityProvider,
             menuBarVisibilitySetter: menuBarVisibilitySetter,
-            openDiagnosticsWindow: openDiagnosticsWindow
+            openDiagnosticsWindow: openDiagnosticsWindow,
+            hotkey: HotkeyPreference.resolve(from: defaults)
         )
     }
 
@@ -382,5 +425,12 @@ final class UnifiedWindowControllerHost: ObservableObject {
             controller = controllerFactory()
         }
         controller?.showWindow(selecting: tab)
+    }
+
+    func showSetup() {
+        if controller == nil {
+            controller = controllerFactory()
+        }
+        controller?.showSetup()
     }
 }

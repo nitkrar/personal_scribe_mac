@@ -4,6 +4,25 @@ import PersonalScribeTestSupport
 @testable import PersonalScribeSession
 
 final class SessionCoordinatorHappyPathTests: XCTestCase {
+    func testBeforeCaptureStartsHandlerRunsForToggleAndHoldStarts() async throws {
+        let counter = StartHookCounter()
+        let coordinator = SessionCoordinator(
+            capture: FakeAudioCapturer(buffers: []),
+            transcriber: FakeTranscriber(result: .init(text: "", audioDuration: .zero, processingDuration: .zero)),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+        await coordinator.setBeforeCaptureStartsHandler {
+            await counter.increment()
+        }
+
+        await coordinator.toggle()
+        await coordinator.stopIfActive()
+        await coordinator.startHoldIfIdle()
+
+        let count = await counter.value()
+        XCTAssertEqual(count, 2)
+    }
+
     func testApplicationTerminationFinalizesDuringPausedResumeTransition() async throws {
         let capture = CoordinatorResumeGatedCapture(
             buffer: try PCMBuffer(
@@ -148,6 +167,12 @@ final class SessionCoordinatorHappyPathTests: XCTestCase {
     }
 
     private struct TimeoutError: Error {}
+}
+
+private actor StartHookCounter {
+    private var count = 0
+    func increment() { count += 1 }
+    func value() -> Int { count }
 }
 
 private actor CoordinatorResumeGatedCapture: AudioCapturer {

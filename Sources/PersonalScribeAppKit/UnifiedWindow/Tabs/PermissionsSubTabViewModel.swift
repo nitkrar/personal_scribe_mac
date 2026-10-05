@@ -92,6 +92,11 @@ final class PermissionsSubTabViewModel: ObservableObject {
         openURL(url)
     }
 
+    func requestAccess(for permission: Permission) async {
+        _ = await permissionService.request(permission)
+        refresh()
+    }
+
     private static func observePermissionChanges<Service: PermissionService>(
         for service: Service,
         onChange: @escaping @MainActor ([Permission: PermissionStatus]) -> Void

@@ -25,11 +25,16 @@ struct UnifiedWindowView: View {
     @ObservedObject var offlineTranscriptionViewModel: OfflineTranscriptionTabViewModel
     @ObservedObject var modesViewModel: ModesListViewModel
     @ObservedObject var microphoneFooterViewModel: MicrophoneFooterViewModel
+    @ObservedObject var setupFlow: SetupFlowState
+    @ObservedObject var setupPermissionsViewModel: PermissionsSubTabViewModel
+    @ObservedObject var setupMicrophoneViewModel: SetupMicrophoneViewModel
+    @ObservedObject var setupModelViewModel: SetupModelViewModel
     let permissionService: any PermissionService
     let defaults: UserDefaults
     let menuBarVisibilityProvider: @MainActor () -> Bool
     let menuBarVisibilitySetter: @MainActor (Bool) -> Void
     let openDiagnosticsWindow: @MainActor () -> Void
+    let hotkey: HotkeyPreference
 
     init(
         model: UnifiedWindowModel,
@@ -39,11 +44,16 @@ struct UnifiedWindowView: View {
         offlineTranscriptionViewModel: OfflineTranscriptionTabViewModel,
         modesViewModel: ModesListViewModel,
         microphoneFooterViewModel: MicrophoneFooterViewModel,
+        setupFlow: SetupFlowState,
+        setupPermissionsViewModel: PermissionsSubTabViewModel,
+        setupMicrophoneViewModel: SetupMicrophoneViewModel,
+        setupModelViewModel: SetupModelViewModel,
         permissionService: any PermissionService,
         defaults: UserDefaults = .standard,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
-        openDiagnosticsWindow: @escaping @MainActor () -> Void = {}
+        openDiagnosticsWindow: @escaping @MainActor () -> Void = {},
+        hotkey: HotkeyPreference = .default
     ) {
         self.model = model
         self.windowTint = windowTint
@@ -52,11 +62,16 @@ struct UnifiedWindowView: View {
         self.offlineTranscriptionViewModel = offlineTranscriptionViewModel
         self.modesViewModel = modesViewModel
         self.microphoneFooterViewModel = microphoneFooterViewModel
+        self.setupFlow = setupFlow
+        self.setupPermissionsViewModel = setupPermissionsViewModel
+        self.setupMicrophoneViewModel = setupMicrophoneViewModel
+        self.setupModelViewModel = setupModelViewModel
         self.permissionService = permissionService
         self.defaults = defaults
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.openDiagnosticsWindow = openDiagnosticsWindow
+        self.hotkey = hotkey
     }
 
     var body: some View {
@@ -91,6 +106,12 @@ struct UnifiedWindowView: View {
                 .padding(.horizontal, PersonalScribeTheme.Spacing.lg)
                 .padding(.vertical, PersonalScribeTheme.Spacing.lg)
 
+            if setupFlow.isOpen {
+                setupSidebarRow
+                    .padding(.horizontal, PersonalScribeTheme.Spacing.sm)
+                    .padding(.bottom, PersonalScribeTheme.Spacing.xs)
+            }
+
             List(AppTab.sidebarListCases, selection: tabBinding) { tab in
                 sidebarRow(for: tab)
                     .tag(tab)
@@ -116,6 +137,26 @@ struct UnifiedWindowView: View {
                 .fill(UnifiedWindowChrome.chromeSeparator(scheme: colorScheme, tint: windowTint))
                 .frame(width: 1)
         }
+    }
+
+    private var setupSidebarRow: some View {
+        Button {
+            model.showSetup()
+        } label: {
+            HStack(spacing: PersonalScribeTheme.Spacing.sm) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(model.isShowingSetup ? PersonalScribeTheme.Palette.for(scheme: colorScheme).brandChampagne : .clear)
+                    .frame(width: 3, height: 28)
+                Label("Get started", systemImage: "sparkles")
+                Spacer()
+                Text("\(setupFlow.completedStepCount)/5")
+                    .font(PersonalScribeTheme.Typography.caption.font.weight(.semibold))
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(Capsule().fill(UnifiedWindowChrome.chromeText(scheme: colorScheme, tint: windowTint).opacity(0.12)))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// Sidebar row with a champagne left-accent bar on the active tab.
@@ -195,7 +236,20 @@ struct UnifiedWindowView: View {
 
     @ViewBuilder
     private var detail: some View {
-        tabView(for: model.activeTab)
+        Group {
+            if model.isShowingSetup && setupFlow.isOpen {
+                SetupView(
+                    flow: setupFlow,
+                    permissions: setupPermissionsViewModel,
+                    microphone: setupMicrophoneViewModel,
+                    model: setupModelViewModel,
+                    hotkey: hotkey,
+                    onClose: { model.setActiveTab(.home) }
+                )
+            } else {
+                tabView(for: model.activeTab)
+            }
+        }
             .frame(
                 maxWidth: .infinity,
                 maxHeight: .infinity,
@@ -222,8 +276,12 @@ struct UnifiedWindowView: View {
                 defaults: defaults,
                 permissionService: permissionService,
                 shortcutsNavigationRequest: model.settingsShortcutsRequest,
+                modelsNavigationRequest: model.settingsModelsRequest,
                 onConsumeShortcutsNavigationRequest: {
                     model.consumeSettingsShortcutsRequest($0)
+                },
+                onConsumeModelsNavigationRequest: {
+                    model.consumeSettingsModelsRequest($0)
                 },
                 menuBarVisibilityProvider: menuBarVisibilityProvider,
                 menuBarVisibilitySetter: menuBarVisibilitySetter,

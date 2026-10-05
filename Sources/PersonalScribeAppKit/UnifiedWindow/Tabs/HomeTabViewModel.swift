@@ -236,6 +236,8 @@ public final class HomeTabViewModel: ObservableObject {
 
     private let openShortcuts: @MainActor () -> Void
     private let openModes: @MainActor () -> Void
+    private let setupFlow: SetupFlowState?
+    private var setupFlowObservation: AnyCancellable?
 
     public convenience init(
         metrics: MetricsSnapshotStore,
@@ -247,6 +249,7 @@ public final class HomeTabViewModel: ObservableObject {
             metrics: metrics,
             defaults: defaults,
             checklist: nil,
+            setupFlow: nil,
             openShortcuts: openShortcuts,
             openModes: openModes
         )
@@ -256,6 +259,7 @@ public final class HomeTabViewModel: ObservableObject {
         metrics: MetricsSnapshotStore,
         defaults: UserDefaults = .standard,
         checklist: HomeChecklistState? = nil,
+        setupFlow: SetupFlowState? = nil,
         openShortcuts: @escaping @MainActor () -> Void = {},
         openModes: @escaping @MainActor () -> Void = {}
     ) {
@@ -263,6 +267,18 @@ public final class HomeTabViewModel: ObservableObject {
         self.openShortcuts = openShortcuts
         self.openModes = openModes
         self.checklist = checklist ?? HomeChecklistState(defaults: defaults)
+        self.setupFlow = setupFlow
+        setupFlowObservation = setupFlow?.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+    }
+
+    var isCompletionBannerVisible: Bool {
+        setupFlow?.isCompletionBannerVisible == true
+    }
+
+    func dismissCompletionBanner() {
+        setupFlow?.dismissCompletionBanner()
     }
 
     public var emptyStateHotkeyHint: String {

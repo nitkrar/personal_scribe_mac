@@ -234,6 +234,15 @@ final class PermissionsSubTabViewModelTests: XCTestCase {
         ])
     }
 
+    func testRequestAccessUsesPermissionServiceSoPendingMicCanRaiseOSPrompt() async {
+        let service = FakePermissionService()
+        let viewModel = PermissionsSubTabViewModel(permissionService: service)
+
+        await viewModel.requestAccess(for: .microphone)
+
+        XCTAssertEqual(service.requestedPermissions, [.microphone])
+    }
+
     // MARK: - Helpers
 
     private func makeViewModelCapturingOpens() -> (
@@ -283,6 +292,7 @@ private final class CapturedURLs {
 private final class FakePermissionService: PermissionService {
     @Published private(set) var statuses: [Permission: PermissionStatus]
     private(set) var refreshCallCount = 0
+    private(set) var requestedPermissions: [Permission] = []
     private var nextSnapshot: [Permission: PermissionStatus]?
 
     init(
@@ -312,7 +322,8 @@ private final class FakePermissionService: PermissionService {
     }
 
     func request(_ permission: Permission) async -> RequestOutcome {
-        RequestOutcome(
+        requestedPermissions.append(permission)
+        return RequestOutcome(
             prompted: false,
             openedSettings: false,
             requiresRelaunch: false,
