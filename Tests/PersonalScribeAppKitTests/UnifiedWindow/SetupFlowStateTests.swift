@@ -120,7 +120,7 @@ final class SetupFlowStateTests: XCTestCase {
         )
     }
 
-    func testPracticeSuccessRecordsWordsElapsedTimeAndCompletesPendingItem() {
+    func testPasteAfterCaptureStopBeforeCompletedSnapshotSucceeds() {
         let defaults = Self.ephemeralDefaults()
         let checklist = HomeChecklistState(defaults: defaults)
         checklist.markApplicable(.tryShortcut)
@@ -132,7 +132,7 @@ final class SetupFlowStateTests: XCTestCase {
         )
         flow.beginPractice()
         now = Date(timeIntervalSince1970: 110)
-        flow.recordPracticeCompleted()
+        flow.recordPracticeSessionEvent(.captureStopped(1))
         now = Date(timeIntervalSince1970: 111.25)
 
         flow.updatePracticeText("Typed prefix Hello Ninimma")
@@ -163,7 +163,7 @@ final class SetupFlowStateTests: XCTestCase {
         let defaults = Self.ephemeralDefaults()
         let flow = SetupFlowState(defaults: defaults)
         flow.beginPractice()
-        flow.recordPracticeCompleted()
+        flow.recordPracticeSessionEvent(.captureStopped(1))
 
         flow.recordPracticePaste("")
         flow.recordPracticePaste("Later manual paste")
@@ -171,11 +171,22 @@ final class SetupFlowStateTests: XCTestCase {
         XCTAssertNil(flow.practiceResult)
     }
 
-    func testNextCaptureOrLeavingPracticeDisarmsPaste() {
+    func testEmptyCompletionDiscardsStoppedCaptureBeforeLaterPaste() {
         let flow = SetupFlowState(defaults: Self.ephemeralDefaults())
         flow.beginPractice()
-        flow.recordPracticeCompleted()
-        flow.disarmPracticePaste()
+        flow.recordPracticeSessionEvent(.captureStopped(1))
+        flow.recordPracticeSessionEvent(.discarded(2))
+
+        flow.recordPracticePaste("Later manual paste")
+
+        XCTAssertNil(flow.practiceResult)
+    }
+
+    func testNextCaptureDisarmsPreviousCompletedCapture() {
+        let flow = SetupFlowState(defaults: Self.ephemeralDefaults())
+        flow.beginPractice()
+        flow.recordPracticeSessionEvent(.captureStopped(1))
+        flow.recordPracticeSessionEvent(.captureStarted(2))
 
         flow.recordPracticePaste("Later manual paste")
 

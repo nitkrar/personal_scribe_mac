@@ -76,6 +76,12 @@ final class SetupViewRenderTests: XCTestCase {
                     continuation.yield(renderSession)
                     continuation.finish()
                 }
+            },
+            recordingAudioLevels: {
+                AsyncStream { continuation in
+                    continuation.yield(0.75)
+                    continuation.finish()
+                }
             }
         )
         let model = SetupModelViewModel(
@@ -109,7 +115,7 @@ final class SetupViewRenderTests: XCTestCase {
         if scenario == .tryShortcutSuccess {
             flow.beginPractice()
             renderNow = Date(timeIntervalSince1970: 101)
-            flow.recordPracticeCompleted()
+            flow.recordPracticeSessionEvent(.captureStopped(1))
             renderNow = Date(timeIntervalSince1970: 101.8)
             flow.updatePracticeText("Hello Ninimma, this is my first dictation.")
             flow.recordPracticePaste("Hello Ninimma, this is my first dictation.")
@@ -124,6 +130,7 @@ final class SetupViewRenderTests: XCTestCase {
             microphone: microphone,
             model: model,
             checklist: checklist,
+            pillPreviewRenderDate: Date(timeIntervalSinceReferenceDate: 1),
             onOpenShortcuts: {},
             onClose: {}
         )

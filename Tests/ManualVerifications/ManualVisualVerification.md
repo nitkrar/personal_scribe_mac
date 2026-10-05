@@ -680,8 +680,9 @@ below once per dogfood cycle:
   Accessibility is marked optional with clipboard fallback, opens its
   privacy pane, and both statuses update live.
 - [ ] **MV-ONBOARDING-3** On Microphone, switch input devices and speak.
-  The meter moves; leaving the step, minimizing, or closing the retained
-  window stops it. Open this step during active/paused recording and confirm no second
+  The meter moves; leaving the step, minimizing, hiding the app, or closing
+  the retained window stops it. Restore/unhide and confirm it restarts. Open
+  this step during active/paused recording and confirm no second
   engine starts and device selection is inert. After stopping, the meter
   resets and restarts while this step remains visible. Confirm the meter
   uses the same animated waveform as the recording pill. Close and reopen
@@ -701,7 +702,7 @@ below once per dogfood cycle:
   the shortcut in Settings and
   confirm this screen updates live. Typing does not complete the step;
   silence/empty results and later manual paste do not complete it; only a
-  non-empty completed recording pasted into the Ninimma editor shows
+  non-empty recording pasted into the Ninimma editor shows
   the word-count/time success card. Its time measures stop-to-paste
   latency, not speaking duration. Try again clears it.
 - [ ] **MV-ONBOARDING-7** While setup is open, use Home and Settings,

@@ -226,7 +226,7 @@ final class SetupMicrophoneViewModelTests: XCTestCase {
         await waitUntil { await source.activeSubscriptionCount == 0 }
     }
 
-    func testPracticeCompletionRequiresNonEmptyCompletedResult() async {
+    func testPracticeStopArmsBeforeCompletionAndEmptyCompletionDiscards() async {
         let source = StubSetupSessionSource(state: .idle)
         let viewModel = SetupMicrophoneViewModel(
             inputDeviceProvider: StubSetupInputDeviceProvider(),
@@ -248,13 +248,18 @@ final class SetupMicrophoneViewModelTests: XCTestCase {
             )
         )
         try? await Task.sleep(for: .milliseconds(20))
-        if case .completed = viewModel.practiceSessionEvent {
-            XCTFail("An empty transcript must not arm a later paste")
+        guard case .discarded = viewModel.practiceSessionEvent else {
+            return XCTFail("An empty transcript must discard the stopped capture")
         }
 
         await source.send(SessionSnapshot(sessionState: .capturing))
         await waitUntil {
-            if case .captureStarted(2) = viewModel.practiceSessionEvent { return true }
+            if case .captureStarted(4) = viewModel.practiceSessionEvent { return true }
+            return false
+        }
+        await source.send(SessionSnapshot(sessionState: .transcribing))
+        await waitUntil {
+            if case .captureStopped = viewModel.practiceSessionEvent { return true }
             return false
         }
         await source.send(
@@ -263,9 +268,9 @@ final class SetupMicrophoneViewModelTests: XCTestCase {
                 lastCompletedResult: Self.result(text: "Hello Ninimma")
             )
         )
-        await waitUntil {
-            if case .completed = viewModel.practiceSessionEvent { return true }
-            return false
+        try? await Task.sleep(for: .milliseconds(20))
+        guard case .captureStopped = viewModel.practiceSessionEvent else {
+            return XCTFail("A non-empty completion must preserve the stop arm")
         }
     }
 
@@ -279,6 +284,8 @@ final class SetupMicrophoneViewModelTests: XCTestCase {
         )
 
         await viewModel.setPracticeVisible(true)
+        await waitUntil { await source.activeSubscriptionCount == 1 }
+        try? await Task.sleep(for: .milliseconds(20))
         XCTAssertNil(viewModel.practiceSessionEvent)
         await viewModel.windowDidHide()
         await source.send(
@@ -289,9 +296,34 @@ final class SetupMicrophoneViewModelTests: XCTestCase {
         )
 
         await viewModel.setPracticeVisible(true)
+        await waitUntil { await source.activeSubscriptionCount == 1 }
+        try? await Task.sleep(for: .milliseconds(20))
 
         XCTAssertNil(viewModel.practiceSessionEvent)
         XCTAssertEqual(viewModel.sessionState, .completed)
+    }
+
+    func testPracticeWaveformUsesRecordingAudioLevel() async {
+        let source = StubSetupSessionSource(state: .capturing)
+        let viewModel = SetupMicrophoneViewModel(
+            inputDeviceProvider: StubSetupInputDeviceProvider(),
+            levelMonitor: StubAudioLevelMonitor(),
+            currentSessionSnapshot: { await source.current() },
+            sessionSnapshots: { await source.stream() },
+            recordingAudioLevels: {
+                AsyncStream { continuation in
+                    continuation.yield(0.82)
+                    continuation.finish()
+                }
+            }
+        )
+
+        await viewModel.setPracticeVisible(true)
+        await waitUntil { viewModel.level == 0.82 }
+
+        XCTAssertEqual(viewModel.level, 0.82)
+        await viewModel.setPracticeVisible(false)
+        XCTAssertEqual(viewModel.level, 0)
     }
 
     private func waitUntil(

@@ -72,6 +72,8 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
     private var windowTintObserver: NSObjectProtocol?
     private var appDidBecomeActiveObserver: NSObjectProtocol?
     private var appDidResignActiveObserver: NSObjectProtocol?
+    private var appDidHideObserver: NSObjectProtocol?
+    private var appDidUnhideObserver: NSObjectProtocol?
     private var activeSpaceDidChangeObserver: NSObjectProtocol?
     private var foregroundRecoveryState = UnifiedWindowForegroundRecoveryState()
 
@@ -99,6 +101,9 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
             SessionSnapshot()
         },
         sessionSnapshots: @escaping @Sendable () async -> AsyncStream<SessionSnapshot> = {
+            AsyncStream { $0.finish() }
+        },
+        recordingAudioLevels: @escaping @Sendable () async -> AsyncStream<Float> = {
             AsyncStream { $0.finish() }
         }
     ) {
@@ -165,7 +170,8 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
             levelMonitor: setupLevelMonitor
                 ?? StandaloneAudioLevelMonitor(inputDeviceProvider: inputDeviceProvider),
             currentSessionSnapshot: currentSessionSnapshot,
-            sessionSnapshots: sessionSnapshots
+            sessionSnapshots: sessionSnapshots,
+            recordingAudioLevels: recordingAudioLevels
         )
         self.setupModelViewModel = SetupModelViewModel(
             service: modelService,
@@ -253,6 +259,27 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
             }
         }
 
+        appDidHideObserver = notificationCenter.addObserver(
+            forName: NSApplication.didHideNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.hideSetupMicrophoneState()
+            }
+        }
+
+        appDidUnhideObserver = notificationCenter.addObserver(
+            forName: NSApplication.didUnhideNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard self?.window?.isVisible == true else { return }
+                self?.resumeVisibleSetupMicrophoneState()
+            }
+        }
+
         activeSpaceDidChangeObserver = workspaceNotificationCenter.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil,
@@ -279,6 +306,12 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
         }
         if let appDidResignActiveObserver {
             notificationCenter.removeObserver(appDidResignActiveObserver)
+        }
+        if let appDidHideObserver {
+            notificationCenter.removeObserver(appDidHideObserver)
+        }
+        if let appDidUnhideObserver {
+            notificationCenter.removeObserver(appDidUnhideObserver)
         }
         if let activeSpaceDidChangeObserver {
             workspaceNotificationCenter.removeObserver(activeSpaceDidChangeObserver)

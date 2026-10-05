@@ -164,7 +164,7 @@ final class UnifiedWindowControllerTests: XCTestCase {
         let defaults = Self.ephemeralDefaults()
         let setupFlow = SetupFlowState(defaults: defaults)
         setupFlow.beginPractice()
-        setupFlow.recordPracticeCompleted()
+        setupFlow.recordPracticeSessionEvent(.captureStopped(1))
         let controller = Self.makeController(defaults: defaults, setupFlow: setupFlow)
 
         controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
@@ -222,6 +222,33 @@ final class UnifiedWindowControllerTests: XCTestCase {
         controller.window?.close()
     }
 
+    func testAppHideStopsAndUnhideRestartsSetupMicrophoneMonitor() async {
+        let defaults = Self.ephemeralDefaults()
+        let setupFlow = SetupFlowState(defaults: defaults)
+        setupFlow.advance(satisfaction: .allSatisfied)
+        let monitor = CloseTrackingAudioLevelMonitor()
+        let notifications = NotificationCenter()
+        let controller = Self.makeController(
+            defaults: defaults,
+            notificationCenter: notifications,
+            setupFlow: setupFlow,
+            setupLevelMonitor: monitor
+        )
+        controller.showSetup()
+        await waitUntil { await monitor.startCount >= 1 }
+        let startsBeforeHide = await monitor.startCount
+        let stopsBeforeHide = await monitor.stopCount
+
+        notifications.post(name: NSApplication.didHideNotification, object: nil)
+        await waitUntil { await monitor.stopCount > stopsBeforeHide }
+        notifications.post(name: NSApplication.didUnhideNotification, object: nil)
+        await waitUntil { await monitor.startCount > startsBeforeHide }
+
+        let startsAfterUnhide = await monitor.startCount
+        XCTAssertGreaterThan(startsAfterUnhide, startsBeforeHide)
+        controller.window?.close()
+    }
+
     // MARK: - Main-screen placement
 
     func testFrameForShowingReturnsSameFrameWhenFullyInsideMainScreen() {
@@ -269,6 +296,7 @@ final class UnifiedWindowControllerTests: XCTestCase {
     @MainActor
     private static func makeController(
         defaults: UserDefaults? = nil,
+        notificationCenter: NotificationCenter = .default,
         setupFlow: SetupFlowState? = nil,
         setupLevelMonitor: (any AudioLevelMonitoring)? = nil
     ) -> UnifiedWindowController {
@@ -284,6 +312,7 @@ final class UnifiedWindowControllerTests: XCTestCase {
         )
         return UnifiedWindowController(
             defaults: defaults,
+            notificationCenter: notificationCenter,
             transcriptReader: StubTranscriptReader(),
             metricsStore: MetricsSnapshotStore(
                 reader: StubMetricsReader(),

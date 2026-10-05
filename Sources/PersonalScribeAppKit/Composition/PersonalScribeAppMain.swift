@@ -314,6 +314,9 @@ struct PersonalScribeAppMain: App {
                     },
                     sessionSnapshots: {
                         await coordinator.snapshotStream()
+                    },
+                    recordingAudioLevels: {
+                        await coordinator.audioLevelStream()
                     }
                 )
             }

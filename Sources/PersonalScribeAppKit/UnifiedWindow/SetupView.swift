@@ -10,16 +10,34 @@ struct SetupView: View {
     let microphone: SetupMicrophoneViewModel
     @ObservedObject var model: SetupModelViewModel
     @ObservedObject var checklist: HomeChecklistState
-    @StateObject private var pillPreview: PillOverlayViewModel = {
-        let model = PillOverlayViewModel(visibility: .recording)
-        model.waveformRenderDate = Date(timeIntervalSinceReferenceDate: 1)
-        return model
-    }()
+    @StateObject private var pillPreview: PillOverlayViewModel
 
     let onOpenShortcuts: @MainActor () -> Void
     let onClose: @MainActor () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+
+    init(
+        flow: SetupFlowState,
+        permissions: PermissionsSubTabViewModel,
+        microphone: SetupMicrophoneViewModel,
+        model: SetupModelViewModel,
+        checklist: HomeChecklistState,
+        pillPreviewRenderDate: Date? = nil,
+        onOpenShortcuts: @escaping @MainActor () -> Void,
+        onClose: @escaping @MainActor () -> Void
+    ) {
+        self.flow = flow
+        self.permissions = permissions
+        self.microphone = microphone
+        self.model = model
+        self.checklist = checklist
+        self.onOpenShortcuts = onOpenShortcuts
+        self.onClose = onClose
+        let preview = PillOverlayViewModel(visibility: .recording)
+        preview.waveformRenderDate = pillPreviewRenderDate
+        _pillPreview = StateObject(wrappedValue: preview)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -27,7 +45,7 @@ struct SetupView: View {
             stepContent
                 .padding(.top, PersonalScribeTheme.Spacing.xl)
             Spacer(minLength: PersonalScribeTheme.Spacing.lg)
-            if flow.step == .tryShortcut, flow.practiceResult == nil {
+            if flow.step == .tryShortcut, model.isReady, flow.practiceResult == nil {
                 SetupMicrophoneObserver(microphone: microphone) {
                     practicePillPreview
                 }
@@ -366,13 +384,8 @@ struct SetupView: View {
                     }
                 }
                 .onChange(of: microphone.practiceSessionEvent) { _, event in
-                    switch event {
-                    case .captureStarted:
-                        flow.disarmPracticePaste()
-                    case .completed:
-                        flow.recordPracticeCompleted()
-                    case nil:
-                        break
+                    if let event {
+                        flow.recordPracticeSessionEvent(event)
                     }
                 }
                 .onAppear { Task { await microphone.setPracticeVisible(true) } }
@@ -431,10 +444,11 @@ struct SetupView: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .onAppear { updatePillPreviewLevel() }
         .onChange(of: microphone.isRecording) { _, _ in updatePillPreviewLevel() }
+        .onChange(of: microphone.level) { _, _ in updatePillPreviewLevel() }
     }
 
     private func updatePillPreviewLevel() {
-        pillPreview.audioLevel = microphone.isRecording ? 0.75 : 0
+        pillPreview.audioLevel = microphone.isRecording ? Double(microphone.level) : 0
     }
 
     private var footer: some View {

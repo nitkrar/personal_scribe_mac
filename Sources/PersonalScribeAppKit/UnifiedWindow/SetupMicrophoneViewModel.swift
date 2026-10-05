@@ -5,7 +5,8 @@ import PersonalScribeSession
 
 enum SetupPracticeSessionEvent: Equatable {
     case captureStarted(Int)
-    case completed(Int)
+    case captureStopped(Int)
+    case discarded(Int)
 }
 
 @MainActor
@@ -22,14 +23,17 @@ final class SetupMicrophoneViewModel: ObservableObject {
     private let levelMonitor: any AudioLevelMonitoring
     private let currentSessionSnapshot: @Sendable () async -> SessionSnapshot
     private let sessionSnapshots: @Sendable () async -> AsyncStream<SessionSnapshot>
+    private let recordingAudioLevels: @Sendable () async -> AsyncStream<Float>
     private var levelTask: Task<Void, Never>?
     private var sessionTask: Task<Void, Never>?
+    private var recordingLevelTask: Task<Void, Never>?
     private var isVisible = false
     private var isPracticeVisible = false
     private var isStarting = false
     private var monitorGeneration = 0
     private var latestSessionSnapshot: SessionSnapshot
     private var practiceCaptureWasSeen = false
+    private var practiceStopWasSeen = false
     private var practiceEventSequence = 0
 
     init(
@@ -44,6 +48,9 @@ final class SetupMicrophoneViewModel: ObservableObject {
                 continuation.yield(SessionSnapshot())
                 continuation.finish()
             }
+        },
+        recordingAudioLevels: @escaping @Sendable () async -> AsyncStream<Float> = {
+            AsyncStream { $0.finish() }
         }
     ) {
         self.inputDeviceProvider = inputDeviceProvider
@@ -54,11 +61,13 @@ final class SetupMicrophoneViewModel: ObservableObject {
         self.practiceSessionEvent = nil
         self.currentSessionSnapshot = currentSessionSnapshot
         self.sessionSnapshots = sessionSnapshots
+        self.recordingAudioLevels = recordingAudioLevels
     }
 
     isolated deinit {
         levelTask?.cancel()
         sessionTask?.cancel()
+        recordingLevelTask?.cancel()
     }
 
     func appear() async {
@@ -79,7 +88,9 @@ final class SetupMicrophoneViewModel: ObservableObject {
         isVisible = false
         isPracticeVisible = false
         practiceCaptureWasSeen = false
+        practiceStopWasSeen = false
         updateSessionObservation()
+        updateRecordingLevelObservation()
         if recordingElapsedSeconds != 0 {
             recordingElapsedSeconds = 0
         }
@@ -115,12 +126,18 @@ final class SetupMicrophoneViewModel: ObservableObject {
         isPracticeVisible = visible
         if !visible {
             practiceCaptureWasSeen = false
+            practiceStopWasSeen = false
             updateSessionObservation()
+            updateRecordingLevelObservation()
+            if level != 0 {
+                level = 0
+            }
         } else {
             let snapshot = await currentSessionSnapshot()
             guard isPracticeVisible else { return }
             await applySessionSnapshot(snapshot, emitsPracticeEvents: false)
             updateSessionObservation()
+            updateRecordingLevelObservation()
         }
         if visible, sessionState != latestSessionSnapshot.sessionState {
             sessionState = latestSessionSnapshot.sessionState
@@ -147,6 +164,25 @@ final class SetupMicrophoneViewModel: ObservableObject {
             for await snapshot in stream {
                 guard let self, !Task.isCancelled else { return }
                 await self.applySessionSnapshot(snapshot, emitsPracticeEvents: true)
+            }
+        }
+    }
+
+    private func updateRecordingLevelObservation() {
+        guard isPracticeVisible else {
+            recordingLevelTask?.cancel()
+            recordingLevelTask = nil
+            return
+        }
+        guard recordingLevelTask == nil else { return }
+        recordingLevelTask = Task { @MainActor [weak self, recordingAudioLevels] in
+            let stream = await recordingAudioLevels()
+            for await level in stream {
+                guard let self, !Task.isCancelled, isPracticeVisible else { return }
+                let visibleLevel = isRecording ? level : 0
+                if self.level != visibleLevel {
+                    self.level = visibleLevel
+                }
             }
         }
     }
@@ -244,26 +280,42 @@ final class SetupMicrophoneViewModel: ObservableObject {
     ) {
         guard isPracticeVisible else {
             practiceCaptureWasSeen = false
+            practiceStopWasSeen = false
             return
         }
         guard emitsEvent else {
             practiceCaptureWasSeen = Self.isCaptureInProgress(snapshot.sessionState)
+            practiceStopWasSeen = false
             return
         }
         if Self.isCaptureInProgress(snapshot.sessionState) {
             if !practiceCaptureWasSeen {
                 practiceCaptureWasSeen = true
+                practiceStopWasSeen = false
                 publishPracticeEvent { .captureStarted($0) }
             }
             return
         }
-        guard practiceCaptureWasSeen, snapshot.sessionState == .completed else { return }
-        practiceCaptureWasSeen = false
-        guard let text = snapshot.lastCompletedResult?.text,
-              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return
+        guard practiceCaptureWasSeen else { return }
+        if !practiceStopWasSeen {
+            practiceStopWasSeen = true
+            publishPracticeEvent { .captureStopped($0) }
         }
-        publishPracticeEvent { .completed($0) }
+        switch snapshot.sessionState {
+        case .completed:
+            practiceCaptureWasSeen = false
+            practiceStopWasSeen = false
+            let text = snapshot.lastCompletedResult?.text ?? ""
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                publishPracticeEvent { .discarded($0) }
+            }
+        case .shortExit, .error, .idle:
+            practiceCaptureWasSeen = false
+            practiceStopWasSeen = false
+            publishPracticeEvent { .discarded($0) }
+        case .capturing, .holdRecording, .paused, .transcribing:
+            break
+        }
     }
 
     private func publishPracticeEvent(
