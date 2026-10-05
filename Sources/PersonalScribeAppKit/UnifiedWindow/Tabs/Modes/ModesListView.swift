@@ -110,6 +110,7 @@ struct ModesListView: View {
                     isCurrent: viewModel.currentModeID == mode.id,
                     isDefault: viewModel.defaultModeID == mode.id,
                     validity: viewModel.validityByID[mode.id] ?? .valid,
+                    voiceModelCaption: viewModel.voiceModelCaptionByID[mode.id],
                     onTapBody: { detailPath.append(mode.id) },
                     onTapStar: { viewModel.setDefault(mode) }
                 )

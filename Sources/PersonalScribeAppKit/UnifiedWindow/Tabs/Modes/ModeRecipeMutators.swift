@@ -93,6 +93,25 @@ extension WorkflowMode {
     /// `.streamingTranscriber`, or `.diarizedTurns`'s ASR leg). Modes
     /// with multiple transcriber-bearing specs aren't producible by
     /// the editor today, so "first match" is sufficient.
+    var voiceModelPinID: String? {
+        for spec in processors {
+            switch spec {
+            case .transcriber(_, let id): return id
+            case .streamingTranscriber(_, let id): return id
+            case .diarizedTurns(_, _, let id, _): return id
+            }
+        }
+        return nil
+    }
+
+    /// Kind the mode's unpinned voice model resolves against.
+    var voiceModelKind: ModelKind {
+        switch pipelineShape {
+        case .streaming: return .streamingASR
+        case .batch: return .asr
+        }
+    }
+
     func withVoiceModelPin(_ id: String?) -> WorkflowMode {
         var copy = self
         var didReplace = false

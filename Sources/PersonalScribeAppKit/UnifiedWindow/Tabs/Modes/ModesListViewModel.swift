@@ -12,6 +12,7 @@ final class ModesListViewModel: ObservableObject {
     @Published private(set) var defaultModeID: String? = nil
     @Published private(set) var currentModeID: String? = nil
     @Published private(set) var validityByID: [String: ModeRowValidity] = [:]
+    @Published private(set) var voiceModelCaptionByID: [String: String] = [:]
     @Published var lastError: String? = nil
 
     private let registry: WorkflowModeRegistry
@@ -146,6 +147,18 @@ final class ModesListViewModel: ObservableObject {
             }
         }
         validityByID = next
+        voiceModelCaptionByID = Dictionary(
+            uniqueKeysWithValues: customModes.map { ($0.id, voiceModelCaption(for: $0)) }
+        )
+    }
+
+    /// Names the model the mode will actually use.
+    private func voiceModelCaption(for mode: WorkflowMode) -> String {
+        if let pinID = mode.voiceModelPinID {
+            return modelService.registeredModels.first { $0.id == pinID }?.displayName
+                ?? "Pinned model unavailable"
+        }
+        return modelService.activeDescriptor(for: mode.voiceModelKind)?.displayName ?? "—"
     }
 
     private func message(for error: Error) -> String {

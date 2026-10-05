@@ -231,3 +231,8 @@ mode-list event or app restart. Acceptable trade-off for V1.
   General: the "Cancel card duration" slider is in the "Recording" card
   (formerly "Behavior"), not under Auto-stop; it still changes how long the
   Cancel card offers Resume after Esc.
+- [ ] **MV-MODES-26 — Row shows each mode's voice model:** in Modes, each
+  row has a grey caption under the name. A pinned mode shows the pinned
+  model's name; an unpinned mode shows the active model's name,
+  and changing the active model in AI models updates it. An invalid mode
+  keeps its orange warning below the caption.

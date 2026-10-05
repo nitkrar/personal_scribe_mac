@@ -35,17 +35,45 @@ final class ModesListViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.lastError)
     }
 
+    func testVoiceModelCaptionNamesPinnedModel() throws {
+        let pinned = BuiltInModelCatalog.parakeetTDT06Bv3
+        let (viewModel, _, _) = try makeViewModel(modes: [mode(id: "a", pin: pinned.id)])
+
+        XCTAssertEqual(viewModel.voiceModelCaptionByID["a"], pinned.displayName)
+    }
+
+    func testVoiceModelCaptionNamesGloballyActiveModelWhenUnpinned() throws {
+        let (viewModel, _, modelService) = try makeViewModel(modes: [mode(id: "a", pin: nil)])
+        let active = BuiltInModelCatalog.parakeetTDTCTC110M
+
+        viewModel.startObserving()
+        modelService.setActive(active, forKind: .asr)
+        let expectation = expectation(description: "caption follows active model")
+        DispatchQueue.main.async { expectation.fulfill() }
+        wait(for: [expectation], timeout: 1)
+
+        XCTAssertEqual(viewModel.voiceModelCaptionByID["a"], active.displayName)
+    }
+
+    private func mode(id: String, pin: String?) -> WorkflowMode {
+        WorkflowMode(
+            id: id,
+            name: "Mode \(id)",
+            pipelineShape: .batch,
+            processors: [.transcriber(kind: .asr, descriptorID: pin)],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.transcriptHistorySQLite]
+        )
+    }
+
     private func makeViewModel(ids: [String]) throws -> (ModesListViewModel, WorkflowModeRegistry) {
-        let modes = ids.map { id in
-            WorkflowMode(
-                id: id,
-                name: "Mode \(id)",
-                pipelineShape: .batch,
-                processors: [.transcriber(kind: .asr)],
-                captureControllers: [.manualHotkey],
-                outputSinks: [.transcriptHistorySQLite]
-            )
-        }
+        let (viewModel, registry, _) = try makeViewModel(modes: ids.map { mode(id: $0, pin: nil) })
+        return (viewModel, registry)
+    }
+
+    private func makeViewModel(
+        modes: [WorkflowMode]
+    ) throws -> (ModesListViewModel, WorkflowModeRegistry, ActiveModelService) {
         let registry = try WorkflowModeRegistry(
             store: InMemoryWorkflowModeStore(
                 initial: WorkflowModeDocument(defaultModeID: nil, customModes: modes)
@@ -58,6 +86,10 @@ final class ModesListViewModelTests: XCTestCase {
             physicalMemoryBytes: 16_000_000_000,
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
-        return (ModesListViewModel(registry: registry, modelService: modelService), registry)
+        return (
+            ModesListViewModel(registry: registry, modelService: modelService),
+            registry,
+            modelService
+        )
     }
 }

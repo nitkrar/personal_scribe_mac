@@ -15,6 +15,7 @@ struct ModeRowView: View {
     let isCurrent: Bool
     let isDefault: Bool
     let validity: ModeRowValidity
+    let voiceModelCaption: String?
     let onTapBody: () -> Void
     let onTapStar: () -> Void
 
@@ -34,6 +35,12 @@ struct ModeRowView: View {
                 Text(mode.name)
                     .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
                     .lineLimit(1)
+                if let voiceModelCaption {
+                    Text(voiceModelCaption)
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 if case .invalid(let reason) = validity {
                     Label(reason, systemImage: "exclamationmark.triangle.fill")
                         .font(PersonalScribeTheme.Typography.caption.font)

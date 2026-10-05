@@ -112,16 +112,7 @@ final class ModeDetailViewModel: ObservableObject {
     /// #090 — Per-mode voice-model pin. Reads through to the first
     /// transcriber-bearing processor's `descriptorID`. `nil` means
     /// "use globally active", which is the default.
-    var voiceModelPinID: String? {
-        for spec in mode.processors {
-            switch spec {
-            case .transcriber(_, let id): return id
-            case .streamingTranscriber(_, let id): return id
-            case .diarizedTurns(_, _, let id, _): return id
-            }
-        }
-        return nil
-    }
+    var voiceModelPinID: String? { mode.voiceModelPinID }
 
     /// #092 — Per-mode override for diarizer sensitivity. `nil` when
     /// the mode has no diarized processor (the picker stays hidden);
