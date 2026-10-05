@@ -6,14 +6,16 @@ struct HomeTab: View {
     @ObservedObject private var viewModel: HomeTabViewModel
     @ObservedObject private var metrics: MetricsSnapshotStore
     @ObservedObject private var checklist: HomeChecklistState
+    private let referenceDate: Date
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.windowTint) private var windowTint
 
-    init(viewModel: HomeTabViewModel) {
+    init(viewModel: HomeTabViewModel, referenceDate: Date = Date()) {
         self.viewModel = viewModel
         self.metrics = viewModel.metrics
         self.checklist = viewModel.checklist
+        self.referenceDate = referenceDate
     }
 
     var body: some View {
@@ -98,6 +100,7 @@ struct HomeTab: View {
                     total: Double(HomeChecklistItem.allCases.count)
                 )
                 .progressViewStyle(.linear)
+                .tint(palette.brandChampagne)
                 .frame(width: 96)
 
                 Spacer()
@@ -202,7 +205,8 @@ struct HomeTab: View {
                     TranscriptRow(
                         title: Self.title(for: entry),
                         timestamp: entry.timestamp,
-                        preview: entry.text
+                        preview: entry.text,
+                        referenceDate: referenceDate
                     )
                 }
             }
