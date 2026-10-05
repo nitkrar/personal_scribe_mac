@@ -263,17 +263,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             button.image = image
         }
 
-        switch sessionState {
-        case .capturing, .holdRecording:
-            button.contentTintColor = .systemRed
-        case .paused:
-            button.contentTintColor = .systemOrange
-        case .transcribing:
-            button.contentTintColor = .systemOrange
-        case .idle, .completed, .shortExit, .error:
-            button.contentTintColor = nil
-        }
-
         let label = statusItemLabel(for: sessionState)
         button.toolTip = label
         button.setAccessibilityLabel(label)

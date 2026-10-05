@@ -450,6 +450,11 @@ continues the same recording; stop transcribes both parts as one.
   the record circle centred in the same hover footprint (no resize or
   enter/exit flicker). Clicking anywhere in it starts recording and the
   `Start recording` tooltip appears.
+- [ ] **MV-PILL-STYLE-6** Stop a recording in Mini and in Classic. The
+  pill shows a centred spinner at the recording size (Mini 110×20, Classic
+  220×36) while transcribing, then returns straight to idle — no green
+  check — or hides when Auto-hide pill is on.
+- [ ] **MV-PILL-STYLE-7** Classic idle hover is as tall as Classic recording.
 
 ## Pill controls and pause
 
