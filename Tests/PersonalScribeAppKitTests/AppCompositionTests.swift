@@ -286,11 +286,16 @@ final class AppCompositionTests: XCTestCase {
 
     func testModelCacheRefreshesWhenPreparationProgressEnds() async throws {
         let downloaded = DownloadedFlag()
+        let descriptor = BuiltInModelCatalog.parakeetTDT06Bv2
         let suiteName = "AppCompositionTests.\(#function).\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let modelService = ActiveModelService(
-            activeIDsPreference: Preference(key: ActiveModelService.preferenceKey, default: [:], defaults: defaults),
+            activeIDsPreference: Preference(
+                key: ActiveModelService.preferenceKey,
+                default: [.asr: descriptor.id],
+                defaults: defaults
+            ),
             isDownloaded: { _ in downloaded.value },
             download: { _, _ in },
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
@@ -298,11 +303,11 @@ final class AppCompositionTests: XCTestCase {
         let (snapshots, continuation) = AsyncStream<SessionSnapshot>.makeStream()
         let task = AppComposition.refreshModelCacheWhenPreparationEnds(snapshots: snapshots, modelService: modelService)
         defer { task.cancel() }
-        let descriptor = BuiltInModelCatalog.parakeetTDT06Bv2
-
         continuation.yield(SessionSnapshot(modelDownloadProgress: ModelDownloadProgress(
             phase: .downloading, fractionCompleted: 0.5, receivedBytes: 5, expectedBytes: 10
         )))
+        await waitUntil { modelService.downloadStates[descriptor.id]?.phase == .downloading }
+        XCTAssertEqual(modelService.downloadStates[descriptor.id]?.fractionCompleted, 0.5)
         downloaded.value = true
         continuation.yield(SessionSnapshot(modelDownloadProgress: nil))
 

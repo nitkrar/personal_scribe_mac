@@ -306,6 +306,38 @@ public final class ActiveModelService: ObservableObject {
         return isDownloadedHandler(canonical)
     }
 
+    /// Mirrors progress from recipe-driven preparation into the UI-facing
+    /// state owned by this service. Startup preparation uses the same model
+    /// adapter as recording, so callers should bridge that progress here
+    /// instead of launching a second download through `download(_:)`.
+    public func updatePreparationProgress(
+        _ progress: ModelDownloadProgress,
+        for descriptor: ModelDescriptor
+    ) {
+        guard let canonical = registeredModels.first(where: { $0.id == descriptor.id }) else {
+            return
+        }
+        ingest(progress: progress, for: canonical)
+    }
+
+    /// Ends a preparation-progress cycle using disk presence as the source
+    /// of truth. This intentionally resolves an in-flight phase, whereas
+    /// `refresh()` preserves one because it cannot otherwise know whether a
+    /// download is still running.
+    public func finishPreparation(for descriptor: ModelDescriptor) {
+        guard let canonical = registeredModels.first(where: { $0.id == descriptor.id }) else {
+            return
+        }
+        let isReady = isDownloadedHandler(canonical)
+        publishDownloadState(
+            ModelDownloadState(
+                descriptorId: canonical.id,
+                phase: isReady ? .ready : .notDownloaded,
+                fractionCompleted: isReady ? 1 : 0
+            )
+        )
+    }
+
     /// Download `descriptor`'s artifacts, then activate it for every
     /// kind it supports that has no active model yet (a fresh install's
     /// first realtime download "just works"). An existing choice is

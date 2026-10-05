@@ -45,6 +45,27 @@ final class ActiveModelServiceDownloadStateTests: XCTestCase {
         )
     }
 
+    func testPreparationProgressUpdatesActiveModelDownloadState() {
+        let target = BuiltInModelCatalog.parakeetTDT06Bv2
+        let service = makeService(
+            isDownloaded: { _ in false },
+            download: { _, _ in }
+        )
+
+        service.updatePreparationProgress(
+            ModelDownloadProgress(
+                phase: .downloading,
+                fractionCompleted: 0.42,
+                receivedBytes: 42,
+                expectedBytes: 100
+            ),
+            for: target
+        )
+
+        XCTAssertEqual(service.downloadStates[target.id]?.phase, .downloading)
+        XCTAssertEqual(service.downloadStates[target.id]?.fractionCompleted, 0.42)
+    }
+
     func testDownloadEmitsDownloadingLoadingAndReadyPhasesInOrder() async throws {
         let target = BuiltInModelCatalog.parakeetTDTCTC110M
         let service = makeService(

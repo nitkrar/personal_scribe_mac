@@ -308,10 +308,22 @@ public enum AppComposition {
     ) -> Task<Void, Never> {
         Task { @MainActor in
             var wasPreparing = false
+            var preparingDescriptor: ModelDescriptor?
             for await snapshot in snapshots {
                 let isPreparing = snapshot.modelDownloadProgress != nil
+                if isPreparing && !wasPreparing {
+                    preparingDescriptor = modelService.activeDescriptor(for: .asr)
+                }
+                if let progress = snapshot.modelDownloadProgress,
+                   let descriptor = preparingDescriptor {
+                    modelService.updatePreparationProgress(progress, for: descriptor)
+                }
                 if wasPreparing && !isPreparing {
+                    if let preparingDescriptor {
+                        modelService.finishPreparation(for: preparingDescriptor)
+                    }
                     modelService.refresh()
+                    preparingDescriptor = nil
                 }
                 wasPreparing = isPreparing
             }
