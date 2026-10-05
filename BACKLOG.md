@@ -210,14 +210,16 @@ FTS5 + embedding lookup over transcripts/notes. Needs embeddings schema (migrati
 
 ### #045 — Personal dictionary (2-stage)
 
-`feature` · `P2` · `open` · `phase: 3` · `area: post-processing, memory-learning, settings`
-*Updated 2026-10-05*
+`feature` · `P2` · `parked` · `phase: 3` · `area: post-processing, memory-learning, settings`
+*Updated 2026-10-06*
 
 **Shipped so far:** `c82af27`, `00f5f9b` — post-processing is a composed `PostProcessingStage` pipeline and the session path runs it; `PersonalDictionaryStage`, dictionary persistence, and decoder-level biasing remain unimplemented.
 
 Central to the Memory/Learning competitive pitch (`COMPETITIVE.md`). **Stage A:** refactor `PostProcessor` to a chain-of-stages; add `PersonalDictionaryStage` applied first. Data: `DictionaryEntry { term, alternatives: [String], createdAt, source }`; JSON at `<AppConfig.baseDirectory()>/dictionary.json`. Case-insensitive word-boundary replacement, first match wins per region; no regex. Soft cap ~40 entries / 60-char alternatives. **Stage B:** decoder-level biasing via Parakeet CTC custom-vocab head + correction-learning loop from NotesWindow edit UI — `CollectionDifference`-based edit tracking + Levenshtein filter; top-30 decayed-frequency terms feed the CTC vocab.
 
 **Screen (Stage A):** a "Vocabulary" item in the main-window sidebar. One input at the top, "New word or replacement": Return adds it as a word (spelling to keep, e.g. a name or acronym); typing in the "Replace with…" field and pressing ⌘Return adds a replacement (heard → written). The entries are listed below, newest first, as `word` or `heard → written`, each editable in place and deletable; a search field appears once the list is long. When the list is empty, a dismissible tip reads "Add your first word: people's names, company names, acronyms or jargon so they're transcribed correctly." Not part of onboarding. Reference: Superwhisper's Vocabulary page.
+
+**Steering spike (2026-10-06, TTS audio, spike code deleted):** Parakeet CTC rescoring took term hits 20–25 → 42–45/45 but rewrote 8–9/21 control sentences (`code→Codex`, `model→Codex`) and only fixes near-spellings; needs the separate 113 MB `parakeet-ctc-110m` model and `CtcModels.loadDirect` (other loaders delete-and-redownload on failure). WhisperKit prompt: 25 → 42/45, clean, but decode time ×3 and prompt capped at ~111 tokens (~15–20 terms). whisper.cpp prompt: 18 → 38/45, no cost. Qwen3 / Parakeet EOU: no hook. Parakeet adapter claims `providesCustomVocabulary` but nothing feeds it. Parked by user.
 
 **Depends on:** #013 (NotesWindow edit UI — Stage B only)
 **Legacy:** `plans/_legacy/BACKLOG_pre_migration.md` → "Personal dictionary — ship in two stages"

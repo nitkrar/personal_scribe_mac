@@ -345,7 +345,7 @@ public actor SessionCoordinator {
         let intervalName: StaticString = "SessionCoordinator.prepareTranscriber"
         let state = signposter.beginInterval(intervalName)
         defer { signposter.endInterval(intervalName, state) }
-        guard let recipe = try await resolveRecipe() else {
+        guard let recipe = try await resolveRecipe(reason: "prewarm") else {
             return
         }
         await pipeline.bindRecipeForNextSession(recipe)
@@ -539,7 +539,7 @@ public actor SessionCoordinator {
     private func bindRecipeBeforeStart() async {
         let recipe: BoundRecipe?
         do {
-            recipe = try await resolveRecipe()
+            recipe = try await resolveRecipe(reason: "sessionStart")
         } catch {
             logger.error("Failed to build session recipe", error: error)
             await pipeline.publishSessionStartError(.invalidActiveMode)
@@ -553,10 +553,11 @@ public actor SessionCoordinator {
     /// or build via `RecipeBuilder` against the registry's current
     /// mode (#089 L-5). Returns nil only when neither path is wired
     /// (legacy state).
-    private func resolveRecipe() async throws -> BoundRecipe? {
+    /// `reason` (sessionStart / prewarm) is logged so warmup isn't read as a session.
+    private func resolveRecipe(reason: String) async throws -> BoundRecipe? {
         if let fixedRecipe {
             logger.info(
-                "session_started_intent — source=fixedRecipe recipeID=\(fixedRecipe.recipeID) recipeName=\(fixedRecipe.recipeName)"
+                "recipe_resolved — reason=\(reason) source=fixedRecipe recipeID=\(fixedRecipe.recipeID) recipeName=\(fixedRecipe.recipeName)"
             )
             return fixedRecipe
         }
@@ -581,7 +582,7 @@ public actor SessionCoordinator {
                 }
             }.joined(separator: ",")
             logger.info(
-                "session_started_intent — modeID=\(mode.id) modeName=\(mode.name) pipelineShape=\(mode.pipelineShape.rawValue) processors=[\(processorKinds)] activeASR=\(activeASR) activeStreamingASR=\(activeStreamingASR)"
+                "recipe_resolved — reason=\(reason) modeID=\(mode.id) modeName=\(mode.name) pipelineShape=\(mode.pipelineShape.rawValue) processors=[\(processorKinds)] activeASR=\(activeASR) activeStreamingASR=\(activeStreamingASR)"
             )
             let builder = RecipeBuilder(
                 modelService: modelService,
@@ -646,6 +647,7 @@ public actor SessionCoordinator {
                 transcriptRepository: transcriptRepository,
                 logger: logger
             ),
+            destinationHandler: makeDestinationHandler(transcriptRepository: transcriptRepository),
             recordingFileWriter: recordingFileWriter,
             recordAudioEnabled: recordAudioEnabled,
             recordingsDirectory: recordingsDirectory,
@@ -673,6 +675,15 @@ public actor SessionCoordinator {
                     ]
                 )
             }
+        }
+    }
+
+    private static func makeDestinationHandler(
+        transcriptRepository: TranscriptRepository?
+    ) -> (@Sendable (UUID, String) async throws -> Void)? {
+        guard let transcriptRepository else { return nil }
+        return { id, appName in
+            try await transcriptRepository.updateDestinationApp(id: id, appName: appName)
         }
     }
 

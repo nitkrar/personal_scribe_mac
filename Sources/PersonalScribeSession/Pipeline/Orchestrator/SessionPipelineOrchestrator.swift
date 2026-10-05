@@ -225,7 +225,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?,
-        destinationHandler: (@Sendable (UUID, String) async throws -> Void)? = nil,
+        destinationHandler: (@Sendable (UUID, String) async throws -> Void)?,
         recordingFileWriter: (any RecordingFileWriting)? = nil,
         recordAudioEnabled: @escaping @Sendable () -> Bool = { false },
         recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },

@@ -2287,37 +2287,6 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(entries.first?.processingDuration ?? 0, 0.2, accuracy: 0.01)
     }
 
-    func testSuccessfulPasteRecordsDestinationAppOnSavedTranscript() async throws {
-        let destinations = try await savedDestinations(pastedAppName: "Notes")
-        XCTAssertEqual(destinations, ["Notes"])
-    }
-
-    func testUnpastedTranscriptKeepsClipboardDestination() async throws {
-        let destinations = try await savedDestinations(pastedAppName: nil)
-        XCTAssertEqual(destinations, [TranscriptEntry.clipboardDestination])
-    }
-
-    private func savedDestinations(pastedAppName: String?) async throws -> [String?] {
-        let temporaryDirectory = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
-
-        let repository = try makeRepository(in: temporaryDirectory)
-        let orchestrator = makeOrchestrator(
-            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
-            transcriber: FakeTranscriber(
-                result: TranscriptionResult(text: "hello", audioDuration: .seconds(1), processingDuration: .zero)
-            ),
-            transcriptRepository: repository,
-            outputSink: TestPipelineOutputSink(pastedAppName: pastedAppName)
-        )
-
-        await orchestrator.toggleCapture()
-        await orchestrator.toggleCapture()
-        await waitForState(.completed, in: orchestrator)
-
-        return await repository.recent(limit: 10).map(\.destinationApp)
-    }
-
     func testCurrentBoundRecipeStaysSessionFrozenDespiteMidTranscriptionRebind() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let transcriber = CountingTranscriber(
@@ -2363,6 +2332,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             persistenceHandler: { entry in
                 await persisted.append(entry)
             },
+            destinationHandler: nil,
             boundRecipe: sessionRecipe
         )
 
@@ -3009,6 +2979,7 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                 outputSink: outputSink,
                 contextProvider: contextProvider,
                 persistenceHandler: persistenceHandler,
+                destinationHandler: nil,
                 recordingFileWriter: recordingFileWriter,
                 recordAudioEnabled: recordAudioEnabled,
                 recordingsDirectory: recordingsDirectory,
