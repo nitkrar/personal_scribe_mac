@@ -80,6 +80,24 @@ Recording follows input device switches (headset connecting, disconnecting, prof
 
 ---
 
+### #114 — Deleting an offline transcript logs a false "file removal failed"
+
+`bug` · `P3` · `open` · `area: history, offline`
+*Updated 2026-10-05* · Follow up after #102.
+
+Offline transcripts store an absolute source path, but `TranscriptRepository.delete` joins it onto the recordings directory, so the removal targets a path that doesn't exist and logs a failure. Delete should use the stored path as-is when it's absolute (and must never delete the user's original source file — check what an offline transcript owns before fixing).
+
+---
+
+### #115 — Finished offline jobs never leave the Offline list
+
+`bug` · `P3` · `open` · `area: offline`
+*Updated 2026-10-05* · Follow up after #102.
+
+Completed jobs stay in `offline-jobs.json` and the Offline tab forever, with no way to remove them. Completed jobs should leave the queue (their result is in History), or the tab needs a remove/clear action.
+
+---
+
 ### #104 — Whisper.cpp streaming dedup tracker
 
 `bug` · `P3` · `open` · `stage: design` · `area: transcription, streaming`
@@ -192,12 +210,14 @@ FTS5 + embedding lookup over transcripts/notes. Needs embeddings schema (migrati
 
 ### #045 — Personal dictionary (2-stage)
 
-`feature` · `P2` · `open` · `phase: 3` · `area: post-processing, memory-learning`
-*Updated 2026-10-02*
+`feature` · `P2` · `open` · `phase: 3` · `area: post-processing, memory-learning, settings`
+*Updated 2026-10-05*
 
 **Shipped so far:** `c82af27`, `00f5f9b` — post-processing is a composed `PostProcessingStage` pipeline and the session path runs it; `PersonalDictionaryStage`, dictionary persistence, and decoder-level biasing remain unimplemented.
 
-Central to the Memory/Learning competitive pitch (`COMPETITIVE.md`). **Stage A:** refactor `PostProcessor` to a chain-of-stages; add `PersonalDictionaryStage` applied first. Data: `DictionaryEntry { term, alternatives: [String], createdAt, source }`; JSON at `<AppConfig.baseDirectory()>/dictionary.json`. Case-insensitive word-boundary replacement, first match wins per region; no regex. No UI — manual file edit until Phase 3 Settings. Soft cap ~40 entries / 60-char alternatives. **Stage B:** decoder-level biasing via Parakeet CTC custom-vocab head + correction-learning loop from NotesWindow edit UI — `CollectionDifference`-based edit tracking + Levenshtein filter; top-30 decayed-frequency terms feed the CTC vocab.
+Central to the Memory/Learning competitive pitch (`COMPETITIVE.md`). **Stage A:** refactor `PostProcessor` to a chain-of-stages; add `PersonalDictionaryStage` applied first. Data: `DictionaryEntry { term, alternatives: [String], createdAt, source }`; JSON at `<AppConfig.baseDirectory()>/dictionary.json`. Case-insensitive word-boundary replacement, first match wins per region; no regex. Soft cap ~40 entries / 60-char alternatives. **Stage B:** decoder-level biasing via Parakeet CTC custom-vocab head + correction-learning loop from NotesWindow edit UI — `CollectionDifference`-based edit tracking + Levenshtein filter; top-30 decayed-frequency terms feed the CTC vocab.
+
+**Screen (Stage A):** a "Vocabulary" item in the main-window sidebar. One input at the top, "New word or replacement": Return adds it as a word (spelling to keep, e.g. a name or acronym); typing in the "Replace with…" field and pressing ⌘Return adds a replacement (heard → written). The entries are listed below, newest first, as `word` or `heard → written`, each editable in place and deletable; a search field appears once the list is long. When the list is empty, a dismissible tip reads "Add your first word: people's names, company names, acronyms or jargon so they're transcribed correctly." Not part of onboarding. Reference: Superwhisper's Vocabulary page.
 
 **Depends on:** #013 (NotesWindow edit UI — Stage B only)
 **Legacy:** `plans/_legacy/BACKLOG_pre_migration.md` → "Personal dictionary — ship in two stages"
@@ -342,33 +362,10 @@ Migrate `transcripts.sqlite` to SQLCipher-backed encrypted DB. Key via Keychain.
 
 ### #068 — In-pill mode switcher (quick UX)
 
-`feature` · `P2` · `Stage A done · Stage B pending` · `phase: 3` · `area: pill, ui, modes`
-*Updated 2026-10-02*
+`feature` · `P2` · `done` · `area: pill, ui, modes`
+*Updated 2026-10-05*
 
-**Shipped so far:** `15e73ec` — the menu-bar Mode submenu lists modes, marks the active one, and switches the next session; the in-pill picker remains unimplemented.
-
-Switch the active mode directly from the pill overlay (or the menu-bar status item) instead of having to open Settings → Modes tab. Today mode switching is a multi-click journey through the unified window; this ticket makes it a one-click flip next to where the user is already looking.
-
-**Status (2026-04-24)** — Stage A shipped (menu-bar submenu). Stage B (pill bottom-row icon) deferred until a second mode lands; with `ModeRegistry.all = [dictation]` today the menu-bar submenu is one-item scaffolding that auto-lights-up when modes infra grows.
-
-**Locked design decisions (2026-04-24 session):**
-- **Where**: menu-bar "Mode" submenu (Stage A) + pill bottom-row icon → click opens picker (Stage B). Click-only — no hover chip, no long-press.
-- **Modes listed**: all wired modes including user-defined; unwired modes hidden until they have distinct behavior.
-- **When it applies**: immediately (next session starts in new mode). Mid-recording flip out of scope.
-- **Keyboard chord**: dropped. Discoverability problem (no way to surface the cycle direction) outweighed the speed win.
-
-**Stage A — DONE** (`bf28dd3`, 2026-04-24): menu-bar "Mode" submenu. Mirrors `StatusItemMenuModel` Microphone-submenu pattern via a new `.modeSubmenu` `Item` + `ModeSubmenuChild`. Lists `ModeRegistry.all`, checkmark on the active mode, selection routes through `modelService.setActive(modelService.descriptor(for: mode))` — same closure shape as the existing `UnifiedWindowController` ModesTab path. Snapshot observer rebuilds the menu on `activeMode` change → checkmark + parent title update automatically. Tests: 2 new in `StatusItemMenuModelSubmenuTests` + 9 existing mic-submenu tests + 20 baseline `StatusItemMenuModelTests` all pass. Runtime click-through not yet manually verified.
-
-**Stage B — PENDING**: pill bottom-row mode icon → click opens picker. Real architectural cost; explicitly NOT minimal.
-- Pill geometry today is single-row HStacks at fixed dimensional bands (`PillOverlayView.swift:40-78`, `size(for:)` at L96-119). Adding a row changes the height bands and breaks the `PillOverlayPresenter` per-state panel-resize tween (#044).
-- Sub-region clicks inside the pill don't fire SwiftUI gestures — `ClickThroughHostingView.mouseDown` overrides without `super`. Needs AppKit hit-testing for the new icon region (see memory `project_pill_hit_testing`).
-- Click target needs to open a picker against a non-activating `NSPanel` — popover plumbing not currently wired anywhere on the pill.
-- Per-state visibility (does the icon show during recording / downloading / error?) is a design call.
-
-**Stage B preconditions:** (a) ≥ 2 wired modes exist (otherwise Stage B is shipping complex infra to point at a list-of-one); (b) decision on whether the icon shows in active-recording states or only in idle.
-
-**Depends on:** none for Stage A (ModesTab + `ModeDescriptor` already live). Stage B effectively blocked on additional modes infra landing.
-**Legacy:** none — net-new ticket from 2026-04-22 UX session.
+Stage A shipped (`bf28dd3`): the menu-bar Mode submenu switches the next session. Stage B (mode button on the pill) folded into #102.
 
 ---
 
@@ -403,29 +400,10 @@ Today audio lives only in `SessionCoordinator.bufferedAudio: [PCMBuffer]` in mem
 
 ### #070 — Recording pause/resume (pill affordance)
 
-`feature` · `P2` · `open` · `area: session, pill, audio`
-*Updated 2026-10-02*
+`feature` · `P2` · `superseded` · `area: session, pill, audio`
+*Updated 2026-10-05*
 
-**Shipped so far:** `481cbad` — Esc cancellation retains the captured buffers briefly and the Cancel Card can resume them; a direct pill pause/play affordance and first-class paused state remain unimplemented.
-
-Replace pill ✕ with a pause/play toggle on pill-click-initiated recordings. Pausing retains the captured audio buffer; resume continues appending; final stop (click pill, or a stop affordance in paused state) transcribes the whole buffer. Esc remains the sole discard path (per #002) once this ships — ✕ goes away entirely.
-
-**Scope:**
-- New session state `.paused` alongside `.recording` / `.transcribing`; buffer retention across pause boundaries.
-- `SessionCoordinator.pauseRecording() async` + `resumeRecording() async`; `SessionPipelining.pauseCapture()` / `resumeCapture()`.
-- Audio capture actor: stop emitting samples without tearing down `AVAudioEngine` input (keep tap installed, pause buffering) OR stop the engine and re-prime on resume — evaluate latency/correctness of each.
-- Pill UI: pause/play icon in place of ✕; visual indicator for paused state (dimmed equalizer bars? frozen waveform?); recording-duration timer pauses.
-
-**Open questions:**
-- Timeout: auto-transcribe after N minutes paused, or hold indefinitely?
-- Interaction with VAD auto-stop (#046) — does VAD trigger auto-pause, auto-stop, or do nothing while paused?
-- Menu-bar "Stop" path while paused — transcribe or discard?
-- Paused state needs a stop-and-transcribe affordance distinct from resume — pill-click, long-press, secondary button?
-
-**Out of scope:** hold-to-record flow — that path uses a separate pill with no Esc/✕/pause affordance; release always stops + transcribes.
-
-**Depends on:** #002 (locks `✕ = true-discard` semantics first; #070 then reclaims that slot for pause/play and removes the ✕).
-**Legacy:** 2026-04-22 brainstorm (after #002 spec-literal lock).
+Folded into #102 (pause/resume design agreed 2026-10-05).
 
 ---
 
@@ -533,18 +511,35 @@ on transcript rows.
 
 ---
 
-### #102 — Pill redesign: separate click targets, hover detail
+### #102 — Pill redesign
 
-`feature` · `P2` · `open` · `area: pill, overlay, settings`
-*Updated 2026-10-04*
+`feature` · `P2` · `done` · `phase: 3` · `area: pill, overlay, session, settings`
+*Updated 2026-10-05*
 
-**Shipped so far:** cards choose above/below placement, the pill grows away from a nearby edge, the live pill has a three-strand waveform, Light appearance renders the whole pill coherently, and Style is wired (Classic, Mini at 0.75×, None never shows the pill). Pill visibility is an "Auto-hide pill" toggle, disabled under Style None.
+The one ticket for the floating pill. Absorbs #070 (pause), #068 Stage B (in-pill mode switcher) and #035. Agreed mockups: [`plans/backlog/pill-redesign-mockups.png`](plans/backlog/pill-redesign-mockups.png) (Mini + Classic, dark and light). Shipped in 102.82–102.104; all MV-PILL checks passed 2026-10-05.
 
-1. **Separate click targets.** The whole pill is one tap target that toggles recording; the × and stop are drawn but not separate buttons. Make cancel, stop and the body distinct targets. Prerequisite for 2.
-2. **Minimal while recording, more on hover.** Show a design preview before building. Mini may shrink further (around 50%) as part of this.
-3. **Style preview cards are stale.** Settings → Recording window → Style previews draw a single-line equalizer instead of the three-strand waveform.
+**One pill, two styles.** Every state has one layout shared by both styles. A style sets only (1) its sizes and (2) whether controls show only on hover. Mini: small, controls on hover. Classic: larger, controls always shown.
 
-Not doing: vertical or circular shapes at side edges; the pill stays horizontal.
+**Clicks (both styles):** each button is its own target: mode, record, pause/resume, stop. Clicking the middle area toggles recording (idle → start, recording → stop); it does nothing while paused. Dragging moves the pill. Esc cancels (Cancel card with Resume, which resumes recording).
+
+**States**
+- Idle at rest: the quill (Mini mockup 40×16; Classic 80×28).
+- Idle hover: mode button and record button, just wide enough for the two with a little padding (Mini mockup 66×30), "Start recording" tooltip. Mode opens a menu of modes; the choice applies to the next recording. Classic gets this too, at Classic size. The mode button shows only when there is more than one mode to choose from; otherwise idle hover keeps the same size with the record button alone, centred.
+- Recording: pause · waveform · stop. Mini shows the waveform only at rest (110×20) and the buttons on hover (170×30); Classic always shows them (220×36).
+- Paused: resume · "Paused · 0:23" · stop.
+- Transcribing: a small spinner at the recording size, so the pill doesn't grow or shrink after stop.
+- No "done" check in either style: after transcribing the pill returns straight to idle.
+
+**Pause**
+- Pause stops capture and transcribes the piece since the last start/resume; the text is held. Any number of pause/resume cycles.
+- Resume starts a fresh capture; it's transcribed at the next pause or stop.
+- Stop (pill, menu toggle, hotkey) joins all pieces in order, pastes, and saves one History entry.
+- Auto-stop on silence is off while paused.
+- A recording left paused finishes on its own after a timeout (default 5 min, Settings slider next to the Cancel card duration), or at once on quit or mode switch: it saves to History and copies to the clipboard (no paste), with a "Saved to History" notice.
+
+**Also:** Settings → Style previews draw the new pills.
+
+**Not doing:** cancel button on the pill (Esc only). A round style is a separate ticket (#113).
 
 ---
 
@@ -630,8 +625,8 @@ inspection (#078 follow-up).
 
 ### #074 — State-ownership audit across app
 
-`refactor` · `P0` · `in-progress` · `area: architecture`
-*Updated 2026-10-04*
+`refactor` · `P0` · `done` · `area: architecture`
+*Updated 2026-10-05* · All manual checks passed; closed.
 
 State ownership kept fragmenting: the same concept lived in several places coupled to different state machines. The audit's fixes are listed by `git log --grep '#074'`; manual checks are the `MV-HOME-1`, `MV-PILL-RESUME-*`, `MV-PILL-STYLE-*`, `MV-SI-LAUNCH-1`, `MV-SI-MIC-1`, `MV-OFFLINE-QUEUE-1` and "Change base directory" runbook entries.
 
@@ -672,12 +667,10 @@ Mockup shows "Dictation Mode" / "Command Mode" pill on each row's trailing edge.
 
 ### #035 — Hold-hotkey mode bar visuals
 
-`feature` · `P3` · `parked` · `area: pill, hotkey`
-*Updated 2026-04-21*
+`feature` · `P3` · `superseded` · `area: pill, hotkey`
+*Updated 2026-10-05*
 
-Spacing / contrast / motion pass. Capture specifics when picked up.
-
-**Legacy:** `ui-dogfood-bugs-2026-04-21.md` #11
+Folded into #102.
 
 ---
 
@@ -713,6 +706,57 @@ Second `SettingsSection` below Voice models; seeds once Phase 4 lands an LLM dow
 
 **Depends on:** #020
 **Legacy:** `backlog/model-download-ux-bug-research.md` Stage B
+
+---
+
+### #112 — Onboarding inside the main window
+
+`feature` · `P2` · `open` · `phase: 3` · `area: onboarding, unified-window`
+*Updated 2026-10-05*
+
+Replaces the separate onboarding window (#015) with setup inside the main window; the sidebar stays usable and menu-bar items are never gated. Mockups: `plans/backlog/onboarding-home/` B* (V-* is the Vocabulary page for #045).
+
+**Steps:** Permissions (microphone, accessibility; live status, open System Settings) → Mic test (device picker, live level) → Model (recommended model preselected, download progress, "Show all models") → Try the shortcut (⌥/, practice field, pill appears, success state) → Home. Back/Continue and "Skip setup" on every step. No vocabulary step.
+
+---
+
+### #116 — Home refresh
+
+`feature` · `P2` · `open` · `phase: 3` · `area: home, unified-window`
+*Updated 2026-10-05*
+
+Mockups: `plans/backlog/onboarding-home/` H-*. Stats card keeps today's four tiles (words, recordings, time saved, WPM) but adds a range picker (This week / Month / All time, default All time). Below it a "Get started" checklist (start recording, customize your shortcut, create a mode; rows check off, card dismissible when done), then today's recent transcripts. No "What's new". All data already exists.
+
+---
+
+### #117 — "Apps used" stat
+
+`feature` · `P3` · `open` · `area: home, history, persistence`
+*Updated 2026-10-05*
+
+Save the app each transcript was pasted into (new optional column; counts from then on) and show an "Apps used" tile on Home. Taken from Superwhisper's Home; decide on build whether it replaces Recordings or is added.
+
+**Depends on:** #116
+
+---
+
+### #113 — Orb pill style (round, Siri-like)
+
+`feature` · `P3` · `open` · `area: pill, overlay`
+*Updated 2026-10-05*
+
+A third pill style on top of #102's one-layout model: at rest the pill is a small circle. Idle shows the quill; recording shows a round pulsing waveform instead of the three-strand one. On hover, paused and transcribing it grows into the Mini capsule (same buttons and click rules) and shrinks back to the circle afterwards. Adds a rest shape (capsule or circle) to what a style sets. Needs mockups before building.
+
+**Depends on:** #102
+
+---
+
+### #111 — Optional cloud models via your own API key
+
+`feature` · `P3` · `parked` · `area: transcription, post-processing, settings`
+*Updated 2026-10-05*
+
+Local models stay the default; no built-in cloud models. Later, let the user add a cloud provider (voice or LLM) with their own API key, from a preset list or a custom OpenAI-compatible endpoint. Audio or text leaves the Mac only for modes that pick one of these models, and the Models list marks them as cloud.
 
 ---
 

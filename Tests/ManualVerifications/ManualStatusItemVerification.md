@@ -14,7 +14,7 @@ or `StatusItemIconLoader`.
   or DMG install). The menu-bar status item shows the **quill glyph**,
   not the text letter "S". Regression guard for the
   `NSImage(named:) -> nil` bug fixed by loading through `Bundle.module`.
-- [ ] **MV-SI-LAUNCH-1** With onboarding complete, quit and relaunch.
+- [x] **MV-SI-LAUNCH-1** With onboarding complete, quit and relaunch.
   The unified window opens on **Home**. With permissions missing it
   opens on **Settings** instead.
 - [ ] **MV-SI-2** Flip macOS Appearance between Light and Dark. The
@@ -23,7 +23,7 @@ or `StatusItemIconLoader`.
 
 ## Icon under session state
 
-- [ ] **MV-SI-3** Start recording — the icon switches to the listening
+- [x] **MV-SI-3** Start recording — the icon switches to the listening
   pose and stays monochrome (black/white), legible on light, dark and
   full-screen menu bars. Same while paused and transcribing.
 - [ ] **MV-SI-5** When idle again, the icon returns to the idle pose.

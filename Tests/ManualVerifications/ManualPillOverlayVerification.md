@@ -424,25 +424,25 @@ continues the same recording; stop transcribes both parts as one.
 
 - [x] **MV-PILL-RESUME-1** Dictate a sentence, press Esc, click Resume,
   dictate a second sentence, stop. One paste containing both sentences.
-- [ ] **MV-PILL-RESUME-2** Press Esc and let the card expire. Nothing is
+- [x] **MV-PILL-RESUME-2** Press Esc and let the card expire. Nothing is
   pasted or copied; the next recording starts fresh (no old audio).
-- [ ] **MV-PILL-RESUME-3** Set the duration to 6s; the card stays ~6s.
+- [x] **MV-PILL-RESUME-3** Set the duration to 6s; the card stays ~6s.
 
 ## Pill style
 
-- [ ] **MV-PILL-STYLE-1** Settings → Recording window → Style = Mini.
+- [x] **MV-PILL-STYLE-1** Settings → Recording window → Style = Mini.
   At rest, idle is a 40×16 quill and recording is a 110×20 waveform.
 - [x] **MV-PILL-STYLE-2** Style = None. The pill never shows, including while recording; the shortcut and menu bar still start and stop dictation. Pill visibility is a single "Auto-hide pill" toggle (on: the pill shows only while recording), disabled while Style is None.
-- [ ] **MV-PILL-STYLE-3** Back to Classic while recording. The
+- [x] **MV-PILL-STYLE-3** Back to Classic while recording. The
   220×36 pause + waveform + stop pill returns without restarting the
   session.
-- [ ] **MV-PILL-STYLE-4** Move the cursor into and out of the Mini idle
+- [x] **MV-PILL-STYLE-4** Move the cursor into and out of the Mini idle
   pill from its top and both sides at least ten times. It stays expanded
   at 66×30 while the cursor is over either footprint, never flickers or
   shows clipped edges, and returns to 40×16 after exit. Repeat while
   recording: hover stays at 170×30 with intact rounded edges and exit
   returns to 110×20.
-- [ ] **MV-PILL-STYLE-5** With two or more selectable modes, hover idle
+- [x] **MV-PILL-STYLE-5** With two or more selectable modes, hover idle
   in Mini and Classic. Both show mode + record buttons; the mode button
   opens the same valid modes as the menu bar and a choice applies to the
   next recording. Add or remove modes while the app runs and confirm the
@@ -450,28 +450,28 @@ continues the same recording; stop transcribes both parts as one.
   the record circle centred in the same hover footprint (no resize or
   enter/exit flicker). Clicking anywhere in it starts recording and the
   `Start recording` tooltip appears.
-- [ ] **MV-PILL-STYLE-6** Stop a recording in Mini and in Classic. The
+- [x] **MV-PILL-STYLE-6** Stop a recording in Mini and in Classic. The
   pill shows a centred spinner at the recording size (Mini 110×20, Classic
   220×36) while transcribing, then returns straight to idle — no green
   check — or hides when Auto-hide pill is on.
-- [ ] **MV-PILL-STYLE-7** Classic idle hover is as tall as Classic recording.
+- [x] **MV-PILL-STYLE-7** Classic idle hover is as tall as Classic recording.
 
 ## Pill controls and pause
 
-- [ ] **MV-PILL-PAUSE-1** In Classic recording, click pause, the middle
+- [x] **MV-PILL-PAUSE-1** In Classic recording, click pause, the middle
   waveform, and stop in separate recordings. Pause holds the session,
   the middle stops, and stop stops; dragging any non-button area moves
   the pill without firing a control.
-- [ ] **MV-PILL-PAUSE-2** Pause and resume at least twice, then stop.
+- [x] **MV-PILL-PAUSE-2** Pause and resume at least twice, then stop.
   `Paused · m:ss` stays frozen at cumulative captured-audio time while
   paused. One ordered transcript is pasted and one History row is saved.
-- [ ] **MV-PILL-PAUSE-3** While paused, click the middle time label.
+- [x] **MV-PILL-PAUSE-3** While paused, click the middle time label.
   Nothing happens. Click resume to begin a fresh captured segment; VAD
   silence auto-stop does not run during the pause.
-- [ ] **MV-PILL-PAUSE-4** Leave a session paused until its configured
+- [x] **MV-PILL-PAUSE-4** Leave a session paused until its configured
   timeout. One History row is saved, the joined text remains on the
   clipboard without a synthetic paste, and a `Saved to History` notice
   appears.
-- [ ] **MV-PILL-PAUSE-5** While paused, choose another mode, then repeat
+- [x] **MV-PILL-PAUSE-5** While paused, choose another mode, then repeat
   and quit. Each path finalizes to History + clipboard with no paste
   before switching mode or exiting.
