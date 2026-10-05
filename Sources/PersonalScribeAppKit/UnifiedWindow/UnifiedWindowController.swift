@@ -247,11 +247,9 @@ final class UnifiedWindowController: NSWindowController {
             newFrame: frameBeforeShow
         )
 
-        // Bug #041: if the persisted frame's midpoint isn't on any screen
-        // that currently exists (e.g. the user left a multi-monitor setup,
-        // or the window is about to be dragged over from a dismissed
-        // full-screen space) re-center it on the screen the user is
-        // actually looking at.
+        // Bug #041: preserve valid placement on any attached display,
+        // constrain partially off-screen placement to that display, and
+        // re-center only a fully stranded frame.
         reconcileWindowFrameIfNeeded(
             window,
             whenVisible: false,
@@ -296,26 +294,73 @@ final class UnifiedWindowController: NSWindowController {
         showWindow(nil)
     }
 
-    /// Pure helper (bug #041): if `windowFrame`'s midpoint is already inside
-    /// `activeScreenVisibleFrame`, return the frame unchanged. Otherwise
-    /// return a copy re-centered over the active screen (preserving size).
-    ///
-    /// Kept `static` + `internal` so it can be unit-tested without an
-    /// NSWindow — NSWindow is `@MainActor` + hard to fake.
     static func reconciledFrame(
         for windowFrame: NSRect,
         activeScreenVisibleFrame: NSRect
     ) -> NSRect {
-        if activeScreenVisibleFrame == .zero {
+        reconciledFrame(
+            for: windowFrame,
+            activeScreenVisibleFrame: activeScreenVisibleFrame,
+            availableScreenVisibleFrames: [activeScreenVisibleFrame]
+        )
+    }
+
+    /// Preserves valid placement on any display, constrains a partially
+    /// visible frame to its display, and centers a stranded frame on the
+    /// active display. The window size is preserved.
+    static func reconciledFrame(
+        for windowFrame: NSRect,
+        activeScreenVisibleFrame: NSRect,
+        availableScreenVisibleFrames: [NSRect]
+    ) -> NSRect {
+        guard activeScreenVisibleFrame != .zero else {
             return windowFrame
         }
-        let midpoint = NSPoint(x: windowFrame.midX, y: windowFrame.midY)
-        if activeScreenVisibleFrame.contains(midpoint) {
+
+        let visibleFrames = availableScreenVisibleFrames.filter { $0 != .zero }
+        if visibleFrames.contains(where: { $0.contains(windowFrame) }) {
             return windowFrame
         }
-        let x = activeScreenVisibleFrame.midX - (windowFrame.width / 2.0)
-        let y = activeScreenVisibleFrame.midY - (windowFrame.height / 2.0)
-        return NSRect(x: x, y: y, width: windowFrame.width, height: windowFrame.height)
+
+        let intersectingFrame = visibleFrames.max { lhs, rhs in
+            intersectionArea(of: windowFrame, and: lhs)
+                < intersectionArea(of: windowFrame, and: rhs)
+        }
+        if let intersectingFrame,
+           intersectionArea(of: windowFrame, and: intersectingFrame) > 0 {
+            return frame(windowFrame, constrainedTo: intersectingFrame)
+        }
+
+        return NSRect(
+            x: activeScreenVisibleFrame.midX - (windowFrame.width / 2.0),
+            y: activeScreenVisibleFrame.midY - (windowFrame.height / 2.0),
+            width: windowFrame.width,
+            height: windowFrame.height
+        )
+    }
+
+    private static func intersectionArea(of lhs: NSRect, and rhs: NSRect) -> CGFloat {
+        let intersection = lhs.intersection(rhs)
+        guard !intersection.isNull else { return 0 }
+        return intersection.width * intersection.height
+    }
+
+    private static func frame(_ frame: NSRect, constrainedTo target: NSRect) -> NSRect {
+        let x: CGFloat
+        if frame.width <= target.width {
+            x = min(max(frame.minX, target.minX), target.maxX - frame.width)
+        } else {
+            x = target.midX - (frame.width / 2.0)
+        }
+
+        let y: CGFloat
+        if frame.height <= target.height {
+            y = min(max(frame.minY, target.minY), target.maxY - frame.height)
+        } else {
+            y = target.midY - (frame.height / 2.0)
+        }
+
+        return NSRect(x: x, y: y, width: frame.width, height: frame.height)
     }
 
     /// Returns the visible frame of the screen the user is most likely
@@ -409,7 +454,8 @@ final class UnifiedWindowController: NSWindowController {
         let activeScreenFrame = UnifiedWindowController.activeScreenVisibleFrame()
         let reconciled = UnifiedWindowController.reconciledFrame(
             for: window.frame,
-            activeScreenVisibleFrame: activeScreenFrame
+            activeScreenVisibleFrame: activeScreenFrame,
+            availableScreenVisibleFrames: NSScreen.screens.map(\.visibleFrame)
         )
         if reconciled != window.frame {
             logWindowState(

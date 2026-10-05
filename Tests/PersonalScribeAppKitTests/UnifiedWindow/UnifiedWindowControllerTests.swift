@@ -223,6 +223,35 @@ final class UnifiedWindowControllerTests: XCTestCase {
         XCTAssertEqual(reconciled.midY, secondaryScreen.midY, accuracy: 0.5)
     }
 
+    func testReconciledFrameKeepsWindowContainedOnNonActiveDisplay() {
+        let primaryScreen = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+        let secondaryScreen = NSRect(x: 1920, y: 0, width: 2560, height: 1440)
+        let window = NSRect(x: 2200, y: 200, width: 800, height: 600)
+
+        let reconciled = UnifiedWindowController.reconciledFrame(
+            for: window,
+            activeScreenVisibleFrame: primaryScreen,
+            availableScreenVisibleFrames: [primaryScreen, secondaryScreen]
+        )
+
+        XCTAssertEqual(reconciled, window)
+    }
+
+    func testReconciledFrameContainsPartiallyOffscreenWindowOnItsDisplay() {
+        let primaryScreen = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+        let secondaryScreen = NSRect(x: 1920, y: 0, width: 2560, height: 1440)
+        let window = NSRect(x: 4200, y: 200, width: 800, height: 600)
+
+        let reconciled = UnifiedWindowController.reconciledFrame(
+            for: window,
+            activeScreenVisibleFrame: primaryScreen,
+            availableScreenVisibleFrames: [primaryScreen, secondaryScreen]
+        )
+
+        XCTAssertTrue(secondaryScreen.contains(reconciled))
+        XCTAssertEqual(reconciled.size, window.size)
+    }
+
     func testReconciledFrameReturnsOriginalWhenNoScreenAvailable() {
         // Defensive: if AppKit reports no active screen (headless CI,
         // transient display reconfiguration) we must not produce a
