@@ -155,6 +155,26 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
         }
     }
 
+    /// Records where a saved transcript was pasted (#117).
+    public func updateDestinationApp(id: UUID, appName: String) async throws {
+        do {
+            try await database.write { db in
+                try db.execute(
+                    sql: "UPDATE transcripts SET destination_app = ? WHERE id = ?",
+                    arguments: [appName, id.uuidString]
+                )
+            }
+            notificationCenter.post(name: MetricsNotification.transcriptCommit, object: nil)
+            operationObserver.record(.writeSucceeded)
+        } catch let error as TranscriptStorageError {
+            operationObserver.record(.writeFailed)
+            throw error
+        } catch {
+            operationObserver.record(.writeFailed)
+            throw TranscriptStorageError.queryFailed(underlying: error)
+        }
+    }
+
     public func nullifyAudioFilenames(_ filenames: [String]) async throws {
         guard !filenames.isEmpty else {
             return
@@ -205,7 +225,8 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         audio_duration,
                         processing_duration,
                         mode_id,
-                        audio_filename
+                        audio_filename,
+                        destination_app
                     FROM transcripts
                     ORDER BY timestamp DESC
                     LIMIT ?
@@ -268,7 +289,8 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         transcripts.audio_duration,
                         transcripts.processing_duration,
                         transcripts.mode_id,
-                        transcripts.audio_filename
+                        transcripts.audio_filename,
+                        transcripts.destination_app
                     FROM transcripts
                     JOIN transcripts_fts
                       ON transcripts_fts.rowid = transcripts.rowid
@@ -303,7 +325,8 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         audio_duration,
                         processing_duration,
                         mode_id,
-                        audio_filename
+                        audio_filename,
+                        destination_app
                     FROM transcripts
                     ORDER BY timestamp DESC
                     """
@@ -335,7 +358,8 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         audio_duration,
                         processing_duration,
                         mode_id,
-                        audio_filename
+                        audio_filename,
+                        destination_app
                     FROM transcripts
                     WHERE audio_filename IS NOT NULL
                     ORDER BY timestamp DESC
@@ -382,7 +406,8 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                         audio_duration,
                         processing_duration,
                         mode_id,
-                        audio_filename
+                        audio_filename,
+                        destination_app
                     FROM transcripts
                     WHERE timestamp BETWEEN ? AND ?
                     ORDER BY timestamp \(orderClause)

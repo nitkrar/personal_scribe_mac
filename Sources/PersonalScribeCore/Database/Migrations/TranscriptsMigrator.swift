@@ -79,6 +79,13 @@ enum TranscriptsMigrator {
             }
         }
 
+        migrator.registerMigration("v7_destination_app") { db in
+            try wrapMigration(version: "v7_destination_app") {
+                try db.execute(sql: "ALTER TABLE transcripts ADD COLUMN destination_app TEXT")
+                try db.execute(sql: "PRAGMA user_version = 7")
+            }
+        }
+
         return migrator
     }
 

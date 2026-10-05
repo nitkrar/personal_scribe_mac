@@ -18,6 +18,12 @@ public struct TranscriptEntry: Codable, Sendable, Equatable {
     /// Optional so rows persisted before audio retention landed decode
     /// cleanly to `nil`.
     public let audioFilename: String?
+    /// #117 — display name of the app the transcript was pasted into, or
+    /// `clipboardDestination` / `fileDestination`. `nil` for older rows.
+    public let destinationApp: String?
+
+    public static let clipboardDestination = "Clipboard"
+    public static let fileDestination = "File"
 
     public init(
         id: UUID,
@@ -26,7 +32,8 @@ public struct TranscriptEntry: Codable, Sendable, Equatable {
         audioDuration: TimeInterval,
         processingDuration: TimeInterval,
         modeId: String? = nil,
-        audioFilename: String? = nil
+        audioFilename: String? = nil,
+        destinationApp: String? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -35,6 +42,7 @@ public struct TranscriptEntry: Codable, Sendable, Equatable {
         self.processingDuration = processingDuration
         self.modeId = modeId
         self.audioFilename = audioFilename
+        self.destinationApp = destinationApp
     }
 
     /// Snake_case `CodingKeys` aligned to the `transcripts` SQLite schema
@@ -49,6 +57,7 @@ public struct TranscriptEntry: Codable, Sendable, Equatable {
         case processingDuration = "processing_duration"
         case modeId = "mode_id"
         case audioFilename = "audio_filename"
+        case destinationApp = "destination_app"
     }
 
     public init(from decoder: Decoder) throws {
@@ -62,6 +71,7 @@ public struct TranscriptEntry: Codable, Sendable, Equatable {
         )
         self.modeId = try container.decodeIfPresent(String.self, forKey: .modeId)
         self.audioFilename = try container.decodeIfPresent(String.self, forKey: .audioFilename)
+        self.destinationApp = try container.decodeIfPresent(String.self, forKey: .destinationApp)
     }
 }
 
@@ -91,7 +101,8 @@ extension TranscriptEntry: FetchableRecord, PersistableRecord {
             audioDuration: row[CodingKeys.audioDuration.stringValue],
             processingDuration: row[CodingKeys.processingDuration.stringValue],
             modeId: row[CodingKeys.modeId.stringValue],
-            audioFilename: row[CodingKeys.audioFilename.stringValue]
+            audioFilename: row[CodingKeys.audioFilename.stringValue],
+            destinationApp: row[CodingKeys.destinationApp.stringValue]
         )
     }
 
@@ -103,5 +114,6 @@ extension TranscriptEntry: FetchableRecord, PersistableRecord {
         container[CodingKeys.processingDuration.stringValue] = processingDuration
         container[CodingKeys.modeId.stringValue] = modeId
         container[CodingKeys.audioFilename.stringValue] = audioFilename
+        container[CodingKeys.destinationApp.stringValue] = destinationApp
     }
 }

@@ -143,7 +143,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         recordObservedTarget(target)
     }
 
-    public func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {
+    public func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws -> String? {
         // Live cursor mode does not stop-time deliver via this sink.
         // The authoritative second-pass writes through
         // `ClipboardBatchOutput` when `.frontmostPaste` is in the
@@ -152,6 +152,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
         // restored it so the user can opt into both surfaces. The
         // newline separator before the final paste is owned by
         // ClipboardBatchOutput using #097's accumulator signal.
+        return nil
     }
 
     public func resetForNewSession() async {
@@ -218,7 +219,7 @@ public final class LiveCursorOutput: PipelineOutputSink, @unchecked Sendable {
     }
 
     private func recordObservedTarget(_ target: PasteTarget) {
-        guard case .frontmost(let bundleID, let pid) = target else { return }
+        guard case .frontmost(let bundleID, let pid, _) = target else { return }
         pasteAccumulator.recordTarget(pid: pid, bundleID: bundleID)
     }
 

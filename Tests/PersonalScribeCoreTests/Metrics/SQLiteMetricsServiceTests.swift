@@ -376,6 +376,37 @@ final class SQLiteMetricsServiceAppDatabaseInitTests: XCTestCase {
         XCTAssertEqual(snapshot.recentTranscriptions, [oldEntry])
     }
 
+    func testAppsUsedCountsDistinctPastedAppsOnly() async throws {
+        let context = try makeMetricsAppDatabaseContext()
+        defer { cleanupMetricsAppDatabaseContext(context) }
+
+        let referenceDate = Date(timeIntervalSince1970: 4_000_000)
+        for destination in ["Notes", "Slack", "Notes", "Clipboard", "File", nil] {
+            try await context.repository.append(
+                TranscriptEntry(
+                    id: UUID(),
+                    timestamp: referenceDate.addingTimeInterval(-60),
+                    text: "hello",
+                    audioDuration: 1,
+                    processingDuration: 0.1,
+                    destinationApp: destination
+                )
+            )
+        }
+        let service = SQLiteMetricsService(
+            appDatabase: context.database,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app),
+            referenceDateProvider: { referenceDate }
+        )
+
+        let snapshot = try await service.loadSnapshot(
+            window: MetricsRange.allTime.window(anchoredAt: referenceDate, calendar: makeMetricsTestCalendar()),
+            recentLimit: 0
+        )
+
+        XCTAssertEqual(snapshot.rollups.appsUsed, 2)
+    }
+
     func testSnapshotRollupsUseOnlyEntriesInsideRequestedWindow() async throws {
         let context = try makeMetricsAppDatabaseContext()
         defer { cleanupMetricsAppDatabaseContext(context) }

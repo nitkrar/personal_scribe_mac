@@ -142,8 +142,46 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         let result = await service.deliverBatch(text: "already trusted", sinks: Self.sinks())
 
-        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(result, .pasted(appName: "com.example.target"))
         XCTAssertEqual(shortcutPostCount, 1)
+    }
+
+    func testSuccessfulPasteReportsTargetAppName() async {
+        let result = await makeTrustedPasteService(
+            target: .frontmost(bundleID: "com.apple.Notes", pid: 4242, appName: "Notes")
+        ).deliverBatch(text: "hello", sinks: Self.sinks())
+
+        XCTAssertEqual(result, .pasted(appName: "Notes"))
+    }
+
+    func testSuccessfulPasteIntoOwnTextInputReportsNinimma() async {
+        let result = await makeTrustedPasteService(target: .ownTextInput)
+            .deliverBatch(text: "hello", sinks: Self.sinks())
+
+        XCTAssertEqual(result, .pasted(appName: AppBrand.displayName))
+    }
+
+    func testSuccessfulPasteFallsBackToBundleIDWithoutAppName() async {
+        let result = await makeTrustedPasteService(
+            target: .frontmost(bundleID: "com.example.target", pid: 4242)
+        ).deliverBatch(text: "hello", sinks: Self.sinks())
+
+        XCTAssertEqual(result, .pasted(appName: "com.example.target"))
+    }
+
+    private func makeTrustedPasteService(target: PasteTarget) -> ClipboardBatchOutput {
+        ClipboardBatchOutput(
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui),
+            defaults: isolatedDefaults(),
+            frontmostAppProvider: FakeFrontmostAppProvider(
+                frontmostApplicationBundleIdentifier: "com.apple.TextEdit"
+            ),
+            snapshotService: makeSnapshotService(for: makePasteboard()),
+            scheduleRestore: { _, _ in },
+            isAccessibilityTrusted: { true },
+            pasteShortcutPoster: { _ in true },
+            pasteTarget: { target }
+        )
     }
 
     func testDeliverBatchEmitsPasteSessionSummaryOnSuccessPath() async throws {
@@ -166,7 +204,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         let result = await service.deliverBatch(text: "already trusted", sinks: Self.sinks())
 
-        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(result, .pasted(appName: "com.example.target"))
         let summaryMessages = await waitForLogMessages(
             in: sink,
             containing: "paste_session_summary",
@@ -351,7 +389,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         let result = await service.deliverBatch(text: "self frontmost but cursor present", sinks: Self.sinks())
 
-        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(result, .pasted(appName: "com.example.target"))
         XCTAssertEqual(shortcutPostCount, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "self frontmost but cursor present")
     }
@@ -412,7 +450,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         let firstResult = await service.deliverBatch(text: "transcript one", sinks: Self.sinks(restoreEnabled: true))
 
-        XCTAssertEqual(firstResult, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(firstResult, .pasted(appName: "com.example.target"))
         XCTAssertEqual(scheduledRestores.count, 1)
         XCTAssertEqual(scheduledRestores[0].delay, 0.2, accuracy: 0.0001)
         XCTAssertEqual(pasteboard.string(forType: .string), "transcript one")
@@ -425,7 +463,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         let secondResult = await service.deliverBatch(text: "transcript two", sinks: Self.sinks(restoreEnabled: true))
 
-        XCTAssertEqual(secondResult, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(secondResult, .pasted(appName: "com.example.target"))
         XCTAssertEqual(scheduledRestores.count, 2)
         XCTAssertEqual(scheduledRestores[1].delay, 1.4, accuracy: 0.0001)
         XCTAssertEqual(pasteboard.string(forType: .string), "transcript two")
@@ -461,7 +499,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         let result = await service.deliverBatch(text: "transcript", sinks: Self.sinks(restoreEnabled: false))
 
-        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(result, .pasted(appName: "com.example.target"))
         XCTAssertTrue(
             scheduledRestores.isEmpty,
             "Restore toggle off means no scheduleRestore call — transcript stays on clipboard"
@@ -495,7 +533,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
         _ = pasteboard.setString("user original", forType: .string)
 
         let result = await service.deliverBatch(text: "transcript", sinks: Self.sinks(restoreEnabled: true))
-        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(result, .pasted(appName: "com.example.target"))
         XCTAssertEqual(scheduledRestores.count, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "transcript")
 
@@ -603,7 +641,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         let result = await service.deliverBatch(text: "cursor present", sinks: Self.sinks())
 
-        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(result, .pasted(appName: "com.example.target"))
         XCTAssertEqual(shortcutPostCount, 1)
         XCTAssertEqual(probeCount, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "cursor present")
@@ -818,7 +856,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         let result = await service.deliverBatch(text: "Final paragraph.", sinks: Self.sinks())
 
-        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(result, .pasted(appName: "com.example.target"))
         XCTAssertEqual(pasteboard.string(forType: .string), "\nFinal paragraph.")
     }
 
@@ -861,7 +899,7 @@ final class ClipboardBatchOutputTests: XCTestCase {
 
         let result = await service.deliverBatch(text: "Final paragraph.", sinks: Self.sinks())
 
-        XCTAssertEqual(result, .delivered(target: .frontmostApp, delivery: .paste))
+        XCTAssertEqual(result, .pasted(appName: "com.example.target"))
         XCTAssertEqual(pasteboard.string(forType: .string), "Final paragraph.")
     }
 

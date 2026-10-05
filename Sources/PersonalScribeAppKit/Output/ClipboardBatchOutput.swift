@@ -210,7 +210,7 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
 
         pasteAccumulator.recordFinalSucceeded(chars: text.count)
         maybeScheduleRestore()
-        return .delivered(target: .frontmostApp, delivery: .paste)
+        return .pasted(appName: target.destinationAppName)
     }
 
     private static func postPasteShortcut(logger: PersonalScribeLogger) -> Bool {
@@ -235,7 +235,7 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
     }
 
     private func recordObservedTarget(_ target: PasteTarget, into accumulator: inout PasteSessionAccumulator) {
-        guard case .frontmost(let bundleID, let pid) = target else { return }
+        guard case .frontmost(let bundleID, let pid, _) = target else { return }
         accumulator.recordTarget(pid: pid, bundleID: bundleID)
     }
 

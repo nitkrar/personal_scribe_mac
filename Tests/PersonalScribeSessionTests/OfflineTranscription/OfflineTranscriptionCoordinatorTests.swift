@@ -112,6 +112,7 @@ final class OfflineTranscriptionCoordinatorTests: XCTestCase {
         XCTAssertEqual(entries.count, 1)
         XCTAssertEqual(entries[0].text, "Hello world.")
         XCTAssertEqual(entries[0].audioFilename, url.path)
+        XCTAssertEqual(entries[0].destinationApp, TranscriptEntry.fileDestination)
     }
 
     func testSavedTextFollowsGlobalCleanupSetting() async throws {

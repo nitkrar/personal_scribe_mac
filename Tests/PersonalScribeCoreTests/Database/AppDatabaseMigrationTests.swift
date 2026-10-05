@@ -80,7 +80,23 @@ final class AppDatabaseMigrationTests: XCTestCase {
         let userVersion = try queue.read { db in
             try Int.fetchOne(db, sql: "PRAGMA user_version")
         }
-        XCTAssertEqual(userVersion, 6)
+        XCTAssertEqual(userVersion, 7)
+    }
+
+    func testV7AddsDestinationAppColumnNullable() throws {
+        let baseDirectory = try makeTempBaseDir()
+        defer { cleanup(baseDirectory) }
+
+        _ = try AppDatabase(locator: FixedBaseDirectoryStorageLocator(baseDirectory: baseDirectory))
+        let databaseURL = baseDirectory.appendingPathComponent("db/transcripts.sqlite", isDirectory: false)
+        let queue = try DatabaseQueue(path: databaseURL.path)
+
+        let column = try queue.read { db in
+            try Row.fetchAll(db, sql: "PRAGMA table_info(transcripts)")
+                .first { ($0["name"] as String?) == "destination_app" }
+        }
+        XCTAssertEqual(column?["type"] as String?, "TEXT")
+        XCTAssertEqual(column?["notnull"] as Int64?, 0)
     }
 
     // MARK: - Expected DDL (byte-identical pin)
@@ -96,7 +112,7 @@ final class AppDatabaseMigrationTests: XCTestCase {
         text TEXT NOT NULL,
         audio_duration REAL NOT NULL,
         processing_duration REAL NOT NULL
-    , mode_id TEXT, audio_filename TEXT)
+    , mode_id TEXT, audio_filename TEXT, destination_app TEXT)
     ---
     table transcripts_fts
     CREATE VIRTUAL TABLE "transcripts_fts" USING fts5(text, tokenize='''unicode61'' ''remove_diacritics'' ''2''', content='transcripts')

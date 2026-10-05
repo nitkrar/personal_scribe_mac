@@ -661,8 +661,9 @@ private actor TestPipelineOutputSink: PipelineOutputSink {
         partials.append(revision)
     }
 
-    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws -> String? {
         finals.append(result)
+        return nil
     }
 
     func resetForNewSession() async {

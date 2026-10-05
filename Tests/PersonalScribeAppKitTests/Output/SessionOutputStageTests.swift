@@ -9,7 +9,7 @@ import PersonalScribeSession
 final class SessionOutputStageTests: XCTestCase {
     func testFinalDeliveryEndsLiveSessionThenDeliversTranscriptToRecipeSinks() async throws {
         let events = EventLog()
-        let batch = FakeBatchOutput(events: events, result: .delivered(target: .frontmostApp, delivery: .paste))
+        let batch = FakeBatchOutput(events: events, result: .pasted(appName: "Notes"))
         let stage = SessionOutputStage(
             live: FakeLiveOutput(events: events),
             batch: batch,
@@ -27,6 +27,25 @@ final class SessionOutputStageTests: XCTestCase {
         XCTAssertEqual(events.entries, ["live.endSession", "batch.deliver"])
         XCTAssertEqual(batch.deliveredTexts, ["final words"])
         XCTAssertEqual(batch.deliveredSinks, [sinks])
+    }
+
+    func testFinalDeliveryReturnsPastedAppNameOnlyWhenPasted() async throws {
+        let result = TranscriptionResult(text: "words", audioDuration: .seconds(1), processingDuration: .zero)
+        func stage(_ outcome: OutputResult) -> SessionOutputStage {
+            let events = EventLog()
+            return SessionOutputStage(
+                live: FakeLiveOutput(events: events),
+                batch: FakeBatchOutput(events: events, result: outcome),
+                logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
+            )
+        }
+
+        let pasted = try await stage(.pasted(appName: "Notes")).deliverFinal(result, sinks: [])
+        let copied = try await stage(.delivered(target: .clipboardOnly, delivery: .clipboardOnly))
+            .deliverFinal(result, sinks: [])
+
+        XCTAssertEqual(pasted, "Notes")
+        XCTAssertNil(copied)
     }
 
     func testClipboardOnlyDeliveryRaisesNotice() async throws {
@@ -103,7 +122,7 @@ private final class FakeLiveOutput: PipelineOutputSink, @unchecked Sendable {
     private let events: EventLog
     init(events: EventLog) { self.events = events }
     func deliverPartial(_ revision: TranscriptProgress) async throws {}
-    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {}
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws -> String? { nil }
     func resetForNewSession() async {}
     func endSession() async {
         await MainActor.run { events.entries.append("live.endSession") }

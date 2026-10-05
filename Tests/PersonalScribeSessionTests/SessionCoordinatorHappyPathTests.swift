@@ -243,8 +243,9 @@ private actor CoordinatorOutputSink: PipelineOutputSink {
 
     func deliverPartial(_ revision: TranscriptProgress) async throws {}
 
-    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws -> String? {
         self.sinks.append(sinks)
+        return nil
     }
 
     func resetForNewSession() async {}

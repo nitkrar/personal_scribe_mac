@@ -733,12 +733,31 @@ Mockups: `plans/backlog/onboarding-home/` H-*. Stats card in mockup order (words
 
 ### #117 — "Apps used" stat
 
-`feature` · `P3` · `open` · `area: home, history, persistence`
-*Updated 2026-10-05*
+`feature` · `P3` · `done` · `area: home, history, persistence`
+*Updated 2026-10-06*
 
-Save the app each transcript was pasted into (new optional column; counts from then on) and show an "Apps used" tile on Home. Taken from Superwhisper's Home; decide on build whether it replaces Recordings or is added.
+Save where each transcript went (new optional column) and show an "Apps used" tile on Home. Taken from Superwhisper's Home; decide on build whether it replaces Recordings or is added.
+
+Decided 2026-10-05:
+- Store the app's display name at paste time, not the bundle ID; uninstalled apps keep their saved name.
+- Tie it to a successful paste. Live transcripts are inserted as "Clipboard" (the clipboard copy always happens) and updated to the app name after a successful paste; the update also posts a metrics refresh.
+- Offline file transcripts store "File". Rows from before the column show "Unknown" (NULL).
+- Nothing is excluded: Ninimma itself and browsers count by app name.
+
+Built 2026-10-06: `destination_app` column (v7); the tile replaces Recordings (mockup slot) and counts distinct app names, not "Clipboard"/"File"/NULL. No per-transcript display yet, so "Unknown" isn't shown anywhere.
 
 **Depends on:** #116
+
+---
+
+### #118 — Pill skips brief in-between states
+
+`feature` · `P3` · `parked` · `area: pill, overlay`
+*Updated 2026-10-05*
+
+Loading ("Warming up model…"), transcribing and downloading often last well under 0.3s, so the pill flashes them for a frame or two; launch model preload does this every launch. Wishlist: the pill presenter shows these three only once they've lasted about 0.3s, otherwise it goes straight to the next state. Recording, hold-to-record, paused, cancelled, idle and hide stay instant. One timer in the presenter, not per-state logic.
+
+Related: the pill's `error` state is never produced; a failed session drops straight to idle (`AppStore.derivePillVisibility`).
 
 ---
 

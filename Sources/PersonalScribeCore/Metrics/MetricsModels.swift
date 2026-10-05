@@ -51,6 +51,8 @@ public enum MetricsRange: String, CaseIterable, Codable, Identifiable, Sendable 
 
 public struct MetricsRollups: Sendable, Equatable {
     public let recordings: Int
+    /// Distinct apps transcripts were pasted into (#117).
+    public let appsUsed: Int
     public let words: Int
     public let minutesSaved: Double
     public let averageWPM: Double
@@ -60,6 +62,7 @@ public struct MetricsRollups: Sendable, Equatable {
 
     public init(
         recordings: Int,
+        appsUsed: Int = 0,
         words: Int,
         minutesSaved: Double,
         averageWPM: Double,
@@ -68,6 +71,7 @@ public struct MetricsRollups: Sendable, Equatable {
         windowEnd: Date
     ) {
         self.recordings = recordings
+        self.appsUsed = appsUsed
         self.words = words
         self.minutesSaved = minutesSaved
         self.averageWPM = averageWPM

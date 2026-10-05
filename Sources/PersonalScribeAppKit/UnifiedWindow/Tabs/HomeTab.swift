@@ -98,7 +98,7 @@ struct HomeTab: View {
                 metricDivider
                 metricCell(label: "Words", value: loadedValue(formattedWords))
                 metricDivider
-                metricCell(label: "Recordings", value: loadedValue(formattedRecordings))
+                metricCell(label: "Apps used", value: loadedValue(formattedAppsUsed))
                 metricDivider
                 metricCell(
                     label: "Time saved",
@@ -385,9 +385,9 @@ struct HomeTab: View {
             ?? "\(metrics.rollups.words)"
     }
 
-    private var formattedRecordings: String {
-        Self.integerFormatter.string(from: NSNumber(value: metrics.rollups.recordings))
-            ?? "\(metrics.rollups.recordings)"
+    private var formattedAppsUsed: String {
+        Self.integerFormatter.string(from: NSNumber(value: metrics.rollups.appsUsed))
+            ?? "\(metrics.rollups.appsUsed)"
     }
 
     private var palette: PersonalScribeTheme.Palette {

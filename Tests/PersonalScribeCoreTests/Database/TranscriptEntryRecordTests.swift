@@ -19,7 +19,8 @@ final class TranscriptEntryRecordTests: XCTestCase {
                     audio_duration REAL NOT NULL,
                     processing_duration REAL NOT NULL,
                     mode_id TEXT,
-                    audio_filename TEXT
+                    audio_filename TEXT,
+                    destination_app TEXT
                 )
                 """)
         }

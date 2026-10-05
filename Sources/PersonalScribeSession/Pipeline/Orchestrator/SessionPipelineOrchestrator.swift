@@ -11,6 +11,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private let outputSink: any PipelineOutputSink
     private let contextProvider: any PipelineContextProviding
     private let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
+    /// Records the app a saved transcript was pasted into (#117).
+    private let destinationHandler: (@Sendable (UUID, String) async throws -> Void)?
     private let recordingFileWriter: (any RecordingFileWriting)?
     private let recordAudioEnabled: @Sendable () -> Bool
     private let recordingsDirectory: @Sendable () throws -> URL
@@ -184,12 +186,17 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         pausedRecordingTimeout: @escaping @Sendable () -> Duration = { PausedRecordingTimeout.resolve().duration }
     ) {
         let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
+        let destinationHandler: (@Sendable (UUID, String) async throws -> Void)?
         if let repository = transcriptRepository {
             persistenceHandler = { (entry: TranscriptEntry) async throws -> Void in
                 try await repository.append(entry)
             }
+            destinationHandler = { id, appName in
+                try await repository.updateDestinationApp(id: id, appName: appName)
+            }
         } else {
             persistenceHandler = nil
+            destinationHandler = nil
         }
         self.init(
             capture: capture,
@@ -198,6 +205,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             outputSink: outputSink,
             contextProvider: contextProvider,
             persistenceHandler: persistenceHandler,
+            destinationHandler: destinationHandler,
             recordingFileWriter: recordingFileWriter,
             recordAudioEnabled: recordAudioEnabled,
             recordingsDirectory: recordingsDirectory,
@@ -217,6 +225,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         outputSink: any PipelineOutputSink,
         contextProvider: any PipelineContextProviding,
         persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?,
+        destinationHandler: (@Sendable (UUID, String) async throws -> Void)? = nil,
         recordingFileWriter: (any RecordingFileWriting)? = nil,
         recordAudioEnabled: @escaping @Sendable () -> Bool = { false },
         recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
@@ -234,6 +243,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.outputSink = outputSink
         self.contextProvider = contextProvider
         self.persistenceHandler = persistenceHandler
+        self.destinationHandler = destinationHandler
         self.recordingFileWriter = recordingFileWriter
         self.recordAudioEnabled = recordAudioEnabled
         self.recordingsDirectory = recordingsDirectory
@@ -1159,12 +1169,12 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.activeStage = .persistence
                 snapshot.transcriptProgress = progress
             }
-            try await persist(finalResult, replayBuffers: allBuffers)
+            let savedID = try await persist(finalResult, replayBuffers: allBuffers)
 
             publish { snapshot in snapshot.activeStage = .output }
             switch delivery {
             case .standard:
-                try await deliverFinal(finalResult)
+                try await deliverFinal(finalResult, savedID: savedID)
             case .clipboardWithoutPaste:
                 try await outputSink.deliverFinalWithoutPaste(finalResult)
             }
@@ -1398,7 +1408,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.recordingDuration = rawResult.audioDuration
             }
 
-            try await persist(finalResult, replayBuffers: replayBuffers)
+            let savedID = try await persist(finalResult, replayBuffers: replayBuffers)
 
             publish { snapshot in
                 snapshot.sessionState = .transcribing
@@ -1407,7 +1417,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.recordingDuration = rawResult.audioDuration
             }
 
-            try await deliverFinal(finalResult)
+            try await deliverFinal(finalResult, savedID: savedID)
             await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
 
             publish { snapshot in
@@ -1656,15 +1666,17 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
+    /// Returns the saved row's id, or nil when nothing was saved.
+    @discardableResult
     private func persist(
         _ result: TranscriptionResult,
         replayBuffers: [PCMBuffer]
-    ) async throws {
+    ) async throws -> UUID? {
         // Empty transcripts stay out of history and stats.
         guard let persistenceHandler,
               !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
-            return
+            return nil
         }
 
         var audioFilename: String?
@@ -1700,11 +1712,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             // (legacy / fixed-recipe test paths); production
             // session-starts always bind.
             modeId: activeSessionRecipe?.recipeID,
-            audioFilename: audioFilename
+            audioFilename: audioFilename,
+            // Updated to the app name once the paste succeeds.
+            destinationApp: TranscriptEntry.clipboardDestination
         )
 
         do {
             try await persistenceHandler(entry)
+            return entry.id
         } catch {
             // No row will reference the recording, so don't leave it behind.
             if let audioFileURL {
@@ -1714,11 +1729,19 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
-    private func deliverFinal(_ result: TranscriptionResult) async throws {
+    private func deliverFinal(_ result: TranscriptionResult, savedID: UUID?) async throws {
+        let pastedApp: String?
         do {
-            try await outputSink.deliverFinal(result, sinks: activeSessionRecipe?.outputSinks ?? [])
+            pastedApp = try await outputSink.deliverFinal(result, sinks: activeSessionRecipe?.outputSinks ?? [])
         } catch {
             throw makeStageFailure(stage: .output, error: error, fallback: .transcriptionFailure)
+        }
+        guard let savedID, let pastedApp, let destinationHandler else { return }
+        do {
+            try await destinationHandler(savedID, pastedApp)
+        } catch {
+            // The paste already landed; only the stat is missing.
+            logger.error("Failed to record paste destination", error: error)
         }
     }
 

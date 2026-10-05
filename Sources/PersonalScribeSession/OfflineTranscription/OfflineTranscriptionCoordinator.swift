@@ -373,7 +373,8 @@ private extension OfflineTranscriptionCoordinator {
                 audioDuration: Self.seconds(from: result.audioDuration),
                 processingDuration: Self.seconds(from: result.processingDuration),
                 modeId: nil,
-                audioFilename: job.sourceFilename
+                audioFilename: job.sourceFilename,
+                destinationApp: TranscriptEntry.fileDestination
             )
             try await transcriptRepository.append(entry)
             updateStatus(for: id, status: .completed(transcriptID: transcriptID))

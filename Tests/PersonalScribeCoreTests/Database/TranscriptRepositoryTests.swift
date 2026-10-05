@@ -253,6 +253,63 @@ final class TranscriptRepositoryTests: XCTestCase {
         }
     }
 
+    // MARK: - destination app
+
+    func testAppendPersistsDestinationApp() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        let entry = TranscriptEntry(
+            id: UUID(),
+            timestamp: Date(timeIntervalSince1970: 100),
+            text: "hello",
+            audioDuration: 1,
+            processingDuration: 0.1,
+            destinationApp: TranscriptEntry.clipboardDestination
+        )
+        try await harness.repository.append(entry)
+
+        let recent = await harness.repository.recent(limit: 1)
+        XCTAssertEqual(recent.first?.destinationApp, "Clipboard")
+    }
+
+    func testUpdateDestinationAppReplacesValueAndPostsMetricsRefresh() async throws {
+        let harness = try makeHarness()
+        defer { cleanup(harness.base) }
+
+        let notificationCenter = NotificationCenter()
+        let repository = TranscriptRepository(
+            database: harness.database,
+            notificationCenter: notificationCenter,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+        )
+        let entry = TranscriptEntry(
+            id: UUID(),
+            timestamp: Date(timeIntervalSince1970: 100),
+            text: "hello",
+            audioDuration: 1,
+            processingDuration: 0.1,
+            destinationApp: TranscriptEntry.clipboardDestination
+        )
+        try await repository.append(entry)
+
+        let expectation = expectation(description: "destination update posts metrics refresh")
+        let token = notificationCenter.addObserver(
+            forName: MetricsNotification.transcriptCommit,
+            object: nil,
+            queue: nil
+        ) { _ in
+            expectation.fulfill()
+        }
+        defer { notificationCenter.removeObserver(token) }
+
+        try await repository.updateDestinationApp(id: entry.id, appName: "Notes")
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+        let all = await repository.all()
+        XCTAssertEqual(all.map(\.destinationApp), ["Notes"])
+    }
+
     // MARK: - recent
 
     func test_recent_limitZero_returnsEmpty() async throws {

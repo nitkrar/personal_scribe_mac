@@ -2287,6 +2287,37 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(entries.first?.processingDuration ?? 0, 0.2, accuracy: 0.01)
     }
 
+    func testSuccessfulPasteRecordsDestinationAppOnSavedTranscript() async throws {
+        let destinations = try await savedDestinations(pastedAppName: "Notes")
+        XCTAssertEqual(destinations, ["Notes"])
+    }
+
+    func testUnpastedTranscriptKeepsClipboardDestination() async throws {
+        let destinations = try await savedDestinations(pastedAppName: nil)
+        XCTAssertEqual(destinations, [TranscriptEntry.clipboardDestination])
+    }
+
+    private func savedDestinations(pastedAppName: String?) async throws -> [String?] {
+        let temporaryDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let repository = try makeRepository(in: temporaryDirectory)
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(text: "hello", audioDuration: .seconds(1), processingDuration: .zero)
+            ),
+            transcriptRepository: repository,
+            outputSink: TestPipelineOutputSink(pastedAppName: pastedAppName)
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        await waitForState(.completed, in: orchestrator)
+
+        return await repository.recent(limit: 10).map(\.destinationApp)
+    }
+
     func testCurrentBoundRecipeStaysSessionFrozenDespiteMidTranscriptionRebind() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000)
         let transcriber = CountingTranscriber(
@@ -3199,26 +3230,29 @@ private actor TestPipelineOutputSink: PipelineOutputSink {
     }
 
     private let failurePoint: FailurePoint?
+    private let pastedAppName: String?
     private var partials: [TranscriptProgress] = []
     private var finals: [TranscriptionResult] = []
     private var finalSinks: [[BoundOutputSink]] = []
     private var resets = 0
     private var endSessions = 0
 
-    init(failurePoint: FailurePoint? = nil) {
+    init(failurePoint: FailurePoint? = nil, pastedAppName: String? = nil) {
         self.failurePoint = failurePoint
+        self.pastedAppName = pastedAppName
     }
 
     func deliverPartial(_ revision: TranscriptProgress) async throws {
         partials.append(revision)
     }
 
-    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws -> String? {
         if case .final? = failurePoint {
             throw OutputFailure.finalDeliveryFailed
         }
         finals.append(result)
         finalSinks.append(sinks)
+        return pastedAppName
     }
 
     func finalDeliverySinks() -> [[BoundOutputSink]] {
@@ -3264,7 +3298,7 @@ private actor BlockingEndSessionPipelineOutputSink: PipelineOutputSink {
 
     func deliverPartial(_ revision: TranscriptProgress) async throws {}
 
-    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {}
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws -> String? { nil }
 
     func resetForNewSession() async {
         phaseState = .idle

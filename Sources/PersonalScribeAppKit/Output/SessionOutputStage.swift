@@ -35,7 +35,7 @@ public final class SessionOutputStage: PipelineOutputSink, @unchecked Sendable {
         try await live.deliverPartial(revision)
     }
 
-    public func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {
+    public func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws -> String? {
         // End the live session first: it restores the clipboard it
         // borrowed for streamed chunks and records the live paste count
         // the batch paste reads (#098 newline). Pasting before that would
@@ -45,6 +45,8 @@ public final class SessionOutputStage: PipelineOutputSink, @unchecked Sendable {
 
         let outcome = await batch.deliverBatch(text: result.text, sinks: sinks)
         switch outcome {
+        case .pasted(let appName):
+            return appName
         case .delivered(let target, _):
             if let notice = ClipboardNotice(target: target) {
                 await MainActor.run { onClipboardOnlyCopy(notice) }
@@ -54,6 +56,7 @@ public final class SessionOutputStage: PipelineOutputSink, @unchecked Sendable {
         case .ignoredEmptyInput:
             break
         }
+        return nil
     }
 
     public func deliverFinalWithoutPaste(_ result: TranscriptionResult) async throws {

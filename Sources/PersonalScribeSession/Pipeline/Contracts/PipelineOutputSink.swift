@@ -5,8 +5,10 @@ public protocol PipelineOutputSink: Sendable {
     /// The recipe's output stage — the last step of a session that
     /// produced a result. `sinks` are the session's bound output sinks
     /// (clipboard / paste / …). Never called for cancelled, short-exit or
-    /// failed sessions.
-    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws
+    /// failed sessions. Returns the app name it was pasted into, or nil
+    /// when it wasn't pasted.
+    @discardableResult
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws -> String?
     func deliverFinalWithoutPaste(_ result: TranscriptionResult) async throws
     func resetForNewSession() async
     /// #033 — invoked on every session-end path (success, cancel, error,

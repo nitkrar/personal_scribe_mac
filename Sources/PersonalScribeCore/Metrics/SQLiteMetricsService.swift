@@ -68,10 +68,18 @@ public final class SQLiteMetricsService: MetricsService, MetricsReading, @unchec
             0
         )
         let averageWPM = audioMinutes > 0 ? Double(words) / audioMinutes : 0
+        let placeholderDestinations: Set<String> = [
+            TranscriptEntry.clipboardDestination,
+            TranscriptEntry.fileDestination,
+        ]
+        let appsUsed = Set(windowEntries.compactMap(\.destinationApp))
+            .subtracting(placeholderDestinations)
+            .count
 
         return MetricsSnapshot(
             rollups: MetricsRollups(
                 recordings: windowEntries.count,
+                appsUsed: appsUsed,
                 words: words,
                 minutesSaved: minutesSaved,
                 averageWPM: averageWPM,
