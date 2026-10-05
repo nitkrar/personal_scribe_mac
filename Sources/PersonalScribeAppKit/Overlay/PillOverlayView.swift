@@ -39,51 +39,27 @@ public struct PillOverlayView: View {
     // can't silently drift one state out of its band. To change a state's
     // footprint, either reassign it to a different band or edit the band's
     // value; never drop a literal in here.
-    static let idleSize = CGSize(
-        width: PersonalScribeTheme.Pill.Width.compact,
-        height: PersonalScribeTheme.Pill.Height.resting
-    )
+    static let idleSize = PillStyleMetrics.classic.idleSize
     /// Hold-to-Record. 7-bar equaliser + clay border. Matches `.recording`
     /// dimensions (medium × active) — both are live-session pills.
-    static let holdToRecordSize = CGSize(
-        width: PersonalScribeTheme.Pill.Width.medium,
-        height: PersonalScribeTheme.Pill.Height.active
-    )
+    static let holdToRecordSize = PillStyleMetrics.classic.holdToRecordSize
     /// Committed Recording.
-    static let recordingSize = CGSize(
-        width: PersonalScribeTheme.Pill.Width.medium,
-        height: PersonalScribeTheme.Pill.Height.active
-    )
-    static let pausedSize = CGSize(width: 220, height: 36)
-    static let miniIdleSize = CGSize(width: 40, height: 16)
-    static let miniIdleHoverSize = CGSize(width: 66, height: 30)
-    static let miniRecordingSize = CGSize(width: 110, height: 20)
-    static let miniRecordingHoverSize = CGSize(width: 170, height: 30)
-    static let miniPausedSize = CGSize(width: 170, height: 30)
+    static let recordingSize = PillStyleMetrics.classic.recordingSize
+    static let pausedSize = PillStyleMetrics.classic.pausedSize
+    static let miniIdleSize = PillStyleMetrics.mini.idleSize
+    static let miniIdleHoverSize = PillStyleMetrics.mini.idleHoverSize
+    static let miniRecordingSize = PillStyleMetrics.mini.recordingSize
+    static let miniRecordingHoverSize = PillStyleMetrics.mini.recordingHoverSize
+    static let miniPausedSize = PillStyleMetrics.mini.pausedSize
     /// Transcribing.
-    static let transcribingSize = CGSize(
-        width: PersonalScribeTheme.Pill.Width.medium,
-        height: PersonalScribeTheme.Pill.Height.active
-    )
+    static let transcribingSize = PillStyleMetrics.classic.transcribingSize
     /// Done — brief success confirmation. Shares resting-band width and
     /// height with `.idle` so both ambient states read as the same "not
     /// demanding attention" surface.
-    static let doneSize = CGSize(
-        width: PersonalScribeTheme.Pill.Width.compact,
-        height: PersonalScribeTheme.Pill.Height.resting
-    )
-    static let downloadingSize = CGSize(
-        width: PersonalScribeTheme.Pill.Width.medium,
-        height: PersonalScribeTheme.Pill.Height.active
-    )
-    static let loadingSize = CGSize(
-        width: PersonalScribeTheme.Pill.Width.medium,
-        height: PersonalScribeTheme.Pill.Height.active
-    )
-    static let errorSize = CGSize(
-        width: PersonalScribeTheme.Pill.Width.medium,
-        height: PersonalScribeTheme.Pill.Height.active
-    )
+    static let doneSize = PillStyleMetrics.classic.doneSize
+    static let downloadingSize = PillStyleMetrics.classic.downloadingSize
+    static let loadingSize = PillStyleMetrics.classic.loadingSize
+    static let errorSize = PillStyleMetrics.classic.errorSize
     /// Cancel Card. Not a pill — the panel resizes to this footprint at the
     /// same anchor origin when visibility transitions to `.cancelled`.
     static let cancelCardSize = CGSize(
@@ -140,23 +116,31 @@ public struct PillOverlayView: View {
         style: PillStyle,
         isHovered: Bool = false
     ) -> CGSize {
-        let size = size(for: visibility)
-        if style == .mini {
-            switch visibility {
-            case .idle:
-                return isHovered ? miniIdleHoverSize : miniIdleSize
-            case .recording:
-                return isHovered ? miniRecordingHoverSize : miniRecordingSize
-            case .paused:
-                return miniPausedSize
-            case .cancelled:
-                return cancelCardSize
-            case .hidden, .downloading, .loading, .holdToRecord,
-                 .transcribing, .done, .error:
-                break
-            }
+        let metrics = style.metrics
+        switch visibility {
+        case .hidden:
+            return .zero
+        case .idle:
+            return isHovered ? metrics.idleHoverSize : metrics.idleSize
+        case .holdToRecord:
+            return metrics.holdToRecordSize
+        case .recording:
+            return isHovered ? metrics.recordingHoverSize : metrics.recordingSize
+        case .paused:
+            return metrics.pausedSize
+        case .transcribing:
+            return metrics.transcribingSize
+        case .done:
+            return metrics.doneSize
+        case .downloading:
+            return metrics.downloadingSize
+        case .loading:
+            return metrics.loadingSize
+        case .error:
+            return metrics.errorSize
+        case .cancelled:
+            return cancelCardSize
         }
-        return CGSize(width: size.width * style.scale, height: size.height * style.scale)
     }
 
     /// Corner radius for idle (spec §2a — 14pt) and a few non-spec
@@ -252,6 +236,7 @@ public struct PillOverlayView: View {
     // MARK: - Idle
 
     private var idlePill: some View {
+        let metrics = model.pillStyle.metrics
         let size = Self.size(
             for: .idle,
             style: model.pillStyle,
@@ -259,13 +244,13 @@ public struct PillOverlayView: View {
         )
 
         return Group {
-            if model.pillStyle == .mini, model.isHovered {
-                HStack(spacing: 4) {
+            if metrics.controlsOnHover, model.isHovered {
+                HStack(spacing: metrics.idleControlsSpacing) {
                     Circle()
                         .fill(fgDim.opacity(colorScheme == .dark ? 0.18 : 0.14))
                         .overlay(
                             Image(systemName: "square.grid.2x2")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.system(size: metrics.modeIconSize, weight: .medium))
                                 .foregroundColor(fgDim)
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -276,15 +261,14 @@ public struct PillOverlayView: View {
                             PersonalScribeLogoView(
                                 color: PersonalScribeTheme.Pill.surface(for: colorScheme)
                             )
-                            .frame(width: 11, height: 11)
+                            .frame(width: metrics.recordLogoSize, height: metrics.recordLogoSize)
                         )
                         .help("Start recording")
                 }
-                .padding(3)
+                .padding(metrics.idleControlsInset)
             } else {
                 PersonalScribeLogoView(color: fg.opacity(0.9))
-                    .frame(width: model.pillStyle == .mini ? 10 : 14,
-                           height: model.pillStyle == .mini ? 10 : 14)
+                    .frame(width: metrics.idleLogoSize, height: metrics.idleLogoSize)
             }
         }
         .frame(width: size.width, height: size.height)
@@ -301,6 +285,7 @@ public struct PillOverlayView: View {
     /// incoming audio level is zero the bars idle at the minimum
     /// height rather than falling to zero — keeps the visual alive).
     private var holdToRecordPill: some View {
+        let metrics = model.pillStyle.metrics
 
         return EqualizerBarsView(
             audioLevel: model.audioLevel,
@@ -308,7 +293,7 @@ public struct PillOverlayView: View {
             barCount: 7
         )
         .frame(width: 120, height: 24)
-        .frame(width: Self.holdToRecordSize.width, height: Self.holdToRecordSize.height)
+        .frame(width: metrics.holdToRecordSize.width, height: metrics.holdToRecordSize.height)
         .modifier(PillChrome(borderStyle: .active))
         .accessibilityElement()
         .accessibilityLabel("\(AppBrand.displayName) hold-to-record — release to transcribe")
@@ -317,19 +302,19 @@ public struct PillOverlayView: View {
     // MARK: - Recording (spec §2c)
 
     private var recordingPill: some View {
-        let mini = model.pillStyle == .mini
-        let showsControls = !mini || model.isHovered
+        let metrics = model.pillStyle.metrics
+        let showsControls = !metrics.controlsOnHover || model.isHovered
         let size = Self.size(
             for: .recording,
             style: model.pillStyle,
             isHovered: model.isHovered
         )
 
-        return HStack(spacing: mini ? 6 : 8) {
+        return HStack(spacing: metrics.recordingSpacing) {
             if showsControls {
                 controlGlyph(
                     systemName: "pause.fill",
-                    diameter: mini ? 24 : 22
+                    diameter: metrics.controlDiameter
                 )
             }
 
@@ -342,14 +327,16 @@ public struct PillOverlayView: View {
                 onDarkBackground: colorScheme == .dark,
                 renderDate: model.waveformRenderDate
             )
-            .frame(width: mini ? (showsControls ? 98 : 90) : 132,
-                   height: mini ? size.height : 34)
+            .frame(
+                width: showsControls ? metrics.waveformControlsWidth : metrics.waveformRestWidth,
+                height: metrics.controlsOnHover ? size.height : 34
+            )
 
             if showsControls {
-                stopGlyph(diameter: mini ? 22 : 20)
+                stopGlyph(diameter: metrics.stopDiameter)
             }
         }
-        .padding(.horizontal, mini ? 4 : 8)
+        .padding(.horizontal, metrics.recordingHorizontalInset)
         .frame(width: size.width, height: size.height)
         .modifier(PillChrome(borderStyle: .idle))
         .accessibilityElement()
@@ -357,26 +344,26 @@ public struct PillOverlayView: View {
     }
 
     private func pausedPill(elapsedSeconds: Int) -> some View {
-        let mini = model.pillStyle == .mini
+        let metrics = model.pillStyle.metrics
         let size = Self.size(
             for: .paused(elapsedSeconds: elapsedSeconds),
             style: model.pillStyle
         )
 
-        return HStack(spacing: mini ? 6 : 12) {
+        return HStack(spacing: metrics.pausedSpacing) {
             controlGlyph(
                 systemName: "play.fill",
-                diameter: mini ? 24 : 22
+                diameter: metrics.controlDiameter
             )
 
             Text("Paused · \(Self.elapsedText(elapsedSeconds))")
-                .font(.system(size: mini ? 11 : 12, weight: .semibold))
+                .font(.system(size: metrics.pausedFontSize, weight: .semibold))
                 .foregroundColor(pausedTextColor)
                 .frame(maxWidth: .infinity)
 
-            stopGlyph(diameter: mini ? 22 : 20)
+            stopGlyph(diameter: metrics.stopDiameter)
         }
-        .padding(.horizontal, mini ? 7 : 15)
+        .padding(.horizontal, metrics.pausedHorizontalInset)
         .frame(width: size.width, height: size.height)
         .modifier(PillChrome(borderStyle: .idle))
         .accessibilityElement()
@@ -413,17 +400,18 @@ public struct PillOverlayView: View {
     // MARK: - Transcribing (spec §2d)
 
     private var transcribingPill: some View {
+        let metrics = model.pillStyle.metrics
 
-        return HStack(spacing: 8) {
+        return HStack(spacing: metrics.statusSpacing) {
             ProgressView()
                 .controlSize(.small)
                 .tint(fg)
 
             Text("Transcribing…")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: metrics.statusFontSize, weight: .medium))
                 .foregroundColor(fg)
         }
-        .frame(width: Self.transcribingSize.width, height: Self.transcribingSize.height)
+        .frame(width: metrics.transcribingSize.width, height: metrics.transcribingSize.height)
         .modifier(PillChrome(borderStyle: .transcribing))
         .accessibilityElement()
         .accessibilityLabel("\(AppBrand.displayName) transcribing")
@@ -433,11 +421,12 @@ public struct PillOverlayView: View {
 
     private var donePill: some View {
         let green = PersonalScribeTheme.Pill.Border.doneColor
+        let metrics = model.pillStyle.metrics
 
         return Image(systemName: "checkmark")
             .font(.system(size: 13, weight: .semibold))
             .foregroundColor(green)
-            .frame(width: Self.doneSize.width, height: Self.doneSize.height)
+            .frame(width: metrics.doneSize.width, height: metrics.doneSize.height)
             .modifier(PillChrome(borderStyle: .done))
             .accessibilityElement()
             .accessibilityLabel("Transcription copied to clipboard")
@@ -447,15 +436,16 @@ public struct PillOverlayView: View {
 
     private func downloadingPill(fraction: Double) -> some View {
         let percent = Int((fraction * 100).rounded())
+        let metrics = model.pillStyle.metrics
 
-        return HStack(spacing: 8) {
+        return HStack(spacing: metrics.statusSpacing) {
             Image(systemName: "arrow.down.circle")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(fg)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Downloading model \(percent)%")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: metrics.statusFontSize - 1, weight: .medium))
                     .foregroundColor(fg)
 
                 ProgressView(value: max(0, min(fraction, 1)))
@@ -464,45 +454,47 @@ public struct PillOverlayView: View {
                     .frame(height: 2)
             }
         }
-        .padding(.horizontal, 12)
-        .frame(width: Self.downloadingSize.width, height: Self.downloadingSize.height)
+        .padding(.horizontal, metrics.statusHorizontalInset)
+        .frame(width: metrics.downloadingSize.width, height: metrics.downloadingSize.height)
         .modifier(PillChrome())
     }
 
     // MARK: - Loading
 
     private var loadingPill: some View {
+        let metrics = model.pillStyle.metrics
 
-        return HStack(spacing: 8) {
+        return HStack(spacing: metrics.statusSpacing) {
             ProgressView()
                 .controlSize(.small)
                 .tint(fg)
 
             Text("Warming up model…")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: metrics.statusFontSize, weight: .medium))
                 .foregroundColor(fg)
         }
-        .frame(width: Self.loadingSize.width, height: Self.loadingSize.height)
+        .frame(width: metrics.loadingSize.width, height: metrics.loadingSize.height)
         .modifier(PillChrome())
     }
 
     // MARK: - Error
 
     private func errorPill(message: String) -> some View {
+        let metrics = model.pillStyle.metrics
 
-        return HStack(spacing: 8) {
+        return HStack(spacing: metrics.statusSpacing) {
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(fgStop)   // red — same stop/error red
 
             Text(message)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: metrics.statusFontSize, weight: .medium))
                 .foregroundColor(fg)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .padding(.horizontal, 12)
-        .frame(width: Self.errorSize.width, height: Self.errorSize.height)
+        .padding(.horizontal, metrics.statusHorizontalInset)
+        .frame(width: metrics.errorSize.width, height: metrics.errorSize.height)
         .modifier(PillChrome())
         .accessibilityElement()
         .accessibilityLabel("\(AppBrand.displayName) error: \(message)")
