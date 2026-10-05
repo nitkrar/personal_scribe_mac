@@ -3,6 +3,7 @@ import Combine
 import XCTest
 import PersonalScribeCore
 import PersonalScribeSession
+import PersonalScribeTestSupport
 @testable import PersonalScribeAppKit
 
 @MainActor
@@ -31,6 +32,78 @@ final class AppCompositionTests: XCTestCase {
         )
 
         XCTAssertEqual(events, ["finalize", "set:notes"])
+    }
+
+    func testCurrentModeHotkeyStopsPausedSessionWithStandardPasteDelivery() async throws {
+        let hotkey = HotkeyPreference(
+            keyCode: 0,
+            tapCount: 1,
+            modifiers: NSEvent.ModifierFlags([.command, .option]).rawValue
+        )
+        let mode = WorkflowMode(
+            id: "medical",
+            name: "Medical",
+            glyph: "mic",
+            hotkey: hotkey,
+            pipelineShape: .batch,
+            processors: [
+                .transcriber(kind: .asr, descriptorID: BuiltInModelCatalog.parakeetTDTCTC110M.id),
+            ],
+            captureControllers: [.manualHotkey],
+            outputSinks: [.frontmostPaste(enabled: .override(true))]
+        )
+        let registry = try WorkflowModeRegistry(
+            store: InMemoryWorkflowModeStore(
+                initial: WorkflowModeDocument(defaultModeID: mode.id, customModes: [mode])
+            ),
+            availableKindsProvider: { Set(ModelKind.allCases) }
+        )
+        registry.setCurrent(id: mode.id)
+        let buffer = try PCMBuffer(
+            samples: Array(repeating: 0.1, count: 16_000),
+            timestamp: ContinuousClock().now
+        )
+        let sink = HotkeyOutputSink()
+        let coordinator = SessionCoordinator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(
+                    text: "paste me",
+                    audioDuration: .seconds(1),
+                    processingDuration: .zero
+                )
+            ),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
+            outputSink: sink
+        )
+        let monitor = GlobalHotkeyMonitor(onToggle: {})
+        AppComposition.configurePerModeHotkeys(
+            on: monitor,
+            registry: registry,
+            coordinator: coordinator,
+            modelService: makePinnedAsrModelService()
+        )
+
+        await coordinator.toggle()
+        try await Task.sleep(for: .milliseconds(20))
+        await coordinator.pauseIfRecording()
+        let pausedState = await coordinator.state()
+        XCTAssertEqual(pausedState, .paused)
+
+        monitor.handle(event: try makeKeyDownEvent(
+            keyCode: 0,
+            modifierFlags: [.command, .option],
+            characters: "a",
+            timestamp: 1
+        ))
+        for _ in 0..<200 {
+            if await !sink.deliverySinks().isEmpty { break }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+
+        let deliverySinks = await sink.deliverySinks()
+        XCTAssertEqual(deliverySinks, [[.frontmostPaste(enabled: true)]])
+        XCTAssertEqual(registry.currentMode.id, mode.id)
     }
 
     func testMakePermissionServiceReturnsProductionType() {
@@ -390,4 +463,20 @@ private struct TestStorageLocator: StorageLocator {
 
 private final class DownloadedFlag: @unchecked Sendable {
     var value = false
+}
+
+private actor HotkeyOutputSink: PipelineOutputSink {
+    private var sinks: [[BoundOutputSink]] = []
+
+    func deliverPartial(_ revision: TranscriptProgress) async throws {}
+
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {
+        self.sinks.append(sinks)
+    }
+
+    func resetForNewSession() async {}
+
+    func deliverySinks() -> [[BoundOutputSink]] {
+        sinks
+    }
 }

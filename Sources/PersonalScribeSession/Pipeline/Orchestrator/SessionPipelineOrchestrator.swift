@@ -54,6 +54,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private let cancelCardDuration: @Sendable () -> Duration
     private let pausedRecordingTimeout: @Sendable () -> Duration
     private var pausedTimeoutTask: Task<Void, Never>?
+    private var pausedTransitionInFlight = false
     private var onPausedAutoFinalized: (@Sendable () async -> Void)?
     /// Bound the live-stream shutdown wait so a misbehaving adapter
     /// cannot wedge stop/cancel forever by never terminating its event
@@ -391,6 +392,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             return
         }
 
+        pausedTransitionInFlight = true
+        defer { pausedTransitionInFlight = false }
         publish { snapshot in
             snapshot.sessionState = .transcribing
             snapshot.activeStage = .capture
@@ -402,16 +405,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             }
             publishPausedSnapshot()
         } catch let failure as PipelineStageFailure {
-            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
-            handleStageFailure(failure)
+            await handleSegmentFailure(failure)
         } catch {
-            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
-            handleStageFailure(
-                makeStageFailure(
-                    stage: .transcription,
-                    error: error,
-                    fallback: .transcriptionFailure
-                )
+            await handleSegmentFailure(
+                makeStageFailure(stage: .transcription, error: error, fallback: .transcriptionFailure)
             )
         }
     }
@@ -424,6 +421,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
         pausedTimeoutTask?.cancel()
         pausedTimeoutTask = nil
+        pausedTransitionInFlight = true
+        defer { pausedTransitionInFlight = false }
         publish { snapshot in
             snapshot.sessionState = .transcribing
             snapshot.activeStage = .capture
@@ -459,7 +458,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 await self?.consumeCaptureStream(stream)
             }
         } catch {
-            await finalizePausedSegments(delivery: .clipboardWithoutPaste)
+            logger.error("paused_resume_capture_start_failed", error: error)
+            if pausedSegments.isEmpty {
+                handleStageFailure(
+                    makeStageFailure(stage: .capture, error: error, fallback: .audioEngineFailure)
+                )
+            } else {
+                await finalizePausedSegments(delivery: .clipboardWithoutPaste)
+            }
         }
     }
 
@@ -481,7 +487,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     public func finalizePausedSessionForApplicationTermination() async {
-        guard currentSnapshot.sessionState == .paused else { return }
+        guard hasPausedSessionForApplicationTermination() else { return }
         pausedTimeoutTask?.cancel()
         pausedTimeoutTask = nil
         await finalizePausedSegments(
@@ -489,6 +495,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             postProcess: false,
             releaseResources: false
         )
+    }
+
+    public func hasPausedSessionForApplicationTermination() -> Bool {
+        currentSnapshot.sessionState == .paused || pausedTransitionInFlight
     }
 
     private func resetInputSilence() {
@@ -1175,6 +1185,16 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
+    private func handleSegmentFailure(_ failure: PipelineStageFailure) async {
+        guard !pausedSegments.isEmpty else {
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            handleStageFailure(failure)
+            return
+        }
+        logger.error("paused_segment_failed_saving_held_segments", error: failure)
+        await finalizePausedSegments(delivery: .clipboardWithoutPaste)
+    }
+
     private func combinedPausedResult() -> TranscriptionResult {
         var offset = Duration.zero
         var segments: [TranscriptionResult.Segment] = []
@@ -1206,16 +1226,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 }
                 await finalizePausedSegments(delivery: .standard)
             } catch let failure as PipelineStageFailure {
-                await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
-                handleStageFailure(failure)
+                await handleSegmentFailure(failure)
             } catch {
-                await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
-                handleStageFailure(
-                    makeStageFailure(
-                        stage: .transcription,
-                        error: error,
-                        fallback: .transcriptionFailure
-                    )
+                await handleSegmentFailure(
+                    makeStageFailure(stage: .transcription, error: error, fallback: .transcriptionFailure)
                 )
             }
             return
@@ -1491,6 +1505,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                     with: secondPassTranscriber,
                     replayBuffers: replayBuffers
                 ) {
+                    resumedLiveText = nil
                     secondPassOutcome = "authoritative"
                     logStreamingStopResolution(
                         secondPassOutcome: secondPassOutcome,
@@ -1530,6 +1545,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             // The live session restarted on resume, so its text covers
             // only the resumed part; put the pre-cancel text in front.
             if let prefix = resumedLiveText {
+                resumedLiveText = nil
                 return TranscriptionResult(
                     text: prefix + " " + streamingFallbackResult.text,
                     audioDuration: bufferedDuration,

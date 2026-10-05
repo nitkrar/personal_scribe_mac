@@ -4,6 +4,40 @@ import PersonalScribeTestSupport
 @testable import PersonalScribeSession
 
 final class SessionCoordinatorHappyPathTests: XCTestCase {
+    func testApplicationTerminationFinalizesDuringPausedResumeTransition() async throws {
+        let capture = CoordinatorResumeGatedCapture(
+            buffer: try PCMBuffer(
+                samples: Array(repeating: 0.1, count: 16_000),
+                timestamp: ContinuousClock().now
+            )
+        )
+        let sink = CoordinatorOutputSink()
+        let coordinator = SessionCoordinator(
+            capture: capture,
+            transcriber: FakeTranscriber(
+                result: .init(
+                    text: "held",
+                    audioDuration: .seconds(1),
+                    processingDuration: .zero
+                )
+            ),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session),
+            outputSink: sink
+        )
+
+        await coordinator.toggle()
+        await coordinator.pauseIfRecording()
+        let resume = Task { await coordinator.resumeIfPaused() }
+        await capture.waitUntilResumeStart()
+        await coordinator.finishForApplicationTermination()
+
+        let sinks = await sink.deliverySinks()
+        XCTAssertEqual(sinks, [[.clipboard(restoreEnabled: false)]])
+
+        await capture.releaseResumeStart()
+        await resume.value
+    }
+
     func testCancelIfActiveCancelsPausedSessionIntoResumableCardState() async throws {
         let buffer = try PCMBuffer(
             samples: Array(repeating: 0.1, count: 16_000),
@@ -111,4 +145,74 @@ final class SessionCoordinatorHappyPathTests: XCTestCase {
     }
 
     private struct TimeoutError: Error {}
+}
+
+private actor CoordinatorResumeGatedCapture: AudioCapturer {
+    private let buffer: PCMBuffer
+    private var startCount = 0
+    private var streamContinuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?
+    private var resumeStarted = false
+    private var resumeReleased = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    init(buffer: PCMBuffer) {
+        self.buffer = buffer
+    }
+
+    func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
+        startCount += 1
+        if startCount == 2 {
+            resumeStarted = true
+            let pending = startWaiters
+            startWaiters.removeAll()
+            pending.forEach { $0.resume() }
+            if !resumeReleased {
+                await withCheckedContinuation { releaseWaiters.append($0) }
+            }
+        }
+        return AsyncThrowingStream { continuation in
+            streamContinuation = continuation
+            if startCount == 1 {
+                continuation.yield(buffer)
+            }
+        }
+    }
+
+    func stop() async {
+        streamContinuation?.finish()
+        streamContinuation = nil
+    }
+
+    func audioLevelStream() async -> AsyncStream<Float> {
+        AsyncStream { $0.finish() }
+    }
+
+    func waitUntilResumeStart() async {
+        if resumeStarted { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func releaseResumeStart() {
+        resumeReleased = true
+        let pending = releaseWaiters
+        releaseWaiters.removeAll()
+        pending.forEach { $0.resume() }
+    }
+}
+
+private actor CoordinatorOutputSink: PipelineOutputSink {
+    private var sinks: [[BoundOutputSink]] = []
+
+    func deliverPartial(_ revision: TranscriptProgress) async throws {}
+
+    func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws {
+        self.sinks.append(sinks)
+    }
+
+    func resetForNewSession() async {}
+
+    func deliverySinks() -> [[BoundOutputSink]] {
+        sinks
+    }
 }
