@@ -221,6 +221,7 @@ struct UnifiedWindowView: View {
             SettingsTab(
                 defaults: defaults,
                 permissionService: permissionService,
+                shortcutsNavigationRequest: model.settingsShortcutsRequest,
                 menuBarVisibilityProvider: menuBarVisibilityProvider,
                 menuBarVisibilitySetter: menuBarVisibilitySetter,
                 openDiagnosticsWindow: openDiagnosticsWindow

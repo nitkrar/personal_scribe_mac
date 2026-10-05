@@ -95,7 +95,19 @@ final class UnifiedWindowController: NSWindowController {
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.openDiagnosticsWindow = openDiagnosticsWindow
-        self.homeViewModel = HomeTabViewModel(metrics: metricsStore, defaults: defaults)
+        self.homeViewModel = HomeTabViewModel(
+            metrics: metricsStore,
+            defaults: defaults,
+            hasCustomModes: {
+                !AppComposition.workflowModeRegistry.customModes.isEmpty
+            },
+            openShortcuts: {
+                model.openSettingsShortcuts()
+            },
+            openModes: {
+                model.setActiveTab(.modes)
+            }
+        )
         self.transcriptionsViewModel = TranscriptionsTabViewModel(
             reader: transcriptReader,
             offlineRetranscriptionAction: offlineRetranscriptionAction

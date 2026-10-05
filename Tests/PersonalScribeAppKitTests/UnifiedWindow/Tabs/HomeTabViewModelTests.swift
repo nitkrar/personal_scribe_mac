@@ -83,6 +83,30 @@ final class HomeTabViewModelTests: XCTestCase {
         )
     }
 
+    func testChecklistActionsRouteShortcutAndModeRows() {
+        var destinations: [AppTab] = []
+        let viewModel = HomeTabViewModel(
+            metrics: MetricsSnapshotStore(
+                reader: EmptyMetricsReading(),
+                logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
+            ),
+            openShortcuts: { destinations.append(.settings) },
+            openModes: { destinations.append(.modes) }
+        )
+
+        viewModel.performChecklistAction(for: .startRecording)
+        viewModel.performChecklistAction(for: .customizeShortcut)
+        viewModel.performChecklistAction(for: .createMode)
+
+        XCTAssertEqual(destinations, [.settings, .modes])
+    }
+
+    func testTimeSavedFormatterUsesHourAndMinuteUnits() {
+        XCTAssertEqual(HomeTab.timeSavedText(minutes: 0), "0m")
+        XCTAssertEqual(HomeTab.timeSavedText(minutes: 42), "42m")
+        XCTAssertEqual(HomeTab.timeSavedText(minutes: 222), "3h 42m")
+    }
+
     func testEmptyStateHotkeyHintDefaultsToConfiguredPreference() {
         let viewModel = makeViewModel(defaults: Self.ephemeralDefaults())
 

@@ -211,6 +211,7 @@ struct PersonalScribeAppMain: App {
         }()
         let metricsStore = MetricsSnapshotStore(
             reader: metricsReader,
+            defaults: defaults,
             logger: AppComposition.makeLogger(PersonalScribeLogCategory.app)
         )
         metricsStore.startObserving()

@@ -15,6 +15,7 @@ public struct GeneralTab: View {
 
     public init(
         defaults: UserDefaults = .standard,
+        shortcutsNavigationRequest: Int = 0,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
         launchAtLoginService: any LaunchAtLoginServicing = SystemLaunchAtLoginService(),
@@ -24,6 +25,7 @@ public struct GeneralTab: View {
         workflowModeRegistry: WorkflowModeRegistry = AppComposition.workflowModeRegistry,
         modelService: ActiveModelService = AppComposition.modelService
     ) {
+        self.shortcutsNavigationRequest = shortcutsNavigationRequest
         _viewModel = StateObject(
             wrappedValue: GeneralTabViewModel(
                 defaults: defaults,
@@ -40,7 +42,10 @@ public struct GeneralTab: View {
     }
 
     public var body: some View {
-        SettingsTabContainer {
+        SettingsTabContainer(
+            scrollTarget: "settings-shortcuts",
+            scrollRequest: shortcutsNavigationRequest
+        ) {
             SettingsSection(
                 title: "General",
                 description: "Core defaults for the pill overlay, menu bar surface, and transcript delivery."
@@ -59,6 +64,7 @@ public struct GeneralTab: View {
             }
 
             shortcutsSection
+                .id("settings-shortcuts")
         }
         .toggleStyle(.switch)
         .sheet(isPresented: $isRecordingHotkeyRecorderPresented) {
@@ -74,6 +80,8 @@ public struct GeneralTab: View {
             )
         }
     }
+
+    private let shortcutsNavigationRequest: Int
 
     /// RECORDING WINDOW section — mockup-gaps D.1 centerpiece.
     /// Live SwiftUI pill previews, one card per `PillStyle` case,

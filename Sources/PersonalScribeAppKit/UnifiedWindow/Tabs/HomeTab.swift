@@ -1,83 +1,223 @@
 import PersonalScribeCore
 import SwiftUI
 
-/// Home tab for the unified NavigationSplitView window (M3.5).
-///
-/// Layout: header "Home" + a 4-cell stat card grid (Words this week,
-/// Recordings, Minutes saved, WPM avg) + a "Recent" section showing the
-/// 3 most-recent transcripts via the shared `TranscriptRow` composite.
-///
-/// Data source: the shared `MetricsSnapshotStore`, which refreshes on
-/// `MetricsNotification.transcriptCommit`.
-///
-/// Reference: `plans/App UI design/Claude_Final_Bundle_Prompt.md` §3A.
 @MainActor
 struct HomeTab: View {
     @ObservedObject private var viewModel: HomeTabViewModel
     @ObservedObject private var metrics: MetricsSnapshotStore
+    @ObservedObject private var checklist: HomeChecklistState
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.windowTint) private var windowTint
 
     init(viewModel: HomeTabViewModel) {
         self.viewModel = viewModel
         self.metrics = viewModel.metrics
+        self.checklist = viewModel.checklist
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.xl) {
-            Text("Home")
-                .font(PersonalScribeTheme.Typography.largeTitle.font)
+        ScrollView {
+            VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.xl) {
+                Text("Home")
+                    .font(PersonalScribeTheme.Typography.largeTitle.font)
 
-            statCardGrid
+                dictationCard
 
-            VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
-                Text("Recent transcriptions")
-                    .font(PersonalScribeTheme.Typography.sectionLabel.font)
-                    .textCase(.uppercase)
-
-                if metrics.recentTranscriptions.isEmpty {
-                    emptyStateView
-                } else {
-                    ForEach(metrics.recentTranscriptions, id: \.id) { entry in
-                        TranscriptRow(
-                            title: Self.title(for: entry),
-                            timestamp: entry.timestamp,
-                            preview: entry.text
-                        )
-                    }
+                if checklist.isVisible {
+                    checklistCard
                 }
+
+                recentTranscriptions
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
             viewModel.refreshHotkey()
+            viewModel.refreshChecklist()
+        }
+        .onChange(of: metrics.recentTranscriptions.count) {
+            viewModel.refreshChecklist()
         }
     }
 
-    // MARK: - Empty state (mockup-gaps B.1)
+    private var dictationCard: some View {
+        let palette = palette
 
-    /// Vertically-stacked empty-state view shown when
-    /// `metrics.recentTranscriptions.isEmpty`. Matches `plans/App UI design/screen_home.png`:
-    /// a champagne feather + "No transcriptions yet" primary line and a
-    /// secondary "Press <hotkey> to start recording" hint. The hotkey
-    /// string comes from `viewModel.emptyStateHotkeyHint` — it MUST NOT
-    /// be hardcoded so it reflects the user's actual binding.
+        return VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.lg) {
+            HStack {
+                Text("Your dictation")
+                    .font(PersonalScribeTheme.Typography.sectionLabel.font)
+                    .foregroundStyle(palette.secondaryText)
+                    .textCase(.uppercase)
+
+                Spacer()
+
+                Picker("Metrics range", selection: rangeBinding) {
+                    ForEach(MetricsRange.allCases) { range in
+                        Text(range.title).tag(range)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+
+            HStack(spacing: 0) {
+                metricCell(label: "Words per minute avg", value: formattedWPM, suffix: "wpm")
+                metricDivider
+                metricCell(label: "Words", value: formattedWords)
+                metricDivider
+                metricCell(label: "Recordings", value: formattedRecordings)
+                metricDivider
+                metricCell(
+                    label: "Time saved",
+                    value: Self.timeSavedText(minutes: metrics.rollups.minutesSaved)
+                )
+            }
+        }
+        .padding(PersonalScribeTheme.Spacing.lg)
+        .homeCard(background: cardBackground, border: palette.brandChampagne.opacity(0.14))
+    }
+
+    private var checklistCard: some View {
+        let palette = palette
+
+        return VStack(spacing: 0) {
+            HStack(spacing: PersonalScribeTheme.Spacing.md) {
+                Text("Get started")
+                    .font(PersonalScribeTheme.Typography.title.font)
+                    .foregroundStyle(palette.primaryText)
+
+                Text("\(checklist.completedCount) of \(HomeChecklistItem.allCases.count)")
+                    .font(PersonalScribeTheme.Typography.body.font)
+                    .foregroundStyle(palette.secondaryText)
+
+                ProgressView(
+                    value: Double(checklist.completedCount),
+                    total: Double(HomeChecklistItem.allCases.count)
+                )
+                .progressViewStyle(.linear)
+                .frame(width: 96)
+
+                Spacer()
+
+                if checklist.isComplete {
+                    Button("Dismiss") {
+                        checklist.dismiss()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(palette.secondaryText)
+                }
+            }
+            .padding(PersonalScribeTheme.Spacing.lg)
+
+            Divider()
+
+            checklistRow(
+                item: .startRecording,
+                title: "Start recording",
+                subtitle: "Press \(viewModel.emptyStateHotkeyHint) in any app, speak, press again to paste"
+            )
+            Divider()
+            checklistRow(
+                item: .customizeShortcut,
+                title: "Customize your shortcut",
+                subtitle: "Pick a key combo that suits you · Settings → Shortcuts"
+            )
+            Divider()
+            checklistRow(
+                item: .createMode,
+                title: "Create a mode",
+                subtitle: "Different formatting per app, e.g. email vs. code · Modes"
+            )
+        }
+        .homeCard(background: cardBackground, border: palette.brandChampagne.opacity(0.14))
+    }
+
+    private func checklistRow(
+        item: HomeChecklistItem,
+        title: String,
+        subtitle: String
+    ) -> some View {
+        let palette = palette
+        let isComplete = checklist.completedItems.contains(item)
+
+        return Button {
+            viewModel.performChecklistAction(for: item)
+        } label: {
+            HStack(spacing: PersonalScribeTheme.Spacing.md) {
+                ZStack {
+                    Circle()
+                        .fill(isComplete ? palette.statusReady : .clear)
+                    Circle()
+                        .strokeBorder(
+                            isComplete ? palette.statusReady : palette.secondaryText,
+                            lineWidth: 1.5
+                        )
+                    if isComplete {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color.white)
+                    }
+                }
+                .frame(width: 20, height: 20)
+
+                VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.xs) {
+                    Text(title)
+                        .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+                        .strikethrough(isComplete)
+                        .foregroundStyle(
+                            isComplete ? palette.secondaryText : palette.primaryText
+                        )
+                    Text(subtitle)
+                        .font(PersonalScribeTheme.Typography.caption.font)
+                        .foregroundStyle(palette.secondaryText)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(palette.secondaryText)
+            }
+            .contentShape(Rectangle())
+            .padding(.horizontal, PersonalScribeTheme.Spacing.lg)
+            .padding(.vertical, PersonalScribeTheme.Spacing.md)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var recentTranscriptions: some View {
+        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
+            Text("Recent transcriptions")
+                .font(PersonalScribeTheme.Typography.sectionLabel.font)
+                .foregroundStyle(palette.secondaryText)
+                .textCase(.uppercase)
+
+            if metrics.recentTranscriptions.isEmpty {
+                emptyStateView
+            } else {
+                ForEach(metrics.recentTranscriptions, id: \.id) { entry in
+                    TranscriptRow(
+                        title: Self.title(for: entry),
+                        timestamp: entry.timestamp,
+                        preview: entry.text
+                    )
+                }
+            }
+        }
+    }
+
     private var emptyStateView: some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
-        // Logo size is inline (no dedicated theme constant yet) —
-        // 64pt reads at the same visual weight as the mockup feather
-        // without over-dominating the column.
-        let logoSize: CGFloat = 64
-
-        return VStack(spacing: PersonalScribeTheme.Spacing.lg) {
+        VStack(spacing: PersonalScribeTheme.Spacing.lg) {
             PersonalScribeLogoView(color: palette.brandChampagne)
-                .frame(width: logoSize, height: logoSize)
+                .frame(width: 64, height: 64)
 
             VStack(spacing: PersonalScribeTheme.Spacing.sm) {
                 Text("No transcriptions yet")
                     .font(PersonalScribeTheme.Typography.body.font)
                     .foregroundStyle(palette.primaryText)
-
                 Text("Press \(viewModel.emptyStateHotkeyHint) to start recording")
                     .font(PersonalScribeTheme.Typography.caption.font)
                     .foregroundStyle(palette.secondaryText)
@@ -87,47 +227,78 @@ struct HomeTab: View {
         .padding(.top, PersonalScribeTheme.Spacing.xl)
     }
 
-    // MARK: - Stat cards
+    private func metricCell(label: String, value: String, suffix: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.sm) {
+            Text(label)
+                .font(PersonalScribeTheme.Typography.body.font)
+                .foregroundStyle(palette.secondaryText)
+                .lineLimit(1)
 
-    private var statCardGrid: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 150), spacing: PersonalScribeTheme.Spacing.md)],
-            alignment: .leading,
-            spacing: PersonalScribeTheme.Spacing.md
-        ) {
-            StatCard(
-                label: "Words this week",
-                value: Self.integerFormatter.string(
-                    from: NSNumber(value: metrics.rollups.words)
-                ) ?? "\(metrics.rollups.words)"
-            )
-            StatCard(
-                label: "Recordings",
-                value: Self.integerFormatter.string(
-                    from: NSNumber(value: metrics.rollups.recordings)
-                ) ?? "\(metrics.rollups.recordings)"
-            )
-            StatCard(
-                label: "Mins saved",
-                value: Self.minutesFormatter.string(
-                    from: NSNumber(value: metrics.rollups.minutesSaved.rounded())
-                ) ?? "\(Int(metrics.rollups.minutesSaved.rounded()))"
-            )
-            StatCard(
-                label: "WPM avg",
-                value: Self.wpmFormatter.string(
-                    from: NSNumber(value: metrics.rollups.averageWPM)
-                ) ?? String(format: "%.1f", metrics.rollups.averageWPM)
-            )
+            HStack(alignment: .firstTextBaseline, spacing: PersonalScribeTheme.Spacing.xs) {
+                Text(value)
+                    .font(PersonalScribeTheme.Typography.largeTitle.font)
+                    .foregroundStyle(palette.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                if let suffix {
+                    Text(suffix)
+                        .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+                        .foregroundStyle(palette.secondaryText)
+                }
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, PersonalScribeTheme.Spacing.lg)
     }
 
-    // MARK: - Derivation
+    private var metricDivider: some View {
+        Divider().frame(height: 50)
+    }
 
-    /// Title for a transcript row. Matches the legacy History/Notes
-    /// convention: first non-empty whitespace-trimmed line, truncated
-    /// by `TranscriptRow` itself. Falls back to a short date stamp
-    /// when the text is empty.
+    private var rangeBinding: Binding<MetricsRange> {
+        Binding(
+            get: { metrics.selectedRange },
+            set: { range in
+                Task { @MainActor in
+                    await metrics.selectRange(range)
+                }
+            }
+        )
+    }
+
+    private var formattedWPM: String {
+        Self.wpmFormatter.string(from: NSNumber(value: metrics.rollups.averageWPM))
+            ?? String(format: "%.1f", metrics.rollups.averageWPM)
+    }
+
+    private var formattedWords: String {
+        Self.integerFormatter.string(from: NSNumber(value: metrics.rollups.words))
+            ?? "\(metrics.rollups.words)"
+    }
+
+    private var formattedRecordings: String {
+        Self.integerFormatter.string(from: NSNumber(value: metrics.rollups.recordings))
+            ?? "\(metrics.rollups.recordings)"
+    }
+
+    private var palette: PersonalScribeTheme.Palette {
+        PersonalScribeTheme.Palette.for(scheme: colorScheme, tint: windowTint)
+    }
+
+    private var cardBackground: Color {
+        windowTint?.cardBackground ?? palette.elevatedSurface
+    }
+
+    static func timeSavedText(minutes: Double) -> String {
+        let totalMinutes = max(0, Int(minutes.rounded()))
+        let hours = totalMinutes / 60
+        let remainingMinutes = totalMinutes % 60
+        guard hours > 0 else {
+            return "\(remainingMinutes)m"
+        }
+        return "\(hours)h \(remainingMinutes)m"
+    }
+
     static func title(for entry: TranscriptEntry) -> String {
         let firstLine = entry.text
             .split(whereSeparator: \.isNewline)
@@ -144,8 +315,6 @@ struct HomeTab: View {
         return formatter.string(from: entry.timestamp)
     }
 
-    // MARK: - Formatters
-
     private static let integerFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -154,24 +323,6 @@ struct HomeTab: View {
         return formatter
     }()
 
-    private static let minutesFormatter: NumberFormatter = {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.maximumFractionDigits = 0
-        formatter.usesGroupingSeparator = true
-        return formatter
-    }()
-
-    /// WPM formatter (mockup-gaps B.4).
-    ///
-    /// Mockup (`plans/App UI design/screen_home.png`) shows `0` as an
-    /// integer — the previous `minimumFractionDigits = 1` rendered
-    /// `0.0`. Dropping the floor to 0 yields:
-    ///   - `0`       for 0
-    ///   - `12`      for 12.0
-    ///   - `12.4`    for 12.4
-    /// which matches the desired mockup behaviour without losing the
-    /// single-fractional-digit precision for non-integer values.
     private static let wpmFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
@@ -181,48 +332,27 @@ struct HomeTab: View {
     }()
 }
 
-// MARK: - StatCard
-
-/// Compact stat card: caption label stacked above a large value.
-/// Card surface uses the environment `WindowTint` when provided,
-/// otherwise falls back to the theme elevated-surface colour.
-@MainActor
-private struct StatCard: View {
-    let label: String
-    let value: String
-
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.windowTint) private var windowTint
-
-    var body: some View {
-        let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
-        let background = windowTint?.cardBackground ?? palette.elevatedSurface
-
-        VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.xs) {
-            Text(label)
-                .font(PersonalScribeTheme.Typography.caption.font)
-                .foregroundStyle(palette.secondaryText)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            Text(value)
-                .font(PersonalScribeTheme.Typography.largeTitle.font)
-                .foregroundStyle(palette.primaryText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-        }
-        .padding(PersonalScribeTheme.Spacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.md, style: .continuous)
-                .fill(background)
+private extension View {
+    func homeCard(background: Color, border: Color) -> some View {
+        self.background(
+            RoundedRectangle(
+                cornerRadius: PersonalScribeTheme.Radius.md,
+                style: .continuous
+            )
+            .fill(background)
+        )
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: PersonalScribeTheme.Radius.md,
+                style: .continuous
+            )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.md, style: .continuous)
-                .strokeBorder(
-                    palette.brandChampagne.opacity(0.12),
-                    lineWidth: 0.5
-                )
+            RoundedRectangle(
+                cornerRadius: PersonalScribeTheme.Radius.md,
+                style: .continuous
+            )
+            .strokeBorder(border, lineWidth: 0.5)
         )
     }
 }

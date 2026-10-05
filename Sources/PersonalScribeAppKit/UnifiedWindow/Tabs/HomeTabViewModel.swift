@@ -100,15 +100,21 @@ public final class HomeTabViewModel: ObservableObject {
 
     private let defaults: UserDefaults
     private let hasCustomModes: @MainActor () -> Bool
+    private let openShortcuts: @MainActor () -> Void
+    private let openModes: @MainActor () -> Void
 
     public init(
         metrics: MetricsSnapshotStore,
         defaults: UserDefaults = .standard,
-        hasCustomModes: @escaping @MainActor () -> Bool = { false }
+        hasCustomModes: @escaping @MainActor () -> Bool = { false },
+        openShortcuts: @escaping @MainActor () -> Void = {},
+        openModes: @escaping @MainActor () -> Void = {}
     ) {
         self.metrics = metrics
         self.defaults = defaults
         self.hasCustomModes = hasCustomModes
+        self.openShortcuts = openShortcuts
+        self.openModes = openModes
         self.checklist = HomeChecklistState(defaults: defaults)
         self.recordingHotkey = HotkeyPreference.resolve(from: defaults)
     }
@@ -127,5 +133,16 @@ public final class HomeTabViewModel: ObservableObject {
             hasCustomHotkey: recordingHotkey != .default,
             hasCustomMode: hasCustomModes()
         )
+    }
+
+    func performChecklistAction(for item: HomeChecklistItem) {
+        switch item {
+        case .startRecording:
+            break
+        case .customizeShortcut:
+            openShortcuts()
+        case .createMode:
+            openModes()
+        }
     }
 }

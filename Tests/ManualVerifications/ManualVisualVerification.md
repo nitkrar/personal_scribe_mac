@@ -1,5 +1,13 @@
 # Manual Visual Verification — Phase 2 Sprint 1 (Lane A1)
 
+## Home refresh (#116)
+
+- [ ] **MV-HOME-1 (appearance and content)** Open Home in light and dark appearances. Confirm the Your Dictation card is one horizontal card ordered Words per minute avg, Words, Recordings, Time saved; time uses hour/minute units; no Apps used or What's new content appears.
+- [ ] **MV-HOME-2 (range picker)** Choose Last 7 days, Last 30 days, and All time. Confirm the four values refresh for each range, recent transcriptions remain the three newest entries regardless of range, and the chosen range survives relaunch.
+- [ ] **MV-HOME-3 (checklist progress)** With one item complete, confirm the card shows “1 of 3”, a one-third progress bar, a green check and struck-through dimmed completed title, empty circles for open rows, and the configured recording shortcut in the Start recording subtitle.
+- [ ] **MV-HOME-4 (checklist navigation and dismissal)** Confirm Customize your shortcut opens Settings → General scrolled to Shortcuts and Create a mode opens Modes. Complete all items, confirm Dismiss appears, dismiss the card, and confirm it stays hidden after relaunch.
+- [ ] **MV-HOME-5 (empty history)** With no transcript history, confirm the checklist can still appear and the Recent transcriptions empty state renders below it without clipping.
+
 SwiftUI views cannot be runtime-verified via XCTest. Every foundation
 component ships with a `#Preview` in its source file. The checklist
 below is what a reviewer runs in Xcode (open each source file, use

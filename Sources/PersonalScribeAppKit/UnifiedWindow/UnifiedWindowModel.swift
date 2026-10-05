@@ -11,6 +11,7 @@ import Foundation
 @MainActor
 public final class UnifiedWindowModel: ObservableObject {
     @Published public private(set) var activeTab: AppTab
+    @Published public private(set) var settingsShortcutsRequest = 0
 
     public init(initialTab: AppTab = .home) {
         self.activeTab = initialTab
@@ -18,5 +19,10 @@ public final class UnifiedWindowModel: ObservableObject {
 
     public func setActiveTab(_ tab: AppTab) {
         activeTab = tab
+    }
+
+    public func openSettingsShortcuts() {
+        activeTab = .settings
+        settingsShortcutsRequest += 1
     }
 }

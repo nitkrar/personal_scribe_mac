@@ -29,23 +29,49 @@ struct SettingsTabContainer<Content: View>: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private let content: Content
+    private let scrollTarget: String?
+    private let scrollRequest: Int
 
-    init(@ViewBuilder content: () -> Content) {
+    init(
+        scrollTarget: String? = nil,
+        scrollRequest: Int = 0,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.scrollTarget = scrollTarget
+        self.scrollRequest = scrollRequest
         self.content = content()
     }
 
     var body: some View {
         let palette = PersonalScribeTheme.Palette.for(scheme: colorScheme)
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: SettingsLayout.sectionSpacing) {
-                content
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: SettingsLayout.sectionSpacing) {
+                    content
+                }
+                .frame(maxWidth: SettingsLayout.maxContentWidth, alignment: .leading)
+                .padding(PersonalScribeTheme.Spacing.windowPadding)
             }
-            .frame(maxWidth: SettingsLayout.maxContentWidth, alignment: .leading)
-            .padding(PersonalScribeTheme.Spacing.windowPadding)
+            .onAppear {
+                scrollIfRequested(proxy: proxy)
+            }
+            .onChange(of: scrollRequest) {
+                scrollIfRequested(proxy: proxy)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.appBackground)
+    }
+
+    private func scrollIfRequested(proxy: ScrollViewProxy) {
+        guard scrollRequest > 0, let scrollTarget else {
+            return
+        }
+        Task { @MainActor in
+            await Task.yield()
+            proxy.scrollTo(scrollTarget, anchor: .top)
+        }
     }
 }
 
