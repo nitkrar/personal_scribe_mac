@@ -8,7 +8,7 @@ import PersonalScribeCore
 ///
 /// Three variants:
 /// * `.classic` — full pill with voice-modulated waveform (default).
-/// * `.mini`    — the classic pill at `scale`.
+/// * `.mini`    — compact state-specific layouts for idle, recording, and pause.
 /// * `.none`    — the pill never shows; record from the shortcut or menu bar.
 public enum PillStyle: String, CaseIterable, Identifiable, Codable, Sendable, StoredPreference {
     case classic = "Classic"
@@ -23,7 +23,7 @@ public enum PillStyle: String, CaseIterable, Identifiable, Codable, Sendable, St
         Self.persist(self, to: defaults)
     }
 
-    /// Size multiplier applied to every pill state.
+    /// Fallback multiplier for auxiliary states without a dedicated Mini layout.
     public var scale: CGFloat {
         self == .mini ? 0.75 : 1
     }

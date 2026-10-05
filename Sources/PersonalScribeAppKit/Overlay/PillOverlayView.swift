@@ -316,21 +316,24 @@ public struct PillOverlayView: View {
             isHovered: model.isHovered
         )
 
-        return HStack(spacing: mini ? 6 : 12) {
+        return HStack(spacing: mini ? 6 : 8) {
             if showsControls {
-                Image(systemName: "pause.fill")
-                    .font(.system(size: mini ? 9 : 11, weight: .semibold))
-                    .foregroundColor(fgDim)
-                    .frame(width: mini ? 24 : 28)
+                controlGlyph(
+                    systemName: "pause.fill",
+                    diameter: mini ? 24 : 28
+                )
             }
 
             SineWaveView(
                 audioLevel: model.audioLevel,
                 decayMode: .animated,
-                palette: WaveformPalette(rawValue: waveformPaletteRaw) ?? .default,
-                onDarkBackground: colorScheme == .dark
+                palette: model.waveformPaletteOverride
+                    ?? WaveformPalette(rawValue: waveformPaletteRaw)
+                    ?? .default,
+                onDarkBackground: colorScheme == .dark,
+                renderDate: model.waveformRenderDate
             )
-            .frame(width: mini ? (showsControls ? 98 : 100) : 140,
+            .frame(width: mini ? (showsControls ? 98 : 100) : 132,
                    height: mini ? size.height : 34)
 
             if showsControls {
@@ -339,7 +342,7 @@ public struct PillOverlayView: View {
         }
         .padding(.horizontal, mini ? 4 : 8)
         .frame(width: size.width, height: size.height)
-        .modifier(PillChrome(borderStyle: .active))
+        .modifier(PillChrome(borderStyle: .idle))
         .accessibilityElement()
         .accessibilityLabel("\(AppBrand.displayName) recording — tap to stop")
     }
@@ -352,10 +355,10 @@ public struct PillOverlayView: View {
         )
 
         return HStack(spacing: mini ? 6 : 12) {
-            Image(systemName: "play.fill")
-                .font(.system(size: mini ? 9 : 11, weight: .semibold))
-                .foregroundColor(fgDim)
-                .frame(width: mini ? 24 : 28)
+            controlGlyph(
+                systemName: "play.fill",
+                diameter: mini ? 24 : 28
+            )
 
             Text("Paused · \(Self.elapsedText(elapsedSeconds))")
                 .font(.system(size: mini ? 11 : 12, weight: .semibold))
@@ -366,7 +369,7 @@ public struct PillOverlayView: View {
         }
         .padding(.horizontal, mini ? 4 : 8)
         .frame(width: size.width, height: size.height)
-        .modifier(PillChrome(borderStyle: .active))
+        .modifier(PillChrome(borderStyle: .idle))
         .accessibilityElement()
         .accessibilityLabel("Recording paused at \(Self.elapsedText(elapsedSeconds))")
     }
@@ -379,6 +382,17 @@ public struct PillOverlayView: View {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Color.white)
                     .frame(width: diameter * 0.38, height: diameter * 0.38)
+            )
+    }
+
+    private func controlGlyph(systemName: String, diameter: CGFloat) -> some View {
+        Circle()
+            .fill(fgDim.opacity(colorScheme == .dark ? 0.18 : 0.14))
+            .frame(width: diameter, height: diameter)
+            .overlay(
+                Image(systemName: systemName)
+                    .font(.system(size: diameter * 0.4, weight: .semibold))
+                    .foregroundColor(fgDim)
             )
     }
 
@@ -689,22 +703,4 @@ struct CancelCardView: View {
         .padding(40)
         .background(Color.black.opacity(0.3))
         .preferredColorScheme(.dark)
-}
-
-/// Lays the pill out at full size, then shrinks it to the style's scale.
-private struct PillScale: ViewModifier {
-    let visibility: PillVisibilityState
-    let style: PillStyle
-
-    func body(content: Content) -> some View {
-        if style.scale == 1 {
-            content
-        } else {
-            let full = PillOverlayView.size(for: visibility)
-            content
-                .frame(width: full.width, height: full.height)
-                .scaleEffect(style.scale)
-                .frame(width: full.width * style.scale, height: full.height * style.scale)
-        }
-    }
 }

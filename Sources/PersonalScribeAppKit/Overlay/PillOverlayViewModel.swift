@@ -13,6 +13,8 @@ public final class PillOverlayViewModel: ObservableObject {
     private var sessionVisibility: Visibility
     @Published public private(set) var visibilityMode: PillVisibility
     @Published public var audioLevel: Double = 0
+    var waveformRenderDate: Date?
+    var waveformPaletteOverride: WaveformPalette?
     @Published public private(set) var isHovered = false
     /// Side of the panel the pill content is pinned to (set by the
     /// presenter from the pill's `PillAnchor`).

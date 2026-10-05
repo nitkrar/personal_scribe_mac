@@ -47,6 +47,7 @@ public struct SineWaveView: View {
     public let decayMode: WaveformDecayMode
     public let palette: WaveformPalette
     public let onDarkBackground: Bool
+    private let renderDate: Date?
 
     static let loopPeriod: Double = 1.2
 
@@ -62,29 +63,40 @@ public struct SineWaveView: View {
         audioLevel: Double,
         decayMode: WaveformDecayMode = .animated,
         palette: WaveformPalette = .default,
-        onDarkBackground: Bool = true
+        onDarkBackground: Bool = true,
+        renderDate: Date? = nil
     ) {
         self.audioLevel = audioLevel
         self.decayMode = decayMode
         self.palette = palette
         self.onDarkBackground = onDarkBackground
+        self.renderDate = renderDate
     }
 
     public var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-            let target = Geometry.clampedLevel(audioLevel)
-            let elapsed = context.date.timeIntervalSince(interpStart)
-            let smoothed = Geometry.smoothedLevel(
-                target: target,
-                startLevel: interpStartLevel,
-                lastLevel: lastLevel,
-                elapsed: elapsed,
-                duration: decayMode.durationSeconds
-            )
-            waveCanvas(
-                phase: Self.phase(for: context.date),
-                smoothedLevel: smoothed
-            )
+        Group {
+            if let renderDate {
+                waveCanvas(
+                    phase: Self.phase(for: renderDate),
+                    smoothedLevel: Geometry.clampedLevel(audioLevel)
+                )
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                    let target = Geometry.clampedLevel(audioLevel)
+                    let elapsed = context.date.timeIntervalSince(interpStart)
+                    let smoothed = Geometry.smoothedLevel(
+                        target: target,
+                        startLevel: interpStartLevel,
+                        lastLevel: lastLevel,
+                        elapsed: elapsed,
+                        duration: decayMode.durationSeconds
+                    )
+                    waveCanvas(
+                        phase: Self.phase(for: context.date),
+                        smoothedLevel: smoothed
+                    )
+                }
+            }
         }
         .onChange(of: audioLevel) { _, newTarget in
             let clampedNew = Geometry.clampedLevel(newTarget)
