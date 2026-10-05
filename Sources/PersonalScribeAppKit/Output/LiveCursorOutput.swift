@@ -18,7 +18,7 @@ import PersonalScribeSession
 ///   anchored to session start, not first-chunk timing.
 /// - `deliverPartial(_:)` is called on every EOU chunk. It overwrites
 ///   the clipboard with the new chunk and posts `Cmd+V` if AX trust +
-///   externality probe agree.
+///   the shared paste-target rule agree.
 /// - `endSession()` is called on every termination path (success,
 ///   cancel, error, short-exit). Restores the captured snapshot only
 ///   if this sink wrote a chunk and nothing has been copied since;

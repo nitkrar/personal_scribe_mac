@@ -3,10 +3,8 @@ import ApplicationServices
 import Foundation
 import PersonalScribeCore
 
-/// Probe returning `true` when the system-wide AX focused element is owned
-/// by a different process (another app). Paste is safe when focus is outside
-/// Ninimma. Injected as a dependency so tests can stub the result without
-/// touching the real AX APIs.
+/// Probe describing whether paste targets another app or a focused text
+/// input inside Ninimma. Injected so tests avoid live workspace state.
 typealias PasteTargetProbe = @MainActor () -> PasteTarget
 
 @MainActor

@@ -716,16 +716,18 @@ Second `SettingsSection` below Voice models; seeds once Phase 4 lands an LLM dow
 
 Replaces the separate onboarding window (#015) with setup inside the main window; the sidebar stays usable and menu-bar items are never gated. Mockups: `plans/backlog/onboarding-home/` B* (V-* is the Vocabulary page for #045).
 
-**Steps:** Permissions (microphone, accessibility; live status, open System Settings) → Mic test (device picker, live level) → Model (recommended model preselected, download progress, "Show all models") → Try the shortcut (⌥/, practice field, pill appears, success state) → Home. Back/Continue and "Skip setup" on every step. No vocabulary step.
+**Steps:** Permissions (microphone, accessibility; live status, open System Settings) → Mic test (device picker, live level) → Model (recommended model preselected, download progress, "Show all models") → Try the shortcut (⌥/, practice field, pill appears, success state) → Done (Home with a one-time "You're set up" banner). Back/Continue and "Skip setup" on every step; a "Get started N/5" sidebar row while setup is open. No vocabulary step.
+
+**Decisions:** setup opens at launch until mic + Accessibility are granted (today's `OnboardingCompleted` rule); an open setup runs to the end. Skipped steps that are still unsatisfied become pending items in Home's "Get started" card. Dictation pastes into Ninimma itself when one of its text fields has focus (otherwise clipboard notice as today), so the practice field works through the normal paste path.
 
 ---
 
 ### #116 — Home refresh
 
-`feature` · `P2` · `open` · `phase: 3` · `area: home, unified-window`
+`feature` · `P2` · `done` · `phase: 3` · `area: home, unified-window`
 *Updated 2026-10-05*
 
-Mockups: `plans/backlog/onboarding-home/` H-*. Stats card keeps today's four tiles (words, recordings, time saved, WPM) but adds a range picker (This week / Month / All time, default All time). Below it a "Get started" checklist (start recording, customize your shortcut, create a mode; rows check off, card dismissible when done), then today's recent transcripts. No "What's new". All data already exists.
+Mockups: `plans/backlog/onboarding-home/` H-*. Stats card in mockup order (words per minute, words, recordings, time saved as "3h 42m"; recordings sits in the mockup's Apps used slot until #117) with a range picker (Last 7 days / Last 30 days / All time, default All time). Below it a compact "Get started" list of pending setup items only (customize your shortcut, create a mode; each done automatically or by clicking its circle, then removed; × dismisses the card for good; #112 adds skipped setup steps here), then the 3 most recent transcripts. No "What's new". All data already exists.
 
 ---
 
