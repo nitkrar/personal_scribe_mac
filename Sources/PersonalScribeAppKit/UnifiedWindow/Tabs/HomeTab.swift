@@ -81,120 +81,89 @@ struct HomeTab: View {
         let palette = palette
 
         return VStack(spacing: 0) {
-            HStack(spacing: PersonalScribeTheme.Spacing.md) {
+            HStack {
                 Text("Get started")
                     .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
                     .foregroundStyle(palette.primaryTextBase)
 
-                Text("\(checklist.completedCount) of \(HomeChecklistItem.allCases.count)")
-                    .font(PersonalScribeTheme.Typography.body.font)
-                    .foregroundStyle(palette.secondaryText)
-
-                checklistProgress
-
                 Spacer()
 
-                if checklist.isComplete {
-                    Button("Dismiss") {
-                        checklist.dismiss()
-                    }
-                    .buttonStyle(.plain)
-                    .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
-                    .foregroundStyle(palette.brandChampagne)
-                } else {
-                    Text("Dismiss when all done")
-                        .font(PersonalScribeTheme.Typography.body.font)
+                Button {
+                    checklist.dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(palette.secondaryText)
+                        .frame(width: 20, height: 20)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss Get started")
             }
             .padding(.horizontal, PersonalScribeTheme.Spacing.lg)
-            .padding(.vertical, PersonalScribeTheme.Spacing.md)
+            .padding(.vertical, 10)
 
             Divider()
 
-            checklistRow(
-                item: .startRecording,
-                title: "Start recording",
-                showsChevron: false
-            ) {
-                HStack(spacing: PersonalScribeTheme.Spacing.xs) {
-                    Text("Press")
-                    hotkeyKeycap
-                    Text("in any app, speak, press again to paste")
+            ForEach(checklist.pendingItems, id: \.self) { item in
+                checklistRow(item)
+                if item != checklist.pendingItems.last {
+                    Divider()
                 }
-            }
-            Divider()
-            checklistRow(
-                item: .customizeShortcut,
-                title: "Customize your shortcut"
-            ) {
-                Text("Pick a key combo that suits you · Settings → Shortcuts")
-            }
-            Divider()
-            checklistRow(
-                item: .createMode,
-                title: "Create a mode"
-            ) {
-                Text("Different formatting per app, e.g. email vs. code · Modes")
             }
         }
         .homeCard(background: cardSurface, border: palette.brandChampagne.opacity(0.14))
     }
 
-    private func checklistRow<Subtitle: View>(
-        item: HomeChecklistItem,
-        title: String,
-        showsChevron: Bool = true,
-        @ViewBuilder subtitle: () -> Subtitle
-    ) -> some View {
+    private func checklistRow(_ item: HomeChecklistItem) -> some View {
         let palette = palette
-        let isComplete = checklist.completedItems.contains(item)
 
-        return Button {
-            viewModel.performChecklistAction(for: item)
-        } label: {
-            HStack(spacing: PersonalScribeTheme.Spacing.md) {
-                ZStack {
-                    Circle()
-                        .fill(isComplete ? palette.statusReady : .clear)
-                    Circle()
-                        .strokeBorder(
-                            isComplete ? palette.statusReady : palette.secondaryText,
-                            lineWidth: 1.5
-                        )
-                    if isComplete {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.white)
+        return HStack(spacing: PersonalScribeTheme.Spacing.md) {
+            Button {
+                checklist.complete(item)
+            } label: {
+                Circle()
+                    .fill(Color.clear)
+                    .overlay {
+                        Circle()
+                            .strokeBorder(
+                                palette.secondaryText,
+                                lineWidth: 1.5
+                            )
                     }
-                }
-                .frame(width: 20, height: 20)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Mark \(item.title) done")
 
-                VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.xs) {
-                    Text(title)
-                        .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
-                        .strikethrough(isComplete)
-                        .foregroundStyle(
-                            isComplete ? palette.secondaryText : palette.primaryTextBase
-                        )
-                    subtitle()
-                        .font(PersonalScribeTheme.Typography.caption.font)
-                        .foregroundStyle(palette.secondaryText)
-                }
+            Button {
+                viewModel.performChecklistAction(for: item)
+            } label: {
+                HStack(spacing: PersonalScribeTheme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .font(
+                                PersonalScribeTheme.Typography.body.font.weight(.semibold)
+                            )
+                            .foregroundStyle(palette.primaryTextBase)
+                        Text(item.subtitle)
+                            .font(PersonalScribeTheme.Typography.caption.font)
+                            .foregroundStyle(palette.secondaryText)
+                            .lineLimit(1)
+                    }
 
-                Spacer()
+                    Spacer()
 
-                if showsChevron {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(palette.secondaryText)
                 }
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
-            .padding(.horizontal, PersonalScribeTheme.Spacing.lg)
-            .padding(.vertical, 9)
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, PersonalScribeTheme.Spacing.lg)
+        .padding(.vertical, 8)
     }
 
     private var recentTranscriptions: some View {
@@ -234,25 +203,6 @@ struct HomeTab: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, PersonalScribeTheme.Spacing.xl)
-    }
-
-    private var checklistProgress: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(palette.secondaryText.opacity(0.2))
-                if checklist.completedCount > 0 {
-                    Capsule()
-                        .fill(palette.brandChampagne)
-                        .frame(
-                            width: geometry.size.width
-                                * CGFloat(checklist.completedCount)
-                                / CGFloat(HomeChecklistItem.allCases.count)
-                        )
-                }
-            }
-        }
-        .frame(width: 96, height: 6)
     }
 
     private var hotkeyKeycap: some View {

@@ -7,34 +7,46 @@ import PersonalScribeCore
 
 @MainActor
 final class HomeTabViewModelTests: XCTestCase {
-    func testChecklistRestoresEachPersistedAchievement() {
+    func testChecklistRestoresPendingSetupAchievementsAndIgnoresLegacyRecordingTick() {
         let defaults = Self.ephemeralDefaults()
         defaults.set(true, forKey: "HomeChecklistStartRecordingComplete")
         defaults.set(true, forKey: "HomeChecklistCreateModeComplete")
 
         let checklist = HomeChecklistState(defaults: defaults)
 
-        XCTAssertEqual(checklist.completedItems, [.startRecording, .createMode])
-        XCTAssertEqual(checklist.completedCount, 2)
+        XCTAssertEqual(checklist.completedItems, [.createMode])
+        XCTAssertEqual(checklist.pendingItems, [.customizeShortcut])
+        XCTAssertTrue(checklist.isVisible)
     }
 
-    func testChecklistDismissesOnlyWhenCompleteAndRestoresDismissal() {
+    func testChecklistDismissesAtAnyTimeAndRestoresDismissal() {
         let defaults = Self.ephemeralDefaults()
         var checklist = HomeChecklistState(defaults: defaults)
 
         checklist.dismiss()
-        XCTAssertFalse(checklist.isDismissed)
-
-        defaults.set(true, forKey: "HomeChecklistStartRecordingComplete")
-        defaults.set(true, forKey: "HomeChecklistCustomizeShortcutComplete")
-        defaults.set(true, forKey: "HomeChecklistCreateModeComplete")
-        checklist = HomeChecklistState(defaults: defaults)
-        checklist.dismiss()
         XCTAssertTrue(checklist.isDismissed)
+        XCTAssertFalse(checklist.isVisible)
 
         checklist = HomeChecklistState(defaults: defaults)
         XCTAssertTrue(checklist.isDismissed)
         XCTAssertFalse(checklist.isVisible)
+    }
+
+    func testChecklistManualCompletionPersistsAndHidesCardWhenNothingIsPending() {
+        let defaults = Self.ephemeralDefaults()
+        let checklist = HomeChecklistState(defaults: defaults)
+
+        checklist.complete(.customizeShortcut)
+        XCTAssertEqual(checklist.pendingItems, [.createMode])
+        XCTAssertTrue(checklist.isVisible)
+
+        checklist.complete(.createMode)
+        XCTAssertTrue(checklist.pendingItems.isEmpty)
+        XCTAssertFalse(checklist.isVisible)
+
+        let restored = HomeChecklistState(defaults: defaults)
+        XCTAssertEqual(restored.completedItems, Set(HomeChecklistItem.allCases))
+        XCTAssertFalse(restored.isVisible)
     }
 
     func testChecklistInitializesFromPersistedHotkeySignal() {
@@ -56,40 +68,11 @@ final class HomeTabViewModelTests: XCTestCase {
         )
     }
 
-    func testChecklistEarnsSignalsWhileHomeIsClosed() async throws {
+    func testChecklistEarnsSetupSignalsWhileHomeIsClosed() async throws {
         let defaults = Self.ephemeralDefaults()
-        let referenceDate = Date(timeIntervalSince1970: 2_000_000)
-        let window = MetricsWindow(start: .distantPast, end: referenceDate)
-        let entry = TranscriptEntry(
-            id: UUID(),
-            timestamp: referenceDate.addingTimeInterval(-60),
-            text: "earned while closed",
-            audioDuration: 10,
-            processingDuration: 0.1
-        )
-        let snapshot = MetricsSnapshot(
-            rollups: MetricsRollups(
-                recordings: 1,
-                words: 3,
-                minutesSaved: 0,
-                averageWPM: 18,
-                sampleCount: 1,
-                windowStart: window.start,
-                windowEnd: window.end
-            ),
-            recentTranscriptions: [entry],
-            lastUpdatedAt: referenceDate,
-            lastRefreshReason: .transcriptCommit
-        )
-        let metrics = MetricsSnapshotStore(
-            reader: FixedHomeMetricsReader(snapshot: snapshot),
-            referenceDateProvider: { referenceDate },
-            defaults: defaults,
-            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
-        )
         let (modeUpdates, modeContinuation) = AsyncStream<[WorkflowMode]>.makeStream()
         let checklist = HomeChecklistState(defaults: defaults)
-        checklist.startObserving(metrics: metrics, customModes: modeUpdates)
+        checklist.startObserving(customModes: modeUpdates)
         let completed = expectation(description: "All checklist signals are observed")
         let completionObservation = checklist.$completedItems
             .filter { $0 == Set(HomeChecklistItem.allCases) }
@@ -100,7 +83,6 @@ final class HomeTabViewModelTests: XCTestCase {
         HotkeyPreference.default.persist(to: defaults)
         modeContinuation.yield([.dictation])
         modeContinuation.yield([])
-        await metrics.refresh(reason: .transcriptCommit)
         await fulfillment(of: [completed], timeout: 1)
 
         XCTAssertEqual(checklist.completedItems, Set(HomeChecklistItem.allCases))
@@ -151,7 +133,6 @@ final class HomeTabViewModelTests: XCTestCase {
             openModes: { destinations.append(.modes) }
         )
 
-        viewModel.performChecklistAction(for: .startRecording)
         viewModel.performChecklistAction(for: .customizeShortcut)
         viewModel.performChecklistAction(for: .createMode)
 
@@ -229,16 +210,4 @@ private struct EmptyMetricsReading: MetricsReading {
     }
 
     func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry] { [] }
-}
-
-private struct FixedHomeMetricsReader: MetricsReading {
-    let snapshot: MetricsSnapshot
-
-    func loadSnapshot(window: MetricsWindow, recentLimit: Int) async throws -> MetricsSnapshot {
-        snapshot
-    }
-
-    func recentTranscriptions(limit: Int) async throws -> [TranscriptEntry] {
-        Array(snapshot.recentTranscriptions.prefix(limit))
-    }
 }

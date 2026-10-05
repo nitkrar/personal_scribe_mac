@@ -3,9 +3,35 @@ import Foundation
 import PersonalScribeCore
 
 enum HomeChecklistItem: CaseIterable, Hashable, Sendable {
-    case startRecording
     case customizeShortcut
     case createMode
+
+    var completionKey: String {
+        switch self {
+        case .customizeShortcut:
+            "HomeChecklistCustomizeShortcutComplete"
+        case .createMode:
+            "HomeChecklistCreateModeComplete"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .customizeShortcut:
+            "Customize your shortcut"
+        case .createMode:
+            "Create a mode"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .customizeShortcut:
+            "Pick a key combo that suits you · Settings → Shortcuts"
+        case .createMode:
+            "Different formatting per app, e.g. email vs. code · Modes"
+        }
+    }
 }
 
 @MainActor
@@ -15,31 +41,12 @@ final class HomeChecklistState: ObservableObject {
     @Published private(set) var recordingHotkey: HotkeyPreference
 
     private let defaults: UserDefaults
-    private let startRecordingPreference: Preference<Bool>
-    private let customizeShortcutPreference: Preference<Bool>
-    private let createModePreference: Preference<Bool>
     private let dismissedPreference: Preference<Bool>
     private var hotkeyObservation: NSObjectProtocol?
-    private var metricsObservation: AnyCancellable?
     private var customModesTask: Task<Void, Never>?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        startRecordingPreference = Preference(
-            key: "HomeChecklistStartRecordingComplete",
-            default: false,
-            defaults: defaults
-        )
-        customizeShortcutPreference = Preference(
-            key: "HomeChecklistCustomizeShortcutComplete",
-            default: false,
-            defaults: defaults
-        )
-        createModePreference = Preference(
-            key: "HomeChecklistCreateModeComplete",
-            default: false,
-            defaults: defaults
-        )
         dismissedPreference = Preference(
             key: "HomeChecklistDismissed",
             default: false,
@@ -48,19 +55,22 @@ final class HomeChecklistState: ObservableObject {
 
         let recordingHotkey = HotkeyPreference.resolve(from: defaults)
         self.recordingHotkey = recordingHotkey
-        var completedItems: Set<HomeChecklistItem> = []
-        if startRecordingPreference.resolve() {
-            completedItems.insert(.startRecording)
-        }
-        if customizeShortcutPreference.resolve() {
-            completedItems.insert(.customizeShortcut)
-        }
-        if createModePreference.resolve() {
-            completedItems.insert(.createMode)
-        }
+        var completedItems = Set(
+            HomeChecklistItem.allCases.filter { item in
+                Preference(
+                    key: item.completionKey,
+                    default: false,
+                    defaults: defaults
+                ).resolve()
+            }
+        )
         if recordingHotkey != .default {
             completedItems.insert(.customizeShortcut)
-            customizeShortcutPreference.persist(true)
+            Preference(
+                key: HomeChecklistItem.customizeShortcut.completionKey,
+                default: false,
+                defaults: defaults
+            ).persist(true)
         }
         self.completedItems = completedItems
         self.isDismissed = dismissedPreference.resolve()
@@ -81,27 +91,20 @@ final class HomeChecklistState: ObservableObject {
         }
     }
 
-    var completedCount: Int { completedItems.count }
-    var isComplete: Bool { completedCount == HomeChecklistItem.allCases.count }
-    var isVisible: Bool { !isDismissed }
+    var pendingItems: [HomeChecklistItem] {
+        HomeChecklistItem.allCases.filter { !completedItems.contains($0) }
+    }
 
-    func startObserving(
-        metrics: MetricsSnapshotStore,
-        customModes: AsyncStream<[WorkflowMode]>
-    ) {
-        metricsObservation = metrics.$recentTranscriptions.sink { [weak self] entries in
-            guard let self, !entries.isEmpty else {
-                return
-            }
-            self.earn(.startRecording, preference: self.startRecordingPreference)
-        }
+    var isVisible: Bool { !isDismissed && !pendingItems.isEmpty }
+
+    func startObserving(customModes: AsyncStream<[WorkflowMode]>) {
         customModesTask?.cancel()
         customModesTask = Task { @MainActor [weak self] in
             for await modes in customModes where !modes.isEmpty {
                 guard let self else {
                     return
                 }
-                self.earn(.createMode, preference: self.createModePreference)
+                self.complete(.createMode)
             }
         }
     }
@@ -113,23 +116,24 @@ final class HomeChecklistState: ObservableObject {
     private func applyHotkey(_ hotkey: HotkeyPreference) {
         recordingHotkey = hotkey
         if hotkey != .default {
-            earn(.customizeShortcut, preference: customizeShortcutPreference)
+            complete(.customizeShortcut)
         }
     }
 
     func dismiss() {
-        guard isComplete else {
-            return
-        }
         isDismissed = true
         dismissedPreference.persist(true)
     }
 
-    private func earn(_ item: HomeChecklistItem, preference: Preference<Bool>) {
+    func complete(_ item: HomeChecklistItem) {
         guard completedItems.insert(item).inserted else {
             return
         }
-        preference.persist(true)
+        Preference(
+            key: item.completionKey,
+            default: false,
+            defaults: defaults
+        ).persist(true)
     }
 
     isolated deinit {
@@ -140,7 +144,7 @@ final class HomeChecklistState: ObservableObject {
     }
 }
 
-/// Presents Home metrics, checklist progress, hotkey hints, and navigation actions.
+/// Presents Home metrics, pending setup items, hotkey hints, and navigation actions.
 @MainActor
 public final class HomeTabViewModel: ObservableObject {
     public let metrics: MetricsSnapshotStore
@@ -187,8 +191,6 @@ public final class HomeTabViewModel: ObservableObject {
 
     func performChecklistAction(for item: HomeChecklistItem) {
         switch item {
-        case .startRecording:
-            break
         case .customizeShortcut:
             openShortcuts()
         case .createMode:

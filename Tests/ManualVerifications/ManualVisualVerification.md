@@ -2,11 +2,11 @@
 
 ## Home refresh (#116)
 
-- [ ] **MV-HOME-1 (appearance and content)** Open Home in light and dark appearances. Confirm the Your Dictation card is one horizontal card ordered Words per minute avg, Words, Recordings, Time saved; time uses hour/minute units; no Apps used or What's new content appears.
-- [ ] **MV-HOME-2 (range picker)** Choose Last 7 days, Last 30 days, and All time. Confirm the four values refresh for each range, recent transcriptions remain the three newest entries regardless of range, and the chosen range survives relaunch.
-- [ ] **MV-HOME-3 (checklist progress)** With one item complete, confirm the card shows “1 of 3”, a one-third progress bar, a green check and struck-through dimmed completed title, empty circles for open rows, and the configured recording shortcut in the Start recording subtitle.
-- [ ] **MV-HOME-4 (checklist navigation and dismissal)** Confirm Customize your shortcut opens Settings → General scrolled to Shortcuts and Create a mode opens Modes. Complete all items, confirm Dismiss appears, dismiss the card, and confirm it stays hidden after relaunch.
-- [ ] **MV-HOME-5 (empty history)** With no transcript history, confirm the checklist can still appear and the Recent transcriptions empty state renders below it without clipping.
+- [ ] **MV-HOME-2 (appearance and content)** Open Home in light and dark appearances. Confirm the Your Dictation card is one horizontal card ordered Words per minute avg, Words, Recordings, Time saved; time uses hour/minute units; no Apps used or What's new content appears.
+- [ ] **MV-HOME-3 (range picker)** Choose Last 7 days, Last 30 days, and All time. Confirm the four values refresh for each range, recent transcriptions remain the three newest entries regardless of range, and the chosen range survives relaunch.
+- [ ] **MV-HOME-4 (pending setup items)** With neither setup item complete, confirm Get started contains only Customize your shortcut and Create a mode in one compact divided card. Click each open circle in turn and confirm its row disappears immediately; after the last row disappears, confirm the card disappears and stays gone after relaunch.
+- [ ] **MV-HOME-5 (automatic completion, navigation, and dismissal)** Confirm saving a non-default shortcut removes Customize your shortcut, creating a custom mode removes Create a mode, and keeping the default shortcut still allows manual completion. Confirm clicking each row outside its circle opens Settings → Shortcuts or Modes. Click × while items remain and confirm the card stays dismissed after relaunch.
+- [ ] **MV-HOME-6 (empty history)** With no transcript history and both setup items pending, confirm the Get started card and the Recent transcriptions empty state render without clipping.
 
 SwiftUI views cannot be runtime-verified via XCTest. Every foundation
 component ships with a `#Preview` in its source file. The checklist

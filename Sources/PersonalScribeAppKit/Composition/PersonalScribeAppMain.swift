@@ -217,7 +217,6 @@ struct PersonalScribeAppMain: App {
         metricsStore.startObserving()
         let homeChecklist = HomeChecklistState(defaults: defaults)
         homeChecklist.startObserving(
-            metrics: metricsStore,
             customModes: AppComposition.workflowModeRegistry.customModesStream()
         )
         let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader(

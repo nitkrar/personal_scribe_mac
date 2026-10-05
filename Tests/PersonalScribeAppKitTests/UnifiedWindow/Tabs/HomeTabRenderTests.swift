@@ -22,10 +22,10 @@ final class HomeTabRenderTests: XCTestCase {
             ("light", .light),
         ]
         let scenarios: [Scenario] = [
-            Scenario(name: "checklist-1-of-3", checklist: .oneComplete, hasHistory: true),
-            Scenario(name: "all-done", checklist: .allComplete, hasHistory: true),
-            Scenario(name: "card-dismissed", checklist: .dismissed, hasHistory: true),
-            Scenario(name: "empty-history", checklist: .noneComplete, hasHistory: false),
+            Scenario(name: "two-pending", checklist: .twoPending, hasHistory: true),
+            Scenario(name: "one-pending", checklist: .onePending, hasHistory: true),
+            Scenario(name: "card-gone-dismissed", checklist: .dismissed, hasHistory: true),
+            Scenario(name: "empty-history", checklist: .twoPending, hasHistory: false),
         ]
 
         for scheme in schemes {
@@ -59,14 +59,10 @@ final class HomeTabRenderTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         switch scenario.checklist {
-        case .noneComplete:
+        case .twoPending, .dismissed:
             break
-        case .oneComplete:
-            defaults.set(true, forKey: "HomeChecklistStartRecordingComplete")
-        case .allComplete, .dismissed:
-            defaults.set(true, forKey: "HomeChecklistStartRecordingComplete")
+        case .onePending:
             defaults.set(true, forKey: "HomeChecklistCustomizeShortcutComplete")
-            defaults.set(true, forKey: "HomeChecklistCreateModeComplete")
         }
         let checklist = HomeChecklistState(defaults: defaults)
         if scenario.checklist == .dismissed {
@@ -169,9 +165,8 @@ final class HomeTabRenderTests: XCTestCase {
     }
 
     private enum ChecklistFixture: Equatable {
-        case noneComplete
-        case oneComplete
-        case allComplete
+        case twoPending
+        case onePending
         case dismissed
     }
 }
