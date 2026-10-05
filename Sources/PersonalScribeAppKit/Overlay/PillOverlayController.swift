@@ -10,6 +10,7 @@ public final class PillOverlayController: ObservableObject {
     private let defaults: UserDefaults?
     private let legacyVisibilityModeBridge: LegacyVisibilityModeBridge?
     private let presenter: PillOverlayPresenter
+    private var modeMenuPresenter: PillModeMenuPresenter?
     private var cancellables: Set<AnyCancellable> = []
     /// True between a logged stream-card show and its logged hide.
     private var isStreamCardLogOpen = false
@@ -212,6 +213,22 @@ public final class PillOverlayController: ObservableObject {
 
     public func showClipboardOnlyNotice(_ notice: ClipboardNotice) {
         presenter.showClipboardOnlyNotice(notice)
+    }
+
+    public func configureModeMenu(
+        modesProvider: @escaping @MainActor () -> [WorkflowMode],
+        currentModeIDProvider: @escaping @MainActor () -> String?,
+        onSelect: @escaping @MainActor (WorkflowMode) async -> Void
+    ) {
+        let presenter = PillModeMenuPresenter(
+            modesProvider: modesProvider,
+            currentModeIDProvider: currentModeIDProvider,
+            onSelect: onSelect
+        )
+        modeMenuPresenter = presenter
+        viewModel.onMode = { [weak presenter] in
+            presenter?.present()
+        }
     }
 
     /// Late-binding install for the Settings-deep-link closure. Called by

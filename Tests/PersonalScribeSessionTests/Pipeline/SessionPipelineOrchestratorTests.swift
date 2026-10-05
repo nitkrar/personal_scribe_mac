@@ -105,6 +105,42 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertEqual(snapshot.lastCompletedResult?.text, "before cancel after resume")
     }
 
+    func testPausedTimeoutPersistsOnceAndDeliversPermanentClipboardWithoutPaste() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.1)
+        let sink = TestPipelineOutputSink()
+        let entries = TranscriptEntryRecorder()
+        let notices = AsyncCounter()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(
+                    text: "timeout text",
+                    audioDuration: .seconds(1),
+                    processingDuration: .zero
+                )
+            ),
+            postProcessingPipeline: IdentityPostProcessingPipeline(),
+            outputSink: sink,
+            persistenceHandler: { entry in await entries.append(entry) },
+            pausedRecordingTimeout: .milliseconds(20)
+        )
+        await orchestrator.setPausedAutoFinalizeHandler {
+            await notices.increment()
+        }
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+        await waitForState(.completed, in: orchestrator)
+
+        let finalSinks = await sink.finalDeliverySinks()
+        let entryTexts = await entries.all().map(\.text)
+        let noticeCount = await notices.value()
+        XCTAssertEqual(finalSinks, [[.clipboard(restoreEnabled: false)]])
+        XCTAssertEqual(entryTexts, ["timeout text"])
+        XCTAssertEqual(noticeCount, 1)
+    }
+
     func testSnapshotStreamDeliversInitialIdleSnapshotImmediately() async {
         let context = makeContext(streamingOutputEnabled: false)
         let orchestrator = makeOrchestrator(context: context)
@@ -2398,7 +2434,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         recordingsDirectory: @escaping @Sendable () throws -> URL = { try AppConfig.recordingsDirectory() },
         boundRecipe: BoundRecipe? = nil,
         liveStreamingEventShutdownTimeout: Duration = .seconds(2),
-        cancelCardDuration: Duration = .seconds(10)
+        cancelCardDuration: Duration = .seconds(10),
+        pausedRecordingTimeout: Duration = .seconds(300)
     ) -> SessionPipelineOrchestrator {
         // #078.31b: orchestrator init takes a `BoundRecipe` post-cutover.
         // Wrap the `transcriber:` arg as the asr processor of a built-in
@@ -2427,7 +2464,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
                 vadProvider: vadProvider,
                 boundRecipe: resolvedRecipe,
                 liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout,
-                cancelCardDuration: { cancelCardDuration }
+                cancelCardDuration: { cancelCardDuration },
+                pausedRecordingTimeout: { pausedRecordingTimeout }
             )
         }
 
@@ -2444,7 +2482,8 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
             vadProvider: vadProvider,
             boundRecipe: resolvedRecipe,
             liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout,
-            cancelCardDuration: { cancelCardDuration }
+            cancelCardDuration: { cancelCardDuration },
+            pausedRecordingTimeout: { pausedRecordingTimeout }
         )
     }
 
@@ -2846,6 +2885,12 @@ private actor TranscriptEntryRecorder {
     }
 
     func all() -> [TranscriptEntry] { entries }
+}
+
+private actor AsyncCounter {
+    private var count = 0
+    func increment() { count += 1 }
+    func value() -> Int { count }
 }
 
 private struct IdentityPostProcessingPipeline: PostProcessingPipeline {

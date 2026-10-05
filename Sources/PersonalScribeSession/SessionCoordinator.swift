@@ -137,6 +137,25 @@ public actor SessionCoordinator {
         }
     }
 
+    public func setPausedAutoFinalizeHandler(
+        _ handler: @escaping @Sendable () async -> Void
+    ) async {
+        await pipeline.setPausedAutoFinalizeHandler(handler)
+    }
+
+    public func finalizePausedForExternalInterruption() async {
+        guard await currentDisplayState() == .paused else { return }
+        await pipeline.finalizePausedSessionWithoutPaste()
+    }
+
+    public func finishForApplicationTermination() async {
+        if await currentDisplayState() == .paused {
+            await pipeline.finalizePausedSessionWithoutPaste()
+        } else {
+            await stopIfActive()
+        }
+    }
+
     public func toggle() async {
         switch await currentDisplayState() {
         case .idle:

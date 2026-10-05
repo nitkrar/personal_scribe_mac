@@ -513,6 +513,26 @@ public struct GeneralTab: View {
                     step: 1
                 )
             }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: SettingsLayout.inlineSpacing) {
+                Text("Paused recording timeout")
+                    .font(PersonalScribeTheme.Typography.body.font.weight(.medium))
+
+                Text(viewModel.pausedRecordingTimeoutDescription)
+                    .font(PersonalScribeTheme.Typography.caption.font)
+                    .foregroundStyle(.secondary)
+
+                Slider(
+                    value: Binding(
+                        get: { viewModel.pausedRecordingTimeout.minutes },
+                        set: { viewModel.setPausedRecordingTimeoutMinutes($0) }
+                    ),
+                    in: PausedRecordingTimeout.minimumMinutes...PausedRecordingTimeout.maximumMinutes,
+                    step: 1
+                )
+            }
         }
     }
 
@@ -666,6 +686,7 @@ final class GeneralTabViewModel: ObservableObject {
     @Published private(set) var waveformPalette: WaveformPalette
     @Published private(set) var clipboardRestoreDelay: ClipboardRestoreDelay
     @Published private(set) var cancelCardDuration: CancelCardDuration
+    @Published private(set) var pausedRecordingTimeout: PausedRecordingTimeout
     @Published private(set) var launchAtLogin: Bool
     /// Background mode = menu-bar-only accessory app. Default `false`
     /// (app is a regular app with Dock icon / Cmd+Tab entry / Force Quit
@@ -798,6 +819,7 @@ final class GeneralTabViewModel: ObservableObject {
         self.waveformPalette = WaveformPalette.resolve(from: defaults)
         self.clipboardRestoreDelay = ClipboardRestoreDelay.resolve(from: defaults)
         self.cancelCardDuration = CancelCardDuration.resolve(from: defaults)
+        self.pausedRecordingTimeout = PausedRecordingTimeout.resolve(from: defaults)
         // launchAtLogin seeds from the injected service. The real impl
         // (`SystemLaunchAtLoginService`) reads SMAppService.mainApp.status
         // — .enabled means the app is registered to launch at login.
@@ -1043,6 +1065,15 @@ final class GeneralTabViewModel: ObservableObject {
         "After you cancel a recording, the Cancel card offers Resume for \(Self.formatSeconds(cancelCardDuration.seconds))s"
     }
 
+    func setPausedRecordingTimeoutMinutes(_ minutes: TimeInterval) {
+        PausedRecordingTimeout.persist(to: defaults, .init(minutes: minutes))
+        pausedRecordingTimeout = PausedRecordingTimeout.resolve(from: defaults)
+    }
+
+    var pausedRecordingTimeoutDescription: String {
+        "Paused recordings finish after \(Int(pausedRecordingTimeout.minutes)) min"
+    }
+
     func setClipboardRestoreDelaySeconds(_ seconds: TimeInterval) {
         ClipboardRestoreDelay.persist(to: defaults, .init(seconds: seconds))
         clipboardRestoreDelay = ClipboardRestoreDelay.resolve(from: defaults)
@@ -1227,30 +1258,14 @@ private struct PillStyleSelectorCard: View {
         }
     }
 
-    /// Classic — dark-navy pill with a short waveform sketch inside.
-    /// Hand-rolled mini-waveform (4 bars) rather than reusing
-    /// `WaveformView` so the preview is decoupled from audio-level
-    /// bindings and the `TimelineView` animation it manages.
     private var classicPreview: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(pillBackgroundColor)
             .overlay(
-                HStack(spacing: 3) {
-                    ForEach(0..<5, id: \.self) { index in
-                        Capsule()
-                            .fill(pillForegroundColor)
-                            .frame(width: 2, height: classicBarHeight(for: index))
-                    }
-                }
+                PersonalScribeLogoView(color: pillForegroundColor)
+                    .frame(width: 14, height: 14)
             )
-            .frame(height: 28)
-    }
-
-    /// 4-bar preview heights — evoke a short waveform snapshot. Static
-    /// so the preview is stable across redraws (no TimelineView).
-    private func classicBarHeight(for index: Int) -> CGFloat {
-        let heights: [CGFloat] = [6, 12, 16, 10, 7]
-        return heights[index % heights.count]
+            .frame(width: 80, height: 28)
     }
 
     /// None — communicates "hidden". Low-opacity surface + eye.slash glyph.
@@ -1268,11 +1283,14 @@ private struct PillStyleSelectorCard: View {
         }
     }
 
-    /// Mini — smaller flat pill, no content. Just the shape.
     private var miniPreview: some View {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(pillBackgroundColor)
-            .frame(width: 40, height: 14)
+            .overlay(
+                PersonalScribeLogoView(color: pillForegroundColor)
+                    .frame(width: 10, height: 10)
+            )
+            .frame(width: 40, height: 16)
     }
 
 }

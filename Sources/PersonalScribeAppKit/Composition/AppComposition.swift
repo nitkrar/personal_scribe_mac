@@ -459,8 +459,9 @@ public enum AppComposition {
         // global-hotkey UX so the same chord can stop a mode-initiated
         // recording.
         monitor.setOnPerModeActivate { modeID in
-            registry.setCurrent(id: modeID)
-            Task {
+            Task { @MainActor in
+                await coordinator.finalizePausedForExternalInterruption()
+                registry.setCurrent(id: modeID)
                 await coordinator.toggle()
             }
         }

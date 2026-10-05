@@ -16,7 +16,7 @@ final class AppCompositionTests: XCTestCase {
         )
     }
 
-    func testConfigurePerModeHotkeysWiresProvidedMonitorToRegistryCurrentMode() throws {
+    func testConfigurePerModeHotkeysWiresProvidedMonitorToRegistryCurrentMode() async throws {
         let perModeHotkey = HotkeyPreference(
             keyCode: 0, // 'a'
             tapCount: 1,
@@ -61,6 +61,9 @@ final class AppCompositionTests: XCTestCase {
             timestamp: 1.0
         ))
 
+        for _ in 0..<100 where registry.currentMode.id != "med-notes" {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
         XCTAssertEqual(registry.currentMode.id, "med-notes")
     }
 

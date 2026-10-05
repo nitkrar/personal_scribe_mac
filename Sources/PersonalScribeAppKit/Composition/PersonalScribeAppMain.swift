@@ -77,6 +77,12 @@ struct PersonalScribeAppMain: App {
         let isOnboardingCompleteProvider: @MainActor () -> Bool = {
             OnboardingState.resolve(from: defaults) == .completed
         }
+        let selectableModesProvider: @MainActor () -> [WorkflowMode] = {
+            WorkflowModeRegistry.builtInModes
+                + AppComposition.currentlyValidCustomModes(
+                    among: AppComposition.workflowModeRegistry.customModes
+                )
+        }
 
         self.coordinator = coordinator
         let sceneModel = MenuBarSceneModel(
@@ -112,6 +118,25 @@ struct PersonalScribeAppMain: App {
             },
             panelBuilder: overlayPanelBuilder,
             openVadSettingsAction: nil
+        )
+        Task {
+            await coordinator.setPausedAutoFinalizeHandler {
+                await MainActor.run {
+                    AppComposition.toastBroadcaster.post(
+                        .success("Saved to History")
+                    )
+                }
+            }
+        }
+        pillController.configureModeMenu(
+            modesProvider: selectableModesProvider,
+            currentModeIDProvider: {
+                AppComposition.workflowModeRegistry.currentMode.id
+            },
+            onSelect: { mode in
+                await coordinator.finalizePausedForExternalInterruption()
+                AppComposition.workflowModeRegistry.setCurrent(id: mode.id)
+            }
         )
         // Final delivery runs in the pipeline's output stage; it raises
         // the clipboard-only notice when paste fell back to clipboard.
@@ -222,6 +247,7 @@ struct PersonalScribeAppMain: App {
                         // *current* mode, not the persisted default.
                         // RecipeBuilder resolves descriptors per Kind via
                         // ActiveModelService at session start.
+                        await coordinator.finalizePausedForExternalInterruption()
                         AppComposition.workflowModeRegistry.setCurrent(id: mode.id)
                     },
                     menuBarVisibilityProvider: {
@@ -275,7 +301,7 @@ struct PersonalScribeAppMain: App {
             stopIfActive: {
                 // Stop an active recording before fast-exit so
                 // `SystemAudioMuter` restores the prior output mute state.
-                await coordinator.stopIfActive()
+                await coordinator.finishForApplicationTermination()
             },
             shutdownPreparedWhisperCppAdapters: {
                 await coordinator.shutdownPreparedWhisperCppAdaptersForApplicationTermination()
@@ -294,22 +320,13 @@ struct PersonalScribeAppMain: App {
             isOnboardingCompleteProvider: isOnboardingCompleteProvider,
             inputDeviceProvider: inputDeviceProvider,
             modesProvider: {
-                // #089: surface the user's customModes in the menu
-                // submenu. Pulled fresh on every rebuild so newly
-                // created modes show up without a relaunch.
-                // #090: filter out invalid modes (unpinned with no
-                // ready active model OR pinned to a removed
-                // descriptor). The user can repair these in the
-                // Modes tab; selectors hide them so the user can't
-                // pick a mode that would fail at session start.
-                AppComposition.currentlyValidCustomModes(
-                    among: AppComposition.workflowModeRegistry.customModes
-                )
+                selectableModesProvider()
             },
             setActiveMode: { mode in
                 // #089: menu-bar submenu picks the runtime *current*
                 // mode. Recipe resolution against ActiveModelService
                 // happens at session start via RecipeBuilder.
+                await coordinator.finalizePausedForExternalInterruption()
                 AppComposition.workflowModeRegistry.setCurrent(id: mode.id)
             },
             prequitHandler: prequitHandler

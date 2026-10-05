@@ -52,6 +52,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private let graceDurationSeconds: Double
     /// How long a cancelled capture stays resumable.
     private let cancelCardDuration: @Sendable () -> Duration
+    private let pausedRecordingTimeout: @Sendable () -> Duration
+    private var pausedTimeoutTask: Task<Void, Never>?
+    private var onPausedAutoFinalized: (@Sendable () async -> Void)?
     /// Bound the live-stream shutdown wait so a misbehaving adapter
     /// cannot wedge stop/cancel forever by never terminating its event
     /// stream after input closes.
@@ -77,6 +80,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         /// new session) preempted the grace. Clears grace fields; no
         /// fire token; no handler.
         case cancelled
+    }
+
+    private enum PausedFinalizationDelivery: Equatable {
+        case standard
+        case clipboardWithoutPaste
     }
 
     private struct LiveStreamingObservabilityState: Sendable {
@@ -170,7 +178,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds,
         liveStreamingEventShutdownTimeout: Duration = .seconds(2),
-        cancelCardDuration: @escaping @Sendable () -> Duration = { .seconds(CancelCardDuration.resolve().seconds) }
+        cancelCardDuration: @escaping @Sendable () -> Duration = { .seconds(CancelCardDuration.resolve().seconds) },
+        pausedRecordingTimeout: @escaping @Sendable () -> Duration = { PausedRecordingTimeout.resolve().duration }
     ) {
         let persistenceHandler: (@Sendable (TranscriptEntry) async throws -> Void)?
         if let repository = transcriptRepository {
@@ -194,7 +203,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             boundRecipe: boundRecipe,
             graceDurationSeconds: graceDurationSeconds,
             liveStreamingEventShutdownTimeout: liveStreamingEventShutdownTimeout,
-            cancelCardDuration: cancelCardDuration
+            cancelCardDuration: cancelCardDuration,
+            pausedRecordingTimeout: pausedRecordingTimeout
         )
     }
 
@@ -212,7 +222,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         boundRecipe: BoundRecipe? = nil,
         graceDurationSeconds: Double = SessionPipelineOrchestrator.defaultGraceDurationSeconds,
         liveStreamingEventShutdownTimeout: Duration = .seconds(2),
-        cancelCardDuration: @escaping @Sendable () -> Duration = { .seconds(CancelCardDuration.resolve().seconds) }
+        cancelCardDuration: @escaping @Sendable () -> Duration = { .seconds(CancelCardDuration.resolve().seconds) },
+        pausedRecordingTimeout: @escaping @Sendable () -> Duration = { PausedRecordingTimeout.resolve().duration }
     ) {
         let initialContext = contextProvider.currentContext()
         self.capture = capture
@@ -229,6 +240,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         self.graceDurationSeconds = graceDurationSeconds
         self.liveStreamingEventShutdownTimeout = liveStreamingEventShutdownTimeout
         self.cancelCardDuration = cancelCardDuration
+        self.pausedRecordingTimeout = pausedRecordingTimeout
         self.activeContext = initialContext
         self.currentSnapshot = SessionSnapshot()
     }
@@ -405,6 +417,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             return
         }
 
+        pausedTimeoutTask?.cancel()
+        pausedTimeoutTask = nil
         resetInputSilence()
         resetGraceForNewSession()
         bufferedAudio.removeAll(keepingCapacity: true)
@@ -449,7 +463,16 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             logger.info("Ignored paused stop while session is not paused")
             return
         }
-        await finalizePausedSegments()
+        pausedTimeoutTask?.cancel()
+        pausedTimeoutTask = nil
+        await finalizePausedSegments(delivery: .standard)
+    }
+
+    public func finalizePausedSessionWithoutPaste() async {
+        guard currentSnapshot.sessionState == .paused else { return }
+        pausedTimeoutTask?.cancel()
+        pausedTimeoutTask = nil
+        await finalizePausedSegments(delivery: .clipboardWithoutPaste)
     }
 
     private func resetInputSilence() {
@@ -504,6 +527,12 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     /// on the one-shot `vadAlreadyFired` flag is possible.
     public func setAutoStopHandler(_ handler: @escaping @Sendable () async -> Void) {
         self.onAutoStopRequested = handler
+    }
+
+    public func setPausedAutoFinalizeHandler(
+        _ handler: @escaping @Sendable () async -> Void
+    ) {
+        onPausedAutoFinalized = handler
     }
 
     /// #078.28 — publish a session-start failure to the snapshot stream
@@ -847,6 +876,8 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
     private func discardPausedCapture() async {
         guard !pausedSegments.isEmpty else { return }
+        pausedTimeoutTask?.cancel()
+        pausedTimeoutTask = nil
         let resumable = ResumableCapture(
             buffers: [],
             pausedSegments: pausedSegments,
@@ -1015,9 +1046,16 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             snapshot.vadAutoStopGraceDeadline = nil
             snapshot.vadAutoStopFireToken = nil
         }
+        let timeout = pausedRecordingTimeout()
+        pausedTimeoutTask?.cancel()
+        pausedTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard !Task.isCancelled else { return }
+            await self?.finalizePausedSessionWithoutPaste()
+        }
     }
 
-    private func finalizePausedSegments() async {
+    private func finalizePausedSegments(delivery: PausedFinalizationDelivery) async {
         guard !pausedSegments.isEmpty else {
             publish { snapshot in
                 snapshot.sessionState = .shortExit
@@ -1066,7 +1104,12 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             try await persist(finalResult, replayBuffers: allBuffers)
 
             publish { snapshot in snapshot.activeStage = .output }
-            try await deliverFinal(finalResult)
+            switch delivery {
+            case .standard:
+                try await deliverFinal(finalResult)
+            case .clipboardWithoutPaste:
+                try await outputSink.deliverFinalWithoutPaste(finalResult)
+            }
             await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
             pausedSegments.removeAll(keepingCapacity: true)
 
@@ -1078,6 +1121,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 snapshot.recordingDuration = finalResult.audioDuration
                 snapshot.liveStreamingFallbackNotice = nil
                 snapshot.isStreamingSession = false
+            }
+            if delivery == .clipboardWithoutPaste {
+                await onPausedAutoFinalized?()
             }
         } catch let failure as PipelineStageFailure {
             await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
@@ -1123,7 +1169,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 if let segment = try await transcribeCurrentSegment() {
                     pausedSegments.append(segment)
                 }
-                await finalizePausedSegments()
+                await finalizePausedSegments(delivery: .standard)
             } catch let failure as PipelineStageFailure {
                 await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
                 handleStageFailure(failure)

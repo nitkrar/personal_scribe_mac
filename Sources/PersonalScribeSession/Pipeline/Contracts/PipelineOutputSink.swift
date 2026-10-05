@@ -7,6 +7,7 @@ public protocol PipelineOutputSink: Sendable {
     /// (clipboard / paste / …). Never called for cancelled, short-exit or
     /// failed sessions.
     func deliverFinal(_ result: TranscriptionResult, sinks: [BoundOutputSink]) async throws
+    func deliverFinalWithoutPaste(_ result: TranscriptionResult) async throws
     func resetForNewSession() async
     /// #033 — invoked on every session-end path (success, cancel, error,
     /// short-exit) so session-scoped sinks (e.g. live cursor output)
@@ -17,4 +18,11 @@ public protocol PipelineOutputSink: Sendable {
 
 public extension PipelineOutputSink {
     func endSession() async {}
+
+    func deliverFinalWithoutPaste(_ result: TranscriptionResult) async throws {
+        try await deliverFinal(
+            result,
+            sinks: [.clipboard(restoreEnabled: false)]
+        )
+    }
 }
