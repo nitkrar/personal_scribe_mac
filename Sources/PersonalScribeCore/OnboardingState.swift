@@ -3,8 +3,8 @@ import Foundation
 /// UserDefaults-backed first-run onboarding completion state.
 ///
 /// Stored under `UserDefaults["OnboardingCompleted"]`. Default is
-/// `.incomplete` so first launch presents onboarding until the app records
-/// that the window has been dismissed once.
+/// `.incomplete` so first launch presents setup until microphone access is
+/// granted. Optional setup steps do not keep this flag incomplete.
 public struct OnboardingState: RawRepresentable, Sendable, Equatable {
     public let rawValue: Bool
 

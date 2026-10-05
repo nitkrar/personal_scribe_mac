@@ -26,6 +26,50 @@ final class SetupFlowStateTests: XCTestCase {
         XCTAssertFalse(SetupFlowState(defaults: defaults).isOpen)
     }
 
+    func testMicrophoneGrantCompletesBoundaryWithAccessibilityStillPending() {
+        let defaults = Self.ephemeralDefaults()
+        let statuses: [Permission: PermissionStatus] = [
+            .microphone: .granted,
+            .accessibility: .pending,
+        ]
+
+        XCTAssertTrue(OnboardingCompletionPolicy.shouldMarkComplete(statuses: statuses))
+        OnboardingState.completed.persist(to: defaults)
+
+        XCTAssertFalse(SetupFlowState(defaults: defaults).isOpen)
+    }
+
+    func testSkipWithMicrophoneMissingLeavesFutureSetupOpen() {
+        let defaults = Self.ephemeralDefaults()
+        let flow = SetupFlowState(defaults: defaults)
+
+        flow.skip(satisfaction: SetupSatisfaction(
+            permissionsGranted: false,
+            modelDownloaded: true,
+            shortcutTried: true
+        ))
+
+        XCTAssertEqual(OnboardingState.resolve(from: defaults), .incomplete)
+        XCTAssertTrue(SetupFlowState(defaults: defaults).isOpen)
+    }
+
+    func testOpenFlowCanSkipOptionalStepsAfterMicGrantWithoutReopening() {
+        let defaults = Self.ephemeralDefaults()
+        let checklist = HomeChecklistState(defaults: defaults)
+        let flow = SetupFlowState(defaults: defaults, checklist: checklist)
+        OnboardingState.completed.persist(to: defaults)
+
+        flow.skip(satisfaction: SetupSatisfaction(
+            permissionsGranted: false,
+            modelDownloaded: true,
+            shortcutTried: false
+        ))
+
+        XCTAssertFalse(SetupFlowState(defaults: defaults).isOpen)
+        XCTAssertTrue(checklist.pendingItems.contains(.grantPermissions))
+        XCTAssertTrue(checklist.pendingItems.contains(.tryShortcut))
+    }
+
     func testBackAndContinueNavigateFiveStepFlow() {
         let flow = SetupFlowState(defaults: Self.ephemeralDefaults())
 

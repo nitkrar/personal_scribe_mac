@@ -5,19 +5,19 @@ import XCTest
 /// decides when the first-run `OnboardingCompleted` flag should flip
 /// to `true` based on the user's permission grants.
 ///
-/// Microphone enables recording; Accessibility enables auto-paste.
-/// Registered global hotkeys require neither permission.
+/// Microphone enables recording; Accessibility is optional because output
+/// falls back to the clipboard.
 final class OnboardingCompletionPolicyTests: XCTestCase {
     func testReturnsFalseForEmptyStatuses() {
         XCTAssertFalse(OnboardingCompletionPolicy.shouldMarkComplete(statuses: [:]))
     }
 
-    func testReturnsFalseWhenOnlyMicrophoneIsGranted() {
+    func testReturnsTrueWhenOnlyMicrophoneIsGranted() {
         let statuses: [Permission: PermissionStatus] = [
             .microphone: .granted,
             .accessibility: .pending,
         ]
-        XCTAssertFalse(OnboardingCompletionPolicy.shouldMarkComplete(statuses: statuses))
+        XCTAssertTrue(OnboardingCompletionPolicy.shouldMarkComplete(statuses: statuses))
     }
 
     func testReturnsFalseWhenOnlyAccessibilityIsGranted() {

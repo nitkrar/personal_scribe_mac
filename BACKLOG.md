@@ -718,7 +718,7 @@ Replaces the separate onboarding window (#015) with setup inside the main window
 
 **Steps:** Permissions (microphone, accessibility; live status, open System Settings) → Mic test (device picker, live level) → Model (recommended model preselected, download progress, "Show all models") → Try the shortcut (⌥/, practice field, pill appears, success state) → Done (Home with a one-time "You're set up" banner). Back/Continue and "Skip setup" on every step; a "Get started N/5" sidebar row while setup is open. No vocabulary step.
 
-**Decisions:** setup opens at launch until mic + Accessibility are granted (today's `OnboardingCompleted` rule); an open setup runs to the end. Skipped steps that are still unsatisfied become pending items in Home's "Get started" card. Dictation pastes into Ninimma itself when one of its text fields has focus (otherwise clipboard notice as today), so the practice field works through the normal paste path.
+**Decisions:** Microphone is the only required setup permission. `OnboardingCompleted` flips when microphone access is granted, so setup opens at launch only while microphone access is missing; an already-open setup runs to the end. Skip closes setup. If microphone access is still missing, setup reopens next launch; once granted, it stays closed and unsatisfied optional steps such as Accessibility and Try it become pending items in Home's "Get started" card. Without Accessibility, transcript delivery falls back to the clipboard. Dictation pastes into Ninimma itself only when an editable, non-secure text field has focus, so the practice field works through the normal paste path.
 
 ---
 

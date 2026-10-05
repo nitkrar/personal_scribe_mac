@@ -57,23 +57,23 @@ these entries are guidance, not a literal checklist item.
 
 `OnboardingCompletionObserver` watches the PermissionService and
 flips the `OnboardingCompleted` UserDefault to `true` the first time
-Microphone + Accessibility are both `.granted`. Accessibility is used
-only to post ⌘V for auto-paste; registered hotkeys require no permission.
+Microphone is `.granted`. Accessibility is optional: without it, output
+falls back to the clipboard instead of auto-pasting.
 After the first
 flip the observer self-terminates, so a later permission revoke in
 System Settings does NOT re-trigger first-run auto-open.
 
-- [ ] **MV-ONB-1 — fresh install grants both required perms:** clean
+- [ ] **MV-ONB-1 — fresh install grants microphone:** clean
   the TCC database for the bundle (`tccutil reset All com.nitkrar.personal_scribe`
   then quit Ninimma). Launch Ninimma. Confirm the unified window
-  auto-opens to Settings → Permissions. Grant Microphone +
-  Accessibility via their "Grant Access" buttons; return to Ninimma.
+  auto-opens to Get started. Grant Microphone but leave Accessibility
+  pending; return to Ninimma.
   Quit and relaunch. Confirm the unified window does NOT auto-open
   — it stays closed behind the menu-bar icon.
 - [ ] **MV-ONB-2 — accessibility alone does not complete onboarding:**
   from a fresh TCC state, grant only Accessibility. Quit and
-  relaunch. Confirm the unified window still auto-opens to Settings
-  → Permissions (flag did not flip).
+  relaunch. Confirm the unified window still auto-opens to Get started
+  (flag did not flip).
 - [ ] **MV-ONB-3 — later revoke does not re-trigger onboarding:**
   with onboarding complete (MV-ONB-1 final state), revoke Microphone
   in `System Settings → Privacy & Security → Microphone`. Return to

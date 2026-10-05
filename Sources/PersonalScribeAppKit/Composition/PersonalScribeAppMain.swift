@@ -220,6 +220,11 @@ struct PersonalScribeAppMain: App {
         homeChecklist.startObserving(
             customModes: AppComposition.workflowModeRegistry.customModesStream()
         )
+        let onboardingObserver = OnboardingCompletionObserver(
+            permissionService: resolvedPermissionService,
+            defaults: defaults
+        )
+        onboardingObserver.start()
         let setupFlow = SetupFlowState(defaults: defaults, checklist: homeChecklist)
         let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader(
             logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
@@ -427,20 +432,10 @@ struct PersonalScribeAppMain: App {
             NSApp.setActivationPolicy(.accessory)
         }
 
-        // #015: watch the permission service and flip
-        // `OnboardingCompleted` the first time Mic + Accessibility
-        // both land as `.granted`. Covers the "perms granted before
-        // launch" case (flag flips immediately) AND the "user grants
-        // during first session" case (observer fires on publish). Once
-        // flipped, the observer self-terminates — later revokes in
-        // System Settings don't churn the flag.
+        // The observer starts before SetupFlowState is created so a mic grant
+        // that predates launch suppresses setup immediately.
         let shouldOpenSetupAtLaunch = setupFlow.isOpen
-        let observer = OnboardingCompletionObserver(
-            permissionService: resolvedPermissionService,
-            defaults: defaults
-        )
-        observer.start()
-        self.onboardingCompletionObserver = observer
+        self.onboardingCompletionObserver = onboardingObserver
 
         if showWindowAtLaunch {
             Task { @MainActor in

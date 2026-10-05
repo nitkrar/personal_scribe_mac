@@ -40,11 +40,11 @@ final class OnboardingCompletionObserverTests: XCTestCase {
     /// App already has perms (e.g. a previous install, or user granted
     /// via System Settings before launching) — observer flips the flag
     /// immediately on `start()`.
-    func testStartFlipsFlagWhenRequiredPermissionsAlreadyGranted() {
+    func testStartFlipsFlagWhenMicrophoneIsAlreadyGranted() {
         let defaults = isolatedDefaults()
         let service = FakePermissionService(statuses: [
             .microphone: .granted,
-            .accessibility: .granted,
+            .accessibility: .pending,
         ])
         let observer = OnboardingCompletionObserver(
             permissionService: service,
@@ -71,7 +71,7 @@ final class OnboardingCompletionObserverTests: XCTestCase {
 
         service.nextRefreshStatuses = [
             .microphone: .granted,
-            .accessibility: .granted,
+            .accessibility: .pending,
         ]
         service.refresh()
 
