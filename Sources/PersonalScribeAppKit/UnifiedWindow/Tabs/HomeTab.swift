@@ -20,18 +20,21 @@ struct HomeTab: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.xl) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text("Home")
                     .font(PersonalScribeTheme.Typography.largeTitle.font)
                     .foregroundStyle(palette.primaryTextBase)
 
                 dictationCard
+                    .padding(.top, PersonalScribeTheme.Spacing.xl)
 
                 if checklist.isVisible {
                     checklistCard
+                        .padding(.top, PersonalScribeTheme.Spacing.lg)
                 }
 
                 recentTranscriptions
+                    .padding(.top, PersonalScribeTheme.Spacing.xl)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -117,21 +120,17 @@ struct HomeTab: View {
     private func checklistRow(_ item: HomeChecklistItem) -> some View {
         let palette = palette
 
-        return HStack(spacing: PersonalScribeTheme.Spacing.md) {
+        return HStack(spacing: 0) {
             Button {
                 checklist.complete(item)
             } label: {
-                Circle()
-                    .fill(Color.clear)
-                    .overlay {
-                        Circle()
-                            .strokeBorder(
-                                palette.secondaryText,
-                                lineWidth: 1.5
-                            )
-                    }
-                    .frame(width: 18, height: 18)
-                    .contentShape(Circle())
+                ZStack {
+                    Circle()
+                        .strokeBorder(palette.secondaryText, lineWidth: 1.5)
+                        .frame(width: 18, height: 18)
+                }
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Mark \(item.title) done")
@@ -158,12 +157,17 @@ struct HomeTab: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(palette.secondaryText)
                 }
+                .padding(.leading, PersonalScribeTheme.Spacing.sm)
+                .padding(.trailing, PersonalScribeTheme.Spacing.lg)
+                .padding(.vertical, PersonalScribeTheme.Spacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(item.title)
+            .accessibilityHint(item.navigationHint)
         }
-        .padding(.horizontal, PersonalScribeTheme.Spacing.lg)
-        .padding(.vertical, 8)
+        .padding(.leading, PersonalScribeTheme.Spacing.sm)
     }
 
     private var recentTranscriptions: some View {
@@ -176,9 +180,12 @@ struct HomeTab: View {
             if metrics.recentTranscriptions.isEmpty {
                 emptyStateView
             } else {
-                ForEach(metrics.recentTranscriptions, id: \.id) { entry in
-                    recentTranscriptionRow(entry)
+                VStack(spacing: PersonalScribeTheme.Spacing.sm) {
+                    ForEach(metrics.recentTranscriptions, id: \.id) { entry in
+                        recentTranscriptionRow(entry)
+                    }
                 }
+                .frame(maxWidth: .infinity)
             }
         }
     }

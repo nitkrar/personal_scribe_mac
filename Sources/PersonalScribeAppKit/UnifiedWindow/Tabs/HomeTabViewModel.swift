@@ -32,6 +32,15 @@ enum HomeChecklistItem: CaseIterable, Hashable, Sendable {
             "Different formatting per app, e.g. email vs. code · Modes"
         }
     }
+
+    var navigationHint: String {
+        switch self {
+        case .customizeShortcut:
+            "Opens Settings"
+        case .createMode:
+            "Opens Modes"
+        }
+    }
 }
 
 @MainActor
@@ -57,18 +66,13 @@ final class HomeChecklistState: ObservableObject {
         self.recordingHotkey = recordingHotkey
         var completedItems = Set(
             HomeChecklistItem.allCases.filter { item in
-                Preference(
-                    key: item.completionKey,
-                    default: false,
-                    defaults: defaults
-                ).resolve()
+                Self.completionPreference(for: item, defaults: defaults).resolve()
             }
         )
         if recordingHotkey != .default {
             completedItems.insert(.customizeShortcut)
-            Preference(
-                key: HomeChecklistItem.customizeShortcut.completionKey,
-                default: false,
+            Self.completionPreference(
+                for: .customizeShortcut,
                 defaults: defaults
             ).persist(true)
         }
@@ -129,11 +133,14 @@ final class HomeChecklistState: ObservableObject {
         guard completedItems.insert(item).inserted else {
             return
         }
-        Preference(
-            key: item.completionKey,
-            default: false,
-            defaults: defaults
-        ).persist(true)
+        Self.completionPreference(for: item, defaults: defaults).persist(true)
+    }
+
+    private static func completionPreference(
+        for item: HomeChecklistItem,
+        defaults: UserDefaults
+    ) -> Preference<Bool> {
+        Preference(key: item.completionKey, default: false, defaults: defaults)
     }
 
     isolated deinit {

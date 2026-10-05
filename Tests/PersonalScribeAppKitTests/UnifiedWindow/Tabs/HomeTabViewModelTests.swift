@@ -122,6 +122,22 @@ final class HomeTabViewModelTests: XCTestCase {
         XCTAssertTrue(checklist.completedItems.contains(.customizeShortcut))
     }
 
+    func testManualShortcutCompletionSurvivesLaterChangeBackToDefaultHotkey() {
+        let defaults = Self.ephemeralDefaults()
+        let checklist = HomeChecklistState(defaults: defaults)
+
+        checklist.complete(.customizeShortcut)
+        Self.customHotkey.persist(to: defaults)
+        HotkeyPreference.default.persist(to: defaults)
+
+        XCTAssertTrue(checklist.completedItems.contains(.customizeShortcut))
+        XCTAssertTrue(
+            HomeChecklistState(defaults: defaults).completedItems.contains(
+                .customizeShortcut
+            )
+        )
+    }
+
     func testChecklistActionsRouteShortcutAndModeRows() {
         var destinations: [AppTab] = []
         let viewModel = HomeTabViewModel(
