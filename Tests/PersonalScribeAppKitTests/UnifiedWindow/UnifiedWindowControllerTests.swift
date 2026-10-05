@@ -7,7 +7,7 @@ import XCTest
 @testable import PersonalScribeAppKit
 
 /// Tests for `UnifiedWindowController` — bug #041 regression guards
-/// covering window-space pinning + off-screen-frame reconciliation.
+/// covering window-space pinning + main-screen placement.
 @MainActor
 final class UnifiedWindowControllerTests: XCTestCase {
 
@@ -146,134 +146,52 @@ final class UnifiedWindowControllerTests: XCTestCase {
         )
     }
 
-    func testWindowMoveLogCapturesPlacementContext() async throws {
-        let sink = InMemoryTestSink()
-        let logger = PersonalScribeLogger(
-            category: PersonalScribeLogCategory.ui,
-            reporter: DiagnosticsReporter(sinks: [sink])
-        )
-        let controller = Self.makeController(logger: logger)
-        let window = try XCTUnwrap(controller.window)
+    // MARK: - Main-screen placement
 
-        controller.windowDidMove(
-            Notification(name: NSWindow.didMoveNotification, object: window)
-        )
-
-        let event = await Self.waitForWindowFrameEvent(in: sink)
-        XCTAssertEqual(event?.level, .debug)
-        XCTAssertTrue(event?.message.contains("event=did_move") == true)
-        XCTAssertTrue(event?.message.contains("source=system") == true)
-        XCTAssertTrue(event?.message.contains("old=") == true)
-        XCTAssertTrue(event?.message.contains("new=") == true)
-        XCTAssertTrue(event?.message.contains("windowScreenFrame=") == true)
-        XCTAssertTrue(event?.message.contains("mouseScreenFrame=") == true)
-        XCTAssertTrue(event?.message.contains("mainScreenFrame=") == true)
-        XCTAssertTrue(event?.message.contains("screens=[") == true)
-        XCTAssertTrue(event?.message.contains("isOnActiveSpace=") == true)
-        XCTAssertTrue(event?.message.contains("collectionBehavior=") == true)
-    }
-
-    // MARK: - Pure-function tests for `reconciledFrame(for:activeScreenVisibleFrame:)`
-
-    func testReconciledFrameReturnsSameFrameWhenMidpointInsideActiveScreen() {
-        let screen = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+    func testFrameForShowingReturnsSameFrameWhenFullyInsideMainScreen() {
+        let mainScreen = NSRect(x: 0, y: 0, width: 1920, height: 1080)
         let window = NSRect(x: 200, y: 200, width: 800, height: 600)
         XCTAssertEqual(
-            UnifiedWindowController.reconciledFrame(
-                for: window,
-                activeScreenVisibleFrame: screen
+            UnifiedWindowController.frameForShowing(
+                window,
+                mainScreenVisibleFrame: mainScreen
             ),
             window
         )
     }
 
-    func testReconciledFrameCentersOverActiveScreenWhenMidpointOffscreen() {
-        // Simulate: saved window frame lives on a former full-screen
-        // space / disconnected monitor at (-2000, -2000). Active screen
-        // is a single 1920x1080 display at origin.
-        let activeScreen = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+    func testFrameForShowingCentersWindowThatIsNotFullyInsideMainScreen() {
+        let mainScreen = NSRect(x: 0, y: 0, width: 1920, height: 1080)
+        let partiallyOutsideWindow = NSRect(x: 1500, y: 200, width: 800, height: 600)
+
+        let frame = UnifiedWindowController.frameForShowing(
+            partiallyOutsideWindow,
+            mainScreenVisibleFrame: mainScreen
+        )
+
+        XCTAssertEqual(frame.size, partiallyOutsideWindow.size)
+        XCTAssertEqual(frame.midX, mainScreen.midX, accuracy: 0.5)
+        XCTAssertEqual(frame.midY, mainScreen.midY, accuracy: 0.5)
+    }
+
+    func testFrameForShowingCentersWindowOutsideMainScreen() {
+        let mainScreen = NSRect(x: 0, y: 0, width: 1920, height: 1080)
         let strandedWindow = NSRect(x: -2000, y: -2000, width: 800, height: 600)
 
-        let reconciled = UnifiedWindowController.reconciledFrame(
-            for: strandedWindow,
-            activeScreenVisibleFrame: activeScreen
+        let frame = UnifiedWindowController.frameForShowing(
+            strandedWindow,
+            mainScreenVisibleFrame: mainScreen
         )
 
-        // Size preserved.
-        XCTAssertEqual(reconciled.size, strandedWindow.size)
-        // Centered on the active screen.
-        XCTAssertEqual(reconciled.midX, activeScreen.midX, accuracy: 0.5)
-        XCTAssertEqual(reconciled.midY, activeScreen.midY, accuracy: 0.5)
-        // Midpoint is now inside the active screen.
-        XCTAssertTrue(activeScreen.contains(NSPoint(x: reconciled.midX, y: reconciled.midY)))
-    }
-
-    func testReconciledFrameCentersOnMultiMonitorSecondaryDisplay() {
-        // User drags cursor to a secondary display on the right; the
-        // saved window frame is stranded on the primary display.
-        let secondaryScreen = NSRect(x: 1920, y: 0, width: 2560, height: 1440)
-        let strandedWindow = NSRect(x: 100, y: 100, width: 800, height: 600)
-
-        let reconciled = UnifiedWindowController.reconciledFrame(
-            for: strandedWindow,
-            activeScreenVisibleFrame: secondaryScreen
-        )
-
-        XCTAssertEqual(reconciled.midX, secondaryScreen.midX, accuracy: 0.5)
-        XCTAssertEqual(reconciled.midY, secondaryScreen.midY, accuracy: 0.5)
-    }
-
-    func testReconciledFrameKeepsWindowContainedOnNonActiveDisplay() {
-        let primaryScreen = NSRect(x: 0, y: 0, width: 1920, height: 1080)
-        let secondaryScreen = NSRect(x: 1920, y: 0, width: 2560, height: 1440)
-        let window = NSRect(x: 2200, y: 200, width: 800, height: 600)
-
-        let reconciled = UnifiedWindowController.reconciledFrame(
-            for: window,
-            activeScreenVisibleFrame: primaryScreen,
-            availableScreenVisibleFrames: [primaryScreen, secondaryScreen]
-        )
-
-        XCTAssertEqual(reconciled, window)
-    }
-
-    func testReconciledFrameContainsPartiallyOffscreenWindowOnItsDisplay() {
-        let primaryScreen = NSRect(x: 0, y: 0, width: 1920, height: 1080)
-        let secondaryScreen = NSRect(x: 1920, y: 0, width: 2560, height: 1440)
-        let window = NSRect(x: 4200, y: 200, width: 800, height: 600)
-
-        let reconciled = UnifiedWindowController.reconciledFrame(
-            for: window,
-            activeScreenVisibleFrame: primaryScreen,
-            availableScreenVisibleFrames: [primaryScreen, secondaryScreen]
-        )
-
-        XCTAssertTrue(secondaryScreen.contains(reconciled))
-        XCTAssertEqual(reconciled.size, window.size)
-    }
-
-    func testReconciledFrameReturnsOriginalWhenNoScreenAvailable() {
-        // Defensive: if AppKit reports no active screen (headless CI,
-        // transient display reconfiguration) we must not produce a
-        // NaN-centered frame — pass through unchanged.
-        let window = NSRect(x: 100, y: 200, width: 800, height: 600)
-        XCTAssertEqual(
-            UnifiedWindowController.reconciledFrame(
-                for: window,
-                activeScreenVisibleFrame: .zero
-            ),
-            window
-        )
+        XCTAssertEqual(frame.size, strandedWindow.size)
+        XCTAssertEqual(frame.midX, mainScreen.midX, accuracy: 0.5)
+        XCTAssertEqual(frame.midY, mainScreen.midY, accuracy: 0.5)
     }
 
     // MARK: - Helpers
 
     @MainActor
-    private static func makeController(
-        logger: PersonalScribeLogger = PersonalScribeLogger.testing(
-            category: PersonalScribeLogCategory.ui
-        )
-    ) -> UnifiedWindowController {
+    private static func makeController() -> UnifiedWindowController {
         let defaults = ephemeralDefaults()
         let modelService = ActiveModelService(
             activeIDsPreference: Preference<[ModelKind: String]>(
@@ -293,23 +211,8 @@ final class UnifiedWindowControllerTests: XCTestCase {
             ),
             permissionService: StubPermissionService(),
             inputDeviceProvider: NoOpAudioInputDeviceProvider(),
-            modelService: modelService,
-            logger: logger
+            modelService: modelService
         )
-    }
-
-    private static func waitForWindowFrameEvent(
-        in sink: InMemoryTestSink
-    ) async -> RedactedDiagnosticsEvent? {
-        for _ in 0..<100 {
-            if let event = await sink.snapshot().first(where: {
-                $0.message.contains("unified_window_frame")
-            }) {
-                return event
-            }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return nil
     }
 
     private static func ephemeralDefaults() -> UserDefaults {

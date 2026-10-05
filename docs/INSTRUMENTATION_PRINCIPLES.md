@@ -144,26 +144,6 @@ Privacy reminder for paste logs:
 - Log counts, enum reasons, PID, and bundle ID only
 - Never log chunk text, final transcript text, or clipboard contents
 
-## Unified-window placement trace
-
-Unified-window placement events use `.debug` because `windowDidMove` can fire
-repeatedly during a drag. Every line starts with `unified_window_frame` and
-records the event, code path, source (`ours` or `system`), old/new window
-frames, window/mouse/main screen geometry, every attached screen, active-space
-membership, and collection behavior.
-
-After reproducing a placement problem, collect the complete sequence from
-`~/Library/Application Support/personal_scribe/logs/debug.log`:
-
-```sh
-grep 'unified_window_frame' "$HOME/Library/Application Support/personal_scribe/logs/debug.log"
-```
-
-The relevant events are `show_begin`, `reconcile_unchanged`,
-`reconcile_skipped_visible`, `set_frame_begin`, `set_frame_end`, `show_end`,
-`move_to_active_space_removed`, `recover_begin`, `recover_skipped`,
-`recover_end`, `did_move`, and `did_change_screen`.
-
 ---
 
 ## How to enforce

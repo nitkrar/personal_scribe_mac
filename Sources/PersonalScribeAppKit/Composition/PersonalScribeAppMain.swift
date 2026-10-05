@@ -271,8 +271,7 @@ struct PersonalScribeAppMain: App {
                     },
                     openDiagnosticsWindow: {
                         diagnosticsOverlayController.openWindow()
-                    },
-                    logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
+                    }
                 )
             }
         )
