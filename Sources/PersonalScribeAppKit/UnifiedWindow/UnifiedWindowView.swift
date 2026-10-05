@@ -151,7 +151,7 @@ struct UnifiedWindowView: View {
     /// Sidebar row with a champagne left-accent bar on the active tab.
     @ViewBuilder
     private func sidebarRow(for tab: AppTab) -> some View {
-        let isActive = model.activeTab == tab
+        let isActive = !model.isShowingSetup && model.activeTab == tab
         let accentColor = PersonalScribeTheme.Palette.for(scheme: colorScheme).brandChampagne
         HStack(spacing: 0) {
             // Champagne accent bar — 3pt wide, full row height.

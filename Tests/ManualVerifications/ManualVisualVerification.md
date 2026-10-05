@@ -7,6 +7,7 @@
 - [ ] **MV-HOME-4 (pending setup items)** With neither setup item complete, confirm Get started contains only Customize your shortcut and Create a mode in one compact divided card. Click each open circle in turn and confirm its row disappears immediately; after the last row disappears, confirm the card disappears and stays gone after relaunch.
 - [ ] **MV-HOME-5 (automatic completion, navigation, and dismissal)** Confirm saving a non-default shortcut removes Customize your shortcut, creating a custom mode removes Create a mode, and keeping the default shortcut still allows manual completion. Confirm clicking each row outside its circle opens Settings → Shortcuts or Modes. Click × while items remain and confirm the card stays dismissed after relaunch.
 - [ ] **MV-HOME-6 (empty history)** With no transcript history and both setup items pending, confirm the Get started card and the Recent transcriptions empty state render without clipping.
+- [ ] **MV-HOME-7 (long titles)** With a recent transcription whose title fills the row, shrink the window to 760×520 and confirm the title truncates while the relative time (e.g. "12 min ago") stays whole.
 
 SwiftUI views cannot be runtime-verified via XCTest. Every foundation
 component ships with a `#Preview` in its source file. The checklist
@@ -674,7 +675,7 @@ below once per dogfood cycle:
   and confirm the unified window opens on Get started step 1/5. With
   `OnboardingCompleted` already true, relaunch and confirm Home opens
   without a Get started row. During setup, Get started — not Home — is
-  the selected sidebar row. At the 760×520 minimum window size, the step
+  the selected sidebar row, and Home shows no accent bar. At the 760×520 minimum window size, the step
   counter sits above a single-line, connected stepper and no setup content,
   sidebar, or footer control clips outside the window.
 - [ ] **MV-ONBOARDING-2** On Permissions, confirm pending Microphone

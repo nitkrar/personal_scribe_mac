@@ -279,6 +279,7 @@ struct HomeTab: View {
                 .font(PersonalScribeTheme.Typography.caption.font)
                 .foregroundStyle(palette.secondaryText)
                 .lineLimit(1)
+                .fixedSize()
             }
 
             Text(TranscriptRow.Formatters.collapseWhitespace(entry.text))
