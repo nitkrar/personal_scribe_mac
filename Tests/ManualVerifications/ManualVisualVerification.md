@@ -8,6 +8,7 @@
 - [ ] **MV-HOME-5 (automatic completion, navigation, and dismissal)** Confirm saving a non-default shortcut removes Customize your shortcut, creating a custom mode removes Create a mode, and keeping the default shortcut still allows manual completion. Confirm clicking each row outside its circle opens Settings → Shortcuts or Modes. Click × while items remain and confirm the card stays dismissed after relaunch.
 - [ ] **MV-HOME-6 (empty history)** With no transcript history and both setup items pending, confirm the Get started card and the Recent transcriptions empty state render without clipping.
 - [ ] **MV-HOME-7 (long titles)** With a recent transcription whose title fills the row, shrink the window to 760×520 and confirm the title truncates while the relative time (e.g. "12 min ago") stays whole.
+- [ ] **MV-HOME-8 (launch load)** With transcript history, relaunch with Home open. Confirm the metric values show "—" until data arrives and the "No transcriptions yet" empty state never flashes before the recent list.
 
 SwiftUI views cannot be runtime-verified via XCTest. Every foundation
 component ships with a `#Preview` in its source file. The checklist

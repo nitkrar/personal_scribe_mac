@@ -91,18 +91,18 @@ struct HomeTab: View {
             HStack(spacing: 0) {
                 metricCell(
                     label: "Words per minute avg",
-                    value: formattedWPM,
+                    value: loadedValue(formattedWPM),
                     suffix: "wpm",
                     leadingPadding: 0
                 )
                 metricDivider
-                metricCell(label: "Words", value: formattedWords)
+                metricCell(label: "Words", value: loadedValue(formattedWords))
                 metricDivider
-                metricCell(label: "Recordings", value: formattedRecordings)
+                metricCell(label: "Recordings", value: loadedValue(formattedRecordings))
                 metricDivider
                 metricCell(
                     label: "Time saved",
-                    value: Self.timeSavedText(minutes: metrics.rollups.minutesSaved)
+                    value: loadedValue(Self.timeSavedText(minutes: metrics.rollups.minutesSaved))
                 )
             }
         }
@@ -207,7 +207,9 @@ struct HomeTab: View {
                 .foregroundStyle(palette.secondaryText)
                 .textCase(.uppercase)
 
-            if metrics.recentTranscriptions.isEmpty {
+            if !metrics.hasAttemptedInitialLoad {
+                EmptyView()
+            } else if metrics.recentTranscriptions.isEmpty {
                 emptyStateView
             } else {
                 VStack(spacing: PersonalScribeTheme.Spacing.sm) {
@@ -367,6 +369,10 @@ struct HomeTab: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .contentShape(Capsule())
+    }
+
+    private func loadedValue(_ value: String) -> String {
+        metrics.hasAttemptedInitialLoad ? value : "—"
     }
 
     private var formattedWPM: String {

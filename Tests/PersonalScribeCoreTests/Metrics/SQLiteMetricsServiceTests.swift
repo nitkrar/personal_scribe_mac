@@ -236,6 +236,44 @@ final class MetricsSnapshotStoreTests: XCTestCase {
         XCTAssertFalse(store.isRefreshing)
     }
 
+    func testStoreMarksInitialLoadAttemptedOnlyAfterFirstRefreshSettles() async throws {
+        for outcome in [false, true] {
+            let calendar = makeMetricsTestCalendar()
+            let referenceDate = Date(timeIntervalSince1970: 600_000)
+            let window = MetricsRange.lastSevenDays.window(anchoredAt: referenceDate, calendar: calendar)
+            let metricsService = ControllableMetricsService()
+            let store = MetricsSnapshotStore(
+                reader: metricsService,
+                notificationCenter: NotificationCenter(),
+                calendar: calendar,
+                referenceDateProvider: { referenceDate },
+                logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app)
+            )
+            XCTAssertFalse(store.hasAttemptedInitialLoad)
+
+            let refresh = Task { @MainActor in
+                await store.refresh(reason: .initialLoad)
+            }
+            try await waitForCondition(description: "initial load request") {
+                await metricsService.loadRequestCount() == 1
+            }
+            XCTAssertFalse(store.hasAttemptedInitialLoad, "still loading")
+
+            if outcome {
+                let snapshot = makeMetricsSnapshot(
+                    window: window, recordings: 0, words: 0, minutesSaved: 0, averageWPM: 0,
+                    recentTranscriptions: [], lastUpdatedAt: referenceDate, lastRefreshReason: .initialLoad
+                )
+                await metricsService.completeNextLoad(with: .success(snapshot))
+            } else {
+                await metricsService.completeNextLoad(with: .failure(StubReadError()))
+            }
+            _ = await refresh.value
+
+            XCTAssertTrue(store.hasAttemptedInitialLoad, "success=\(outcome)")
+        }
+    }
+
     func testStoreCoalescesOverlappingRefreshRequests() async throws {
         let notificationCenter = NotificationCenter()
         let calendar = makeMetricsTestCalendar()

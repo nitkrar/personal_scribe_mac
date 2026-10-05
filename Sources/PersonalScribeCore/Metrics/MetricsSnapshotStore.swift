@@ -8,6 +8,8 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
     @Published public private(set) var lastUpdatedAt: Date?
     @Published public private(set) var lastRefreshReason: MetricsRefreshReason?
     @Published public private(set) var isRefreshing = false
+    /// False until the first refresh settles, so views can tell "not loaded" from "empty".
+    @Published public private(set) var hasAttemptedInitialLoad = false
     @Published public private(set) var selectedRange: MetricsRange
 
     private let reader: any MetricsReading
@@ -72,6 +74,7 @@ public final class MetricsSnapshotStore: ObservableObject, @unchecked Sendable {
             } catch {
                 logger.error("Failed to refresh metrics snapshot", error: error)
             }
+            hasAttemptedInitialLoad = true
 
             activeReason = pendingRefreshReason
         }
