@@ -236,6 +236,9 @@ public final class HomeTabViewModel: ObservableObject {
 
     private let openShortcuts: @MainActor () -> Void
     private let openModes: @MainActor () -> Void
+    private let openPermissions: @MainActor () -> Void
+    private let openModels: @MainActor () -> Void
+    private let openTryShortcut: @MainActor () -> Void
     private let setupFlow: SetupFlowState?
     private var setupFlowObservation: AnyCancellable?
 
@@ -251,7 +254,10 @@ public final class HomeTabViewModel: ObservableObject {
             checklist: nil,
             setupFlow: nil,
             openShortcuts: openShortcuts,
-            openModes: openModes
+            openModes: openModes,
+            openPermissions: openShortcuts,
+            openModels: openShortcuts,
+            openTryShortcut: openShortcuts
         )
     }
 
@@ -261,11 +267,17 @@ public final class HomeTabViewModel: ObservableObject {
         checklist: HomeChecklistState? = nil,
         setupFlow: SetupFlowState? = nil,
         openShortcuts: @escaping @MainActor () -> Void = {},
-        openModes: @escaping @MainActor () -> Void = {}
+        openModes: @escaping @MainActor () -> Void = {},
+        openPermissions: @escaping @MainActor () -> Void = {},
+        openModels: @escaping @MainActor () -> Void = {},
+        openTryShortcut: @escaping @MainActor () -> Void = {}
     ) {
         self.metrics = metrics
         self.openShortcuts = openShortcuts
         self.openModes = openModes
+        self.openPermissions = openPermissions
+        self.openModels = openModels
+        self.openTryShortcut = openTryShortcut
         self.checklist = checklist ?? HomeChecklistState(defaults: defaults)
         self.setupFlow = setupFlow
         setupFlowObservation = setupFlow?.objectWillChange.sink { [weak self] _ in
@@ -295,8 +307,12 @@ public final class HomeTabViewModel: ObservableObject {
             openShortcuts()
         case .createMode:
             openModes()
-        case .grantPermissions, .downloadModel, .tryShortcut:
-            openShortcuts()
+        case .grantPermissions:
+            openPermissions()
+        case .downloadModel:
+            openModels()
+        case .tryShortcut:
+            openTryShortcut()
         }
     }
 }

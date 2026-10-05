@@ -277,11 +277,15 @@ struct UnifiedWindowView: View {
                 permissionService: permissionService,
                 shortcutsNavigationRequest: model.settingsShortcutsRequest,
                 modelsNavigationRequest: model.settingsModelsRequest,
+                permissionsNavigationRequest: model.settingsPermissionsRequest,
                 onConsumeShortcutsNavigationRequest: {
                     model.consumeSettingsShortcutsRequest($0)
                 },
                 onConsumeModelsNavigationRequest: {
                     model.consumeSettingsModelsRequest($0)
+                },
+                onConsumePermissionsNavigationRequest: {
+                    model.consumeSettingsPermissionsRequest($0)
                 },
                 menuBarVisibilityProvider: menuBarVisibilityProvider,
                 menuBarVisibilitySetter: menuBarVisibilitySetter,

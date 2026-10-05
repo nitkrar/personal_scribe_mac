@@ -120,6 +120,16 @@ final class UnifiedWindowController: NSWindowController {
             },
             openModes: {
                 model.setActiveTab(.modes)
+            },
+            openPermissions: {
+                model.openSettingsPermissions()
+            },
+            openModels: {
+                model.openSettingsModels()
+            },
+            openTryShortcut: {
+                resolvedSetupFlow.reopen(at: .tryShortcut)
+                model.showSetup()
             }
         )
         self.transcriptionsViewModel = TranscriptionsTabViewModel(

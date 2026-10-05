@@ -139,20 +139,26 @@ final class HomeTabViewModelTests: XCTestCase {
     }
 
     func testChecklistActionsRouteShortcutAndModeRows() {
-        var destinations: [AppTab] = []
+        var destinations: [String] = []
         let viewModel = HomeTabViewModel(
             metrics: MetricsSnapshotStore(
                 reader: EmptyMetricsReading(),
                 logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
             ),
-            openShortcuts: { destinations.append(.settings) },
-            openModes: { destinations.append(.modes) }
+            openShortcuts: { destinations.append("shortcuts") },
+            openModes: { destinations.append("modes") },
+            openPermissions: { destinations.append("permissions") },
+            openModels: { destinations.append("models") },
+            openTryShortcut: { destinations.append("try") }
         )
 
         viewModel.performChecklistAction(for: .customizeShortcut)
         viewModel.performChecklistAction(for: .createMode)
+        viewModel.performChecklistAction(for: .grantPermissions)
+        viewModel.performChecklistAction(for: .downloadModel)
+        viewModel.performChecklistAction(for: .tryShortcut)
 
-        XCTAssertEqual(destinations, [.settings, .modes])
+        XCTAssertEqual(destinations, ["shortcuts", "modes", "permissions", "models", "try"])
     }
 
     func testSetupItemsDoNotAppearUntilMarkedApplicable() {

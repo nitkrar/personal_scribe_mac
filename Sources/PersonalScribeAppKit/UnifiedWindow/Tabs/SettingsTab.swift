@@ -10,8 +10,10 @@ public struct SettingsTab: View {
     private let permissionService: any PermissionService
     private let shortcutsNavigationRequest: Int?
     private let modelsNavigationRequest: Int?
+    private let permissionsNavigationRequest: Int?
     private let onConsumeShortcutsNavigationRequest: @MainActor (Int?) -> Void
     private let onConsumeModelsNavigationRequest: @MainActor (Int?) -> Void
+    private let onConsumePermissionsNavigationRequest: @MainActor (Int?) -> Void
     private let menuBarVisibilityProvider: @MainActor () -> Bool
     private let menuBarVisibilitySetter: @MainActor (Bool) -> Void
     private let openDiagnosticsWindow: @MainActor () -> Void
@@ -21,8 +23,10 @@ public struct SettingsTab: View {
         permissionService: any PermissionService,
         shortcutsNavigationRequest: Int? = nil,
         modelsNavigationRequest: Int? = nil,
+        permissionsNavigationRequest: Int? = nil,
         onConsumeShortcutsNavigationRequest: @escaping @MainActor (Int?) -> Void = { _ in },
         onConsumeModelsNavigationRequest: @escaping @MainActor (Int?) -> Void = { _ in },
+        onConsumePermissionsNavigationRequest: @escaping @MainActor (Int?) -> Void = { _ in },
         // Default to a no-op + always-visible reading. Production
         // wiring lives in `PersonalScribeAppMain` and points at
         // `StatusItemControllerHost.{isMenuBarVisible, setMenuBarVisible}`.
@@ -36,8 +40,10 @@ public struct SettingsTab: View {
         self.permissionService = permissionService
         self.shortcutsNavigationRequest = shortcutsNavigationRequest
         self.modelsNavigationRequest = modelsNavigationRequest
+        self.permissionsNavigationRequest = permissionsNavigationRequest
         self.onConsumeShortcutsNavigationRequest = onConsumeShortcutsNavigationRequest
         self.onConsumeModelsNavigationRequest = onConsumeModelsNavigationRequest
+        self.onConsumePermissionsNavigationRequest = onConsumePermissionsNavigationRequest
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.openDiagnosticsWindow = openDiagnosticsWindow
@@ -98,8 +104,15 @@ public struct SettingsTab: View {
             selectedSubTab = .aiModels
             onConsumeModelsNavigationRequest(modelsNavigationRequest)
         }
+        .onChange(of: permissionsNavigationRequest) {
+            selectedSubTab = .permissions
+            onConsumePermissionsNavigationRequest(permissionsNavigationRequest)
+        }
         .onAppear {
-            if modelsNavigationRequest != nil {
+            if permissionsNavigationRequest != nil {
+                selectedSubTab = .permissions
+                onConsumePermissionsNavigationRequest(permissionsNavigationRequest)
+            } else if modelsNavigationRequest != nil {
                 selectedSubTab = .aiModels
                 onConsumeModelsNavigationRequest(modelsNavigationRequest)
             } else if shortcutsNavigationRequest != nil {

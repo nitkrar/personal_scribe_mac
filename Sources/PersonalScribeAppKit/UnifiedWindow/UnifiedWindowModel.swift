@@ -14,8 +14,10 @@ public final class UnifiedWindowModel: ObservableObject {
     @Published private(set) var isShowingSetup = false
     @Published public private(set) var settingsShortcutsRequest: Int?
     @Published private(set) var settingsModelsRequest: Int?
+    @Published private(set) var settingsPermissionsRequest: Int?
     private var nextSettingsShortcutsRequest = 0
     private var nextSettingsModelsRequest = 0
+    private var nextSettingsPermissionsRequest = 0
 
     public init(initialTab: AppTab = .home) {
         self.activeTab = initialTab
@@ -44,6 +46,13 @@ public final class UnifiedWindowModel: ObservableObject {
         settingsModelsRequest = nextSettingsModelsRequest
     }
 
+    func openSettingsPermissions() {
+        activeTab = .settings
+        isShowingSetup = false
+        nextSettingsPermissionsRequest += 1
+        settingsPermissionsRequest = nextSettingsPermissionsRequest
+    }
+
     public func consumeSettingsShortcutsRequest(_ request: Int?) {
         guard settingsShortcutsRequest == request else {
             return
@@ -54,5 +63,10 @@ public final class UnifiedWindowModel: ObservableObject {
     func consumeSettingsModelsRequest(_ request: Int?) {
         guard settingsModelsRequest == request else { return }
         settingsModelsRequest = nil
+    }
+
+    func consumeSettingsPermissionsRequest(_ request: Int?) {
+        guard settingsPermissionsRequest == request else { return }
+        settingsPermissionsRequest = nil
     }
 }
