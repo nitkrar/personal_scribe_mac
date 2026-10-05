@@ -60,9 +60,6 @@ public actor StandaloneAudioLevelMonitor: AudioLevelMonitoring {
             engineDriver.prepare()
             try engineDriver.start()
             isRunning = true
-            continuation.onTermination = { [weak self] _ in
-                Task { await self?.stop() }
-            }
             return stream
         } catch {
             stopInternal()
