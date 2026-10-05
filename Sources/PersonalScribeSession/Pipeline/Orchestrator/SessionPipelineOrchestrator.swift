@@ -1660,7 +1660,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         _ result: TranscriptionResult,
         replayBuffers: [PCMBuffer]
     ) async throws {
-        guard let persistenceHandler else {
+        // Empty transcripts stay out of history and stats.
+        guard let persistenceHandler,
+              !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
             return
         }
 

@@ -2435,6 +2435,33 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         XCTAssertTrue(finals.isEmpty)
     }
 
+    func testEmptyTranscriptIsNotPersisted() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
+        let persisted = PersistedEntries()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(
+                    text: " \n ",
+                    audioDuration: .seconds(1),
+                    processingDuration: .milliseconds(100)
+                )
+            ),
+            persistenceHandler: { entry in
+                await persisted.append(entry)
+            }
+        )
+
+        await orchestrator.toggleCapture()
+        await orchestrator.toggleCapture()
+        try await Task.sleep(for: .milliseconds(100))
+
+        let snapshot = await orchestrator.snapshot()
+        let count = await persisted.count()
+        XCTAssertEqual(snapshot.sessionState, .completed)
+        XCTAssertEqual(count, 0)
+    }
+
     func testRecipeWithCleanupDisabledPersistsRawTranscript() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.25)
         let persisted = PersistedEntries()
