@@ -49,13 +49,14 @@ struct UnifiedWindowForegroundRecoveryState: Equatable {
 /// `AppTheme` drives the `NSAppearance` (Light/Dark/System); the
 /// `WindowTint` stays as a light-mode brand flavor (warm/neutral).
 @MainActor
-final class UnifiedWindowController: NSWindowController {
+final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
     private let defaults: UserDefaults
     private let notificationCenter: NotificationCenter
     private let workspaceNotificationCenter: NotificationCenter
     private let model: UnifiedWindowModel
     private let hostingController: NSHostingController<UnifiedWindowView>
     private let homeViewModel: HomeTabViewModel
+    private let homeChecklist: HomeChecklistState
     private let transcriptionsViewModel: TranscriptionsTabViewModel
     private let offlineTranscriptionViewModel: OfflineTranscriptionTabViewModel
     private let modesViewModel: ModesListViewModel
@@ -94,7 +95,13 @@ final class UnifiedWindowController: NSWindowController {
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
         openDiagnosticsWindow: @escaping @MainActor () -> Void = {},
-        prepareActiveModel: @escaping @MainActor () async -> Void = {}
+        prepareActiveModel: @escaping @MainActor () async -> Void = {},
+        currentSessionSnapshot: @escaping @Sendable () async -> SessionSnapshot = {
+            SessionSnapshot()
+        },
+        sessionSnapshots: @escaping @Sendable () async -> AsyncStream<SessionSnapshot> = {
+            AsyncStream { $0.finish() }
+        }
     ) {
         self.defaults = defaults
         self.notificationCenter = notificationCenter
@@ -110,6 +117,7 @@ final class UnifiedWindowController: NSWindowController {
             checklist: resolvedChecklist
         )
         self.setupFlow = resolvedSetupFlow
+        self.homeChecklist = resolvedChecklist
         self.homeViewModel = HomeTabViewModel(
             metrics: metricsStore,
             defaults: defaults,
@@ -156,7 +164,9 @@ final class UnifiedWindowController: NSWindowController {
         self.setupMicrophoneViewModel = SetupMicrophoneViewModel(
             inputDeviceProvider: inputDeviceProvider,
             levelMonitor: setupLevelMonitor
-                ?? StandaloneAudioLevelMonitor(inputDeviceProvider: inputDeviceProvider)
+                ?? StandaloneAudioLevelMonitor(inputDeviceProvider: inputDeviceProvider),
+            currentSessionSnapshot: currentSessionSnapshot,
+            sessionSnapshots: sessionSnapshots
         )
         self.setupModelViewModel = SetupModelViewModel(
             service: modelService,
@@ -177,12 +187,12 @@ final class UnifiedWindowController: NSWindowController {
             setupPermissionsViewModel: setupPermissionsViewModel,
             setupMicrophoneViewModel: setupMicrophoneViewModel,
             setupModelViewModel: setupModelViewModel,
+            homeChecklist: resolvedChecklist,
             permissionService: permissionService,
             defaults: defaults,
             menuBarVisibilityProvider: menuBarVisibilityProvider,
             menuBarVisibilitySetter: menuBarVisibilitySetter,
-            openDiagnosticsWindow: openDiagnosticsWindow,
-            hotkey: HotkeyPreference.resolve(from: defaults)
+            openDiagnosticsWindow: openDiagnosticsWindow
         )
         let hostingController = NSHostingController(rootView: rootView)
         self.hostingController = hostingController
@@ -213,6 +223,7 @@ final class UnifiedWindowController: NSWindowController {
         window.collectionBehavior = [.fullScreenAuxiliary]
 
         super.init(window: window)
+        window.delegate = self
 
         windowTintObserver = notificationCenter.addObserver(
             forName: UserDefaults.didChangeNotification,
@@ -253,6 +264,7 @@ final class UnifiedWindowController: NSWindowController {
                 self?.recoverForegroundIfNeeded()
             }
         }
+
     }
 
     @available(*, unavailable)
@@ -306,6 +318,12 @@ final class UnifiedWindowController: NSWindowController {
         NSApplication.shared.activate(ignoringOtherApps: true)
         DispatchQueue.main.async { [weak window] in
             window?.collectionBehavior.remove(.moveToActiveSpace)
+        }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        Task { @MainActor [weak self] in
+            await self?.setupMicrophoneViewModel.disappear()
         }
     }
 
@@ -388,12 +406,12 @@ final class UnifiedWindowController: NSWindowController {
             setupPermissionsViewModel: setupPermissionsViewModel,
             setupMicrophoneViewModel: setupMicrophoneViewModel,
             setupModelViewModel: setupModelViewModel,
+            homeChecklist: homeChecklist,
             permissionService: permissionService,
             defaults: defaults,
             menuBarVisibilityProvider: menuBarVisibilityProvider,
             menuBarVisibilitySetter: menuBarVisibilitySetter,
-            openDiagnosticsWindow: openDiagnosticsWindow,
-            hotkey: HotkeyPreference.resolve(from: defaults)
+            openDiagnosticsWindow: openDiagnosticsWindow
         )
     }
 

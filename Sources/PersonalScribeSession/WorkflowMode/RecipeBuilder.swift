@@ -58,6 +58,9 @@ public final class RecipeBuilder {
             streamingBehavior: streamingBehavior,
             streamingDescriptor: streamingDescriptor
         )
+        let preparationModelDescriptorID = try mode.processors.first.map {
+            try preparationDescriptor(for: $0).id
+        }
         return BoundRecipe(
             recipeID: mode.id,
             recipeName: mode.name,
@@ -67,7 +70,8 @@ public final class RecipeBuilder {
             outputSinks: outputSinks,
             streamingBehavior: streamingBehavior,
             streamingSecondPassTranscriber: streamingSecondPassTranscriber,
-            cleanupEnabled: ParameterResolver.resolve(mode.cleanup, from: defaults)
+            cleanupEnabled: ParameterResolver.resolve(mode.cleanup, from: defaults),
+            preparationModelDescriptorID: preparationModelDescriptorID
         )
     }
 
@@ -238,6 +242,16 @@ public final class RecipeBuilder {
             }
         }
         return nil
+    }
+
+    private func preparationDescriptor(for processor: ProcessorSpec) throws -> ModelDescriptor {
+        switch processor {
+        case .transcriber(let kind, let descriptorID),
+             .streamingTranscriber(let kind, let descriptorID):
+            return try resolveDescriptor(for: kind, pinnedID: descriptorID)
+        case .diarizedTurns(_, let transcriberKind, let descriptorID, _):
+            return try resolveDescriptor(for: transcriberKind, pinnedID: descriptorID)
+        }
     }
 }
 

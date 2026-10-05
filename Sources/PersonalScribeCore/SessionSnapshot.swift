@@ -7,6 +7,7 @@ public struct SessionSnapshot: Sendable, Equatable {
     public var lastCompletedResult: TranscriptionResult?
     public var recordingDuration: Duration?
     public var modelDownloadProgress: ModelDownloadProgress?
+    public var modelDownloadDescriptorID: String?
     public var reportedError: ReportedError?
     /// Non-terminal operational notice for a streaming session that
     /// keeps recording after the live transcript path fails.
@@ -40,6 +41,7 @@ public struct SessionSnapshot: Sendable, Equatable {
         lastCompletedResult: TranscriptionResult? = nil,
         recordingDuration: Duration? = nil,
         modelDownloadProgress: ModelDownloadProgress? = nil,
+        modelDownloadDescriptorID: String? = nil,
         reportedError: ReportedError? = nil,
         liveStreamingFallbackNotice: String? = nil,
         isStreamingSession: Bool = false,
@@ -55,6 +57,7 @@ public struct SessionSnapshot: Sendable, Equatable {
         self.lastCompletedResult = lastCompletedResult
         self.recordingDuration = recordingDuration
         self.modelDownloadProgress = modelDownloadProgress
+        self.modelDownloadDescriptorID = modelDownloadDescriptorID
         self.reportedError = reportedError
         self.liveStreamingFallbackNotice = liveStreamingFallbackNotice
         self.isStreamingSession = isStreamingSession

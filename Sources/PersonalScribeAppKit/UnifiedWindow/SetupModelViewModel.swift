@@ -15,7 +15,6 @@ final class SetupModelViewModel: ObservableObject {
 
     init(
         service: ActiveModelService,
-        physicalMemoryBytes: Int64 = Int64(ProcessInfo.processInfo.physicalMemory),
         prepareActiveModel: @escaping @MainActor () async -> Void,
         showAllModels: @escaping @MainActor () -> Void
     ) {
@@ -23,11 +22,9 @@ final class SetupModelViewModel: ObservableObject {
         self.prepareActiveModel = prepareActiveModel
         self.showAllModelsAction = showAllModels
         self.models = service.visibleModels(kind: .asr)
-        self.recommendedModel = DefaultModelSelectionPolicy.recommendedDefault(
-            physicalMemoryBytes: physicalMemoryBytes,
-            lightweight: BuiltInModelCatalog.parakeetTDTCTC110M,
-            baseline: BuiltInModelCatalog.parakeetTDT06Bv2
-        )
+        self.recommendedModel = service.recommendedDescriptor(for: .asr)
+            ?? service.activeDescriptor(for: .asr)
+            ?? models[0]
         serviceObservation = service.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
@@ -49,10 +46,6 @@ final class SetupModelViewModel: ObservableObject {
         service.refresh()
         guard !isReady else { return }
         await prepareActiveModel()
-    }
-
-    func select(_ descriptor: ModelDescriptor) {
-        service.setActive(descriptor, forKind: .asr)
     }
 
     func showAllModels() {

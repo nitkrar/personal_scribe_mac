@@ -50,7 +50,7 @@ final class SetupFlowState: ObservableObject {
     private let defaults: UserDefaults
     private let checklist: HomeChecklistState
     private let now: () -> Date
-    private var practiceStartedAt: Date?
+    private var practiceStoppedAt: Date?
 
     init(
         defaults: UserDefaults = .standard,
@@ -111,17 +111,25 @@ final class SetupFlowState: ObservableObject {
     }
 
     func beginPractice() {
-        practiceStartedAt = now()
+        practiceStoppedAt = nil
         practiceText = ""
         practiceResult = nil
     }
 
-    func recordPracticeText(_ text: String) {
+    func updatePracticeText(_ text: String) {
+        practiceText = text
+    }
+
+    func recordPracticeStopped() {
+        practiceStoppedAt = now()
+    }
+
+    func recordPracticePaste(_ text: String) {
         practiceText = text
         guard practiceResult == nil else { return }
         let words = text.split(whereSeparator: \Character.isWhitespace)
         guard !words.isEmpty else { return }
-        let elapsed = max(0, now().timeIntervalSince(practiceStartedAt ?? now()))
+        let elapsed = max(0, now().timeIntervalSince(practiceStoppedAt ?? now()))
         practiceResult = SetupPracticeResult(
             wordCount: words.count,
             elapsedSeconds: elapsed

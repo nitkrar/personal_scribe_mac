@@ -22,7 +22,7 @@ final class SetupViewRenderTests: XCTestCase {
 
         for scheme in [("dark", ColorScheme.dark), ("light", .light)] {
             for scenario in Scenario.allCases {
-                let rootView = makeView(scenario: scenario)
+                let rootView = makeView(scenario: scenario, colorScheme: scheme.1)
                     .environment(\.colorScheme, scheme.1)
                     .windowTint(.warm)
                     .padding(32)
@@ -34,6 +34,8 @@ final class SetupViewRenderTests: XCTestCase {
                 let size = CGSize(width: 1_000, height: 760)
                 hostingView.frame = NSRect(origin: .zero, size: size)
                 hostingView.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(40))
+                hostingView.layoutSubtreeIfNeeded()
                 let png = try renderPNG(view: hostingView, size: size)
                 try png.write(
                     to: outputDirectory.appendingPathComponent(
@@ -44,12 +46,17 @@ final class SetupViewRenderTests: XCTestCase {
         }
     }
 
-    private func makeView(scenario: Scenario) -> AnyView {
+    private func makeView(scenario: Scenario, colorScheme: ColorScheme) -> AnyView {
         let suite = "SetupViewRenderTests.\(scenario.rawValue).\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         let checklist = HomeChecklistState(defaults: defaults)
-        let flow = SetupFlowState(defaults: defaults, checklist: checklist)
+        var renderNow = Date(timeIntervalSince1970: 100)
+        let flow = SetupFlowState(
+            defaults: defaults,
+            checklist: checklist,
+            now: { renderNow }
+        )
         let ready = scenario != .voiceModel
         let service = makeModelService(defaults: defaults, ready: ready)
         let permissions = PermissionsSubTabViewModel(
@@ -58,20 +65,22 @@ final class SetupViewRenderTests: XCTestCase {
         let deviceProvider = RenderInputDeviceProvider()
         let microphone = SetupMicrophoneViewModel(
             inputDeviceProvider: deviceProvider,
-            levelMonitor: RenderAudioLevelMonitor()
+            levelMonitor: RenderAudioLevelMonitor(),
+            initialSessionSnapshot: scenario == .tryShortcutRecording
+                ? SessionSnapshot(sessionState: .capturing, recordingDuration: .seconds(3))
+                : SessionSnapshot()
         )
         let model = SetupModelViewModel(
             service: service,
-            physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
             prepareActiveModel: {},
             showAllModels: {}
         )
 
         let destinationStep: SetupStep = switch scenario {
-        case .permissions: .permissions
+        case .permissions, .permissionsSidebar: .permissions
         case .microphone: .microphone
         case .voiceModel: .voiceModel
-        case .tryShortcut, .tryShortcutSuccess: .tryShortcut
+        case .tryShortcut, .tryShortcutRecording, .tryShortcutSuccess: .tryShortcut
         case .done: .done
         }
         while flow.isOpen && flow.step.rawValue < destinationStep.rawValue {
@@ -92,22 +101,51 @@ final class SetupViewRenderTests: XCTestCase {
         }
         if scenario == .tryShortcutSuccess {
             flow.beginPractice()
-            flow.recordPracticeText("Hello Ninimma, this is my first dictation.")
+            renderNow = Date(timeIntervalSince1970: 101)
+            flow.recordPracticeStopped()
+            renderNow = Date(timeIntervalSince1970: 101.8)
+            flow.recordPracticePaste("Hello Ninimma, this is my first dictation.")
         }
         if scenario == .done {
             return AnyView(makeDoneView(defaults: defaults, flow: flow, checklist: checklist))
         }
 
-        return AnyView(
-            SetupView(
-                flow: flow,
-                permissions: permissions,
-                microphone: microphone,
-                model: model,
-                hotkey: .default,
-                onClose: {}
-            )
+        let setup = SetupView(
+            flow: flow,
+            permissions: permissions,
+            microphone: microphone,
+            model: model,
+            checklist: checklist,
+            onOpenShortcuts: {},
+            onClose: {}
         )
+        if scenario == .permissionsSidebar {
+            return AnyView(
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack(spacing: 8) {
+                            PersonalScribeLogoView().frame(width: 24, height: 24)
+                            Text(AppBrand.displayName)
+                                .font(PersonalScribeTheme.Typography.title.font)
+                        }
+                        SetupSidebarRow(
+                            isActive: true,
+                            completedStepCount: flow.completedStepCount,
+                            windowTint: .warm,
+                            action: {}
+                        )
+                        Spacer()
+                    }
+                    .padding(16)
+                    .frame(width: PersonalScribeTheme.Layout.sidebarWidth)
+                    .background(UnifiedWindowChrome.sidebarBackground(scheme: colorScheme, tint: .warm))
+                    setup
+                        .padding(32)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+            )
+        }
+        return AnyView(setup)
     }
 
     private func makeDoneView(
@@ -154,6 +192,7 @@ final class SetupViewRenderTests: XCTestCase {
             ),
             isDownloaded: { $0.id == descriptor.id && ready },
             download: { _, _ in },
+            recommendedModels: [.asr: descriptor],
             logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
         )
     }
@@ -181,9 +220,11 @@ final class SetupViewRenderTests: XCTestCase {
 
     private enum Scenario: String, CaseIterable {
         case permissions
+        case permissionsSidebar = "permissions-sidebar"
         case microphone
         case voiceModel = "voice-model"
         case tryShortcut = "try-shortcut"
+        case tryShortcutRecording = "try-shortcut-recording"
         case tryShortcutSuccess = "try-shortcut-success"
         case done
     }

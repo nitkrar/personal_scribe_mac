@@ -43,6 +43,7 @@ public final class ActiveModelService: ObservableObject {
     }
 
     public let registeredModels: [ModelDescriptor]
+    public let recommendedModels: [ModelKind: ModelDescriptor]
     @Published public private(set) var activeModelIDs: [ModelKind: String]
     @Published public private(set) var whisperAdapterFilter: WhisperAdapterFilter
     @Published public private(set) var downloadStates: [String: ModelDownloadState]
@@ -125,6 +126,7 @@ public final class ActiveModelService: ObservableObject {
             modelsDirectoryProvider: { storageLocator.url(for: .models) },
             diskSpaceProvider: Self.liveDiskSpaceProvider,
             chipFamily: ChipFamily.current,
+            recommendedModels: [.asr: recommendedVoiceModel],
             logger: logger
         )
     }
@@ -143,6 +145,7 @@ public final class ActiveModelService: ObservableObject {
         modelsDirectoryProvider: @escaping @Sendable () -> URL? = { nil },
         diskSpaceProvider: @escaping @Sendable (URL) -> Int64? = { _ in nil },
         chipFamily: @escaping @Sendable () -> ChipFamily = ChipFamily.current,
+        recommendedModels: [ModelKind: ModelDescriptor] = [:],
         logger: PersonalScribeLogger
     ) {
         let resolvedWhisperAdapterFilterPreference = whisperAdapterFilterPreference
@@ -150,6 +153,7 @@ public final class ActiveModelService: ObservableObject {
         self.activeIDsPreference = activeIDsPreference
         self.whisperAdapterFilterPreference = resolvedWhisperAdapterFilterPreference
         self.registeredModels = registeredModels
+        self.recommendedModels = recommendedModels
         self.isDownloadedHandler = isDownloaded
         self.downloadHandler = download
         self.removeDownloadedHandler = removeDownloaded
@@ -191,6 +195,10 @@ public final class ActiveModelService: ObservableObject {
             return nil
         }
         return descriptor
+    }
+
+    public func recommendedDescriptor(for kind: ModelKind) -> ModelDescriptor? {
+        recommendedModels[kind]
     }
 
     /// Activate `descriptor` for the specific section `kind`.
@@ -306,10 +314,7 @@ public final class ActiveModelService: ObservableObject {
         return isDownloadedHandler(canonical)
     }
 
-    /// Mirrors progress from recipe-driven preparation into the UI-facing
-    /// state owned by this service. Startup preparation uses the same model
-    /// adapter as recording, so callers should bridge that progress here
-    /// instead of launching a second download through `download(_:)`.
+    /// Mirrors recipe-driven preparation progress into UI-facing state.
     public func updatePreparationProgress(
         _ progress: ModelDownloadProgress,
         for descriptor: ModelDescriptor
@@ -320,10 +325,7 @@ public final class ActiveModelService: ObservableObject {
         ingest(progress: progress, for: canonical)
     }
 
-    /// Ends a preparation-progress cycle using disk presence as the source
-    /// of truth. This intentionally resolves an in-flight phase, whereas
-    /// `refresh()` preserves one because it cannot otherwise know whether a
-    /// download is still running.
+    /// Ends preparation progress using disk presence as the source of truth.
     public func finishPreparation(for descriptor: ModelDescriptor) {
         guard let canonical = registeredModels.first(where: { $0.id == descriptor.id }) else {
             return

@@ -443,6 +443,18 @@ enum HotkeyShortcutFormatter {
         return modifiers.isEmpty ? keyLabel : modifiers + keyLabel
     }
 
+    static func onboardingKeycaps(for preference: HotkeyPreference) -> [String] {
+        var keycaps: [String] = []
+        let modifiers = preference.modifierFlags
+        if modifiers.contains(.command) { keycaps.append("Command") }
+        if modifiers.contains(.option) { keycaps.append("Option") }
+        if modifiers.contains(.control) { keycaps.append("Control") }
+        if modifiers.contains(.shift) { keycaps.append("Shift") }
+        let rawKey = displayKeyLabels[preference.keyCode] ?? "Key \(preference.keyCode)"
+        keycaps.append(rawKey == "/" ? "Slash" : rawKey)
+        return keycaps
+    }
+
     private static func modifierString(for modifiers: NSEvent.ModifierFlags) -> String {
         var result = ""
 

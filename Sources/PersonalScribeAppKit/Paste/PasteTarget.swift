@@ -51,7 +51,18 @@ enum PasteTarget: Equatable {
             frontmostBundleID: app.bundleIdentifier,
             frontmostPID: app.processIdentifier,
             currentPID: ProcessInfo.processInfo.processIdentifier,
-            hasOwnTextInputFocus: NSApp.keyWindow?.firstResponder is NSText
+            hasOwnTextInputFocus: hasEditableTextInputFocus(in: NSApp.keyWindow)
         )
+    }
+
+    @MainActor
+    static func hasEditableTextInputFocus(in window: NSWindow?) -> Bool {
+        guard let text = window?.firstResponder as? NSText, text.isEditable else {
+            return false
+        }
+        guard let textView = text as? NSTextView else {
+            return true
+        }
+        return !(textView.isFieldEditor && textView.delegate is NSSecureTextField)
     }
 }

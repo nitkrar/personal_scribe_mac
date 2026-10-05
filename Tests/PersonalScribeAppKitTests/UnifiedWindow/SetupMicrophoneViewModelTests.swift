@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 import PersonalScribeAudio
 import PersonalScribeCore
+import PersonalScribeSession
 @testable import PersonalScribeAppKit
 
 @MainActor
@@ -38,19 +39,45 @@ final class SetupMicrophoneViewModelTests: XCTestCase {
         XCTAssertEqual(counts.stop, 1)
     }
 
-    func testRecordingActivityStopsMonitorBeforeItCanKeepTestingMic() async {
+    func testRecordingSessionDoesNotStartMonitorOrSwitchSharedDevice() async {
+        let source = StubSetupSessionSource(state: .capturing)
+        let provider = StubSetupInputDeviceProvider()
         let monitor = StubAudioLevelMonitor()
         let viewModel = SetupMicrophoneViewModel(
-            inputDeviceProvider: StubSetupInputDeviceProvider(),
-            levelMonitor: monitor
+            inputDeviceProvider: provider,
+            levelMonitor: monitor,
+            initialSessionSnapshot: SessionSnapshot(sessionState: .capturing),
+            currentSessionSnapshot: { await source.current() },
+            sessionSnapshots: { await source.stream() }
         )
+
         await viewModel.appear()
+        await viewModel.selectDevice(id: "usb")
 
-        await viewModel.recordingDidStart()
-
+        XCTAssertEqual(provider.selectedDeviceID, "built-in")
         XCTAssertFalse(viewModel.isMonitoring)
         let counts = await monitor.counts()
-        XCTAssertEqual(counts.stop, 1)
+        XCTAssertEqual(counts.start, 0)
+    }
+
+    func testPausedSessionDoesNotStartMonitorOrSwitchSharedDevice() async {
+        let source = StubSetupSessionSource(state: .paused)
+        let provider = StubSetupInputDeviceProvider()
+        let monitor = StubAudioLevelMonitor()
+        let viewModel = SetupMicrophoneViewModel(
+            inputDeviceProvider: provider,
+            levelMonitor: monitor,
+            initialSessionSnapshot: SessionSnapshot(sessionState: .paused),
+            currentSessionSnapshot: { await source.current() },
+            sessionSnapshots: { await source.stream() }
+        )
+
+        await viewModel.appear()
+        await viewModel.selectDevice(id: "usb")
+
+        XCTAssertEqual(provider.selectedDeviceID, "built-in")
+        let counts = await monitor.counts()
+        XCTAssertEqual(counts.start, 0)
     }
 
     func testSelectingDevicePersistsAndRestartsMonitor() async {
@@ -69,6 +96,60 @@ final class SetupMicrophoneViewModelTests: XCTestCase {
         let counts = await monitor.counts()
         XCTAssertEqual(counts.stop, 1)
         XCTAssertEqual(counts.start, 2)
+    }
+
+    func testMonitorStopsForRecordingThenResetsAndRestartsWhenIdle() async {
+        let source = StubSetupSessionSource(state: .idle)
+        let monitor = StubAudioLevelMonitor()
+        let viewModel = SetupMicrophoneViewModel(
+            inputDeviceProvider: StubSetupInputDeviceProvider(),
+            levelMonitor: monitor,
+            currentSessionSnapshot: { await source.current() },
+            sessionSnapshots: { await source.stream() }
+        )
+        await viewModel.appear()
+        await waitUntil { await monitor.counts().start == 1 }
+
+        await source.send(SessionSnapshot(sessionState: .capturing))
+        await waitUntil { await monitor.counts().stop >= 1 }
+        XCTAssertFalse(viewModel.isMonitoring)
+        XCTAssertEqual(viewModel.level, 0)
+
+        await source.send(SessionSnapshot(sessionState: .idle))
+        await waitUntil { await monitor.counts().start == 2 }
+        XCTAssertTrue(viewModel.isMonitoring)
+    }
+
+    func testLeavingStepWhileStartIsSuspendedStopsLateEngineStart() async {
+        let monitor = SuspendedStartAudioLevelMonitor()
+        let viewModel = SetupMicrophoneViewModel(
+            inputDeviceProvider: StubSetupInputDeviceProvider(),
+            levelMonitor: monitor
+        )
+
+        let appear = Task { await viewModel.appear() }
+        await waitUntil { await monitor.startCount == 1 }
+        await viewModel.disappear()
+        await monitor.resumeStart()
+        await appear.value
+
+        XCTAssertFalse(viewModel.isMonitoring)
+        XCTAssertEqual(viewModel.level, 0)
+        let stopCount = await monitor.stopCount
+        XCTAssertGreaterThanOrEqual(stopCount, 1)
+    }
+
+    private func waitUntil(
+        timeout: Duration = .seconds(1),
+        condition: @escaping @Sendable () async -> Bool
+    ) async {
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
+        while clock.now < deadline {
+            if await condition() { return }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for condition")
     }
 }
 
@@ -101,5 +182,59 @@ private actor StubAudioLevelMonitor: AudioLevelMonitoring {
 
     func counts() -> (start: Int, stop: Int) {
         (startCount, stopCount)
+    }
+}
+
+private actor StubSetupSessionSource {
+    private var snapshot: SessionSnapshot
+    private var continuations: [UUID: AsyncStream<SessionSnapshot>.Continuation] = [:]
+
+    init(state: SessionState) {
+        snapshot = SessionSnapshot(sessionState: state)
+    }
+
+    func current() -> SessionSnapshot { snapshot }
+
+    func stream() -> AsyncStream<SessionSnapshot> {
+        let id = UUID()
+        return AsyncStream { continuation in
+            continuations[id] = continuation
+            continuation.yield(snapshot)
+            continuation.onTermination = { [weak self] _ in
+                Task { await self?.remove(id) }
+            }
+        }
+    }
+
+    func send(_ snapshot: SessionSnapshot) {
+        self.snapshot = snapshot
+        continuations.values.forEach { $0.yield(snapshot) }
+    }
+
+    private func remove(_ id: UUID) {
+        continuations[id] = nil
+    }
+}
+
+private actor SuspendedStartAudioLevelMonitor: AudioLevelMonitoring {
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+    private var startContinuation: CheckedContinuation<Void, Never>?
+
+    func start() async throws -> AsyncStream<Float> {
+        startCount += 1
+        await withCheckedContinuation { continuation in
+            startContinuation = continuation
+        }
+        return AsyncStream { _ in }
+    }
+
+    func stop() async {
+        stopCount += 1
+    }
+
+    func resumeStart() {
+        startContinuation?.resume()
+        startContinuation = nil
     }
 }

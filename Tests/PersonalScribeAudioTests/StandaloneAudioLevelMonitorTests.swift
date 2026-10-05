@@ -39,4 +39,28 @@ final class StandaloneAudioLevelMonitorTests: XCTestCase {
         XCTAssertEqual(box.stopCount, 1)
         XCTAssertEqual(box.resetCount, 1)
     }
+
+    func testEndingOldStreamAfterRestartDoesNotStopNewEngine() async throws {
+        let box = ThreadSafeEngineBox()
+        let monitor = StandaloneAudioLevelMonitor(
+            authorizationStatusProvider: { .authorized },
+            engineDriver: .testStub(sampleRate: 44_100, channels: 1, box: box),
+            inputDeviceProvider: NoOpAudioInputDeviceProvider()
+        )
+        let firstStream = try await monitor.start()
+        let firstReader = Task {
+            for await _ in firstStream {
+                if Task.isCancelled { return }
+            }
+        }
+        await monitor.stop()
+        _ = try await monitor.start()
+
+        firstReader.cancel()
+        await Task.yield()
+
+        XCTAssertEqual(box.startCount, 2)
+        XCTAssertEqual(box.stopCount, 1)
+        await monitor.stop()
+    }
 }

@@ -1,5 +1,16 @@
 import Foundation
 
+public struct SettingsNavigationRequest: Equatable, Sendable {
+    public enum Destination: Equatable, Sendable {
+        case shortcuts
+        case models
+        case permissions
+    }
+
+    public let id: Int
+    public let destination: Destination
+}
+
 /// Observable routing state for the unified NavigationSplitView window.
 ///
 /// Single source of truth for which `AppTab` is active. Tab switches
@@ -12,12 +23,8 @@ import Foundation
 public final class UnifiedWindowModel: ObservableObject {
     @Published public private(set) var activeTab: AppTab
     @Published private(set) var isShowingSetup = false
-    @Published public private(set) var settingsShortcutsRequest: Int?
-    @Published private(set) var settingsModelsRequest: Int?
-    @Published private(set) var settingsPermissionsRequest: Int?
-    private var nextSettingsShortcutsRequest = 0
-    private var nextSettingsModelsRequest = 0
-    private var nextSettingsPermissionsRequest = 0
+    @Published public private(set) var settingsNavigationRequest: SettingsNavigationRequest?
+    private var nextSettingsNavigationRequest = 0
 
     public init(initialTab: AppTab = .home) {
         self.activeTab = initialTab
@@ -33,40 +40,29 @@ public final class UnifiedWindowModel: ObservableObject {
     }
 
     public func openSettingsShortcuts() {
-        activeTab = .settings
-        isShowingSetup = false
-        nextSettingsShortcutsRequest += 1
-        settingsShortcutsRequest = nextSettingsShortcutsRequest
+        openSettings(.shortcuts)
     }
 
     func openSettingsModels() {
-        activeTab = .settings
-        isShowingSetup = false
-        nextSettingsModelsRequest += 1
-        settingsModelsRequest = nextSettingsModelsRequest
+        openSettings(.models)
     }
 
     func openSettingsPermissions() {
+        openSettings(.permissions)
+    }
+
+    private func openSettings(_ destination: SettingsNavigationRequest.Destination) {
         activeTab = .settings
         isShowingSetup = false
-        nextSettingsPermissionsRequest += 1
-        settingsPermissionsRequest = nextSettingsPermissionsRequest
+        nextSettingsNavigationRequest += 1
+        settingsNavigationRequest = SettingsNavigationRequest(
+            id: nextSettingsNavigationRequest,
+            destination: destination
+        )
     }
 
-    public func consumeSettingsShortcutsRequest(_ request: Int?) {
-        guard settingsShortcutsRequest == request else {
-            return
-        }
-        settingsShortcutsRequest = nil
-    }
-
-    func consumeSettingsModelsRequest(_ request: Int?) {
-        guard settingsModelsRequest == request else { return }
-        settingsModelsRequest = nil
-    }
-
-    func consumeSettingsPermissionsRequest(_ request: Int?) {
-        guard settingsPermissionsRequest == request else { return }
-        settingsPermissionsRequest = nil
+    public func consumeSettingsNavigationRequest(_ request: SettingsNavigationRequest?) {
+        guard settingsNavigationRequest == request else { return }
+        settingsNavigationRequest = nil
     }
 }

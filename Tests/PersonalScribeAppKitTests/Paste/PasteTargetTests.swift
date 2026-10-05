@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import PersonalScribeAppKit
 
@@ -18,8 +19,41 @@ final class PasteTargetTests: XCTestCase {
         XCTAssertFalse(target.permitsPaste(selfBundleID: selfBundle))
     }
 
-    func testPastesIntoNinimmaWhenOwnTextInputHasFocus() {
-        XCTAssertTrue(PasteTarget.ownTextInput.permitsPaste(selfBundleID: selfBundle))
+    @MainActor
+    func testLiveFocusCheckAcceptsEditableTextViewAndRejectsReadOnlyTextView() {
+        let window = NSWindow()
+        let textView = NSTextView()
+        window.contentView = textView
+
+        textView.isEditable = true
+        window.makeFirstResponder(textView)
+        XCTAssertTrue(PasteTarget.hasEditableTextInputFocus(in: window))
+
+        textView.isEditable = false
+        XCTAssertFalse(PasteTarget.hasEditableTextInputFocus(in: window))
+    }
+
+    @MainActor
+    func testLiveFocusCheckUsesFieldEditorEditabilityAndRejectsSecureField() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 100),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let field = NSTextField(frame: NSRect(x: 20, y: 20, width: 200, height: 24))
+        window.contentView?.addSubview(field)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        XCTAssertTrue(PasteTarget.hasEditableTextInputFocus(in: window))
+
+        field.isEditable = false
+        XCTAssertTrue(window.makeFirstResponder(field))
+        XCTAssertFalse(PasteTarget.hasEditableTextInputFocus(in: window))
+
+        let secure = NSSecureTextField(frame: field.frame)
+        window.contentView?.replaceSubview(field, with: secure)
+        XCTAssertTrue(window.makeFirstResponder(secure))
+        XCTAssertFalse(PasteTarget.hasEditableTextInputFocus(in: window))
     }
 
     func testResolveFindsOwnFocusedTextInputInProcess() {

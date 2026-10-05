@@ -311,8 +311,11 @@ public enum AppComposition {
             var preparingDescriptor: ModelDescriptor?
             for await snapshot in snapshots {
                 let isPreparing = snapshot.modelDownloadProgress != nil
-                if isPreparing && !wasPreparing {
-                    preparingDescriptor = modelService.activeDescriptor(for: .asr)
+                if isPreparing,
+                   let descriptorID = snapshot.modelDownloadDescriptorID {
+                    preparingDescriptor = modelService.registeredModels.first {
+                        $0.id == descriptorID
+                    }
                 }
                 if let progress = snapshot.modelDownloadProgress,
                    let descriptor = preparingDescriptor {

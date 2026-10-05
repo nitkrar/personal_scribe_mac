@@ -673,23 +673,34 @@ below once per dogfood cycle:
 - [ ] **MV-ONBOARDING-1** Clear `OnboardingCompleted`, launch Ninimma,
   and confirm the unified window opens on Get started step 1/5. With
   `OnboardingCompleted` already true, relaunch and confirm Home opens
-  without a Get started row.
+  without a Get started row. During setup, Get started — not Home — is
+  the selected sidebar row, and every stepper label remains on one line.
 - [ ] **MV-ONBOARDING-2** On Permissions, confirm pending Microphone
   raises the macOS prompt, denied Microphone opens System Settings,
   Accessibility opens its privacy pane, and both statuses update live.
 - [ ] **MV-ONBOARDING-3** On Microphone, switch input devices and speak.
-  The meter moves; leaving the step stops the meter. Starting a real
-  recording from the hotkey or menu bar also stops it before capture.
-- [ ] **MV-ONBOARDING-4** On Voice model, confirm the RAM-recommended
-  model is selected, startup-download progress moves in the row, no
-  second download starts, and Show all models opens Settings models.
+  The meter moves; leaving the step or closing the retained window stops
+  it. Open this step during active/paused recording and confirm no second
+  engine starts and device selection is inert. After stopping, the meter
+  resets and restarts while this step remains visible. Confirm the meter
+  uses the same animated waveform as the recording pill.
+- [ ] **MV-ONBOARDING-4** On Voice model, confirm one compact card shows
+  the active model and its real startup-download/ready state. The card is
+  not selectable and clicking the step never starts a download. More
+  models opens Settings → AI Models. Switch the active model during a
+  download and confirm progress stays on the descriptor that began it.
 - [ ] **MV-ONBOARDING-5** Move forward while a model downloads and
   confirm the download continues. Try it remains in its waiting state
-  until the selected model is ready.
-- [ ] **MV-ONBOARDING-6** On Try it, click the practice editor and use
-  the displayed configured shortcut. The normal recording path pastes
-  into the Ninimma editor and shows the word-count/time success card;
-  Try again clears it.
+  until the selected model is ready. Start recording during startup
+  preparation with Parakeet, WhisperKit, and whisper.cpp active in turn;
+  each recording joins the in-flight prepare without a second download.
+- [ ] **MV-ONBOARDING-6** On Try it, confirm the practice editor already
+  has keyboard focus, then use the
+  displayed configured shortcut. Change the shortcut in Settings and
+  confirm this screen updates live. Typing does not complete the step;
+  only the normal recording path pasting into the Ninimma editor shows
+  the word-count/time success card. Its time measures stop-to-paste
+  latency, not speaking duration. Try again clears it.
 - [ ] **MV-ONBOARDING-7** While setup is open, use Home and Settings,
   then return via the Get started sidebar row. Grant permissions during
   setup and confirm the open flow does not disappear.
@@ -697,7 +708,6 @@ below once per dogfood cycle:
   You're set up banner. Skip with missing permissions/model/untried
   shortcut and confirm only those applicable items join the pending-only
   Home Get started card; satisfying them later removes them.
-
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift

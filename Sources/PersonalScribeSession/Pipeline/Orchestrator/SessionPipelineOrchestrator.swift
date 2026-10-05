@@ -258,7 +258,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         progressForwardingTask?.cancel()
         // The new recipe's stream replays its current progress, if any.
         if currentSnapshot.modelDownloadProgress != nil {
-            publish { $0.modelDownloadProgress = nil }
+            publish {
+                $0.modelDownloadProgress = nil
+                $0.modelDownloadDescriptorID = nil
+            }
         }
         progressForwardingTask = makeProgressForwardingTask(for: recipe)
     }
@@ -293,7 +296,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             for await progress in stream {
                 if Task.isCancelled { return }
                 await self?.publish { snapshot in
-                    snapshot.modelDownloadProgress = Self.normalizeModelDownloadProgress(progress)
+                    let normalized = Self.normalizeModelDownloadProgress(progress)
+                    snapshot.modelDownloadProgress = normalized
+                    snapshot.modelDownloadDescriptorID = normalized == nil
+                        ? nil
+                        : recipe.preparationModelDescriptorID
                 }
             }
         }

@@ -1,6 +1,7 @@
 import Foundation
 import PersonalScribeAudio
 import PersonalScribeCore
+import PersonalScribeSession
 
 @MainActor
 final class SetupMicrophoneViewModel: ObservableObject {
@@ -8,26 +9,120 @@ final class SetupMicrophoneViewModel: ObservableObject {
     @Published private(set) var selectedDeviceID: String?
     @Published private(set) var level: Float = 0
     @Published private(set) var isMonitoring = false
+    @Published private(set) var sessionSnapshot: SessionSnapshot
 
     private let inputDeviceProvider: any AudioInputDeviceProviding
     private let levelMonitor: any AudioLevelMonitoring
+    private let currentSessionSnapshot: @Sendable () async -> SessionSnapshot
+    private let sessionSnapshots: @Sendable () async -> AsyncStream<SessionSnapshot>
     private var levelTask: Task<Void, Never>?
+    private var sessionTask: Task<Void, Never>?
+    private var isVisible = false
+    private var isStarting = false
+    private var monitorGeneration = 0
 
     init(
         inputDeviceProvider: any AudioInputDeviceProviding,
-        levelMonitor: any AudioLevelMonitoring
+        levelMonitor: any AudioLevelMonitoring,
+        initialSessionSnapshot: SessionSnapshot = SessionSnapshot(),
+        currentSessionSnapshot: @escaping @Sendable () async -> SessionSnapshot = {
+            SessionSnapshot()
+        },
+        sessionSnapshots: @escaping @Sendable () async -> AsyncStream<SessionSnapshot> = {
+            AsyncStream { continuation in
+                continuation.yield(SessionSnapshot())
+                continuation.finish()
+            }
+        }
     ) {
         self.inputDeviceProvider = inputDeviceProvider
         self.levelMonitor = levelMonitor
+        self.sessionSnapshot = initialSessionSnapshot
+        self.currentSessionSnapshot = currentSessionSnapshot
+        self.sessionSnapshots = sessionSnapshots
+        startSessionObservation()
+    }
+
+    isolated deinit {
+        levelTask?.cancel()
+        sessionTask?.cancel()
     }
 
     func appear() async {
+        isVisible = true
         devices = inputDeviceProvider.availableDevices()
         selectedDeviceID = inputDeviceProvider.effectiveDeviceID
-        await startMonitoring()
+        await applySessionSnapshot(await currentSessionSnapshot())
+        if isSessionIdle {
+            await startMonitoring()
+        }
     }
 
     func disappear() async {
+        isVisible = false
+        await stopMonitoring()
+    }
+
+    func selectDevice(id: String?) async {
+        await applySessionSnapshot(await currentSessionSnapshot())
+        guard isSessionIdle else {
+            selectedDeviceID = inputDeviceProvider.effectiveDeviceID
+            return
+        }
+        inputDeviceProvider.selectDevice(id: id)
+        selectedDeviceID = inputDeviceProvider.effectiveDeviceID
+        await stopMonitoring()
+        if isVisible {
+            await startMonitoring()
+        }
+    }
+
+    var isRecording: Bool {
+        switch sessionSnapshot.sessionState.displayState {
+        case .capturing, .holdRecording:
+            true
+        case .idle, .paused, .transcribing, .completed, .shortExit, .error:
+            false
+        }
+    }
+
+    var recordingElapsedSeconds: Int {
+        guard let duration = sessionSnapshot.recordingDuration else { return 0 }
+        return max(0, Int(duration.components.seconds))
+    }
+
+    private var isSessionIdle: Bool {
+        sessionSnapshot.sessionState.displayState == .idle
+    }
+
+    private func startSessionObservation() {
+        sessionTask = Task { @MainActor [weak self, sessionSnapshots] in
+            let stream = await sessionSnapshots()
+            for await snapshot in stream {
+                guard let self, !Task.isCancelled else { return }
+                await self.applySessionSnapshot(snapshot)
+            }
+        }
+    }
+
+    private func applySessionSnapshot(_ snapshot: SessionSnapshot) async {
+        let wasIdle = isSessionIdle
+        sessionSnapshot = snapshot
+        guard isSessionIdle else {
+            await stopMonitoring()
+            return
+        }
+        if !wasIdle {
+            await stopMonitoring()
+        }
+        if isVisible {
+            await startMonitoring()
+        }
+    }
+
+    private func stopMonitoring() async {
+        monitorGeneration += 1
+        isStarting = false
         levelTask?.cancel()
         levelTask = nil
         await levelMonitor.stop()
@@ -35,20 +130,18 @@ final class SetupMicrophoneViewModel: ObservableObject {
         level = 0
     }
 
-    func recordingDidStart() async {
-        await disappear()
-    }
-
-    func selectDevice(id: String?) async {
-        inputDeviceProvider.selectDevice(id: id)
-        selectedDeviceID = inputDeviceProvider.effectiveDeviceID
-        await disappear()
-        await startMonitoring()
-    }
-
     private func startMonitoring() async {
+        guard isVisible, isSessionIdle, !isMonitoring, !isStarting else { return }
+        isStarting = true
+        monitorGeneration += 1
+        let generation = monitorGeneration
         do {
             let stream = try await levelMonitor.start()
+            guard generation == monitorGeneration, isVisible, isSessionIdle else {
+                await levelMonitor.stop()
+                return
+            }
+            isStarting = false
             isMonitoring = true
             levelTask = Task { @MainActor [weak self] in
                 for await level in stream {
@@ -57,6 +150,8 @@ final class SetupMicrophoneViewModel: ObservableObject {
                 }
             }
         } catch {
+            guard generation == monitorGeneration else { return }
+            isStarting = false
             isMonitoring = false
             level = 0
         }

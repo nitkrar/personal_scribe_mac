@@ -305,7 +305,7 @@ final class AppCompositionTests: XCTestCase {
         defer { task.cancel() }
         continuation.yield(SessionSnapshot(modelDownloadProgress: ModelDownloadProgress(
             phase: .downloading, fractionCompleted: 0.5, receivedBytes: 5, expectedBytes: 10
-        )))
+        ), modelDownloadDescriptorID: descriptor.id))
         await waitUntil { modelService.downloadStates[descriptor.id]?.phase == .downloading }
         XCTAssertEqual(modelService.downloadStates[descriptor.id]?.fractionCompleted, 0.5)
         downloaded.value = true
@@ -313,6 +313,45 @@ final class AppCompositionTests: XCTestCase {
 
         await waitUntil { modelService.downloadStates[descriptor.id]?.phase == .ready }
         XCTAssertEqual(modelService.downloadStates[descriptor.id]?.phase, .ready)
+    }
+
+    func testPreparationProgressStaysWithPreparedModelAfterActiveModelSwitch() async throws {
+        let prepared = BuiltInModelCatalog.parakeetTDT06Bv2
+        let newlyActive = BuiltInModelCatalog.parakeetTDTCTC110M
+        let suiteName = "AppCompositionTests.\(#function).\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let service = ActiveModelService(
+            activeIDsPreference: Preference(
+                key: ActiveModelService.preferenceKey,
+                default: [.asr: prepared.id],
+                defaults: defaults
+            ),
+            isDownloaded: { _ in false },
+            download: { _, _ in },
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+        let (snapshots, continuation) = AsyncStream<SessionSnapshot>.makeStream()
+        let task = AppComposition.refreshModelCacheWhenPreparationEnds(
+            snapshots: snapshots,
+            modelService: service
+        )
+        defer { task.cancel() }
+
+        service.setActive(newlyActive, forKind: .asr)
+        continuation.yield(SessionSnapshot(
+            modelDownloadProgress: ModelDownloadProgress(
+                phase: .downloading,
+                fractionCompleted: 0.4,
+                receivedBytes: 4,
+                expectedBytes: 10
+            ),
+            modelDownloadDescriptorID: prepared.id
+        ))
+
+        await waitUntil { service.downloadStates[prepared.id]?.phase == .downloading }
+        XCTAssertEqual(service.downloadStates[prepared.id]?.fractionCompleted, 0.4)
+        XCTAssertEqual(service.downloadStates[newlyActive.id]?.phase, .notDownloaded)
     }
 
     func testReporterIncludesDebugFileSink() async throws {

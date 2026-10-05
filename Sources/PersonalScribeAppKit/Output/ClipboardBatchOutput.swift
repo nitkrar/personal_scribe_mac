@@ -132,13 +132,8 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
         }
         pasteAccumulator.recordFinalClipboardWrite(chars: textToWrite.count)
 
-        // Schedules the user's pre-transcript clipboard to be restored after
-        // `restoreDelay` seconds, but only if nothing has written to the
-        // pasteboard since our transcript landed (changeCount guard — the
-        // `restoreSnapshotIfUnchanged` checks against `writeToken`). Runs for
-        // both the paste-at-cursor branch and the clipboard-only branch
-        // (AutoPasteEnabledPreference off, or AX untrusted, or externality
-        // probe says focus-is-in-self) — restore is orthogonal to paste mode.
+        // Restore the prior clipboard only when the transcript write remains
+        // unchanged; restoration is independent of the chosen delivery mode.
         let maybeScheduleRestore: @MainActor () -> Void = { [snapshotService, scheduleRestore] in
             guard restoreEnabled else {
                 snapshotService.discardSnapshot(handle)
@@ -156,15 +151,8 @@ public final class ClipboardBatchOutput: OutputService, @unchecked Sendable {
             return .delivered(target: .clipboardOnly, delivery: .clipboardOnly)
         }
 
-        // Flow (2026-04-22 — #042 fix + #072):
-        //   Transcription finished → copy to clipboard (always, above) → post
-        //   Cmd+V only if AX permission is granted AND the AX focused element
-        //   is owned by a different process. Otherwise return `.clipboardOnly`
-        //   so the existing "Copied to clipboard · ⌘V to paste" notice fires.
-        //
-        //   #042: earlier 2026-04-20 design probed for text-role / cursor
-        //   attributes directly; that under-included custom-drawn editors
-        //   (Sublime, VS Code, Electron). PID check trusts the focus owner.
+        // Post Cmd+V only with Accessibility access and a permitted target;
+        // otherwise keep the transcript available for manual paste.
 
         guard isAccessibilityTrusted() else {
             pasteAccumulator.recordFinalFailed(reason: .accessibilityNotTrusted)

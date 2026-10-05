@@ -25,7 +25,7 @@ final class ActionButtonTests: XCTestCase {
         XCTAssertTrue(button.isEnabled)
     }
 
-    func testPrimaryVariantUsesChampagneFillAndDarkForeground() {
+    func testPrimaryVariantUsesChampagneFillAndOnColorForeground() {
         let palette = PersonalScribeTheme.Palette.light
 
         assertColor(
@@ -34,7 +34,7 @@ final class ActionButtonTests: XCTestCase {
         )
         assertColor(
             ActionButton.Variant.primary.foregroundColor(for: palette),
-            equals: PersonalScribeTheme.Palette.dark.appBackground
+            equals: palette.pillForegroundText
         )
         assertColor(
             ActionButton.Variant.primary.borderColor(for: palette),

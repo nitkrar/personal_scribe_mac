@@ -29,12 +29,12 @@ struct UnifiedWindowView: View {
     @ObservedObject var setupPermissionsViewModel: PermissionsSubTabViewModel
     @ObservedObject var setupMicrophoneViewModel: SetupMicrophoneViewModel
     @ObservedObject var setupModelViewModel: SetupModelViewModel
+    @ObservedObject var homeChecklist: HomeChecklistState
     let permissionService: any PermissionService
     let defaults: UserDefaults
     let menuBarVisibilityProvider: @MainActor () -> Bool
     let menuBarVisibilitySetter: @MainActor (Bool) -> Void
     let openDiagnosticsWindow: @MainActor () -> Void
-    let hotkey: HotkeyPreference
 
     init(
         model: UnifiedWindowModel,
@@ -48,12 +48,12 @@ struct UnifiedWindowView: View {
         setupPermissionsViewModel: PermissionsSubTabViewModel,
         setupMicrophoneViewModel: SetupMicrophoneViewModel,
         setupModelViewModel: SetupModelViewModel,
+        homeChecklist: HomeChecklistState,
         permissionService: any PermissionService,
         defaults: UserDefaults = .standard,
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
-        openDiagnosticsWindow: @escaping @MainActor () -> Void = {},
-        hotkey: HotkeyPreference = .default
+        openDiagnosticsWindow: @escaping @MainActor () -> Void = {}
     ) {
         self.model = model
         self.windowTint = windowTint
@@ -66,12 +66,12 @@ struct UnifiedWindowView: View {
         self.setupPermissionsViewModel = setupPermissionsViewModel
         self.setupMicrophoneViewModel = setupMicrophoneViewModel
         self.setupModelViewModel = setupModelViewModel
+        self.homeChecklist = homeChecklist
         self.permissionService = permissionService
         self.defaults = defaults
         self.menuBarVisibilityProvider = menuBarVisibilityProvider
         self.menuBarVisibilitySetter = menuBarVisibilitySetter
         self.openDiagnosticsWindow = openDiagnosticsWindow
-        self.hotkey = hotkey
     }
 
     var body: some View {
@@ -140,23 +140,12 @@ struct UnifiedWindowView: View {
     }
 
     private var setupSidebarRow: some View {
-        Button {
-            model.showSetup()
-        } label: {
-            HStack(spacing: PersonalScribeTheme.Spacing.sm) {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(model.isShowingSetup ? PersonalScribeTheme.Palette.for(scheme: colorScheme).brandChampagne : .clear)
-                    .frame(width: 3, height: 28)
-                Label("Get started", systemImage: "sparkles")
-                Spacer()
-                Text("\(setupFlow.completedStepCount)/5")
-                    .font(PersonalScribeTheme.Typography.caption.font.weight(.semibold))
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(Capsule().fill(UnifiedWindowChrome.chromeText(scheme: colorScheme, tint: windowTint).opacity(0.12)))
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        SetupSidebarRow(
+            isActive: model.isShowingSetup,
+            completedStepCount: setupFlow.completedStepCount,
+            windowTint: windowTint,
+            action: { model.showSetup() }
+        )
     }
 
     /// Sidebar row with a champagne left-accent bar on the active tab.
@@ -243,7 +232,8 @@ struct UnifiedWindowView: View {
                     permissions: setupPermissionsViewModel,
                     microphone: setupMicrophoneViewModel,
                     model: setupModelViewModel,
-                    hotkey: hotkey,
+                    checklist: homeChecklist,
+                    onOpenShortcuts: { model.openSettingsShortcuts() },
                     onClose: { model.setActiveTab(.home) }
                 )
             } else {
@@ -275,17 +265,9 @@ struct UnifiedWindowView: View {
             SettingsTab(
                 defaults: defaults,
                 permissionService: permissionService,
-                shortcutsNavigationRequest: model.settingsShortcutsRequest,
-                modelsNavigationRequest: model.settingsModelsRequest,
-                permissionsNavigationRequest: model.settingsPermissionsRequest,
-                onConsumeShortcutsNavigationRequest: {
-                    model.consumeSettingsShortcutsRequest($0)
-                },
-                onConsumeModelsNavigationRequest: {
-                    model.consumeSettingsModelsRequest($0)
-                },
-                onConsumePermissionsNavigationRequest: {
-                    model.consumeSettingsPermissionsRequest($0)
+                navigationRequest: model.settingsNavigationRequest,
+                onConsumeNavigationRequest: {
+                    model.consumeSettingsNavigationRequest($0)
                 },
                 menuBarVisibilityProvider: menuBarVisibilityProvider,
                 menuBarVisibilitySetter: menuBarVisibilitySetter,
@@ -300,12 +282,45 @@ struct UnifiedWindowView: View {
 
     private var tabBinding: Binding<AppTab?> {
         Binding<AppTab?>(
-            get: { model.activeTab },
+            get: { model.isShowingSetup ? nil : model.activeTab },
             set: { newValue in
                 if let newValue {
                     model.setActiveTab(newValue)
                 }
             }
         )
+    }
+}
+
+@MainActor
+struct SetupSidebarRow: View {
+    let isActive: Bool
+    let completedStepCount: Int
+    let windowTint: WindowTint
+    let action: @MainActor () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: PersonalScribeTheme.Spacing.sm) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(isActive ? PersonalScribeTheme.Palette.for(scheme: colorScheme).brandChampagne : .clear)
+                    .frame(width: 3, height: 28)
+                Label("Get started", systemImage: "sparkles")
+                Spacer()
+                Text("\(completedStepCount)/5")
+                    .font(PersonalScribeTheme.Typography.caption.font.weight(.semibold))
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(
+                        Capsule().fill(
+                            UnifiedWindowChrome.chromeText(scheme: colorScheme, tint: windowTint)
+                                .opacity(0.12)
+                        )
+                    )
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

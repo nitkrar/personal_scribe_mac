@@ -125,6 +125,7 @@ extension ActiveModelService {
         evict: @escaping @Sendable (ModelDescriptor) -> Void = { _ in },
         modelsDirectoryProvider: @escaping @Sendable () -> URL? = { nil },
         diskSpaceProvider: @escaping @Sendable (URL) -> Int64? = { _ in nil },
+        recommendedModels: [ModelKind: ModelDescriptor] = [:],
         logger: PersonalScribeLogger = AppKitTestingDiagnostics.logger(PersonalScribeLogCategory.session)
     ) {
         self.init(
@@ -138,6 +139,7 @@ extension ActiveModelService {
             modelsDirectoryProvider: modelsDirectoryProvider,
             diskSpaceProvider: diskSpaceProvider,
             chipFamily: ChipFamily.current,
+            recommendedModels: recommendedModels,
             logger: logger
         )
     }

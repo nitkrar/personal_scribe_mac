@@ -100,14 +100,31 @@ final class SetupFlowStateTests: XCTestCase {
             now: { now }
         )
         flow.beginPractice()
-        now = Date(timeIntervalSince1970: 101.25)
+        now = Date(timeIntervalSince1970: 110)
+        flow.recordPracticeStopped()
+        now = Date(timeIntervalSince1970: 111.25)
 
-        flow.recordPracticeText("Hello Ninimma, this worked")
+        flow.recordPracticePaste("Hello Ninimma, this worked")
 
         XCTAssertEqual(flow.practiceResult?.wordCount, 4)
         XCTAssertEqual(flow.practiceResult?.elapsedSeconds, 1.25)
         XCTAssertTrue(flow.satisfaction.shortcutTried)
         XCTAssertFalse(checklist.pendingItems.contains(.tryShortcut))
+    }
+
+    func testTypingInPracticeEditorDoesNotCountAsShortcutTry() {
+        let defaults = Self.ephemeralDefaults()
+        let checklist = HomeChecklistState(defaults: defaults)
+        checklist.markApplicable(.tryShortcut)
+        let flow = SetupFlowState(defaults: defaults, checklist: checklist)
+
+        flow.beginPractice()
+        flow.updatePracticeText("Typed instead of dictated")
+
+        XCTAssertEqual(flow.practiceText, "Typed instead of dictated")
+        XCTAssertNil(flow.practiceResult)
+        XCTAssertFalse(flow.satisfaction.shortcutTried)
+        XCTAssertTrue(checklist.pendingItems.contains(.tryShortcut))
     }
 
     private static func ephemeralDefaults(function: String = #function) -> UserDefaults {

@@ -16,10 +16,7 @@ public struct ActionButton: View {
         func foregroundColor(for palette: PersonalScribeTheme.Palette) -> Color {
             switch self {
             case .primary:
-                // Contrast against champagne fill — use the dark-scheme
-                // app-background colour so it reads correctly on both
-                // themes.
-                return PersonalScribeTheme.Palette.dark.appBackground
+                return palette.pillForegroundText
             case .secondary:
                 return palette.primaryText
             }
@@ -80,11 +77,11 @@ public struct ActionButton: View {
                 .padding(.vertical, PersonalScribeTheme.Components.ActionButton.verticalPadding)
                 .frame(minWidth: PersonalScribeTheme.Components.ActionButton.minimumWidth)
                 .background(
-                    RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.row, style: .continuous)
+                    Capsule()
                         .fill(variant.backgroundColor(for: palette))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.row, style: .continuous)
+                    Capsule()
                         .strokeBorder(
                             variant.borderColor(for: palette),
                             lineWidth: PersonalScribeTheme.Components.ActionButton.borderWidth

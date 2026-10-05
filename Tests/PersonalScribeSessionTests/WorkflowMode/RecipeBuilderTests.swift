@@ -34,6 +34,10 @@ final class RecipeBuilderTests: XCTestCase {
 
         XCTAssertEqual(bound.recipeID, "dictation")
         XCTAssertEqual(bound.processors.count, 1)
+        XCTAssertEqual(
+            bound.preparationModelDescriptorID,
+            BuiltInModelCatalog.parakeetTDT06Bv2.id
+        )
         guard case .transcriber = bound.processors[0] else {
             XCTFail("Expected .transcriber, got \(bound.processors[0])")
             return

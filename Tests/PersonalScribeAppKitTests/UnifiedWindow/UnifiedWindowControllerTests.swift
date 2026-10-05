@@ -146,6 +146,20 @@ final class UnifiedWindowControllerTests: XCTestCase {
         )
     }
 
+    func testWindowCloseStopsRetainedSetupMicrophoneMonitor() async {
+        let monitor = CloseTrackingAudioLevelMonitor()
+        let controller = Self.makeController(setupLevelMonitor: monitor)
+
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        for _ in 0..<100 {
+            if await monitor.stopCount > 0 { break }
+            await Task.yield()
+        }
+
+        let stopCount = await monitor.stopCount
+        XCTAssertEqual(stopCount, 1)
+    }
+
     // MARK: - Main-screen placement
 
     func testFrameForShowingReturnsSameFrameWhenFullyInsideMainScreen() {
@@ -191,7 +205,9 @@ final class UnifiedWindowControllerTests: XCTestCase {
     // MARK: - Helpers
 
     @MainActor
-    private static func makeController() -> UnifiedWindowController {
+    private static func makeController(
+        setupLevelMonitor: (any AudioLevelMonitoring)? = nil
+    ) -> UnifiedWindowController {
         let defaults = ephemeralDefaults()
         let modelService = ActiveModelService(
             activeIDsPreference: Preference<[ModelKind: String]>(
@@ -211,6 +227,7 @@ final class UnifiedWindowControllerTests: XCTestCase {
             ),
             permissionService: StubPermissionService(),
             inputDeviceProvider: NoOpAudioInputDeviceProvider(),
+            setupLevelMonitor: setupLevelMonitor,
             modelService: modelService
         )
     }
@@ -220,6 +237,18 @@ final class UnifiedWindowControllerTests: XCTestCase {
         let suite = UserDefaults(suiteName: name) ?? .standard
         suite.removePersistentDomain(forName: name)
         return suite
+    }
+}
+
+private actor CloseTrackingAudioLevelMonitor: AudioLevelMonitoring {
+    private(set) var stopCount = 0
+
+    func start() async throws -> AsyncStream<Float> {
+        AsyncStream { _ in }
+    }
+
+    func stop() async {
+        stopCount += 1
     }
 }
 

@@ -305,6 +305,12 @@ struct PersonalScribeAppMain: App {
                     },
                     prepareActiveModel: {
                         try? await coordinator.prepareTranscriber()
+                    },
+                    currentSessionSnapshot: {
+                        await coordinator.snapshot()
+                    },
+                    sessionSnapshots: {
+                        await coordinator.snapshotStream()
                     }
                 )
             }
@@ -481,10 +487,6 @@ struct PersonalScribeAppMain: App {
 }
 
 extension PersonalScribeAppMain {
-    static func shouldOpenSetupAtLaunch(isOnboardingComplete: Bool) -> Bool {
-        !isOnboardingComplete
-    }
-
     static func defaultTranscriptReader(
         logger: PersonalScribeLogger
     ) -> any TranscriptReading {
