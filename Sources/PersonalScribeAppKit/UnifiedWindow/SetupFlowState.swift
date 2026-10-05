@@ -120,8 +120,12 @@ final class SetupFlowState: ObservableObject {
         practiceText = text
     }
 
-    func recordPracticeStopped() {
+    func recordPracticeCompleted() {
         practiceStoppedAt = now()
+    }
+
+    func disarmPracticePaste() {
+        practiceStoppedAt = nil
     }
 
     func recordPracticePaste(_ pastedText: String) {

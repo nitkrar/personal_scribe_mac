@@ -3,6 +3,11 @@ import PersonalScribeAudio
 import PersonalScribeCore
 import PersonalScribeSession
 
+enum SetupPracticeSessionEvent: Equatable {
+    case captureStarted(Int)
+    case completed(Int)
+}
+
 @MainActor
 final class SetupMicrophoneViewModel: ObservableObject {
     @Published private(set) var devices: [AudioInputDevice] = []
@@ -11,6 +16,7 @@ final class SetupMicrophoneViewModel: ObservableObject {
     @Published private(set) var isMonitoring = false
     @Published private(set) var sessionState: SessionState
     @Published private(set) var recordingElapsedSeconds: Int
+    @Published private(set) var practiceSessionEvent: SetupPracticeSessionEvent?
 
     private let inputDeviceProvider: any AudioInputDeviceProviding
     private let levelMonitor: any AudioLevelMonitoring
@@ -23,6 +29,8 @@ final class SetupMicrophoneViewModel: ObservableObject {
     private var isStarting = false
     private var monitorGeneration = 0
     private var latestSessionSnapshot: SessionSnapshot
+    private var practiceCaptureWasSeen = false
+    private var practiceEventSequence = 0
 
     init(
         inputDeviceProvider: any AudioInputDeviceProviding,
@@ -43,6 +51,7 @@ final class SetupMicrophoneViewModel: ObservableObject {
         self.latestSessionSnapshot = initialSessionSnapshot
         self.sessionState = initialSessionSnapshot.sessionState
         self.recordingElapsedSeconds = Self.elapsedSeconds(in: initialSessionSnapshot)
+        self.practiceSessionEvent = nil
         self.currentSessionSnapshot = currentSessionSnapshot
         self.sessionSnapshots = sessionSnapshots
     }
@@ -69,6 +78,7 @@ final class SetupMicrophoneViewModel: ObservableObject {
     func windowDidHide() async {
         isVisible = false
         isPracticeVisible = false
+        practiceCaptureWasSeen = false
         updateSessionObservation()
         if recordingElapsedSeconds != 0 {
             recordingElapsedSeconds = 0
@@ -103,11 +113,14 @@ final class SetupMicrophoneViewModel: ObservableObject {
 
     func setPracticeVisible(_ visible: Bool) async {
         isPracticeVisible = visible
-        updateSessionObservation()
-        if visible {
+        if !visible {
+            practiceCaptureWasSeen = false
+            updateSessionObservation()
+        } else {
             let snapshot = await currentSessionSnapshot()
             guard isPracticeVisible else { return }
-            await applySessionSnapshot(snapshot)
+            await applySessionSnapshot(snapshot, emitsPracticeEvents: false)
+            updateSessionObservation()
         }
         if visible, sessionState != latestSessionSnapshot.sessionState {
             sessionState = latestSessionSnapshot.sessionState
@@ -133,13 +146,17 @@ final class SetupMicrophoneViewModel: ObservableObject {
             let stream = await sessionSnapshots()
             for await snapshot in stream {
                 guard let self, !Task.isCancelled else { return }
-                await self.applySessionSnapshot(snapshot)
+                await self.applySessionSnapshot(snapshot, emitsPracticeEvents: true)
             }
         }
     }
 
-    private func applySessionSnapshot(_ snapshot: SessionSnapshot) async {
+    private func applySessionSnapshot(
+        _ snapshot: SessionSnapshot,
+        emitsPracticeEvents: Bool = false
+    ) async {
         let wasIdle = isSessionIdle
+        updatePracticeSessionEvent(from: snapshot, emitsEvent: emitsPracticeEvents)
         updatePublishedSessionValues(from: snapshot)
         guard isSessionIdle else {
             if wasIdle || isMonitoring || isStarting {
@@ -218,6 +235,50 @@ final class SetupMicrophoneViewModel: ObservableObject {
             if recordingElapsedSeconds != elapsed {
                 recordingElapsedSeconds = elapsed
             }
+        }
+    }
+
+    private func updatePracticeSessionEvent(
+        from snapshot: SessionSnapshot,
+        emitsEvent: Bool
+    ) {
+        guard isPracticeVisible else {
+            practiceCaptureWasSeen = false
+            return
+        }
+        guard emitsEvent else {
+            practiceCaptureWasSeen = Self.isCaptureInProgress(snapshot.sessionState)
+            return
+        }
+        if Self.isCaptureInProgress(snapshot.sessionState) {
+            if !practiceCaptureWasSeen {
+                practiceCaptureWasSeen = true
+                publishPracticeEvent { .captureStarted($0) }
+            }
+            return
+        }
+        guard practiceCaptureWasSeen, snapshot.sessionState == .completed else { return }
+        practiceCaptureWasSeen = false
+        guard let text = snapshot.lastCompletedResult?.text,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        publishPracticeEvent { .completed($0) }
+    }
+
+    private func publishPracticeEvent(
+        _ event: (Int) -> SetupPracticeSessionEvent
+    ) {
+        practiceEventSequence += 1
+        practiceSessionEvent = event(practiceEventSequence)
+    }
+
+    private static func isCaptureInProgress(_ state: SessionState) -> Bool {
+        switch state.displayState {
+        case .capturing, .holdRecording, .paused:
+            true
+        case .idle, .transcribing, .completed, .shortExit, .error:
+            false
         }
     }
 

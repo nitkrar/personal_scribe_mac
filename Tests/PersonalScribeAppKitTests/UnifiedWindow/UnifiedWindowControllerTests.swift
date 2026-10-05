@@ -160,6 +160,19 @@ final class UnifiedWindowControllerTests: XCTestCase {
         XCTAssertEqual(stopCount, 1)
     }
 
+    func testWindowCloseDisarmsPracticePaste() {
+        let defaults = Self.ephemeralDefaults()
+        let setupFlow = SetupFlowState(defaults: defaults)
+        setupFlow.beginPractice()
+        setupFlow.recordPracticeCompleted()
+        let controller = Self.makeController(defaults: defaults, setupFlow: setupFlow)
+
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        setupFlow.recordPracticePaste("Later manual paste")
+
+        XCTAssertNil(setupFlow.practiceResult)
+    }
+
     func testReopeningRetainedWindowOnMicrophoneStepRestartsMonitor() async {
         let defaults = Self.ephemeralDefaults()
         let setupFlow = SetupFlowState(defaults: defaults)
@@ -182,6 +195,30 @@ final class UnifiedWindowControllerTests: XCTestCase {
 
         let startsAfterReopen = await monitor.startCount
         XCTAssertGreaterThan(startsAfterReopen, startsBeforeReopen)
+        controller.window?.close()
+    }
+
+    func testMiniaturizingWindowStopsSetupMicrophoneMonitor() async {
+        let defaults = Self.ephemeralDefaults()
+        let setupFlow = SetupFlowState(defaults: defaults)
+        setupFlow.advance(satisfaction: .allSatisfied)
+        let monitor = CloseTrackingAudioLevelMonitor()
+        let controller = Self.makeController(
+            defaults: defaults,
+            setupFlow: setupFlow,
+            setupLevelMonitor: monitor
+        )
+        controller.showSetup()
+        await waitUntil { await monitor.startCount >= 1 }
+        let stopsBeforeMiniaturize = await monitor.stopCount
+
+        controller.windowDidMiniaturize(
+            Notification(name: NSWindow.didMiniaturizeNotification)
+        )
+        await waitUntil { await monitor.stopCount > stopsBeforeMiniaturize }
+
+        let stopsAfterMiniaturize = await monitor.stopCount
+        XCTAssertGreaterThan(stopsAfterMiniaturize, stopsBeforeMiniaturize)
         controller.window?.close()
     }
 

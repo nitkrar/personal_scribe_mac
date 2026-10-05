@@ -132,7 +132,7 @@ final class SetupFlowStateTests: XCTestCase {
         )
         flow.beginPractice()
         now = Date(timeIntervalSince1970: 110)
-        flow.recordPracticeStopped()
+        flow.recordPracticeCompleted()
         now = Date(timeIntervalSince1970: 111.25)
 
         flow.updatePracticeText("Typed prefix Hello Ninimma")
@@ -163,9 +163,20 @@ final class SetupFlowStateTests: XCTestCase {
         let defaults = Self.ephemeralDefaults()
         let flow = SetupFlowState(defaults: defaults)
         flow.beginPractice()
-        flow.recordPracticeStopped()
+        flow.recordPracticeCompleted()
 
         flow.recordPracticePaste("")
+        flow.recordPracticePaste("Later manual paste")
+
+        XCTAssertNil(flow.practiceResult)
+    }
+
+    func testNextCaptureOrLeavingPracticeDisarmsPaste() {
+        let flow = SetupFlowState(defaults: Self.ephemeralDefaults())
+        flow.beginPractice()
+        flow.recordPracticeCompleted()
+        flow.disarmPracticePaste()
+
         flow.recordPracticePaste("Later manual paste")
 
         XCTAssertNil(flow.practiceResult)

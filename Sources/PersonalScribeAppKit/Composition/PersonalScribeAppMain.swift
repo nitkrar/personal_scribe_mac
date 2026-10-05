@@ -220,12 +220,13 @@ struct PersonalScribeAppMain: App {
         homeChecklist.startObserving(
             customModes: AppComposition.workflowModeRegistry.customModesStream()
         )
-        let onboardingObserver = OnboardingCompletionObserver(
+        let onboarding = Self.makeOnboardingComposition(
             permissionService: resolvedPermissionService,
-            defaults: defaults
+            defaults: defaults,
+            checklist: homeChecklist
         )
-        onboardingObserver.start()
-        let setupFlow = SetupFlowState(defaults: defaults, checklist: homeChecklist)
+        let onboardingObserver = onboarding.observer
+        let setupFlow = onboarding.setupFlow
         let unifiedTranscriptReader = PersonalScribeAppMain.defaultTranscriptReader(
             logger: AppComposition.makeLogger(PersonalScribeLogCategory.ui)
         )
@@ -479,6 +480,27 @@ struct PersonalScribeAppMain: App {
 }
 
 extension PersonalScribeAppMain {
+    struct OnboardingComposition {
+        let observer: OnboardingCompletionObserver
+        let setupFlow: SetupFlowState
+    }
+
+    static func makeOnboardingComposition(
+        permissionService: any PermissionService,
+        defaults: UserDefaults,
+        checklist: HomeChecklistState
+    ) -> OnboardingComposition {
+        let observer = OnboardingCompletionObserver(
+            permissionService: permissionService,
+            defaults: defaults
+        )
+        observer.start()
+        return OnboardingComposition(
+            observer: observer,
+            setupFlow: SetupFlowState(defaults: defaults, checklist: checklist)
+        )
+    }
+
     static func defaultTranscriptReader(
         logger: PersonalScribeLogger
     ) -> any TranscriptReading {

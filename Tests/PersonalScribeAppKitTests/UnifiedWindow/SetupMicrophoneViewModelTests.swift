@@ -226,9 +226,77 @@ final class SetupMicrophoneViewModelTests: XCTestCase {
         await waitUntil { await source.activeSubscriptionCount == 0 }
     }
 
+    func testPracticeCompletionRequiresNonEmptyCompletedResult() async {
+        let source = StubSetupSessionSource(state: .idle)
+        let viewModel = SetupMicrophoneViewModel(
+            inputDeviceProvider: StubSetupInputDeviceProvider(),
+            levelMonitor: StubAudioLevelMonitor(),
+            currentSessionSnapshot: { await source.current() },
+            sessionSnapshots: { await source.stream() }
+        )
+        await viewModel.setPracticeVisible(true)
+
+        await source.send(SessionSnapshot(sessionState: .capturing))
+        await waitUntil {
+            if case .captureStarted = viewModel.practiceSessionEvent { return true }
+            return false
+        }
+        await source.send(
+            SessionSnapshot(
+                sessionState: .completed,
+                lastCompletedResult: Self.result(text: "   ")
+            )
+        )
+        try? await Task.sleep(for: .milliseconds(20))
+        if case .completed = viewModel.practiceSessionEvent {
+            XCTFail("An empty transcript must not arm a later paste")
+        }
+
+        await source.send(SessionSnapshot(sessionState: .capturing))
+        await waitUntil {
+            if case .captureStarted(2) = viewModel.practiceSessionEvent { return true }
+            return false
+        }
+        await source.send(
+            SessionSnapshot(
+                sessionState: .completed,
+                lastCompletedResult: Self.result(text: "Hello Ninimma")
+            )
+        )
+        await waitUntil {
+            if case .completed = viewModel.practiceSessionEvent { return true }
+            return false
+        }
+    }
+
+    func testVisibilityResyncDoesNotEmitPracticeCompletion() async {
+        let source = StubSetupSessionSource(state: .capturing)
+        let viewModel = SetupMicrophoneViewModel(
+            inputDeviceProvider: StubSetupInputDeviceProvider(),
+            levelMonitor: StubAudioLevelMonitor(),
+            currentSessionSnapshot: { await source.current() },
+            sessionSnapshots: { await source.stream() }
+        )
+
+        await viewModel.setPracticeVisible(true)
+        XCTAssertNil(viewModel.practiceSessionEvent)
+        await viewModel.windowDidHide()
+        await source.send(
+            SessionSnapshot(
+                sessionState: .completed,
+                lastCompletedResult: Self.result(text: "Finished while hidden")
+            )
+        )
+
+        await viewModel.setPracticeVisible(true)
+
+        XCTAssertNil(viewModel.practiceSessionEvent)
+        XCTAssertEqual(viewModel.sessionState, .completed)
+    }
+
     private func waitUntil(
         timeout: Duration = .seconds(1),
-        condition: @escaping @Sendable () async -> Bool
+        condition: @escaping @MainActor @Sendable () async -> Bool
     ) async {
         let clock = ContinuousClock()
         let deadline = clock.now + timeout
@@ -237,6 +305,14 @@ final class SetupMicrophoneViewModelTests: XCTestCase {
             await Task.yield()
         }
         XCTFail("Timed out waiting for condition")
+    }
+
+    private static func result(text: String) -> TranscriptionResult {
+        TranscriptionResult(
+            text: text,
+            audioDuration: .seconds(1),
+            processingDuration: .milliseconds(100)
+        )
     }
 }
 

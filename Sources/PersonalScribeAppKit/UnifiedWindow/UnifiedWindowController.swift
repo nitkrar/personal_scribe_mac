@@ -314,28 +314,22 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
         }
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
-        if model.isShowingSetup, setupFlow.isOpen {
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                switch setupFlow.step {
-                case .microphone:
-                    await setupMicrophoneViewModel.appear()
-                case .tryShortcut:
-                    await setupMicrophoneViewModel.setPracticeVisible(true)
-                case .permissions, .voiceModel, .done:
-                    break
-                }
-            }
-        }
+        resumeVisibleSetupMicrophoneState()
         DispatchQueue.main.async { [weak window] in
             window?.collectionBehavior.remove(.moveToActiveSpace)
         }
     }
 
     func windowWillClose(_ notification: Notification) {
-        Task { @MainActor [weak self] in
-            await self?.setupMicrophoneViewModel.windowDidHide()
-        }
+        hideSetupMicrophoneState()
+    }
+
+    func windowDidMiniaturize(_ notification: Notification) {
+        hideSetupMicrophoneState()
+    }
+
+    func windowDidDeminiaturize(_ notification: Notification) {
+        resumeVisibleSetupMicrophoneState()
     }
 
     /// Convenience for menu-bar / hotkey entry points that want to
@@ -381,6 +375,28 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
             unifiedWindowIsKey: window.isKeyWindow,
             unifiedWindowIsMain: window.isMainWindow
         )
+    }
+
+    private func hideSetupMicrophoneState() {
+        setupFlow.disarmPracticePaste()
+        Task { @MainActor [weak self] in
+            await self?.setupMicrophoneViewModel.windowDidHide()
+        }
+    }
+
+    private func resumeVisibleSetupMicrophoneState() {
+        guard model.isShowingSetup, setupFlow.isOpen else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            switch setupFlow.step {
+            case .microphone:
+                await setupMicrophoneViewModel.appear()
+            case .tryShortcut:
+                await setupMicrophoneViewModel.setPracticeVisible(true)
+            case .permissions, .voiceModel, .done:
+                break
+            }
+        }
     }
 
     private func recoverForegroundIfNeeded() {

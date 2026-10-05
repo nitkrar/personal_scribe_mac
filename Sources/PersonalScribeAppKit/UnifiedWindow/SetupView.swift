@@ -12,7 +12,6 @@ struct SetupView: View {
     @ObservedObject var checklist: HomeChecklistState
     @StateObject private var pillPreview: PillOverlayViewModel = {
         let model = PillOverlayViewModel(visibility: .recording)
-        model.audioLevel = 0.55
         model.waveformRenderDate = Date(timeIntervalSinceReferenceDate: 1)
         return model
     }()
@@ -28,6 +27,12 @@ struct SetupView: View {
             stepContent
                 .padding(.top, PersonalScribeTheme.Spacing.xl)
             Spacer(minLength: PersonalScribeTheme.Spacing.lg)
+            if flow.step == .tryShortcut, flow.practiceResult == nil {
+                SetupMicrophoneObserver(microphone: microphone) {
+                    practicePillPreview
+                }
+                .padding(.bottom, PersonalScribeTheme.Spacing.md)
+            }
             footer
         }
         .task {
@@ -165,14 +170,8 @@ struct SetupView: View {
                 HStack(spacing: PersonalScribeTheme.Spacing.sm) {
                     Image(systemName: "mic.fill")
                         .foregroundStyle(palette.secondaryText)
-                    Menu {
-                        ForEach(microphone.devices) { device in
-                            Button(device.name) {
-                                Task { await microphone.selectDevice(id: device.id) }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: PersonalScribeTheme.Spacing.sm) {
+                    ZStack {
+                        HStack {
                             Text(selectedMicrophoneName)
                                 .foregroundStyle(palette.primaryTextBase)
                                 .lineLimit(1)
@@ -181,14 +180,26 @@ struct SetupView: View {
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(palette.secondaryText)
                         }
+                        Menu {
+                            ForEach(microphone.devices) { device in
+                                Button(device.name) {
+                                    Task { await microphone.selectDevice(id: device.id) }
+                                }
+                            }
+                        } label: {
+                            Color.clear
+                                .contentShape(Rectangle())
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 40)
+                        .accessibilityLabel("Input device: \(selectedMicrophoneName)")
                     }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
                     .frame(maxWidth: .infinity)
                 }
                 .padding(.horizontal, PersonalScribeTheme.Spacing.md)
-                .frame(width: 380)
-                .frame(minHeight: 40)
+                .frame(width: 380, height: 40)
                 .setupCard(palette: palette)
             }
             VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
@@ -340,24 +351,43 @@ struct SetupView: View {
                         .padding(8)
                     }
                     .frame(height: 100)
-                    .setupCard(palette: palette)
+                    .background(
+                        RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.md, style: .continuous)
+                            .fill(Color.clear)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: PersonalScribeTheme.Radius.md, style: .continuous)
+                            .strokeBorder(palette.secondaryText.opacity(0.35), lineWidth: 1)
+                    )
                 }
                 .onAppear {
                     if flow.practiceText.isEmpty && flow.practiceResult == nil {
                         flow.beginPractice()
                     }
                 }
-                .onChange(of: microphone.sessionState) { oldState, newState in
-                    if isCaptureInProgress(oldState) && !isCaptureInProgress(newState) {
-                        flow.recordPracticeStopped()
+                .onChange(of: microphone.practiceSessionEvent) { _, event in
+                    switch event {
+                    case .captureStarted:
+                        flow.disarmPracticePaste()
+                    case .completed:
+                        flow.recordPracticeCompleted()
+                    case nil:
+                        break
                     }
                 }
                 .onAppear { Task { await microphone.setPracticeVisible(true) } }
-                .onDisappear { Task { await microphone.setPracticeVisible(false) } }
+                .onDisappear {
+                    flow.disarmPracticePaste()
+                    Task { await microphone.setPracticeVisible(false) }
+                }
                 if microphone.isRecording {
-                    Text("Recording · \(formattedElapsed)")
-                        .font(PersonalScribeTheme.Typography.caption.font.weight(.semibold))
-                        .foregroundStyle(PersonalScribeTheme.Status.error)
+                    HStack(spacing: PersonalScribeTheme.Spacing.sm) {
+                        Label("Recording · \(formattedElapsed)", systemImage: "circle.fill")
+                            .foregroundStyle(PersonalScribeTheme.Status.error)
+                        Text("Press \(hotkeyKeycaps.joined(separator: " + ")) again to stop and paste")
+                            .foregroundStyle(palette.secondaryText)
+                    }
+                    .font(PersonalScribeTheme.Typography.caption.font.weight(.semibold))
                 }
                 if let result = flow.practiceResult {
                     HStack {
@@ -381,14 +411,6 @@ struct SetupView: View {
                             .strokeBorder(PersonalScribeTheme.Status.success.opacity(0.8), lineWidth: 1)
                     )
                 }
-                VStack(alignment: .center, spacing: 6) {
-                    Text("Pill appears at the bottom of your screen")
-                        .font(PersonalScribeTheme.Typography.caption.font)
-                        .foregroundStyle(palette.secondaryText)
-                    PillOverlayView(model: pillPreview)
-                        .frame(width: 220, height: 36)
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
             } else {
                 Label("Waiting for the voice model to finish downloading", systemImage: "clock")
                     .foregroundStyle(palette.secondaryText)
@@ -396,6 +418,23 @@ struct SetupView: View {
                     .setupCard(palette: palette)
             }
         }
+    }
+
+    private var practicePillPreview: some View {
+        VStack(alignment: .center, spacing: 6) {
+            Text("Pill appears at the bottom of your screen")
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(palette.secondaryText)
+            PillOverlayView(model: pillPreview)
+                .frame(width: 220, height: 36)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .onAppear { updatePillPreviewLevel() }
+        .onChange(of: microphone.isRecording) { _, _ in updatePillPreviewLevel() }
+    }
+
+    private func updatePillPreviewLevel() {
+        pillPreview.audioLevel = microphone.isRecording ? 0.75 : 0
     }
 
     private var footer: some View {
@@ -471,15 +510,6 @@ struct SetupView: View {
         let receivedLabel = ByteCountFormatter.string(fromByteCount: received, countStyle: .file)
         let totalLabel = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
         return "Downloading · \(receivedLabel) of \(totalLabel) · \(Int(state.fractionCompleted * 100))%"
-    }
-
-    private func isCaptureInProgress(_ state: SessionState) -> Bool {
-        switch state.displayState {
-        case .capturing, .holdRecording, .paused:
-            true
-        case .idle, .transcribing, .completed, .shortExit, .error:
-            false
-        }
     }
 
     private func title(_ title: String, subtitle: String) -> some View {

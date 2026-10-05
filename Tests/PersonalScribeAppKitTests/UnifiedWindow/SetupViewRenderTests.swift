@@ -109,7 +109,7 @@ final class SetupViewRenderTests: XCTestCase {
         if scenario == .tryShortcutSuccess {
             flow.beginPractice()
             renderNow = Date(timeIntervalSince1970: 101)
-            flow.recordPracticeStopped()
+            flow.recordPracticeCompleted()
             renderNow = Date(timeIntervalSince1970: 101.8)
             flow.updatePracticeText("Hello Ninimma, this is my first dictation.")
             flow.recordPracticePaste("Hello Ninimma, this is my first dictation.")
@@ -277,7 +277,7 @@ private final class RenderInputDeviceProvider: AudioInputDeviceProviding, @unche
 
 private actor RenderAudioLevelMonitor: AudioLevelMonitoring {
     func start() async throws -> AsyncStream<Float> {
-        AsyncStream { $0.yield(0.55) }
+        AsyncStream { $0.yield(1) }
     }
     func stop() async {}
 }

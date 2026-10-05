@@ -55,22 +55,20 @@ final class OnboardingCompletionObserverTests: XCTestCase {
         XCTAssertEqual(OnboardingState.resolve(from: defaults), .completed)
     }
 
-    func testObserverStartsBeforeFlowSoMicrophoneGrantKeepsSetupClosed() {
+    func testProductionCompositionStartsObserverBeforeCreatingFlow() {
         let defaults = isolatedDefaults()
         let service = FakePermissionService(statuses: [
             .microphone: .granted,
             .accessibility: .pending,
         ])
-        let observer = OnboardingCompletionObserver(
+        let composition = PersonalScribeAppMain.makeOnboardingComposition(
             permissionService: service,
-            defaults: defaults
+            defaults: defaults,
+            checklist: HomeChecklistState(defaults: defaults)
         )
 
-        observer.start()
-        let flow = SetupFlowState(defaults: defaults)
-
         XCTAssertEqual(OnboardingState.resolve(from: defaults), .completed)
-        XCTAssertFalse(flow.isOpen)
+        XCTAssertFalse(composition.setupFlow.isOpen)
     }
 
     /// User grants perms during the session — observer reacts and
