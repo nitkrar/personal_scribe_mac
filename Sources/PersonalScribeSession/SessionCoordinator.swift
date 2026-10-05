@@ -144,7 +144,7 @@ public actor SessionCoordinator {
         case .capturing, .holdRecording:
             await performStop()
         case .paused:
-            return
+            await pipeline.stopPausedSession()
         case .transcribing, .error:
             await performToggle()
         case .completed, .shortExit:
@@ -190,6 +190,16 @@ public actor SessionCoordinator {
         await performStop()
     }
 
+    public func pauseIfRecording() async {
+        guard await currentDisplayState() == .capturing else { return }
+        await pipeline.pauseCapture()
+    }
+
+    public func resumeIfPaused() async {
+        guard await currentDisplayState() == .paused else { return }
+        await pipeline.resumePausedCapture()
+    }
+
     /// Mode-agnostic stop. Transitions either `.capturing` or
     /// `.holdRecording` into `.transcribing` via the normal pipeline
     /// stop path. Preferred entry point for hold-release, VAD auto-stop
@@ -200,7 +210,9 @@ public actor SessionCoordinator {
         switch await currentDisplayState() {
         case .capturing, .holdRecording:
             await performStop()
-        case .idle, .completed, .shortExit, .paused, .transcribing, .error:
+        case .paused:
+            await pipeline.stopPausedSession()
+        case .idle, .completed, .shortExit, .transcribing, .error:
             return
         }
     }

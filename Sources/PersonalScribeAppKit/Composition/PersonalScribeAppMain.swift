@@ -118,6 +118,15 @@ struct PersonalScribeAppMain: App {
         AppComposition.sessionOutputStage.onClipboardOnlyCopy = { notice in
             pillController.showClipboardOnlyNotice(notice)
         }
+        pillController.viewModel.onPause = { [weak coordinator] in
+            Task { await coordinator?.pauseIfRecording() }
+        }
+        pillController.viewModel.onResume = { [weak coordinator] in
+            Task { await coordinator?.resumeIfPaused() }
+        }
+        pillController.viewModel.onStop = { [weak coordinator] in
+            Task { await coordinator?.stopIfActive() }
+        }
 
         let diagnosticsOverlayController = LiveDiagnosticsOverlayController(
             store: AppComposition.diagnosticsStore
@@ -129,7 +138,11 @@ struct PersonalScribeAppMain: App {
         ) { [weak pillController, weak coordinator] in
             guard let pillController else { return false }
             let visibility = pillController.viewModel.visibility
-            guard visibility == .holdToRecord || visibility == .recording else {
+            switch visibility {
+            case .holdToRecord, .recording, .paused:
+                break
+            case .hidden, .idle, .downloading, .loading, .transcribing,
+                 .done, .cancelled, .error:
                 return false
             }
             Task { [weak coordinator] in

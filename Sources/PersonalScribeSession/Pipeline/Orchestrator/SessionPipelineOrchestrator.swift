@@ -121,11 +121,17 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private var startRecordingInFlight = false
     private var snapshotContinuations: [UUID: AsyncStream<SessionSnapshot>.Continuation] = [:]
     private var bufferedAudio: [PCMBuffer] = []
+    private struct PausedSegment {
+        let result: TranscriptionResult
+        let buffers: [PCMBuffer]
+    }
+    private var pausedSegments: [PausedSegment] = []
     /// Audio of the last cancelled capture, kept for `cancelCardDuration`
     /// or until any new capture starts.
     private struct ResumableCapture {
         let id = UUID()
         let buffers: [PCMBuffer]
+        let pausedSegments: [PausedSegment]
         let recipe: BoundRecipe?
         /// Live streaming text seen before the cancel — prepended when a
         /// resumed streaming session falls back to its live text.
@@ -304,7 +310,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         case .capturing, .holdRecording:
             await stopRecordingAndRunPipeline()
         case .paused:
-            logger.info("Ignored toggle while paused")
+            await stopPausedSession()
         case .transcribing:
             logger.info("Ignored toggle while transcribing")
         case .error:
@@ -344,7 +350,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         case .capturing, .holdRecording:
             await discardActiveCapture()
         case .paused:
-            logger.info("Ignored cancel while paused")
+            await discardPausedCapture()
         case .idle, .completed, .shortExit, .transcribing, .error:
             logger.info("Ignored cancel from non-active session state")
         }
@@ -365,6 +371,85 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         case .capturing, .holdRecording, .paused, .transcribing, .error:
             logger.info("Ignored resume while session is not idle")
         }
+    }
+
+    public func pauseCapture() async {
+        guard currentSnapshot.sessionState == .capturing else {
+            logger.info("Ignored pause while session is not capturing")
+            return
+        }
+
+        do {
+            if let segment = try await transcribeCurrentSegment() {
+                pausedSegments.append(segment)
+            }
+            publishPausedSnapshot()
+        } catch let failure as PipelineStageFailure {
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            handleStageFailure(failure)
+        } catch {
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            handleStageFailure(
+                makeStageFailure(
+                    stage: .transcription,
+                    error: error,
+                    fallback: .transcriptionFailure
+                )
+            )
+        }
+    }
+
+    public func resumePausedCapture() async {
+        guard currentSnapshot.sessionState == .paused else {
+            logger.info("Ignored paused resume while session is not paused")
+            return
+        }
+
+        resetInputSilence()
+        resetGraceForNewSession()
+        bufferedAudio.removeAll(keepingCapacity: true)
+        do {
+            let stream = try await capture.start()
+            let levelStream = await capture.audioLevelStream()
+            beginLiveStreamingSessionIfNeeded(for: activeSessionRecipe)
+
+            audioLevelTask?.cancel()
+            audioLevelTask = Task { [weak self] in
+                for await level in levelStream {
+                    await self?.publishAudioLevel(level)
+                }
+                await self?.publishAudioLevel(0)
+            }
+
+            publish { snapshot in
+                snapshot.sessionState = .capturing
+                snapshot.activeStage = .capture
+                snapshot.liveStreamingFallbackNotice = nil
+                snapshot.vadAutoStopGracePending = false
+                snapshot.vadAutoStopGraceDeadline = nil
+                snapshot.vadAutoStopFireToken = nil
+            }
+
+            captureTask = Task { [weak self] in
+                await self?.consumeCaptureStream(stream)
+            }
+        } catch {
+            handleStageFailure(
+                makeStageFailure(
+                    stage: .capture,
+                    error: error,
+                    fallback: .audioEngineFailure
+                )
+            )
+        }
+    }
+
+    public func stopPausedSession() async {
+        guard currentSnapshot.sessionState == .paused else {
+            logger.info("Ignored paused stop while session is not paused")
+            return
+        }
+        await finalizePausedSegments()
     }
 
     private func resetInputSilence() {
@@ -637,6 +722,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         defer { startRecordingInFlight = false }
 
         bufferedAudio = resumable?.buffers ?? []
+        pausedSegments = resumable?.pausedSegments ?? []
         resumedLiveText = resumable?.liveText
         clearResumableCapture()
         resetInputSilence()
@@ -716,12 +802,13 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         await cancelLiveStreamingSession()
 
         // Keep the audio while the Cancel Card offers Resume.
-        if !bufferedAudio.isEmpty {
+        if !bufferedAudio.isEmpty || !pausedSegments.isEmpty {
             let liveText = [resumedLiveText, currentSnapshot.transcriptProgress?.text]
                 .compactMap { $0?.isEmpty == false ? $0 : nil }
                 .joined(separator: " ")
             let resumable = ResumableCapture(
                 buffers: bufferedAudio,
+                pausedSegments: pausedSegments,
                 recipe: activeSessionRecipe,
                 liveText: liveText.isEmpty ? nil : liveText
             )
@@ -735,6 +822,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
         resumedLiveText = nil
         bufferedAudio.removeAll(keepingCapacity: true)
+        pausedSegments.removeAll(keepingCapacity: true)
         nextRevision = 0
         latestStageFailure = nil
         let completedRecipe = activeSessionRecipe
@@ -757,6 +845,36 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
+    private func discardPausedCapture() async {
+        guard !pausedSegments.isEmpty else { return }
+        let resumable = ResumableCapture(
+            buffers: [],
+            pausedSegments: pausedSegments,
+            recipe: activeSessionRecipe,
+            liveText: pausedRawText
+        )
+        resumableCapture = resumable
+        let delay = cancelCardDuration()
+        resumableExpiryTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            await self?.expireResumableCapture(id: resumable.id)
+        }
+        pausedSegments.removeAll(keepingCapacity: true)
+        let completedRecipe = activeSessionRecipe
+        activeSessionRecipe = nil
+        await endSessionAndReleaseIdleResources(for: completedRecipe)
+        publish { snapshot in
+            snapshot.sessionState = .idle
+            snapshot.activeStage = nil
+            snapshot.transcriptProgress = nil
+            snapshot.recordingDuration = nil
+            snapshot.liveStreamingFallbackNotice = nil
+            snapshot.isStreamingSession = false
+            snapshot.cancelledCaptureResumable = true
+        }
+    }
+
     /// Hold-path start. Mirrors `startRecording()` except the target
     /// state (`.holdRecording`) is **published before** awaiting
     /// `capture.start()`. A concurrent hold-release routed through
@@ -770,6 +888,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         resetInputSilence()
         resumedLiveText = nil
         bufferedAudio.removeAll(keepingCapacity: true)
+        pausedSegments.removeAll(keepingCapacity: true)
         nextRevision = 0
         latestStageFailure = nil
         activeContext = contextProvider.currentContext()
@@ -822,7 +941,205 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
+    private func transcribeCurrentSegment() async throws -> PausedSegment? {
+        cancelPendingGraceTimer()
+        await capture.stop()
+        await captureTask?.value
+        captureTask = nil
+        await audioLevelTask?.value
+        audioLevelTask = nil
+
+        if case .error = currentSnapshot.sessionState {
+            await cancelLiveStreamingSession()
+            bufferedAudio.removeAll(keepingCapacity: true)
+            return nil
+        }
+
+        let buffers = bufferedAudio
+        bufferedAudio.removeAll(keepingCapacity: true)
+        guard !buffers.isEmpty else {
+            await cancelLiveStreamingSession()
+            return nil
+        }
+
+        let duration = buffers.reduce(Duration.zero) { $0 + $1.duration }
+        publish { snapshot in
+            snapshot.sessionState = .transcribing
+            snapshot.activeStage = .transcription
+            snapshot.recordingDuration = self.pausedDuration + duration
+            snapshot.liveStreamingFallbackNotice = nil
+            snapshot.vadAutoStopGracePending = false
+            snapshot.vadAutoStopGraceDeadline = nil
+        }
+
+        let finishedStreamingState = activeSessionRecipe?.streamingBehavior == nil
+            ? nil
+            : await finishLiveStreamingSessionForStop()
+        let result = try await runBoundProcessing(
+            replayBuffers: buffers,
+            finishedLiveStreamingState: finishedStreamingState
+        )
+        return PausedSegment(result: result, buffers: buffers)
+    }
+
+    private var pausedDuration: Duration {
+        pausedSegments.reduce(.zero) { total, segment in
+            total + segment.buffers.reduce(.zero) { $0 + $1.duration }
+        }
+    }
+
+    private var pausedRawText: String {
+        pausedSegments
+            .map(\.result.text)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: " ")
+    }
+
+    private func publishPausedSnapshot() {
+        let duration = pausedDuration
+        let text = pausedRawText
+        let progress = text.isEmpty
+            ? nil
+            : nextTranscriptProgress(
+                text: text,
+                isFinal: false,
+                sourceStage: .transcription
+            )
+        publish { snapshot in
+            snapshot.sessionState = .paused
+            snapshot.activeStage = nil
+            snapshot.transcriptProgress = progress
+            snapshot.recordingDuration = duration
+            snapshot.liveStreamingFallbackNotice = nil
+            snapshot.vadAutoStopGracePending = false
+            snapshot.vadAutoStopGraceDeadline = nil
+            snapshot.vadAutoStopFireToken = nil
+        }
+    }
+
+    private func finalizePausedSegments() async {
+        guard !pausedSegments.isEmpty else {
+            publish { snapshot in
+                snapshot.sessionState = .shortExit
+                snapshot.activeStage = nil
+                snapshot.transcriptProgress = nil
+                snapshot.recordingDuration = .zero
+            }
+            return
+        }
+
+        let rawResult = combinedPausedResult()
+        let allBuffers = pausedSegments.flatMap(\.buffers)
+        publish { snapshot in
+            snapshot.sessionState = .transcribing
+            snapshot.activeStage = .postProcessing
+            snapshot.recordingDuration = rawResult.audioDuration
+        }
+
+        do {
+            let context = PostProcessingContext(
+                recordingDuration: rawResult.audioDuration,
+                activeMode: activeContext.activeMode,
+                activeAIModelID: activeContext.activeAIModelID,
+                systemPrompt: activeContext.systemPrompt,
+                segments: rawResult.segments,
+                asrConfidence: nil,
+                cleanupEnabled: activeSessionRecipe?.cleanupEnabled ?? true
+            )
+            let cleanedText = try await runPostProcessing(rawResult.text, context: context)
+            let progress = nextTranscriptProgress(
+                text: cleanedText,
+                isFinal: true,
+                sourceStage: .postProcessing
+            )
+            let finalResult = TranscriptionResult(
+                text: cleanedText,
+                segments: rawResult.segments,
+                audioDuration: rawResult.audioDuration,
+                processingDuration: rawResult.processingDuration
+            )
+
+            publish { snapshot in
+                snapshot.activeStage = .persistence
+                snapshot.transcriptProgress = progress
+            }
+            try await persist(finalResult, replayBuffers: allBuffers)
+
+            publish { snapshot in snapshot.activeStage = .output }
+            try await deliverFinal(finalResult)
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            pausedSegments.removeAll(keepingCapacity: true)
+
+            publish { snapshot in
+                snapshot.sessionState = .completed
+                snapshot.activeStage = nil
+                snapshot.transcriptProgress = progress
+                snapshot.lastCompletedResult = finalResult
+                snapshot.recordingDuration = finalResult.audioDuration
+                snapshot.liveStreamingFallbackNotice = nil
+                snapshot.isStreamingSession = false
+            }
+        } catch let failure as PipelineStageFailure {
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            handleStageFailure(failure)
+        } catch {
+            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            handleStageFailure(
+                makeStageFailure(
+                    stage: .transcription,
+                    error: error,
+                    fallback: .transcriptionFailure
+                )
+            )
+        }
+    }
+
+    private func combinedPausedResult() -> TranscriptionResult {
+        var offset = Duration.zero
+        var segments: [TranscriptionResult.Segment] = []
+        var processingDuration = Duration.zero
+        for held in pausedSegments {
+            segments.append(contentsOf: held.result.segments.map { segment in
+                TranscriptionResult.Segment(
+                    text: segment.text,
+                    start: segment.start + offset,
+                    end: segment.end + offset
+                )
+            })
+            offset += held.buffers.reduce(.zero) { $0 + $1.duration }
+            processingDuration += held.result.processingDuration
+        }
+        return TranscriptionResult(
+            text: pausedRawText,
+            segments: segments,
+            audioDuration: pausedDuration,
+            processingDuration: processingDuration
+        )
+    }
+
     private func stopRecordingAndRunPipeline() async {
+        if !pausedSegments.isEmpty {
+            do {
+                if let segment = try await transcribeCurrentSegment() {
+                    pausedSegments.append(segment)
+                }
+                await finalizePausedSegments()
+            } catch let failure as PipelineStageFailure {
+                await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+                handleStageFailure(failure)
+            } catch {
+                await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+                handleStageFailure(
+                    makeStageFailure(
+                        stage: .transcription,
+                        error: error,
+                        fallback: .transcriptionFailure
+                    )
+                )
+            }
+            return
+        }
+
         // Invariant: `capture.stop()` MUST happen BEFORE `captureTask?.value`.
         // The VAD auto-stop path (#046) fires this method from a detached Task
         // while the consumer loop is still live inside `captureTask`. Awaiting

@@ -5,6 +5,106 @@ import PersonalScribeTestSupport
 @testable import PersonalScribeVAD
 
 final class SessionPipelineOrchestratorTests: XCTestCase {
+    func testPauseResumeCyclesJoinSegmentsIntoOnePersistedDelivery() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.1)
+        let transcriber = SequencedTranscriber(results: [
+            TranscriptionResult(
+                text: "first segment",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(10)
+            ),
+            TranscriptionResult(
+                text: "second segment",
+                audioDuration: .seconds(1),
+                processingDuration: .milliseconds(20)
+            ),
+        ])
+        let sink = TestPipelineOutputSink()
+        let entries = TranscriptEntryRecorder()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: transcriber,
+            postProcessingPipeline: IdentityPostProcessingPipeline(),
+            outputSink: sink,
+            persistenceHandler: { entry in
+                await entries.append(entry)
+            }
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+
+        var snapshot = await orchestrator.snapshot()
+        let firstCallCount = await transcriber.callCount()
+        let earlyFinals = await sink.finalDeliveries()
+        let earlyEntries = await entries.all()
+        XCTAssertEqual(snapshot.sessionState, .paused)
+        XCTAssertEqual(snapshot.recordingDuration, .seconds(1))
+        XCTAssertEqual(firstCallCount, 1)
+        XCTAssertTrue(earlyFinals.isEmpty)
+        XCTAssertTrue(earlyEntries.isEmpty)
+
+        await orchestrator.resumePausedCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+
+        snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .paused)
+        XCTAssertEqual(snapshot.recordingDuration, .seconds(2))
+        XCTAssertEqual(snapshot.transcriptProgress?.text, "first segment second segment")
+
+        await orchestrator.stopPausedSession()
+
+        snapshot = await orchestrator.snapshot()
+        let finalTexts = await sink.finalDeliveries().map(\.text)
+        let entryTexts = await entries.all().map(\.text)
+        let finalCallCount = await transcriber.callCount()
+        XCTAssertEqual(snapshot.sessionState, .completed)
+        XCTAssertEqual(snapshot.lastCompletedResult?.text, "first segment second segment")
+        XCTAssertEqual(snapshot.lastCompletedResult?.audioDuration, .seconds(2))
+        XCTAssertEqual(finalTexts, ["first segment second segment"])
+        XCTAssertEqual(entryTexts, ["first segment second segment"])
+        XCTAssertEqual(finalCallCount, 2)
+    }
+
+    func testCancelWhilePausedKeepsHeldSegmentForCancelCardResume() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.1)
+        let transcriber = SequencedTranscriber(results: [
+            TranscriptionResult(
+                text: "before cancel",
+                audioDuration: .seconds(1),
+                processingDuration: .zero
+            ),
+            TranscriptionResult(
+                text: "after resume",
+                audioDuration: .seconds(1),
+                processingDuration: .zero
+            ),
+        ])
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: transcriber,
+            postProcessingPipeline: IdentityPostProcessingPipeline()
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+        await orchestrator.cancelCapture()
+
+        var snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .idle)
+        XCTAssertTrue(snapshot.cancelledCaptureResumable)
+
+        await orchestrator.resumeCancelledCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.toggleCapture()
+
+        snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.lastCompletedResult?.text, "before cancel after resume")
+    }
+
     func testSnapshotStreamDeliversInitialIdleSnapshotImmediately() async {
         let context = makeContext(streamingOutputEnabled: false)
         let orchestrator = makeOrchestrator(context: context)
@@ -2397,6 +2497,19 @@ final class SessionPipelineOrchestratorTests: XCTestCase {
         )
     }
 
+    private func waitForState(
+        _ state: SessionState,
+        in orchestrator: SessionPipelineOrchestrator
+    ) async {
+        for _ in 0..<100 {
+            if await orchestrator.snapshot().sessionState == state {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        XCTFail("Timed out waiting for \(state)")
+    }
+
     private func deduplicatedStages(from snapshots: [SessionSnapshot]) -> [PipelineStepID] {
         var stages: [PipelineStepID] = []
         for stage in snapshots.compactMap(\.activeStage) where stages.last != stage {
@@ -2695,6 +2808,50 @@ private actor CountingTranscriber: Transcriber {
 
     func transcribeCallCount() -> Int {
         calls
+    }
+}
+
+private actor SequencedTranscriber: Transcriber {
+    nonisolated let capabilities = TranscriberCapabilities()
+    private var results: [TranscriptionResult]
+    private var calls = 0
+
+    init(results: [TranscriptionResult]) {
+        self.results = results
+    }
+
+    func prepare() async throws {}
+    func releaseIdleResources() async {}
+
+    nonisolated func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+
+    func transcribe(_ audio: PCMBuffer, languageHint: String?) async throws -> TranscriptionResult {
+        _ = audio
+        _ = languageHint
+        defer { calls += 1 }
+        guard calls < results.count else { throw PersonalScribeError.invalidState }
+        return results[calls]
+    }
+
+    func callCount() -> Int { calls }
+}
+
+private actor TranscriptEntryRecorder {
+    private var entries: [TranscriptEntry] = []
+
+    func append(_ entry: TranscriptEntry) {
+        entries.append(entry)
+    }
+
+    func all() -> [TranscriptEntry] { entries }
+}
+
+private struct IdentityPostProcessingPipeline: PostProcessingPipeline {
+    func run(_ text: String, context: PostProcessingContext) async throws -> String {
+        _ = context
+        return text
     }
 }
 
