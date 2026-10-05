@@ -314,9 +314,17 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
         }
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
-        if model.isShowingSetup, setupFlow.isOpen, setupFlow.step == .microphone {
+        if model.isShowingSetup, setupFlow.isOpen {
             Task { @MainActor [weak self] in
-                await self?.setupMicrophoneViewModel.appear()
+                guard let self else { return }
+                switch setupFlow.step {
+                case .microphone:
+                    await setupMicrophoneViewModel.appear()
+                case .tryShortcut:
+                    await setupMicrophoneViewModel.setPracticeVisible(true)
+                case .permissions, .voiceModel, .done:
+                    break
+                }
             }
         }
         DispatchQueue.main.async { [weak window] in
@@ -326,7 +334,7 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         Task { @MainActor [weak self] in
-            await self?.setupMicrophoneViewModel.disappear()
+            await self?.setupMicrophoneViewModel.windowDidHide()
         }
     }
 

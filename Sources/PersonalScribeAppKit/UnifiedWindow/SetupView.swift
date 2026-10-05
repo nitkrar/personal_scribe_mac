@@ -7,7 +7,7 @@ import SwiftUI
 struct SetupView: View {
     @ObservedObject var flow: SetupFlowState
     @ObservedObject var permissions: PermissionsSubTabViewModel
-    @ObservedObject var microphone: SetupMicrophoneViewModel
+    let microphone: SetupMicrophoneViewModel
     @ObservedObject var model: SetupModelViewModel
     @ObservedObject var checklist: HomeChecklistState
     @StateObject private var pillPreview: PillOverlayViewModel = {
@@ -85,11 +85,15 @@ struct SetupView: View {
         case .permissions:
             permissionsStep
         case .microphone:
-            microphoneStep
+            SetupMicrophoneObserver(microphone: microphone) {
+                microphoneStep
+            }
         case .voiceModel:
             modelStep
         case .tryShortcut:
-            shortcutStep
+            SetupMicrophoneObserver(microphone: microphone) {
+                shortcutStep
+            }
         case .done:
             EmptyView()
         }
@@ -348,8 +352,8 @@ struct SetupView: View {
                         flow.recordPracticeStopped()
                     }
                 }
-                .onAppear { microphone.setPracticeVisible(true) }
-                .onDisappear { microphone.setPracticeVisible(false) }
+                .onAppear { Task { await microphone.setPracticeVisible(true) } }
+                .onDisappear { Task { await microphone.setPracticeVisible(false) } }
                 if microphone.isRecording {
                     Text("Recording · \(formattedElapsed)")
                         .font(PersonalScribeTheme.Typography.caption.font.weight(.semibold))
@@ -489,6 +493,16 @@ struct SetupView: View {
 
     private var palette: PersonalScribeTheme.Palette {
         PersonalScribeTheme.Palette.for(scheme: colorScheme)
+    }
+}
+
+@MainActor
+private struct SetupMicrophoneObserver<Content: View>: View {
+    @ObservedObject var microphone: SetupMicrophoneViewModel
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
     }
 }
 

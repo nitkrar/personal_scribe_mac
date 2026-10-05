@@ -27,7 +27,7 @@ struct UnifiedWindowView: View {
     @ObservedObject var microphoneFooterViewModel: MicrophoneFooterViewModel
     @ObservedObject var setupFlow: SetupFlowState
     @ObservedObject var setupPermissionsViewModel: PermissionsSubTabViewModel
-    @ObservedObject var setupMicrophoneViewModel: SetupMicrophoneViewModel
+    let setupMicrophoneViewModel: SetupMicrophoneViewModel
     @ObservedObject var setupModelViewModel: SetupModelViewModel
     @ObservedObject var homeChecklist: HomeChecklistState
     let permissionService: any PermissionService

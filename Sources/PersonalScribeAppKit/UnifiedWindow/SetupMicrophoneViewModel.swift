@@ -45,7 +45,6 @@ final class SetupMicrophoneViewModel: ObservableObject {
         self.recordingElapsedSeconds = Self.elapsedSeconds(in: initialSessionSnapshot)
         self.currentSessionSnapshot = currentSessionSnapshot
         self.sessionSnapshots = sessionSnapshots
-        startSessionObservation()
     }
 
     isolated deinit {
@@ -55,6 +54,7 @@ final class SetupMicrophoneViewModel: ObservableObject {
 
     func appear() async {
         isVisible = true
+        updateSessionObservation()
         devices = inputDeviceProvider.availableDevices()
         selectedDeviceID = inputDeviceProvider.effectiveDeviceID
         await applySessionSnapshot(await currentSessionSnapshot())
@@ -62,6 +62,17 @@ final class SetupMicrophoneViewModel: ObservableObject {
 
     func disappear() async {
         isVisible = false
+        updateSessionObservation()
+        await stopMonitoring()
+    }
+
+    func windowDidHide() async {
+        isVisible = false
+        isPracticeVisible = false
+        updateSessionObservation()
+        if recordingElapsedSeconds != 0 {
+            recordingElapsedSeconds = 0
+        }
         await stopMonitoring()
     }
 
@@ -90,8 +101,14 @@ final class SetupMicrophoneViewModel: ObservableObject {
         }
     }
 
-    func setPracticeVisible(_ visible: Bool) {
+    func setPracticeVisible(_ visible: Bool) async {
         isPracticeVisible = visible
+        updateSessionObservation()
+        if visible {
+            let snapshot = await currentSessionSnapshot()
+            guard isPracticeVisible else { return }
+            await applySessionSnapshot(snapshot)
+        }
         if visible, sessionState != latestSessionSnapshot.sessionState {
             sessionState = latestSessionSnapshot.sessionState
         }
@@ -105,7 +122,13 @@ final class SetupMicrophoneViewModel: ObservableObject {
         latestSessionSnapshot.sessionState.displayState == .idle
     }
 
-    private func startSessionObservation() {
+    private func updateSessionObservation() {
+        guard isVisible || isPracticeVisible else {
+            sessionTask?.cancel()
+            sessionTask = nil
+            return
+        }
+        guard sessionTask == nil else { return }
         sessionTask = Task { @MainActor [weak self, sessionSnapshots] in
             let stream = await sessionSnapshots()
             for await snapshot in stream {

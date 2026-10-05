@@ -183,10 +183,47 @@ final class SetupMicrophoneViewModelTests: XCTestCase {
         XCTAssertEqual(publicationCount, 0)
         XCTAssertEqual(viewModel.sessionState.displayState, .idle)
 
-        viewModel.setPracticeVisible(true)
+        await viewModel.setPracticeVisible(true)
         XCTAssertEqual(viewModel.sessionState.displayState, .capturing)
         XCTAssertEqual(viewModel.recordingElapsedSeconds, 1)
         _ = cancellable
+    }
+
+    func testSessionSnapshotsAreSubscribedOnlyWhileSetupUsesMicrophoneState() async {
+        let source = StubSetupSessionSource(state: .idle)
+        let viewModel = SetupMicrophoneViewModel(
+            inputDeviceProvider: StubSetupInputDeviceProvider(),
+            levelMonitor: StubAudioLevelMonitor(),
+            currentSessionSnapshot: { await source.current() },
+            sessionSnapshots: { await source.stream() }
+        )
+
+        await Task.yield()
+        let initialStreamCalls = await source.streamCallCount
+        let initialSubscriptions = await source.activeSubscriptionCount
+        XCTAssertEqual(initialStreamCalls, 0)
+        XCTAssertEqual(initialSubscriptions, 0)
+
+        await viewModel.appear()
+        await waitUntil { await source.activeSubscriptionCount == 1 }
+        let microphoneStreamCalls = await source.streamCallCount
+        XCTAssertEqual(microphoneStreamCalls, 1)
+
+        await viewModel.disappear()
+        await waitUntil { await source.activeSubscriptionCount == 0 }
+
+        await viewModel.setPracticeVisible(true)
+        await waitUntil { await source.activeSubscriptionCount == 1 }
+        let practiceStreamCalls = await source.streamCallCount
+        XCTAssertEqual(practiceStreamCalls, 2)
+
+        await viewModel.windowDidHide()
+        await waitUntil { await source.activeSubscriptionCount == 0 }
+
+        await viewModel.setPracticeVisible(true)
+        await waitUntil { await source.activeSubscriptionCount == 1 }
+        await viewModel.setPracticeVisible(false)
+        await waitUntil { await source.activeSubscriptionCount == 0 }
     }
 
     private func waitUntil(
@@ -238,6 +275,9 @@ private actor StubAudioLevelMonitor: AudioLevelMonitoring {
 private actor StubSetupSessionSource {
     private var snapshot: SessionSnapshot
     private var continuations: [UUID: AsyncStream<SessionSnapshot>.Continuation] = [:]
+    private(set) var streamCallCount = 0
+
+    var activeSubscriptionCount: Int { continuations.count }
 
     init(state: SessionState) {
         snapshot = SessionSnapshot(sessionState: state)
@@ -246,6 +286,7 @@ private actor StubSetupSessionSource {
     func current() -> SessionSnapshot { snapshot }
 
     func stream() -> AsyncStream<SessionSnapshot> {
+        streamCallCount += 1
         let id = UUID()
         return AsyncStream { continuation in
             continuations[id] = continuation
