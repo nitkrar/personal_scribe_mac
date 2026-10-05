@@ -285,6 +285,8 @@ struct OfflineTranscriptionTab: View {
                 "Audio conversion failed"
             case .transcriptionFailed:
                 "Transcription failed"
+            case .noSpeech:
+                "No speech detected"
             case .other(let message):
                 message.isEmpty ? "Failed" : message
             }

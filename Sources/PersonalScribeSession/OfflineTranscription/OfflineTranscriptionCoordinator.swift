@@ -20,6 +20,7 @@ public actor OfflineTranscriptionCoordinator {
         case modelNotAvailable
         case conversionFailed
         case transcriptionFailed
+        case noSpeech
         case other(String)
     }
 
@@ -356,6 +357,12 @@ private extension OfflineTranscriptionCoordinator {
 
             let result = try await transcribe(audio: audio, descriptor: descriptor, job: job)
             try Task.checkCancellation()
+
+            guard !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                updateStatus(for: id, status: .failed(reason: .noSpeech))
+                finishProcessingTask(for: id)
+                return
+            }
 
             updateInFlightProgress(for: id, progress: 0.92)
             let transcriptID = UUID()

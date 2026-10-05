@@ -417,6 +417,34 @@ final class OfflineTranscriptionCoordinatorTests: XCTestCase {
         XCTAssertTrue(entries.isEmpty)
     }
 
+    func testEmptyTranscriptionMarksJobNoSpeechWithoutDBWrite() async throws {
+        let transcriber = RecordingTranscriber(
+            outcomes: [.success(makeResult(text: "  \n"))]
+        )
+        let harness = try makeHarness(
+            initialSessionState: .idle,
+            transcribersByID: [BuiltInModelCatalog.parakeetTDT06Bv2.id: transcriber]
+        )
+        defer { cleanup(harness.baseDirectory) }
+
+        let url = harness.baseDirectory.appendingPathComponent("silent.wav", isDirectory: false)
+        try Data().write(to: url)
+
+        let jobID = await harness.coordinator.enqueueFile(
+            url: url,
+            descriptorID: harness.asrDescriptor.id,
+            diarize: false
+        )
+
+        let status = try await waitForStatus(jobID, coordinator: harness.coordinator) { status in
+            if case .inFlight = status { return false }
+            return status != .queued
+        }
+        XCTAssertEqual(status, .failed(reason: .noSpeech))
+        let entries = await harness.repository.all()
+        XCTAssertTrue(entries.isEmpty)
+    }
+
     func testReTranscribeDeduplicatesWhenJobAlreadyQueued() async throws {
         let harness = try makeHarness(initialSessionState: .capturing)
         defer { cleanup(harness.baseDirectory) }

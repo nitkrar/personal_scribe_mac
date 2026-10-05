@@ -157,6 +157,8 @@ private extension OfflineRetranscriptionAction {
         switch reason {
         case .audioMissing:
             toastBroadcaster.post(.error("Audio file no longer available — link removed"))
+        case .noSpeech:
+            toastBroadcaster.post(.error("No speech detected"))
         case .modelNotAvailable,
              .conversionFailed,
              .transcriptionFailed,
