@@ -42,7 +42,6 @@ struct PillStyleMetrics: Equatable {
     let recordingHoverSize: CGSize
     let pausedSize: CGSize
     let transcribingSize: CGSize
-    let doneSize: CGSize
     let downloadingSize: CGSize
     let loadingSize: CGSize
     let errorSize: CGSize
@@ -74,7 +73,6 @@ struct PillStyleMetrics: Equatable {
         recordingHoverSize: CGSize(width: 220, height: 36),
         pausedSize: CGSize(width: 220, height: 36),
         transcribingSize: CGSize(width: 220, height: 36),
-        doneSize: CGSize(width: 80, height: 28),
         downloadingSize: CGSize(width: 220, height: 36),
         loadingSize: CGSize(width: 220, height: 36),
         errorSize: CGSize(width: 220, height: 36),
@@ -107,7 +105,6 @@ struct PillStyleMetrics: Equatable {
         recordingHoverSize: CGSize(width: 170, height: 30),
         pausedSize: CGSize(width: 170, height: 30),
         transcribingSize: CGSize(width: 110, height: 20),
-        doneSize: CGSize(width: 60, height: 21),
         downloadingSize: CGSize(width: 165, height: 27),
         loadingSize: CGSize(width: 165, height: 27),
         errorSize: CGSize(width: 165, height: 27),

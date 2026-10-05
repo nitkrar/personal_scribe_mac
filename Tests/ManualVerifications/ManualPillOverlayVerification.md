@@ -20,8 +20,8 @@ Reference mockups live at:
 2. Confirm the pill fades in at the bottom center of the visible screen area.
 3. Confirm the recording state shows the quill glyph (listening) + an
    animated waveform + stop glyph — NOT the legacy three pulsing dots.
-4. Click `Stop` and confirm the pill transitions in place to the quill +
-   `Transcribing…` rather than fully dismissing immediately.
+4. Click `Stop` and confirm the pill transitions in place to a centered
+   spinner rather than fully dismissing immediately.
 5. After transcription completes, confirm the pill fades out smoothly in
    auto-show mode (or returns to the idle layout in always-on).
 
@@ -123,7 +123,7 @@ via `PillOverlayPresenter.showRecordingStatusCard(text:)` +
    running) or
    `"Waiting — model loading"` (if load is in flight).
 7. When the model reaches `.finished`, confirm the card dismisses
-   automatically (150ms fade) and the normal transcribe → done →
+   automatically (150ms fade) and the normal transcribe → idle +
    clipboard flow runs. Audio is NOT lost — captured transcript matches
    what was spoken.
 
@@ -139,7 +139,7 @@ via `PillOverlayPresenter.showRecordingStatusCard(text:)` +
 1. With the model already prepared (`.finished` in the app state),
    record + stop normally.
 2. Confirm NO ResponseCard appears at any point in the record →
-   transcribe → done flow. Only the clipboard-only notice (if triggered)
+   transcribe → idle flow. Only the clipboard-only notice (if triggered)
    should ever flash.
 
 **MV-RWT-4 — Errors surface on the ResponseCard, not the pill.**
@@ -210,7 +210,7 @@ on `DraggablePanel`, but the real-world effect is only observable at runtime.
 
 ---
 
-## Pill UX redesign — 5-state interaction model (spec Claude_Pill_UX_Prompt.md, 2026-04-21)
+## Pill UX redesign — interaction model (spec Claude_Pill_UX_Prompt.md, 2026-04-21)
 
 End-to-end runbook for the state machine, visuals, hotkey, Cancel Card,
 and Esc monitor. Run in order after any
@@ -231,19 +231,19 @@ rebuild that touches `Sources/PersonalScribeAppKit/Overlay/` or
   pause on the left, sine waveform centre, and red stop ⏹ on the right.
   Clay border.
   Tap `opt + /` again or click ⏹ to stop.
-- [ ] **MV-PUX-4 (transcribing)** After stop, pill becomes 220×36 with
-  a spinner + "Transcribing…" text. 1px Champagne @ 40% opacity
-  border, 18pt radius.
-- [ ] **MV-PUX-5 (done)** After transcription, pill briefly shows a
-  green checkmark in a 80×28 rect with a 1px Green (#50C878) border
-  and 16pt radius. Shares the resting-band height with idle. Auto-returns
-  to idle within ~1.2s.
+- [ ] **MV-PUX-4 (transcribing)** After stop, the pill keeps its
+  recording-rest footprint (Classic 220×36, Mini 110×20) and replaces
+  the recording content with a centered spinner. It does not resize.
+  The border remains 1px Champagne @ 40% opacity with an 18pt radius.
+- [ ] **MV-PUX-5 (completion)** After transcription, the pill returns
+  directly to idle (or hides in auto-show mode). No checkmark or other
+  success state appears; clipboard-only notices remain unchanged.
 
 ### Hotkey gestures (spec §3)
 
 - [ ] **MV-PUX-6 (single tap toggles recording)** Tap `opt + /` once —
   pill transitions idle → recording. Tap again — pill transitions
-  recording → transcribing → done → idle, transcript pasted into
+  recording → transcribing → idle, transcript pasted into
   frontmost app's cursor if AX focused element has a cursor (Issue 1
   AX probe).
 - [ ] **MV-PUX-7 (double-tap alias)** Tap `opt + /` twice in rapid
@@ -320,11 +320,11 @@ recording). #044 makes the panel resize per visibility so panel frame
 == visible pill frame.
 
 - [ ] **MV-PILL-RESIZE-1 (pill↔pill morph preserves bottom-center)**
-  Trigger a full record → transcribe → done cycle (hotkey or click).
-  The pill visibly GROWS idle→hold (80→160), hold→recording
-  (160→220), shrinks recording→transcribing (220→160), and shrinks
-  again transcribing→done (160→100). On each morph the pill's BOTTOM
-  edge and horizontal CENTER remain fixed on screen — the pill grows /
+  Trigger a full record → transcribe → idle cycle (hotkey or click).
+  Classic grows idle→hold/recording (80→220), does not resize at stop,
+  then shrinks transcribing→idle (220→80). Mini grows 40→110, also
+  keeps 110×20 at stop, then shrinks 110→40. On each morph the pill's
+  BOTTOM edge and horizontal CENTER remain fixed on screen — it grows /
   shrinks upward and outward, not sideways. The tween is smooth (AppKit
   `NSPanel.setFrame(_:display:animate:)`), ≈200-300ms per step.
 - [ ] **MV-PILL-RESIZE-2 (halo click test)** Start a recording so the
@@ -346,11 +346,11 @@ recording). #044 makes the panel resize per visibility so panel frame
 - [ ] **MV-PILL-RESIZE-5 (Response card live-follow)** With
   `AutoPasteEnabled = false` (pre-#072: `PasteMode "clipboard-only"`),
   trigger a dictation from another app while the
-  pill cycles idle → recording → done. The `Copied to clipboard · ⌘V
+  pill cycles idle → recording → transcribing → idle. The `Copied to clipboard · ⌘V
   to paste` card that appears above the pill stays anchored to the
   visible pill's bottom-center through every pill resize: it does NOT
   drift left / right or stop tracking when the pill shrinks from
-  recording (220) back to done (100). If user drags the pill, the
+  transcribing (220) back to idle (80). If user drags the pill, the
   card follows.
 
 ## Edge-aware placement
@@ -442,10 +442,13 @@ continues the same recording; stop transcribes both parts as one.
   shows clipped edges, and returns to 40×16 after exit. Repeat while
   recording: hover stays at 170×30 with intact rounded edges and exit
   returns to 110×20.
-- [ ] **MV-PILL-STYLE-5** In Mini idle hover, click the mode button. It
-  opens the same valid built-in and custom modes as the menu bar. Choosing
-  one applies it to the next recording. The record button starts recording
-  and shows the `Start recording` tooltip on hover.
+- [ ] **MV-PILL-STYLE-5** With two or more selectable modes, hover idle
+  in Mini and Classic. Both show mode + record buttons; the mode button
+  opens the same valid modes as the menu bar and a choice applies to the
+  next recording. Add or remove modes while the app runs and confirm the
+  hover layout updates. With zero or one selectable mode, hover shows only
+  the record circle and shrinks to one-button width. Clicking anywhere in
+  it starts recording and the `Start recording` tooltip appears.
 
 ## Pill controls and pause
 

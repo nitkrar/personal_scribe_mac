@@ -422,10 +422,6 @@ public enum PersonalScribeTheme {
             public static let transcribingColor = color(hex: "D4D0C8").opacity(0.4)
             public static let transcribingWidth: CGFloat = 1.0
 
-            /// 1px Green #50C878 — done (brief checkmark state).
-            public static let doneColor = color(hex: "50C878")
-            public static let doneWidth: CGFloat = 1.0
-
             /// 1.5px Red #F75138 — cancel card only (not a pill).
             public static let cancelColor = color(hex: "F75138")
             public static let cancelWidth: CGFloat = 1.5
@@ -435,7 +431,7 @@ public enum PersonalScribeTheme {
         /// `PillOverlayView` references one of these instead of a literal,
         /// so the banding intent survives future edits.
         ///
-        /// - `resting` — ambient low-weight states (`.idle`, `.done`).
+        /// - `resting` — ambient low-weight state (`.idle`).
         /// - `active`  — user-facing states (`.holdToRecord`, `.recording`,
         ///   `.transcribing`, `.downloading`, `.loading`, `.error`).
         /// - `card`    — `.cancelled` — not a pill, a card surface. Kept
@@ -451,7 +447,7 @@ public enum PersonalScribeTheme {
         /// Width bands for overlay surfaces. Widths are grouped by content
         /// class so future edits can't silently introduce off-band values.
         ///
-        /// - `compact` — icon-only ambient states (`.idle`, `.done`).
+        /// - `compact` — icon-only ambient state (`.idle`).
         /// - `snug`    — reserved. Previously held `.holdToRecord`; now
         ///   unused since hold joined the active/medium band. Kept as an
         ///   enum case for future short-content states.

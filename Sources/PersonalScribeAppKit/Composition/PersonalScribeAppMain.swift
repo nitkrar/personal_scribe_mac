@@ -171,7 +171,7 @@ struct PersonalScribeAppMain: App {
             case .holdToRecord, .recording, .paused:
                 break
             case .hidden, .idle, .downloading, .loading, .transcribing,
-                 .done, .cancelled, .error:
+                 .cancelled, .error:
                 return false
             }
             Task { [weak coordinator] in
@@ -558,7 +558,7 @@ final class EscapeKeyMonitorHost: ObservableObject {
         switch visibility {
         case .recording, .holdToRecord, .paused:
             return true
-        case .hidden, .idle, .cancelled, .transcribing, .done, .error, .loading, .downloading:
+        case .hidden, .idle, .cancelled, .transcribing, .error, .loading, .downloading:
             return false
         }
     }

@@ -45,7 +45,7 @@ enum PillInteractionRouter {
             return nil
         case .holdToRecord:
             return .toggle
-        case .hidden, .downloading, .loading, .transcribing, .done, .cancelled, .error:
+        case .hidden, .downloading, .loading, .transcribing, .cancelled, .error:
             return nil
         }
     }
@@ -550,7 +550,7 @@ public final class PillOverlayPresenter {
                 hide()
             case .cancelled,
                  .idle, .downloading, .loading,
-                 .holdToRecord, .recording, .paused, .transcribing, .done, .error:
+                 .holdToRecord, .recording, .paused, .transcribing, .error:
                 // #044: panel must be sized per visibility so the panel
                 // frame == visible pill frame (no invisible click-halo).
                 // First show from `.hidden`: `show()` pre-sizes the
@@ -960,7 +960,7 @@ public final class PillOverlayPresenter {
         // transcribe semantic.
         case .idle, .recording, .paused:
             return true
-        case .hidden, .downloading, .loading, .holdToRecord, .transcribing, .done, .cancelled, .error:
+        case .hidden, .downloading, .loading, .holdToRecord, .transcribing, .cancelled, .error:
             return false
         }
     }

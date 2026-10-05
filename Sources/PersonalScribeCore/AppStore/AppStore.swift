@@ -3,8 +3,6 @@ import Foundation
 
 @MainActor
 public final class AppStore: ObservableObject {
-    public static let doneVisibilityDuration: Duration = .milliseconds(1_000)
-
     @Published public private(set) var snapshot: AppStoreSnapshot
 
     private let session: any AppStoreSessionProviding
@@ -16,7 +14,6 @@ public final class AppStore: ObservableObject {
     /// field name preserved; source is `currentMode`).
     private let workflowModeRegistry: WorkflowModeRegistry
     private let visibilityModeSource: any AppStoreVisibilityModeProviding
-    private let clock: any AppStoreClock
     private let permissionSnapshotProvider: @MainActor @Sendable () -> [Permission: PermissionStatus]
     private let permissionObserverInstaller:
         @MainActor @Sendable (@escaping @MainActor ([Permission: PermissionStatus]) -> Void) -> AnyCancellable
@@ -26,21 +23,18 @@ public final class AppStore: ObservableObject {
     private var sessionObservationTask: Task<Void, Never>?
     private var permissionsObservationTask: Task<Void, Never>?
     private var modeObservationTask: Task<Void, Never>?
-    private var pillTransitionTask: Task<Void, Never>?
     private var permissionObservationCancellable: AnyCancellable?
 
     public init<Permissions: PermissionService>(
         session: any AppStoreSessionProviding,
         permissions: Permissions,
         workflowModeRegistry: WorkflowModeRegistry,
-        visibilityModeSource: any AppStoreVisibilityModeProviding,
-        clock: any AppStoreClock = LiveAppStoreClock()
+        visibilityModeSource: any AppStoreVisibilityModeProviding
     ) {
         self.session = session
         self.permissions = permissions
         self.workflowModeRegistry = workflowModeRegistry
         self.visibilityModeSource = visibilityModeSource
-        self.clock = clock
         self.permissionSnapshotProvider = {
             permissions.statusSnapshot()
         }
@@ -133,10 +127,7 @@ public final class AppStore: ObservableObject {
 
             updateSnapshot { snapshot in
                 snapshot.lastTranscriptionResult = newSession.lastCompletedResult
-                snapshot.pillVisibility = .done
             }
-            schedulePillTransition(after: Self.doneVisibilityDuration)
-            return
         }
 
         // `#075`: `.shortExit` flips pill straight to idle — no chip,
@@ -144,7 +135,6 @@ public final class AppStore: ObservableObject {
         // the pill returning to idle confirms the pipeline exited.
         // `rederivePillVisibility()` routes through `derivePillVisibility`,
         // which maps `.shortExit` to `idleVisibility`.
-        cancelPillTransition()
         rederivePillVisibility()
     }
 
@@ -157,36 +147,7 @@ public final class AppStore: ObservableObject {
     private func handleVisibilityModeChange(_ visibilityMode: AppStoreVisibilityMode) {
         guard visibilityMode != currentVisibilityMode else { return }
         currentVisibilityMode = visibilityMode
-        cancelPillTransition()
         rederivePillVisibility()
-    }
-
-    private func schedulePillTransition(after duration: Duration) {
-        pillTransitionTask?.cancel()
-        let clock = self.clock
-        pillTransitionTask = Task { [weak self] in
-            do {
-                try await clock.sleep(for: duration)
-            } catch {
-                return
-            }
-
-            guard !Task.isCancelled, let self else {
-                return
-            }
-
-            self.completePillTransition()
-        }
-    }
-
-    private func completePillTransition() {
-        pillTransitionTask = nil
-        rederivePillVisibility()
-    }
-
-    private func cancelPillTransition() {
-        pillTransitionTask?.cancel()
-        pillTransitionTask = nil
     }
 
     private func refreshStaticInputs() {
@@ -357,19 +318,5 @@ private extension SessionState {
         }
 
         return false
-    }
-}
-
-public struct LiveAppStoreClock: AppStoreClock {
-    public init() {}
-    private let clock = ContinuousClock()
-    private let reference = ContinuousClock().now
-
-    public func now() -> Duration {
-        reference.duration(to: clock.now)
-    }
-
-    public func sleep(for duration: Duration) async throws {
-        try await Task.sleep(for: duration)
     }
 }

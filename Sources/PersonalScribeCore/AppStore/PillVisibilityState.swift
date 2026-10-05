@@ -12,7 +12,6 @@ public enum PillVisibilityState: Sendable, Equatable {
     case recording
     case paused(elapsedSeconds: Int)
     case transcribing
-    case done
     /// Recording was discarded without transcribing (✕ button or Esc).
     /// The pill panel is replaced at the same screen anchor by the
     /// Cancel Card with a Resume affordance while captured audio is kept.

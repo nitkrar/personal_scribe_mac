@@ -103,10 +103,6 @@ final class PillOverlayViewSizeTests: XCTestCase {
         )
     }
 
-    func testSizeForDoneMatchesDoneSize() {
-        XCTAssertEqual(PillOverlayView.size(for: .done), PillOverlayView.doneSize)
-    }
-
     func testSizeForDownloadingMatchesDownloadingSize() {
         XCTAssertEqual(
             PillOverlayView.size(for: .downloading(fractionCompleted: 0.5)),

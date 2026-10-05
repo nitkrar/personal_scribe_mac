@@ -7,13 +7,11 @@ final class AppStoreTests: XCTestCase {
         let session = FakeAppStoreSessionProvider()
         let permissions = FakePermissionService()
         let visibilityModeProvider = FakeVisibilityModeProvider()
-        let clock = ManualAppStoreClock()
         let store = makeStore(
             session: session,
             permissions: permissions,
             registry: makeRegistry(),
-            visibilityModeProvider: visibilityModeProvider,
-            clock: clock
+            visibilityModeProvider: visibilityModeProvider
         )
 
         store.start()
@@ -60,8 +58,7 @@ final class AppStoreTests: XCTestCase {
             session: session,
             permissions: FakePermissionService(),
             registry: makeRegistry(),
-            visibilityModeProvider: FakeVisibilityModeProvider(),
-            clock: ManualAppStoreClock()
+            visibilityModeProvider: FakeVisibilityModeProvider()
         )
 
         store.start()
@@ -98,8 +95,7 @@ final class AppStoreTests: XCTestCase {
             session: session,
             permissions: FakePermissionService(),
             registry: makeRegistry(),
-            visibilityModeProvider: FakeVisibilityModeProvider(),
-            clock: ManualAppStoreClock()
+            visibilityModeProvider: FakeVisibilityModeProvider()
         )
 
         store.start()
@@ -119,8 +115,7 @@ final class AppStoreTests: XCTestCase {
             session: session,
             permissions: FakePermissionService(),
             registry: makeRegistry(),
-            visibilityModeProvider: FakeVisibilityModeProvider(),
-            clock: ManualAppStoreClock()
+            visibilityModeProvider: FakeVisibilityModeProvider()
         )
         store.start()
 
@@ -145,8 +140,7 @@ final class AppStoreTests: XCTestCase {
             session: session,
             permissions: permissions,
             registry: makeRegistry(),
-            visibilityModeProvider: FakeVisibilityModeProvider(),
-            clock: ManualAppStoreClock()
+            visibilityModeProvider: FakeVisibilityModeProvider()
         )
 
         store.start()
@@ -176,8 +170,7 @@ final class AppStoreTests: XCTestCase {
             session: FakeAppStoreSessionProvider(),
             permissions: FakePermissionService(),
             registry: registry,
-            visibilityModeProvider: FakeVisibilityModeProvider(),
-            clock: ManualAppStoreClock()
+            visibilityModeProvider: FakeVisibilityModeProvider()
         )
 
         store.start()
@@ -199,8 +192,7 @@ final class AppStoreTests: XCTestCase {
             session: session,
             permissions: FakePermissionService(),
             registry: makeRegistry(),
-            visibilityModeProvider: FakeVisibilityModeProvider(initialVisibilityMode: .autoShow),
-            clock: ManualAppStoreClock()
+            visibilityModeProvider: FakeVisibilityModeProvider(initialVisibilityMode: .autoShow)
         )
         store.start()
 
@@ -219,8 +211,7 @@ final class AppStoreTests: XCTestCase {
             session: FakeAppStoreSessionProvider(),
             permissions: FakePermissionService(),
             registry: makeRegistry(),
-            visibilityModeProvider: visibilityModeProvider,
-            clock: ManualAppStoreClock()
+            visibilityModeProvider: visibilityModeProvider
         )
 
         store.start()
@@ -247,8 +238,7 @@ final class AppStoreTests: XCTestCase {
             session: session,
             permissions: FakePermissionService(),
             registry: makeRegistry(),
-            visibilityModeProvider: FakeVisibilityModeProvider(),
-            clock: ManualAppStoreClock()
+            visibilityModeProvider: FakeVisibilityModeProvider()
         )
 
         store.start()
@@ -294,15 +284,13 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.lastTranscriptionResult, expected)
     }
 
-    func testDoneVisibilityIsTransientAfterCompletedSessionSnapshot() async {
+    func testCompletedSessionReturnsDirectlyToIdleVisibility() async {
         let session = FakeAppStoreSessionProvider()
-        let clock = ManualAppStoreClock()
         let store = makeStore(
             session: session,
             permissions: FakePermissionService(),
             registry: makeRegistry(),
-            visibilityModeProvider: FakeVisibilityModeProvider(),
-            clock: clock
+            visibilityModeProvider: FakeVisibilityModeProvider()
         )
 
         store.start()
@@ -313,14 +301,6 @@ final class AppStoreTests: XCTestCase {
         }
 
         session.emitState(.completed)
-        await waitUntil {
-            store.snapshot.pillVisibility == .done
-        }
-
-        await clock.advance(by: .milliseconds(999))
-        XCTAssertEqual(store.snapshot.pillVisibility, .done)
-
-        await clock.advance(by: .milliseconds(1))
         await waitUntil {
             store.snapshot.pillVisibility == .hidden
         }
@@ -328,25 +308,18 @@ final class AppStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
     }
 
-    func testInitialVisibilityModeReplayDoesNotClobberDoneTransient() async {
+    func testCompletedSessionReturnsDirectlyToAlwaysOnIdle() async {
         let session = FakeAppStoreSessionProvider()
-        let visibilityModeProvider = DeferredInitialYieldVisibilityModeProvider(
-            initialVisibilityMode: .autoShow
-        )
-        let clock = ManualAppStoreClock()
-        let store = AppStore(
+        let store = makeStore(
             session: session,
             permissions: FakePermissionService(),
-            workflowModeRegistry: makeRegistry(),
-            visibilityModeSource: visibilityModeProvider,
-            clock: clock
+            registry: makeRegistry(),
+            visibilityModeProvider: FakeVisibilityModeProvider(
+                initialVisibilityMode: .alwaysOn
+            )
         )
 
         store.start()
-        await waitUntil {
-            visibilityModeProvider.hasSubscriber
-        }
-
         session.emitState(.transcribing)
         await waitUntil {
             store.snapshot.pillVisibility == .transcribing
@@ -354,22 +327,10 @@ final class AppStoreTests: XCTestCase {
 
         session.emitState(.completed)
         await waitUntil {
-            store.snapshot.pillVisibility == .done
+            store.snapshot.pillVisibility == .idle
         }
 
-        visibilityModeProvider.emitInitialReplay()
-        await Task.yield()
-        XCTAssertEqual(store.snapshot.pillVisibility, .done)
-
-        await clock.advance(by: .milliseconds(999))
-        XCTAssertEqual(store.snapshot.pillVisibility, .done)
-
-        await clock.advance(by: .milliseconds(1))
-        await waitUntil {
-            store.snapshot.pillVisibility == .hidden
-        }
-
-        XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
+        XCTAssertEqual(store.snapshot.pillVisibility, .idle)
     }
 
     /// `#075`: `.shortExit` flips pill straight to idle — no chip, no
@@ -379,17 +340,14 @@ final class AppStoreTests: XCTestCase {
     /// the next action.
     func testShortExitFlipsPillStraightToIdle() async {
         let session = FakeAppStoreSessionProvider()
-        let clock = ManualAppStoreClock()
         let store = makeStore(
             session: session,
             permissions: FakePermissionService(),
             registry: makeRegistry(),
-            visibilityModeProvider: FakeVisibilityModeProvider(),
-            clock: clock
+            visibilityModeProvider: FakeVisibilityModeProvider()
         )
 
         store.start()
-        await clock.advance(by: .zero)
 
         session.emitState(.shortExit)
         await waitUntil {
@@ -405,24 +363,20 @@ final class AppStoreTests: XCTestCase {
 
     func testErrorStateFallsBackToIdleVisibilityInsteadOfShowingErrorPill() async {
         let session = FakeAppStoreSessionProvider()
-        let clock = ManualAppStoreClock()
         let store = makeStore(
             session: session,
             permissions: FakePermissionService(),
             registry: makeRegistry(),
-            visibilityModeProvider: FakeVisibilityModeProvider(),
-            clock: clock
+            visibilityModeProvider: FakeVisibilityModeProvider()
         )
 
         store.start()
-        await clock.advance(by: .zero)
 
         session.emitState(.error(.resampleFailure))
         await waitUntil {
             store.snapshot.sessionState == .error(.resampleFailure)
         }
 
-        await clock.advance(by: .seconds(5))
         XCTAssertEqual(store.snapshot.sessionState, .error(.resampleFailure))
         XCTAssertEqual(store.snapshot.pillVisibility, .hidden)
     }
@@ -431,15 +385,13 @@ final class AppStoreTests: XCTestCase {
         session: FakeAppStoreSessionProvider,
         permissions: FakePermissionService,
         registry: WorkflowModeRegistry,
-        visibilityModeProvider: FakeVisibilityModeProvider,
-        clock: ManualAppStoreClock
+        visibilityModeProvider: FakeVisibilityModeProvider
     ) -> AppStore {
         AppStore(
             session: session,
             permissions: permissions,
             workflowModeRegistry: registry,
-            visibilityModeSource: visibilityModeProvider,
-            clock: clock
+            visibilityModeSource: visibilityModeProvider
         )
     }
 

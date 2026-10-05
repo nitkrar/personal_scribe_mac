@@ -774,11 +774,11 @@ final class PillOverlayPresenterTests: XCTestCase {
         viewModel.apply(visibility: PillVisibilityState.transcribing)
         XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.transcribingSize, "grow is immediate")
 
-        viewModel.apply(visibility: PillVisibilityState.done)
+        viewModel.apply(visibility: PillVisibilityState.idle)
         XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.transcribingSize, "shrink waits for the content")
         for _ in 0..<5 { await Task.yield() }
         try? await Task.sleep(for: .milliseconds(20))
-        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.doneSize)
+        XCTAssertEqual(panelBuilder.panel.frame.size, PillOverlayView.idleSize)
     }
 
     func testMiniHoverResizeUpdatesPanelWithoutAnimation() async {

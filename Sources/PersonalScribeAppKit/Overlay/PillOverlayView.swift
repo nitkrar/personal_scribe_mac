@@ -2,7 +2,7 @@ import SwiftUI
 import PersonalScribeCore
 
 /// Pill overlay — the floating surface that tracks the recording /
-/// transcribing / done / download visual states.
+/// transcribing / download visual states.
 ///
 /// ## Visual spec (Sprint 2 dogfood redesign, 2026-04-18)
 /// Claude's WisprFlow-inspired compact pill, four main states:
@@ -12,7 +12,6 @@ import PersonalScribeCore
 /// | `.idle`       | 80×28pt | champagne quill mark centered; no text               |
 /// | `.recording`  | 220×36  | pause | animated sine wave | red stop button       |
 /// | `.transcribing` | 140×36 | small spinner + "Transcribing…" caption             |
-/// | `.done`       | 80×28   | champagne checkmark; auto-returns to idle after ~1s |
 ///
 /// ## Non-main-flow states
 /// * `.downloading(fraction)` — 240×36 with progress bar (model download).
@@ -53,10 +52,6 @@ public struct PillOverlayView: View {
     static let miniPausedSize = PillStyleMetrics.mini.pausedSize
     /// Transcribing.
     static let transcribingSize = PillStyleMetrics.classic.transcribingSize
-    /// Done — brief success confirmation. Shares resting-band width and
-    /// height with `.idle` so both ambient states read as the same "not
-    /// demanding attention" surface.
-    static let doneSize = PillStyleMetrics.classic.doneSize
     static let downloadingSize = PillStyleMetrics.classic.downloadingSize
     static let loadingSize = PillStyleMetrics.classic.loadingSize
     static let errorSize = PillStyleMetrics.classic.errorSize
@@ -70,7 +65,7 @@ public struct PillOverlayView: View {
     /// Widest and tallest footprint across all states; decides whether
     /// the pill sits "next to an edge" (see `PillAnchor`).
     static let largestSize: CGSize = [
-        idleSize, holdToRecordSize, recordingSize, pausedSize, transcribingSize, doneSize,
+        idleSize, holdToRecordSize, recordingSize, pausedSize, transcribingSize,
         downloadingSize, loadingSize, errorSize, cancelCardSize,
     ].reduce(.zero) { CGSize(width: max($0.width, $1.width), height: max($0.height, $1.height)) }
 
@@ -98,8 +93,6 @@ public struct PillOverlayView: View {
             return pausedSize
         case .transcribing:
             return transcribingSize
-        case .done:
-            return doneSize
         case .downloading:
             return downloadingSize
         case .loading:
@@ -132,8 +125,6 @@ public struct PillOverlayView: View {
             return metrics.pausedSize
         case .transcribing:
             return metrics.transcribingSize
-        case .done:
-            return metrics.doneSize
         case .downloading:
             return metrics.downloadingSize
         case .loading:
@@ -153,8 +144,6 @@ public struct PillOverlayView: View {
     /// 18pt corner radius for the active-recording family of pills
     /// (hold-to-record, recording, transcribing). Spec §2b, §2c, §2d.
     static let activeCornerRadius: CGFloat = 18
-    /// 16pt corner radius for the done confirmation. Spec §2e.
-    static let doneCornerRadius: CGFloat = 16
 
     // Pill foreground tokens — selected based on the resolved panel
     // appearance (which follows the user's Dark / Light / System
@@ -207,8 +196,6 @@ public struct PillOverlayView: View {
                 pausedPill(elapsedSeconds: elapsedSeconds)
             case .transcribing:
                 transcribingPill
-            case .done:
-                donePill
             case .downloading(let fraction):
                 downloadingPill(fraction: fraction)
             case .loading:
@@ -416,21 +403,6 @@ public struct PillOverlayView: View {
         .accessibilityLabel("\(AppBrand.displayName) transcribing")
     }
 
-    // MARK: - Done (spec §2e)
-
-    private var donePill: some View {
-        let green = PersonalScribeTheme.Pill.Border.doneColor
-        let metrics = model.pillStyle.metrics
-
-        return Image(systemName: "checkmark")
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(green)
-            .frame(width: metrics.doneSize.width, height: metrics.doneSize.height)
-            .modifier(PillChrome(borderStyle: .done))
-            .accessibilityElement()
-            .accessibilityLabel("Transcription copied to clipboard")
-    }
-
     // MARK: - Downloading
 
     private func downloadingPill(fraction: Double) -> some View {
@@ -536,12 +508,6 @@ struct PillBorderStyle: Equatable {
         cornerRadius: 18
     )
 
-    /// 16pt, 1px Green #50C878 — done confirmation.
-    static let done = PillBorderStyle(
-        strokeColor: PersonalScribeTheme.Pill.Border.doneColor,
-        lineWidth: PersonalScribeTheme.Pill.Border.doneWidth,
-        cornerRadius: 16
-    )
 }
 
 /// Shared rounded-rectangle chrome for every pill variant.
@@ -557,7 +523,7 @@ struct PillBorderStyle: Equatable {
 /// radius per state. Idle / downloading / loading / error reuse the
 /// `PillBorderStyle.idle` neutral rim; hold-to-record and committed
 /// recording use `.active` (clay 1.5px); transcribing uses
-/// `.transcribing` (champagne 40%); done uses `.done` (green 1px).
+/// `.transcribing` uses its champagne 40% border.
 ///
 /// ## Fuzzy-edge fix (2026-04-18)
 /// NSPanel shadow disabled at the panel layer; `.clipShape` applied

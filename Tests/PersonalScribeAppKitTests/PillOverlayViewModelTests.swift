@@ -187,10 +187,8 @@ final class PillOverlayViewModelTests: XCTestCase {
     }
 
     func testTransitionSequenceIdleRecordingTranscribingIdleError() async {
-        // Compatibility mode follows the AppStore mapping: success still
-        // shows `.done`, but an error falls back to the mode's idle
-        // visibility instead of surfacing a pill error state.
-        //   recording → transcribing → done → idle
+        // Compatibility mode follows the AppStore mapping: success and
+        // errors return to the mode's idle visibility.
         let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
         var emitted: [PillOverlayViewModel.Visibility] = []
         let expectation = expectation(description: "Collect published visibility updates")
@@ -217,16 +215,11 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .idle)
         XCTAssertEqual(
             emitted,
-            [.recording, .transcribing, .done, .idle]
+            [.recording, .transcribing, .idle, .idle]
         )
     }
 
-    func testTranscribingToIdleShowsDoneConfirmation() {
-        // Core semantics of the `.done` transient state: when the
-        // session transitions transcribing → idle (success path),
-        // the view model emits `.done` immediately so the pill can
-        // show a checkmark. The done task then falls through to the
-        // mode's normal idle after `doneConfirmationDuration`.
+    func testTranscribingToIdleReturnsDirectlyToHiddenInAutoShow() {
         let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
 
         viewModel.apply(sessionState: .capturing, preparationProgress: nil)
@@ -236,22 +229,16 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibility, .transcribing)
 
         viewModel.apply(sessionState: .idle, preparationProgress: nil)
-        XCTAssertEqual(viewModel.visibility, .done)
+        XCTAssertEqual(viewModel.visibility, .hidden)
     }
 
-    func testNewRecordingPreemptsDoneConfirmation() {
-        // If the user triggers a fresh recording while the previous
-        // `.done` confirmation is still on screen, the new recording
-        // wins — the done task is cancelled and `.recording` replaces
-        // `.done` without waiting out the timer.
-        let viewModel = PillOverlayViewModel(visibilityMode: .autoShow)
+    func testCompletedReturnsDirectlyToIdleInAlwaysOn() {
+        let viewModel = PillOverlayViewModel(visibilityMode: .alwaysOn)
 
         viewModel.apply(sessionState: .transcribing, preparationProgress: nil)
-        viewModel.apply(sessionState: .idle, preparationProgress: nil)
-        XCTAssertEqual(viewModel.visibility, .done)
+        viewModel.apply(sessionState: .completed, preparationProgress: nil)
 
-        viewModel.apply(sessionState: .capturing, preparationProgress: nil)
-        XCTAssertEqual(viewModel.visibility, .recording)
+        XCTAssertEqual(viewModel.visibility, .idle)
     }
 
     // MARK: - Phase 1: holdToRecord + cancelled state machine
@@ -301,10 +288,10 @@ final class PillOverlayViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isAudioActive)
     }
 
-    func testIsAudioActiveFalseForIdleHiddenTranscribingDone() {
+    func testIsAudioActiveFalseForIdleHiddenAndTranscribing() {
         let viewModel = PillOverlayViewModel()
 
-        for state: PillOverlayViewModel.Visibility in [.idle, .hidden, .transcribing, .done] {
+        for state: PillOverlayViewModel.Visibility in [.idle, .hidden, .transcribing] {
             viewModel.apply(visibility: state)
             XCTAssertFalse(viewModel.isAudioActive, "isAudioActive must be false for \(state)")
         }

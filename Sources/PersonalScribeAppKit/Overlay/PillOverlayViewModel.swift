@@ -106,16 +106,6 @@ public final class PillOverlayViewModel: ObservableObject {
         sessionState: SessionState,
         preparationProgress: ModelDownloadProgress?
     ) {
-        if visibility == .transcribing, case .idle = sessionState {
-            visibility = .done
-            return
-        }
-
-        if case .completed = sessionState {
-            visibility = .done
-            return
-        }
-
         if case .capturing = sessionState {
             visibility = .recording
             return
