@@ -4,6 +4,35 @@ import PersonalScribeTestSupport
 @testable import PersonalScribeSession
 
 final class SessionCoordinatorHappyPathTests: XCTestCase {
+    func testCancelIfActiveCancelsPausedSessionIntoResumableCardState() async throws {
+        let buffer = try PCMBuffer(
+            samples: Array(repeating: 0.1, count: 16_000),
+            timestamp: ContinuousClock().now
+        )
+        let coordinator = SessionCoordinator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: FakeTranscriber(
+                result: .init(
+                    text: "held",
+                    audioDuration: .seconds(1),
+                    processingDuration: .zero
+                )
+            ),
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.session)
+        )
+
+        await coordinator.toggle()
+        await coordinator.pauseIfRecording()
+        let pausedState = await coordinator.state()
+        XCTAssertEqual(pausedState, .paused)
+
+        await coordinator.cancelIfActive()
+
+        let snapshot = await coordinator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .idle)
+        XCTAssertTrue(snapshot.cancelledCaptureResumable)
+    }
+
     /// Regression: before the pipeline/coordinator state consolidation,
     /// `SessionCoordinator` observed pipeline snapshots through two
     /// unsynchronized paths — a direct post-call `refreshFromPipelineSnapshot()`

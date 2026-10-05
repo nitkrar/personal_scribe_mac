@@ -236,16 +236,14 @@ public actor SessionCoordinator {
         }
     }
 
-    /// Mode-agnostic true-cancel. Transitions either `.capturing` or
-    /// `.holdRecording` directly to `.idle` via `pipeline.cancelCapture()`
-    /// — buffered audio is discarded, transcribe + output stages are
-    /// skipped entirely. Preferred entry point for Esc and the pill ✕
-    /// button (#002). No-op from `.idle`, `.transcribing`, or `.error`.
+    /// Mode-agnostic cancel. Moves capture or pause to the resumable
+    /// Cancel Card without persistence or output. Preferred entry point
+    /// for Esc. No-op from `.idle`, `.transcribing`, or `.error`.
     public func cancelIfActive() async {
         switch await currentDisplayState() {
-        case .capturing, .holdRecording:
+        case .capturing, .holdRecording, .paused:
             await performCancel()
-        case .idle, .completed, .shortExit, .paused, .transcribing, .error:
+        case .idle, .completed, .shortExit, .transcribing, .error:
             return
         }
     }

@@ -10,7 +10,7 @@ import PersonalScribeCore
 /// | State         | Size    | Content                                              |
 /// |---------------|---------|------------------------------------------------------|
 /// | `.idle`       | 80×28pt | champagne quill mark centered; no text               |
-/// | `.recording`  | 200×36  | × cancel | animated sine wave | red stop button      |
+/// | `.recording`  | 220×36  | pause | animated sine wave | red stop button       |
 /// | `.transcribing` | 140×36 | small spinner + "Transcribing…" caption             |
 /// | `.done`       | 80×28   | champagne checkmark; auto-returns to idle after ~1s |
 ///
