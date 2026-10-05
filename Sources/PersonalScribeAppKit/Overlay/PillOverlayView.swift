@@ -407,15 +407,9 @@ public struct PillOverlayView: View {
     private var transcribingPill: some View {
         let metrics = model.pillStyle.metrics
 
-        return HStack(spacing: metrics.statusSpacing) {
-            ProgressView()
-                .controlSize(.small)
-                .tint(fg)
-
-            Text("Transcribing…")
-                .font(.system(size: metrics.statusFontSize, weight: .medium))
-                .foregroundColor(fg)
-        }
+        return ProgressView()
+            .controlSize(.small)
+            .tint(fg)
         .frame(width: metrics.transcribingSize.width, height: metrics.transcribingSize.height)
         .modifier(PillChrome(borderStyle: .transcribing))
         .accessibilityElement()

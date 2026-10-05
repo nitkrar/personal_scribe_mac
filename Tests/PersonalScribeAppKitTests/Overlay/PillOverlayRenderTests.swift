@@ -24,6 +24,7 @@ final class PillOverlayRenderTests: XCTestCase {
             ("recording", .recording, false, 2),
             ("recording-hover", .recording, true, 2),
             ("paused", .paused(elapsedSeconds: 23), false, 2),
+            ("transcribing", .transcribing, false, 2),
         ]
         let schemes: [(name: String, value: ColorScheme)] = [
             ("dark", .dark),

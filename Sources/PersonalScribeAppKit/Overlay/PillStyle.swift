@@ -106,7 +106,7 @@ struct PillStyleMetrics: Equatable {
         recordingSize: CGSize(width: 110, height: 20),
         recordingHoverSize: CGSize(width: 170, height: 30),
         pausedSize: CGSize(width: 170, height: 30),
-        transcribingSize: CGSize(width: 165, height: 27),
+        transcribingSize: CGSize(width: 110, height: 20),
         doneSize: CGSize(width: 60, height: 21),
         downloadingSize: CGSize(width: 165, height: 27),
         loadingSize: CGSize(width: 165, height: 27),

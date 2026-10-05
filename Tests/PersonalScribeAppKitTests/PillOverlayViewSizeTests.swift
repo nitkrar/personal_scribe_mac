@@ -93,6 +93,14 @@ final class PillOverlayViewSizeTests: XCTestCase {
             PillOverlayView.size(for: .transcribing),
             PillOverlayView.transcribingSize
         )
+        XCTAssertEqual(
+            PillOverlayView.size(for: .transcribing, style: .mini),
+            CGSize(width: 110, height: 20)
+        )
+        XCTAssertEqual(
+            PillOverlayView.size(for: .transcribing, style: .mini),
+            PillOverlayView.size(for: .recording, style: .mini)
+        )
     }
 
     func testSizeForDoneMatchesDoneSize() {
