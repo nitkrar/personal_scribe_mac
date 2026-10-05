@@ -140,6 +140,7 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(auxCalls.count, 1)
         XCTAssertEqual(auxCalls.first?.aux, .ctc110m)
         XCTAssertEqual(auxCalls.first?.directory, expectedParentDirectory)
+        XCTAssertEqual(auxCalls.first?.requiredSubdirectories, ["CtcHead.mlmodelc"])
 
         XCTAssertEqual(collected.last?.phase, .finished)
     }
@@ -176,6 +177,7 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         let auxCalls = await manager.auxiliaryDownloadCalls()
         XCTAssertEqual(auxCalls.count, 1)
         XCTAssertEqual(auxCalls.first?.aux, .ctc110m)
+        XCTAssertEqual(auxCalls.first?.requiredSubdirectories, ["CtcHead.mlmodelc"])
     }
 
     /// Complete local artifacts must prepare without a repository query.
@@ -201,7 +203,7 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(loadCount, 1)
     }
 
-    func testPrepareSkipsAuxiliaryDownloadWhenAuxiliaryFolderAlreadyOnDisk() async throws {
+    func testPrepareSkipsAllDownloadsWhenPrimaryAndCtcHeadAreOnDisk() async throws {
         let descriptor = BuiltInModelCatalog.parakeetTDTCTC110M
         let storageLocator = TestStorageLocator(baseDirectory: try temporaryRootDirectory())
         let modelsRoot = storageLocator.url(for: .models)
@@ -211,8 +213,9 @@ final class FluidAudioParakeetTranscriberAdapterTests: XCTestCase {
         )
         for folder in descriptor.auxiliaryRepoFolderNames {
             let aux = modelsRoot.appendingPathComponent(folder, isDirectory: true)
-            try FileManager.default.createDirectory(at: aux, withIntermediateDirectories: true)
-            try Data("x".utf8).write(to: aux.appendingPathComponent("model.bin"))
+            let ctcHead = aux.appendingPathComponent("CtcHead.mlmodelc", isDirectory: true)
+            try FileManager.default.createDirectory(at: ctcHead, withIntermediateDirectories: true)
+            try Data("coreml".utf8).write(to: ctcHead.appendingPathComponent("coremldata.bin"))
         }
 
         let manager = StubFluidAudioParakeetManager()
@@ -417,7 +420,11 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
     private let result: FluidAudioParakeetManagerResult
     private var downloadIfNeededCallCountStorage = 0
     private var downloadIfNeededDirectoriesStorage: [URL] = []
-    private var auxiliaryDownloadCallsStorage: [(aux: ParakeetAuxiliaryRepo, directory: URL)] = []
+    private var auxiliaryDownloadCallsStorage: [(
+        aux: ParakeetAuxiliaryRepo,
+        directory: URL,
+        requiredSubdirectories: [String]
+    )] = []
     private var loadCallCountStorage = 0
     private var loadedVersionsStorage: [AsrModelVersion] = []
     private var loadedDirectoriesStorage: [URL] = []
@@ -447,13 +454,22 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
     func downloadAuxiliary(
         _ aux: ParakeetAuxiliaryRepo,
         to directory: URL,
+        requiredSubdirectories: [String],
         progressHandler: DownloadUtils.ProgressHandler?
     ) async throws {
         _ = progressHandler
-        auxiliaryDownloadCallsStorage.append((aux: aux, directory: directory))
+        auxiliaryDownloadCallsStorage.append((
+            aux: aux,
+            directory: directory,
+            requiredSubdirectories: requiredSubdirectories
+        ))
     }
 
-    func auxiliaryDownloadCalls() -> [(aux: ParakeetAuxiliaryRepo, directory: URL)] {
+    func auxiliaryDownloadCalls() -> [(
+        aux: ParakeetAuxiliaryRepo,
+        directory: URL,
+        requiredSubdirectories: [String]
+    )] {
         auxiliaryDownloadCallsStorage
     }
 

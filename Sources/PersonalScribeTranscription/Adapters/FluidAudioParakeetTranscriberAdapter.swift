@@ -119,6 +119,7 @@ public actor FluidAudioParakeetTranscriberAdapter: Transcriber {
                 try await manager.downloadAuxiliary(
                     .ctc110m,
                     to: modelsRoot,
+                    requiredSubdirectories: [Self.ctcHeadBundleName],
                     progressHandler: { snapshot in
                         self.progressBroadcaster.emit(snapshot)
                     }
@@ -297,6 +298,7 @@ extension FluidAudioParakeetTranscriberAdapter {
                 try await manager.downloadAuxiliary(
                     .ctc110m,
                     to: modelsRoot,
+                    requiredSubdirectories: [Self.ctcHeadBundleName],
                     progressHandler: { snapshot in
                         self.progressBroadcaster.emit(snapshot)
                     }
@@ -317,15 +319,22 @@ extension FluidAudioParakeetTranscriberAdapter {
         progressBroadcaster.emit(.finished)
     }
 
-    /// Auxiliary repos (e.g. the 110m hybrid's CTC head) aren't covered
-    /// by `requiredRelativePaths`; treat a non-empty folder as present.
     func auxiliaryReposPresent(in modelsRoot: URL) -> Bool {
         descriptor.auxiliaryRepoFolderNames.allSatisfy { folder in
-            let path = modelsRoot.appendingPathComponent(folder, isDirectory: true).path
-            let contents = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
-            return !contents.isEmpty
+            let root = modelsRoot.appendingPathComponent(folder, isDirectory: true)
+            if descriptor.id == BuiltInModelCatalog.parakeetTDTCTC110M.id {
+                return FileManager.default.fileExists(
+                    atPath: root
+                        .appendingPathComponent(Self.ctcHeadBundleName, isDirectory: true)
+                        .appendingPathComponent("coremldata.bin", isDirectory: false)
+                        .path
+                )
+            }
+            return FileManager.default.fileExists(atPath: root.path)
         }
     }
+
+    static let ctcHeadBundleName = "CtcHead.mlmodelc"
 
     func modelDirectory() throws -> URL {
         try storageLocator.ensureDirectoriesExist()
@@ -408,6 +417,7 @@ protocol FluidAudioParakeetManaging: Sendable {
     func downloadAuxiliary(
         _ aux: ParakeetAuxiliaryRepo,
         to directory: URL,
+        requiredSubdirectories: [String],
         progressHandler: DownloadUtils.ProgressHandler?
     ) async throws
 
@@ -491,6 +501,7 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
     func downloadAuxiliary(
         _ aux: ParakeetAuxiliaryRepo,
         to directory: URL,
+        requiredSubdirectories: [String],
         progressHandler: DownloadUtils.ProgressHandler?
     ) async throws {
         let repo: Repo
@@ -502,6 +513,14 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
             to: directory,
             progressHandler: progressHandler
         )
+        let repoDirectory = directory.appendingPathComponent(repo.folderName, isDirectory: true)
+        for subdirectory in requiredSubdirectories {
+            try await DownloadUtils.downloadSubdirectory(
+                repo,
+                subdirectory: subdirectory,
+                to: repoDirectory
+            )
+        }
     }
 
     func loadModel(

@@ -72,11 +72,9 @@ public enum BuiltInModelCatalog {
         repository: "FluidInference/parakeet-tdt-ctc-110m-coreml",
         revision: "9bc92ead6e8f17eca92a869fd578ae76842b82ba",
         requiredRelativePaths: fusedFrontendRequiredPaths,
-        // Sum of required `.mlmodelc` (Preprocessor + Decoder +
-        // JointDecision, fused frontend skips Encoder) + vocab per HF
-        // tree API at the pinned revision (2026-04-25). Prior estimate
-        // (407M) was nearly 2× the actual download.
-        approximateSizeBytes: 227_466_209,
+        // Primary fused TDT bundle plus the complete auxiliary CTC repo,
+        // including CtcHead.mlmodelc, from the HF tree APIs.
+        approximateSizeBytes: 333_453_825,
         engine: .parakeetTDT,
         // huggingface.co/nvidia/parakeet-tdt_ctc-110m (2026-04-22):
         // avg WER 7.49% (test-clean 2.4%, test-other 5.2%),

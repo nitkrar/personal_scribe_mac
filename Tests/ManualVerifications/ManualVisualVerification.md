@@ -695,8 +695,8 @@ below once per dogfood cycle:
   preparation with Parakeet, WhisperKit, and whisper.cpp active in turn;
   each recording joins the in-flight prepare without a second download.
 - [ ] **MV-ONBOARDING-6** On Try it, confirm the practice editor already
-  has keyboard focus, then use the
-  displayed configured shortcut. Change the shortcut in Settings and
+  has keyboard focus, then use the displayed configured shortcut. Change
+  the shortcut in Settings and
   confirm this screen updates live. Typing does not complete the step;
   only the normal recording path pasting into the Ninimma editor shows
   the word-count/time success card. Its time measures stop-to-paste
@@ -708,6 +708,11 @@ below once per dogfood cycle:
   You're set up banner. Skip with missing permissions/model/untried
   shortcut and confirm only those applicable items join the pending-only
   Home Get started card; satisfying them later removes them.
+- [ ] **MV-ONBOARDING-9** With Parakeet TDT-CTC 110M fully downloaded,
+  relaunch twice. Confirm the auxiliary `parakeet-ctc-110m-coreml`
+  folder retains `CtcHead.mlmodelc`, no auxiliary re-download occurs,
+  and FluidAudio logs `Loaded CTC head model from HF repo`.
+
 ## Known verification gaps (for reviewer awareness)
 - The worktree I built this in (`.claude/worktrees/agent-a7bd4da6`)
   cannot load its Swift Package manifest under Xcode 26.2 / Swift
