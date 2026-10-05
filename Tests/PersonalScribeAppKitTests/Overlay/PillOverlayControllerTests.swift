@@ -161,6 +161,40 @@ final class PillOverlayControllerTests: XCTestCase {
         XCTAssertTrue(streamCards.card.isVisible)
         XCTAssertEqual(streamCards.card.text, "hello world")
     }
+
+    func testModeAvailabilityTracksLiveModeUpdates() async throws {
+        let controller = PillOverlayController(
+            appStore: try makeAppStore(),
+            defaults: .standard,
+            panelBuilder: RecordingPanelBuilder()
+        )
+        let modes = MutableModes([.dictation])
+        var continuation: AsyncStream<[WorkflowMode]>.Continuation?
+        let updates = AsyncStream<[WorkflowMode]> { continuation = $0 }
+        controller.configureModeMenu(
+            modesProvider: { modes.value },
+            modeUpdates: updates,
+            currentModeIDProvider: { nil },
+            onSelect: { _ in }
+        )
+        XCTAssertFalse(controller.viewModel.showsModeButton)
+
+        modes.value.append(.dictation)
+        continuation?.yield(modes.value)
+        await settle()
+
+        XCTAssertTrue(controller.viewModel.showsModeButton)
+        continuation?.finish()
+    }
+}
+
+@MainActor
+private final class MutableModes {
+    var value: [WorkflowMode]
+
+    init(_ value: [WorkflowMode]) {
+        self.value = value
+    }
 }
 
 @MainActor

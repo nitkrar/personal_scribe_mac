@@ -17,12 +17,13 @@ final class PillOverlayRenderTests: XCTestCase {
             withIntermediateDirectories: true
         )
 
-        let states: [(name: String, visibility: PillVisibilityState, hovered: Bool)] = [
-            ("idle", .idle, false),
-            ("idle-hover", .idle, true),
-            ("recording", .recording, false),
-            ("recording-hover", .recording, true),
-            ("paused", .paused(elapsedSeconds: 23), false),
+        let states: [(name: String, visibility: PillVisibilityState, hovered: Bool, modeCount: Int)] = [
+            ("idle", .idle, false, 2),
+            ("idle-hover", .idle, true, 2),
+            ("idle-hover-single", .idle, true, 1),
+            ("recording", .recording, false, 2),
+            ("recording-hover", .recording, true, 2),
+            ("paused", .paused(elapsedSeconds: 23), false, 2),
         ]
         let schemes: [(name: String, value: ColorScheme)] = [
             ("dark", .dark),
@@ -38,6 +39,7 @@ final class PillOverlayRenderTests: XCTestCase {
                     )
                     model.setPillStyle(style)
                     model.setHovered(state.hovered)
+                    model.setAvailableModeCount(state.modeCount)
                     model.audioLevel = 0.55
                     model.waveformRenderDate = Date(timeIntervalSinceReferenceDate: 0)
                     model.waveformPaletteOverride = .champagne
@@ -45,7 +47,8 @@ final class PillOverlayRenderTests: XCTestCase {
                     let size = PillOverlayView.size(
                         for: state.visibility,
                         style: style,
-                        isHovered: state.hovered
+                        isHovered: state.hovered,
+                        showsModeButton: model.showsModeButton
                     )
                     let rootView = PillOverlayView(model: model)
                         .environment(\.colorScheme, scheme.value)

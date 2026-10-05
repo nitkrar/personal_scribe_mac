@@ -18,13 +18,15 @@ enum PillInteractionRouter {
         size: CGSize,
         visibility: PillVisibilityState,
         style: PillStyle,
-        isHovered: Bool
+        isHovered: Bool,
+        showsModeButton: Bool = true
     ) -> PillInteractionAction? {
         guard NSRect(origin: .zero, size: size).contains(point) else { return nil }
 
         switch visibility {
         case .idle:
-            if style == .mini, isHovered {
+            if isHovered {
+                guard showsModeButton else { return .record }
                 return point.x < size.width / 2 ? .mode : .record
             }
             return .toggle
@@ -423,7 +425,8 @@ struct AppKitPillOverlayPanelBuilder: PillOverlayPanelBuilding {
                 size: size,
                 visibility: model.visibility,
                 style: model.pillStyle,
-                isHovered: model.isHovered
+                isHovered: model.isHovered,
+                showsModeButton: model.showsModeButton
             )
         }
         hostingView.onHoverChanged = { [weak model] hovered in
@@ -467,6 +470,7 @@ public final class PillOverlayPresenter {
     private var visibilityCancellable: AnyCancellable?
     private var styleCancellable: AnyCancellable?
     private var hoverCancellable: AnyCancellable?
+    private var modeCountCancellable: AnyCancellable?
     private let diagnosticLogger: PersonalScribeLogger
     /// Visible screen area for a given pill frame; every pill frame is
     /// clamped into it (see `OverlayPlacement`).
@@ -586,6 +590,15 @@ public final class PillOverlayPresenter {
                     )
                 }
             }
+        modeCountCancellable = model.$availableModeCount.dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.isVisible, self.model.visibility == .idle,
+                          self.model.isHovered else { return }
+                    self.applyVisibilityResize(to: .idle, allowsAnimation: false)
+                }
+            }
     }
 
     private struct VisibilitySinkLogState: Equatable {
@@ -626,7 +639,8 @@ public final class PillOverlayPresenter {
         let newSize = PillOverlayView.size(
             for: visibility,
             style: model.pillStyle,
-            isHovered: model.isHovered
+            isHovered: model.isHovered,
+            showsModeButton: model.showsModeButton
         )
         guard newSize != .zero else {
             // `.hidden` is routed to `hide()` already — defensive no-op.
@@ -755,7 +769,8 @@ public final class PillOverlayPresenter {
                 for: PillOverlayView.size(
                     for: visibility,
                     style: model.pillStyle,
-                    isHovered: model.isHovered
+                    isHovered: model.isHovered,
+                    showsModeButton: model.showsModeButton
                 ),
                 within: bounds
             )

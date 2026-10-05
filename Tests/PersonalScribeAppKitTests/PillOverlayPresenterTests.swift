@@ -31,6 +31,45 @@ final class PillOverlayPresenterTests: XCTestCase {
         )
     }
 
+    func testClassicIdleHoverRoutesModeAndRecordButtonsIndependently() {
+        let size = CGSize(width: 80, height: 36)
+
+        XCTAssertEqual(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 20, y: 18),
+                size: size,
+                visibility: .idle,
+                style: .classic,
+                isHovered: true
+            ),
+            .mode
+        )
+        XCTAssertEqual(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 60, y: 18),
+                size: size,
+                visibility: .idle,
+                style: .classic,
+                isHovered: true
+            ),
+            .record
+        )
+    }
+
+    func testSingleButtonIdleHoverRoutesWholePillToRecord() {
+        XCTAssertEqual(
+            PillInteractionRouter.action(
+                at: NSPoint(x: 5, y: 15),
+                size: CGSize(width: 30, height: 30),
+                visibility: .idle,
+                style: .mini,
+                isHovered: true,
+                showsModeButton: false
+            ),
+            .record
+        )
+    }
+
     func testRecordingRoutesPauseMiddleToggleAndStopIndependently() {
         let size = CGSize(width: 220, height: 36)
 

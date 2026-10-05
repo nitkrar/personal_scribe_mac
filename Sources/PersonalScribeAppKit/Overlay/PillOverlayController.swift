@@ -11,6 +11,7 @@ public final class PillOverlayController: ObservableObject {
     private let legacyVisibilityModeBridge: LegacyVisibilityModeBridge?
     private let presenter: PillOverlayPresenter
     private var modeMenuPresenter: PillModeMenuPresenter?
+    private var modeObservationTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
     /// True between a logged stream-card show and its logged hide.
     private var isStreamCardLogOpen = false
@@ -217,6 +218,7 @@ public final class PillOverlayController: ObservableObject {
 
     public func configureModeMenu(
         modesProvider: @escaping @MainActor () -> [WorkflowMode],
+        modeUpdates: AsyncStream<[WorkflowMode]>? = nil,
         currentModeIDProvider: @escaping @MainActor () -> String?,
         onSelect: @escaping @MainActor (WorkflowMode) async -> Void
     ) {
@@ -226,6 +228,16 @@ public final class PillOverlayController: ObservableObject {
             onSelect: onSelect
         )
         modeMenuPresenter = presenter
+        viewModel.setAvailableModeCount(modesProvider().count)
+        modeObservationTask?.cancel()
+        if let modeUpdates {
+            modeObservationTask = Task { @MainActor [weak self] in
+                for await _ in modeUpdates {
+                    guard !Task.isCancelled, let self else { return }
+                    self.viewModel.setAvailableModeCount(modesProvider().count)
+                }
+            }
+        }
         viewModel.onMode = { [weak presenter] in
             presenter?.present()
         }

@@ -114,14 +114,16 @@ public struct PillOverlayView: View {
     public static func size(
         for visibility: PillVisibilityState,
         style: PillStyle,
-        isHovered: Bool = false
+        isHovered: Bool = false,
+        showsModeButton: Bool = true
     ) -> CGSize {
         let metrics = style.metrics
         switch visibility {
         case .hidden:
             return .zero
         case .idle:
-            return isHovered ? metrics.idleHoverSize : metrics.idleSize
+            guard isHovered else { return metrics.idleSize }
+            return showsModeButton ? metrics.idleHoverSize : metrics.idleSingleButtonSize
         case .holdToRecord:
             return metrics.holdToRecordSize
         case .recording:
@@ -240,20 +242,23 @@ public struct PillOverlayView: View {
         let size = Self.size(
             for: .idle,
             style: model.pillStyle,
-            isHovered: model.isHovered
+            isHovered: model.isHovered,
+            showsModeButton: model.showsModeButton
         )
 
         return Group {
-            if metrics.controlsOnHover, model.isHovered {
+            if model.isHovered {
                 HStack(spacing: metrics.idleControlsSpacing) {
-                    Circle()
-                        .fill(fgDim.opacity(colorScheme == .dark ? 0.18 : 0.14))
-                        .overlay(
-                            Image(systemName: "square.grid.2x2")
-                                .font(.system(size: metrics.modeIconSize, weight: .medium))
-                                .foregroundColor(fgDim)
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if model.showsModeButton {
+                        Circle()
+                            .fill(fgDim.opacity(colorScheme == .dark ? 0.18 : 0.14))
+                            .overlay(
+                                Image(systemName: "square.grid.2x2")
+                                    .font(.system(size: metrics.modeIconSize, weight: .medium))
+                                    .foregroundColor(fgDim)
+                            )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
 
                     Circle()
                         .fill(fg.opacity(0.95))

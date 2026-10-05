@@ -56,6 +56,27 @@ final class PillOverlayViewSizeTests: XCTestCase {
         )
     }
 
+    func testIdleHoverShrinksToOneButtonWhenThereIsNoModeChoice() {
+        XCTAssertEqual(
+            PillOverlayView.size(
+                for: .idle,
+                style: .mini,
+                isHovered: true,
+                showsModeButton: false
+            ),
+            CGSize(width: 30, height: 30)
+        )
+        XCTAssertEqual(
+            PillOverlayView.size(
+                for: .idle,
+                style: .classic,
+                isHovered: true,
+                showsModeButton: false
+            ),
+            CGSize(width: 36, height: 36)
+        )
+    }
+
     func testPausedSizesMatchMockup() {
         XCTAssertEqual(
             PillOverlayView.size(for: .paused(elapsedSeconds: 23), style: .classic),

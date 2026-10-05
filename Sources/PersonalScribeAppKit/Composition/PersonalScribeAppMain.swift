@@ -129,6 +129,7 @@ struct PersonalScribeAppMain: App {
         }
         pillController.configureModeMenu(
             modesProvider: selectableModesProvider,
+            modeUpdates: AppComposition.workflowModeRegistry.customModesStream(),
             currentModeIDProvider: {
                 AppComposition.workflowModeRegistry.currentMode.id
             },

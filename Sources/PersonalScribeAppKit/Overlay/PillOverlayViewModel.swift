@@ -16,6 +16,8 @@ public final class PillOverlayViewModel: ObservableObject {
     var waveformRenderDate: Date?
     var waveformPaletteOverride: WaveformPalette?
     @Published public private(set) var isHovered = false
+    @Published public private(set) var availableModeCount = 2
+    public var showsModeButton: Bool { availableModeCount > 1 }
     /// Side of the panel the pill content is pinned to (set by the
     /// presenter from the pill's `PillAnchor`).
     @Published var contentAlignment: Alignment = .bottom
@@ -62,6 +64,10 @@ public final class PillOverlayViewModel: ObservableObject {
     public func setHovered(_ hovered: Bool) {
         guard hovered != isHovered else { return }
         isHovered = hovered
+    }
+
+    public func setAvailableModeCount(_ count: Int) {
+        availableModeCount = max(0, count)
     }
 
     func performInteraction(

@@ -36,6 +36,7 @@ public enum PillStyle: String, CaseIterable, Identifiable, Codable, Sendable, St
 struct PillStyleMetrics: Equatable {
     let idleSize: CGSize
     let idleHoverSize: CGSize
+    let idleSingleButtonSize: CGSize
     let holdToRecordSize: CGSize
     let recordingSize: CGSize
     let recordingHoverSize: CGSize
@@ -66,7 +67,8 @@ struct PillStyleMetrics: Equatable {
 
     static let classic = PillStyleMetrics(
         idleSize: CGSize(width: 80, height: 28),
-        idleHoverSize: CGSize(width: 80, height: 28),
+        idleHoverSize: CGSize(width: 80, height: 36),
+        idleSingleButtonSize: CGSize(width: 36, height: 36),
         holdToRecordSize: CGSize(width: 220, height: 36),
         recordingSize: CGSize(width: 220, height: 36),
         recordingHoverSize: CGSize(width: 220, height: 36),
@@ -78,10 +80,10 @@ struct PillStyleMetrics: Equatable {
         errorSize: CGSize(width: 220, height: 36),
         controlsOnHover: false,
         idleLogoSize: 14,
-        idleControlsSpacing: 4,
-        idleControlsInset: 3,
-        modeIconSize: 10,
-        recordLogoSize: 11,
+        idleControlsSpacing: 6,
+        idleControlsInset: 4,
+        modeIconSize: 12,
+        recordLogoSize: 14,
         recordingSpacing: 8,
         controlDiameter: 22,
         stopDiameter: 20,
@@ -99,6 +101,7 @@ struct PillStyleMetrics: Equatable {
     static let mini = PillStyleMetrics(
         idleSize: CGSize(width: 40, height: 16),
         idleHoverSize: CGSize(width: 66, height: 30),
+        idleSingleButtonSize: CGSize(width: 30, height: 30),
         holdToRecordSize: CGSize(width: 165, height: 27),
         recordingSize: CGSize(width: 110, height: 20),
         recordingHoverSize: CGSize(width: 170, height: 30),

@@ -325,6 +325,19 @@ final class PillOverlayViewModelTests: XCTestCase {
         _ = cancellable
     }
 
+    func testModeButtonOnlyShowsWhenMoreThanOneModeIsAvailable() {
+        let viewModel = PillOverlayViewModel()
+
+        viewModel.setAvailableModeCount(0)
+        XCTAssertFalse(viewModel.showsModeButton)
+
+        viewModel.setAvailableModeCount(1)
+        XCTAssertFalse(viewModel.showsModeButton)
+
+        viewModel.setAvailableModeCount(2)
+        XCTAssertTrue(viewModel.showsModeButton)
+    }
+
     func testNoneStyleNeverShowsThePillAndOtherStylesRestoreIt() {
         let viewModel = PillOverlayViewModel()
         viewModel.apply(visibility: .recording)
