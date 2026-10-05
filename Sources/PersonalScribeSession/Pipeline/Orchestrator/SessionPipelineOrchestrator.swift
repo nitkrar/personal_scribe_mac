@@ -391,6 +391,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             return
         }
 
+        publish { snapshot in
+            snapshot.sessionState = .transcribing
+            snapshot.activeStage = .capture
+        }
+
         do {
             if let segment = try await transcribeCurrentSegment() {
                 pausedSegments.append(segment)
@@ -419,6 +424,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
         pausedTimeoutTask?.cancel()
         pausedTimeoutTask = nil
+        publish { snapshot in
+            snapshot.sessionState = .transcribing
+            snapshot.activeStage = .capture
+            snapshot.transcriptProgress = nil
+        }
         resetInputSilence()
         resetGraceForNewSession()
         bufferedAudio.removeAll(keepingCapacity: true)
@@ -438,6 +448,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             publish { snapshot in
                 snapshot.sessionState = .capturing
                 snapshot.activeStage = .capture
+                snapshot.transcriptProgress = nil
                 snapshot.liveStreamingFallbackNotice = nil
                 snapshot.vadAutoStopGracePending = false
                 snapshot.vadAutoStopGraceDeadline = nil
@@ -448,13 +459,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 await self?.consumeCaptureStream(stream)
             }
         } catch {
-            handleStageFailure(
-                makeStageFailure(
-                    stage: .capture,
-                    error: error,
-                    fallback: .audioEngineFailure
-                )
-            )
+            await finalizePausedSegments(delivery: .clipboardWithoutPaste)
         }
     }
 
@@ -473,6 +478,17 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         pausedTimeoutTask?.cancel()
         pausedTimeoutTask = nil
         await finalizePausedSegments(delivery: .clipboardWithoutPaste)
+    }
+
+    public func finalizePausedSessionForApplicationTermination() async {
+        guard currentSnapshot.sessionState == .paused else { return }
+        pausedTimeoutTask?.cancel()
+        pausedTimeoutTask = nil
+        await finalizePausedSegments(
+            delivery: .clipboardWithoutPaste,
+            postProcess: false,
+            releaseResources: false
+        )
     }
 
     private func resetInputSilence() {
@@ -875,21 +891,22 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     }
 
     private func discardPausedCapture() async {
-        guard !pausedSegments.isEmpty else { return }
         pausedTimeoutTask?.cancel()
         pausedTimeoutTask = nil
-        let resumable = ResumableCapture(
-            buffers: [],
-            pausedSegments: pausedSegments,
-            recipe: activeSessionRecipe,
-            liveText: pausedRawText
-        )
-        resumableCapture = resumable
-        let delay = cancelCardDuration()
-        resumableExpiryTask = Task { [weak self] in
-            try? await Task.sleep(for: delay)
-            guard !Task.isCancelled else { return }
-            await self?.expireResumableCapture(id: resumable.id)
+        if !pausedSegments.isEmpty {
+            let resumable = ResumableCapture(
+                buffers: [],
+                pausedSegments: pausedSegments,
+                recipe: activeSessionRecipe,
+                liveText: nil
+            )
+            resumableCapture = resumable
+            let delay = cancelCardDuration()
+            resumableExpiryTask = Task { [weak self] in
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled else { return }
+                await self?.expireResumableCapture(id: resumable.id)
+            }
         }
         pausedSegments.removeAll(keepingCapacity: true)
         let completedRecipe = activeSessionRecipe
@@ -902,7 +919,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             snapshot.recordingDuration = nil
             snapshot.liveStreamingFallbackNotice = nil
             snapshot.isStreamingSession = false
-            snapshot.cancelledCaptureResumable = true
+            snapshot.cancelledCaptureResumable = self.resumableCapture != nil
         }
     }
 
@@ -994,6 +1011,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
 
         let duration = buffers.reduce(Duration.zero) { $0 + $1.duration }
+        guard duration >= .milliseconds(1_000) else {
+            await cancelLiveStreamingSession()
+            return nil
+        }
         publish { snapshot in
             snapshot.sessionState = .transcribing
             snapshot.activeStage = .transcription
@@ -1055,7 +1076,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         }
     }
 
-    private func finalizePausedSegments(delivery: PausedFinalizationDelivery) async {
+    private func finalizePausedSegments(
+        delivery: PausedFinalizationDelivery,
+        postProcess: Bool = true,
+        releaseResources: Bool = true
+    ) async {
         guard !pausedSegments.isEmpty else {
             publish { snapshot in
                 snapshot.sessionState = .shortExit
@@ -1084,7 +1109,11 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 asrConfidence: nil,
                 cleanupEnabled: activeSessionRecipe?.cleanupEnabled ?? true
             )
-            let cleanedText = try await runPostProcessing(rawResult.text, context: context)
+            let cleanedText = if postProcess {
+                try await runPostProcessing(rawResult.text, context: context)
+            } else {
+                rawResult.text
+            }
             let progress = nextTranscriptProgress(
                 text: cleanedText,
                 isFinal: true,
@@ -1110,7 +1139,9 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
             case .clipboardWithoutPaste:
                 try await outputSink.deliverFinalWithoutPaste(finalResult)
             }
-            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            if releaseResources {
+                await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            }
             pausedSegments.removeAll(keepingCapacity: true)
 
             publish { snapshot in
@@ -1126,10 +1157,14 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 await onPausedAutoFinalized?()
             }
         } catch let failure as PipelineStageFailure {
-            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            if releaseResources {
+                await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            }
             handleStageFailure(failure)
         } catch {
-            await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            if releaseResources {
+                await endSessionAndReleaseIdleResources(for: activeSessionRecipe)
+            }
             handleStageFailure(
                 makeStageFailure(
                     stage: .transcription,

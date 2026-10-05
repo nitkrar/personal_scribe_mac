@@ -150,7 +150,7 @@ public actor SessionCoordinator {
 
     public func finishForApplicationTermination() async {
         if await currentDisplayState() == .paused {
-            await pipeline.finalizePausedSessionWithoutPaste()
+            await pipeline.finalizePausedSessionForApplicationTermination()
         } else {
             await stopIfActive()
         }

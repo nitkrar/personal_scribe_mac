@@ -5,6 +5,275 @@ import PersonalScribeTestSupport
 @testable import PersonalScribeVAD
 
 final class SessionPipelineOrchestratorTests: XCTestCase {
+    func testPausePublishesTransitionBeforeAwaitingCaptureStop() async throws {
+        let capture = StopGatedCapture(buffer: try makeBuffer(sampleCount: 16_000, sampleValue: 0.1))
+        let orchestrator = makeOrchestrator(
+            capture: capture,
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(
+                    text: "held",
+                    audioDuration: .seconds(1),
+                    processingDuration: .zero
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        let pause = Task { await orchestrator.pauseCapture() }
+        await capture.waitUntilStopStarted()
+
+        var snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .transcribing)
+
+        await capture.releaseStop()
+        await pause.value
+        snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .paused)
+    }
+
+    func testResumePublishesTransitionBeforeAwaitingCaptureStart() async throws {
+        let capture = ResumeStartGatedCapture(buffer: try makeBuffer(sampleCount: 16_000, sampleValue: 0.1))
+        let orchestrator = makeOrchestrator(
+            capture: capture,
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(
+                    text: "held",
+                    audioDuration: .seconds(1),
+                    processingDuration: .zero
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+        let resume = Task { await orchestrator.resumePausedCapture() }
+        await capture.waitUntilResumeStart()
+
+        var snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .transcribing)
+
+        await capture.releaseResumeStart()
+        await resume.value
+        snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .capturing)
+    }
+
+    func testResumeStartFailureSavesHeldSegmentsWithoutPaste() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.1)
+        let sink = TestPipelineOutputSink()
+        let entries = TranscriptEntryRecorder()
+        let orchestrator = makeOrchestrator(
+            capture: ResumeFailingCapture(buffer: buffer),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(
+                    text: "held",
+                    audioDuration: .seconds(1),
+                    processingDuration: .zero
+                )
+            ),
+            postProcessingPipeline: IdentityPostProcessingPipeline(),
+            outputSink: sink,
+            persistenceHandler: { entry in await entries.append(entry) }
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+        await orchestrator.resumePausedCapture()
+
+        let snapshot = await orchestrator.snapshot()
+        let entryTexts = await entries.all().map(\.text)
+        let deliverySinks = await sink.finalDeliverySinks()
+        XCTAssertEqual(snapshot.sessionState, .completed)
+        XCTAssertEqual(entryTexts, ["held"])
+        XCTAssertEqual(deliverySinks, [[.clipboard(restoreEnabled: false)]])
+    }
+
+    func testApplicationTerminationPersistsRawPausedTextBeforeCleanupWork() async throws {
+        let entries = TranscriptEntryRecorder()
+        let transcriber = ReleaseTrackingTranscriber(
+            result: TranscriptionResult(
+                text: "raw words",
+                audioDuration: .seconds(1),
+                processingDuration: .zero
+            )
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            transcriber: transcriber,
+            postProcessingPipeline: PrefixPostProcessingPipeline(),
+            persistenceHandler: { entry in await entries.append(entry) }
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+        await orchestrator.finalizePausedSessionForApplicationTermination()
+
+        let entryTexts = await entries.all().map(\.text)
+        let releaseCount = await transcriber.releaseIdleResourcesCallCount()
+        XCTAssertEqual(entryTexts, ["raw words"])
+        XCTAssertEqual(releaseCount, 0)
+    }
+
+    func testCancelEmptyPausedSessionAlwaysReturnsToIdle() async {
+        let orchestrator = makeOrchestrator(capture: FakeAudioCapturer())
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+        await orchestrator.cancelCapture()
+
+        let snapshot = await orchestrator.snapshot()
+        XCTAssertEqual(snapshot.sessionState, .idle)
+        XCTAssertFalse(snapshot.cancelledCaptureResumable)
+    }
+
+    func testPauseDropsSubsecondSegmentWithoutTranscribing() async throws {
+        let transcriber = CountingTranscriber(
+            result: TranscriptionResult(
+                text: "too short",
+                audioDuration: .milliseconds(500),
+                processingDuration: .zero
+            )
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 8_000)]),
+            transcriber: transcriber
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+
+        let duration = await orchestrator.snapshot().recordingDuration
+        let callCount = await transcriber.transcribeCallCount()
+        XCTAssertEqual(duration, .zero)
+        XCTAssertEqual(callCount, 0)
+    }
+
+    func testResumeCancelsPausedAutoFinalizeTimer() async throws {
+        let sink = TestPipelineOutputSink()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(text: "held", audioDuration: .seconds(1), processingDuration: .zero)
+            ),
+            outputSink: sink,
+            pausedRecordingTimeout: .milliseconds(80)
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+        await orchestrator.resumePausedCapture()
+        try await Task.sleep(for: .milliseconds(120))
+
+        let state = await orchestrator.snapshot().sessionState
+        let deliveries = await sink.finalDeliveries()
+        XCTAssertEqual(state, .capturing)
+        XCTAssertTrue(deliveries.isEmpty)
+    }
+
+    func testPausedTimerFiringAfterStopDoesNothing() async throws {
+        let sink = TestPipelineOutputSink()
+        let entries = TranscriptEntryRecorder()
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [try makeBuffer(sampleCount: 16_000)]),
+            transcriber: FakeTranscriber(
+                result: TranscriptionResult(text: "once", audioDuration: .seconds(1), processingDuration: .zero)
+            ),
+            postProcessingPipeline: IdentityPostProcessingPipeline(),
+            outputSink: sink,
+            persistenceHandler: { entry in await entries.append(entry) },
+            pausedRecordingTimeout: .milliseconds(80)
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+        await orchestrator.stopPausedSession()
+        try await Task.sleep(for: .milliseconds(120))
+
+        let finalTexts = await sink.finalDeliveries().map(\.text)
+        let entryTexts = await entries.all().map(\.text)
+        XCTAssertEqual(finalTexts, ["once"])
+        XCTAssertEqual(entryTexts, ["once"])
+    }
+
+    func testStopWhileCapturingAfterPausePersistsAllSegmentsOnceInOrder() async throws {
+        let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.1)
+        let sink = TestPipelineOutputSink()
+        let entries = TranscriptEntryRecorder()
+        let transcriber = SequencedTranscriber(results: [
+            TranscriptionResult(text: "first", audioDuration: .seconds(1), processingDuration: .zero),
+            TranscriptionResult(text: "second", audioDuration: .seconds(1), processingDuration: .zero),
+        ])
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(buffers: [buffer]),
+            transcriber: transcriber,
+            postProcessingPipeline: IdentityPostProcessingPipeline(),
+            outputSink: sink,
+            persistenceHandler: { entry in await entries.append(entry) }
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.pauseCapture()
+        await orchestrator.resumePausedCapture()
+        await waitForState(.capturing, in: orchestrator)
+        await orchestrator.toggleCapture()
+
+        let finalTexts = await sink.finalDeliveries().map(\.text)
+        let entryTexts = await entries.all().map(\.text)
+        XCTAssertEqual(finalTexts, ["first second"])
+        XCTAssertEqual(entryTexts, ["first second"])
+    }
+
+    func testCancelCardResumeDoesNotDuplicatePausedStreamingText() async throws {
+        let streamingTranscriber = SequentialStreamingTranscriber(
+            sessionTexts: ["A", "B"]
+        )
+        let orchestrator = makeOrchestrator(
+            capture: FakeAudioCapturer(
+                buffers: [try makeBuffer(sampleCount: 16_000)],
+                delayPerBuffer: .milliseconds(20)
+            ),
+            postProcessingPipeline: IdentityPostProcessingPipeline(),
+            boundRecipe: makeStreamingRecipe(
+                streamingTranscriber: streamingTranscriber,
+                streamingBehavior: BoundStreamingBehavior(
+                    liveCardEnabled: true,
+                    liveCursorEnabled: false,
+                    secondPassEnabled: false
+                )
+            )
+        )
+
+        await orchestrator.toggleCapture()
+        await waitForState(.capturing, in: orchestrator)
+        try await withTimeout(.seconds(1)) {
+            while await orchestrator.snapshot().transcriptProgress?.text != "A" {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+        await orchestrator.pauseCapture()
+        await orchestrator.cancelCapture()
+        await orchestrator.resumeCancelledCapture()
+        await waitForState(.capturing, in: orchestrator)
+        try await withTimeout(.seconds(1)) {
+            while await orchestrator.snapshot().transcriptProgress?.text != "B" {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+        await orchestrator.toggleCapture()
+
+        let finalText = await orchestrator.snapshot().lastCompletedResult?.text
+        XCTAssertEqual(finalText, "A B")
+    }
+
     func testPauseResumeCyclesJoinSegmentsIntoOnePersistedDelivery() async throws {
         let buffer = try makeBuffer(sampleCount: 16_000, sampleValue: 0.1)
         let transcriber = SequencedTranscriber(results: [
@@ -2900,6 +3169,13 @@ private struct IdentityPostProcessingPipeline: PostProcessingPipeline {
     }
 }
 
+private struct PrefixPostProcessingPipeline: PostProcessingPipeline {
+    func run(_ text: String, context: PostProcessingContext) async throws -> String {
+        _ = context
+        return "cleaned: \(text)"
+    }
+}
+
 private actor SlowPrepareTranscriber: Transcriber {
     nonisolated let capabilities = TranscriberCapabilities()
 
@@ -3130,6 +3406,62 @@ private actor ScriptedStreamingTranscriber: StreamingTranscriber {
                     continuation.finish(throwing: error)
                 }
             }
+        }
+    }
+}
+
+private final class SequentialStreamingTranscriber: StreamingTranscriber, @unchecked Sendable {
+    let capabilities = TranscriberCapabilities()
+    private let scripts: StreamingSessionScripts
+
+    init(sessionTexts: [String]) {
+        scripts = StreamingSessionScripts(sessionTexts)
+    }
+
+    func prepare() async throws {}
+    func releaseIdleResources() async {}
+
+    func modelDownloadProgress() -> AsyncStream<ModelDownloadProgress> {
+        AsyncStream { $0.finish() }
+    }
+
+    func transcribe(
+        stream: AsyncThrowingStream<PCMBuffer, Error>
+    ) -> AsyncThrowingStream<StreamingTranscriptionEvent, Error> {
+        let text = scripts.takeNext()
+        return AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    for try await _ in stream {
+                        continuation.yield(.partial(text: text))
+                    }
+                    continuation.yield(.finalized(
+                        TranscriptionResult(
+                            text: text,
+                            audioDuration: .seconds(1),
+                            processingDuration: .zero
+                        )
+                    ))
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+}
+
+private final class StreamingSessionScripts: @unchecked Sendable {
+    private let lock = NSLock()
+    private var texts: [String]
+
+    init(_ texts: [String]) {
+        self.texts = texts
+    }
+
+    func takeNext() -> String {
+        lock.withLock {
+            texts.isEmpty ? "" : texts.removeFirst()
         }
     }
 }
@@ -3417,6 +3749,138 @@ private final class RecordingFileWriterSpy: @unchecked Sendable, RecordingFileWr
 
 private enum RecordingWriteFailure: Error {
     case writeFailed
+}
+
+private actor StopGatedCapture: AudioCapturer {
+    private let buffer: PCMBuffer
+    private var streamContinuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?
+    private var stopStarted = false
+    private var stopReleased = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    init(buffer: PCMBuffer) {
+        self.buffer = buffer
+    }
+
+    func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
+        AsyncThrowingStream { continuation in
+            streamContinuation = continuation
+            continuation.yield(buffer)
+        }
+    }
+
+    func stop() async {
+        stopStarted = true
+        let pending = startWaiters
+        startWaiters.removeAll()
+        pending.forEach { $0.resume() }
+        if !stopReleased {
+            await withCheckedContinuation { releaseWaiters.append($0) }
+        }
+        streamContinuation?.finish()
+        streamContinuation = nil
+    }
+
+    func audioLevelStream() async -> AsyncStream<Float> {
+        AsyncStream { $0.finish() }
+    }
+
+    func waitUntilStopStarted() async {
+        if stopStarted { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func releaseStop() {
+        stopReleased = true
+        let pending = releaseWaiters
+        releaseWaiters.removeAll()
+        pending.forEach { $0.resume() }
+    }
+}
+
+private actor ResumeStartGatedCapture: AudioCapturer {
+    private let buffer: PCMBuffer
+    private var startCount = 0
+    private var streamContinuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?
+    private var resumeStarted = false
+    private var resumeReleased = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    init(buffer: PCMBuffer) {
+        self.buffer = buffer
+    }
+
+    func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
+        startCount += 1
+        if startCount == 2 {
+            resumeStarted = true
+            let pending = startWaiters
+            startWaiters.removeAll()
+            pending.forEach { $0.resume() }
+            if !resumeReleased {
+                await withCheckedContinuation { releaseWaiters.append($0) }
+            }
+        }
+        return AsyncThrowingStream { continuation in
+            streamContinuation = continuation
+            if startCount == 1 {
+                continuation.yield(buffer)
+            }
+        }
+    }
+
+    func stop() async {
+        streamContinuation?.finish()
+        streamContinuation = nil
+    }
+
+    func audioLevelStream() async -> AsyncStream<Float> {
+        AsyncStream { $0.finish() }
+    }
+
+    func waitUntilResumeStart() async {
+        if resumeStarted { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func releaseResumeStart() {
+        resumeReleased = true
+        let pending = releaseWaiters
+        releaseWaiters.removeAll()
+        pending.forEach { $0.resume() }
+    }
+}
+
+private actor ResumeFailingCapture: AudioCapturer {
+    private let buffer: PCMBuffer
+    private var startCount = 0
+    private var streamContinuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?
+
+    init(buffer: PCMBuffer) {
+        self.buffer = buffer
+    }
+
+    func start() async throws -> AsyncThrowingStream<PCMBuffer, Error> {
+        startCount += 1
+        guard startCount == 1 else {
+            throw PersonalScribeError.audioEngineFailure
+        }
+        return AsyncThrowingStream { continuation in
+            streamContinuation = continuation
+            continuation.yield(buffer)
+        }
+    }
+
+    func stop() async {
+        streamContinuation?.finish()
+        streamContinuation = nil
+    }
+
+    func audioLevelStream() async -> AsyncStream<Float> {
+        AsyncStream { $0.finish() }
+    }
 }
 
 /// Used by the `#071` race-fix test: `start()` blocks until `release()`

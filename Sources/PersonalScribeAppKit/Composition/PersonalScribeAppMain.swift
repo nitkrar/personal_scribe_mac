@@ -78,10 +78,9 @@ struct PersonalScribeAppMain: App {
             OnboardingState.resolve(from: defaults) == .completed
         }
         let selectableModesProvider: @MainActor () -> [WorkflowMode] = {
-            WorkflowModeRegistry.builtInModes
-                + AppComposition.currentlyValidCustomModes(
-                    among: AppComposition.workflowModeRegistry.customModes
-                )
+            AppComposition.currentlyValidCustomModes(
+                among: AppComposition.workflowModeRegistry.customModes
+            )
         }
 
         self.coordinator = coordinator
@@ -134,8 +133,12 @@ struct PersonalScribeAppMain: App {
                 AppComposition.workflowModeRegistry.currentMode.id
             },
             onSelect: { mode in
-                await coordinator.finalizePausedForExternalInterruption()
-                AppComposition.workflowModeRegistry.setCurrent(id: mode.id)
+                await AppComposition.selectModeIfNeeded(
+                    selectedModeID: mode.id,
+                    currentModeID: AppComposition.workflowModeRegistry.currentMode.id,
+                    finalizePaused: { await coordinator.finalizePausedForExternalInterruption() },
+                    setCurrent: { AppComposition.workflowModeRegistry.setCurrent(id: $0) }
+                )
             }
         )
         // Final delivery runs in the pipeline's output stage; it raises
@@ -247,8 +250,12 @@ struct PersonalScribeAppMain: App {
                         // *current* mode, not the persisted default.
                         // RecipeBuilder resolves descriptors per Kind via
                         // ActiveModelService at session start.
-                        await coordinator.finalizePausedForExternalInterruption()
-                        AppComposition.workflowModeRegistry.setCurrent(id: mode.id)
+                        await AppComposition.selectModeIfNeeded(
+                            selectedModeID: mode.id,
+                            currentModeID: AppComposition.workflowModeRegistry.currentMode.id,
+                            finalizePaused: { await coordinator.finalizePausedForExternalInterruption() },
+                            setCurrent: { AppComposition.workflowModeRegistry.setCurrent(id: $0) }
+                        )
                     },
                     menuBarVisibilityProvider: {
                         statusItemHostRef?.isMenuBarVisible ?? true
@@ -326,8 +333,12 @@ struct PersonalScribeAppMain: App {
                 // #089: menu-bar submenu picks the runtime *current*
                 // mode. Recipe resolution against ActiveModelService
                 // happens at session start via RecipeBuilder.
-                await coordinator.finalizePausedForExternalInterruption()
-                AppComposition.workflowModeRegistry.setCurrent(id: mode.id)
+                await AppComposition.selectModeIfNeeded(
+                    selectedModeID: mode.id,
+                    currentModeID: AppComposition.workflowModeRegistry.currentMode.id,
+                    finalizePaused: { await coordinator.finalizePausedForExternalInterruption() },
+                    setCurrent: { AppComposition.workflowModeRegistry.setCurrent(id: $0) }
+                )
             },
             prequitHandler: prequitHandler
         )
@@ -531,15 +542,24 @@ final class EscapeKeyMonitorHost: ObservableObject {
     let monitor: EscapeKeyMonitor
     private var visibilityCancellable: AnyCancellable?
 
-    /// Esc is armed (registered as a hot key) only while the pill is
-    /// recording, so it behaves normally in every app otherwise.
+    /// Esc is armed only while a recording can be cancelled, including
+    /// the paused state. It behaves normally in every app otherwise.
     init(monitor: EscapeKeyMonitor, visibility: AnyPublisher<PillOverlayViewModel.Visibility, Never>) {
         self.monitor = monitor
         monitor.start()
         visibilityCancellable = visibility
-            .map { $0 == .recording || $0 == .holdToRecord }
+            .map(Self.shouldArm(for:))
             .removeDuplicates()
             .sink { [weak monitor] armed in monitor?.setArmed(armed) }
+    }
+
+    static func shouldArm(for visibility: PillOverlayViewModel.Visibility) -> Bool {
+        switch visibility {
+        case .recording, .holdToRecord, .paused:
+            return true
+        case .hidden, .idle, .cancelled, .transcribing, .done, .error, .loading, .downloading:
+            return false
+        }
     }
 
     deinit {

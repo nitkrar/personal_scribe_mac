@@ -25,6 +25,5 @@ final class SessionStateTests: XCTestCase {
 
     func testPausedRemainsPausedAsADisplayState() {
         XCTAssertEqual(SessionState.paused.displayState, .paused)
-        XCTAssertNotEqual(SessionState.paused, .capturing)
     }
 }

@@ -56,6 +56,17 @@ public final class SessionOutputStage: PipelineOutputSink, @unchecked Sendable {
         }
     }
 
+    public func deliverFinalWithoutPaste(_ result: TranscriptionResult) async throws {
+        await live.endSession()
+        let outcome = await batch.deliverBatch(
+            text: result.text,
+            sinks: [.clipboard(restoreEnabled: false)]
+        )
+        if case .failed(let error) = outcome {
+            logger.error("Final transcript delivery failed", error: error)
+        }
+    }
+
     public func resetForNewSession() async {
         await live.resetForNewSession()
     }

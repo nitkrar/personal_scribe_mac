@@ -24,12 +24,12 @@ final class PausedRecordingTimeoutTests: XCTestCase {
 
         PausedRecordingTimeout.persist(
             to: defaults,
-            .init(minutes: 12)
+            .init(minutes: 99)
         )
 
         XCTAssertEqual(
             defaults.double(forKey: PausedRecordingTimeout.userDefaultsKey),
-            12
+            30
         )
     }
 }

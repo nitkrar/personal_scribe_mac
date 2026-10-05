@@ -10,6 +10,14 @@ import XCTest
 @MainActor
 final class EscapeKeyMonitorTests: XCTestCase {
 
+    func testHostArmsEscapeForEveryCancellablePillState() {
+        XCTAssertTrue(EscapeKeyMonitorHost.shouldArm(for: .recording))
+        XCTAssertTrue(EscapeKeyMonitorHost.shouldArm(for: .holdToRecord))
+        XCTAssertTrue(EscapeKeyMonitorHost.shouldArm(for: .paused(elapsedSeconds: 42)))
+        XCTAssertFalse(EscapeKeyMonitorHost.shouldArm(for: .idle))
+        XCTAssertFalse(EscapeKeyMonitorHost.shouldArm(for: .transcribing))
+    }
+
     // MARK: - Filter logic
 
     /// Plain Esc keyDown → handler fires; decider returns whatever the

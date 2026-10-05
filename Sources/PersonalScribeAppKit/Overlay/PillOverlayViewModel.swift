@@ -120,11 +120,6 @@ public final class PillOverlayViewModel: ObservableObject {
             return
         }
 
-        if case .paused = sessionState {
-            visibility = .paused(elapsedSeconds: 0)
-            return
-        }
-
         if case .transcribing = sessionState {
             visibility = compatibilityTranscribingVisibility(progress: preparationProgress)
             return

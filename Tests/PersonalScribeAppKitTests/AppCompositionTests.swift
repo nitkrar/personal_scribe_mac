@@ -7,6 +7,32 @@ import PersonalScribeSession
 
 @MainActor
 final class AppCompositionTests: XCTestCase {
+    func testSelectingCurrentModeDoesNotFinalizeOrMutate() async {
+        var events: [String] = []
+
+        await AppComposition.selectModeIfNeeded(
+            selectedModeID: "dictation",
+            currentModeID: "dictation",
+            finalizePaused: { events.append("finalize") },
+            setCurrent: { events.append("set:\($0)") }
+        )
+
+        XCTAssertTrue(events.isEmpty)
+    }
+
+    func testSelectingDifferentModeFinalizesBeforeSwitch() async {
+        var events: [String] = []
+
+        await AppComposition.selectModeIfNeeded(
+            selectedModeID: "notes",
+            currentModeID: "dictation",
+            finalizePaused: { events.append("finalize") },
+            setCurrent: { events.append("set:\($0)") }
+        )
+
+        XCTAssertEqual(events, ["finalize", "set:notes"])
+    }
+
     func testMakePermissionServiceReturnsProductionType() {
         let service = AppComposition.makePermissionService()
 

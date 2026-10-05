@@ -460,8 +460,12 @@ public enum AppComposition {
         // recording.
         monitor.setOnPerModeActivate { modeID in
             Task { @MainActor in
-                await coordinator.finalizePausedForExternalInterruption()
-                registry.setCurrent(id: modeID)
+                await selectModeIfNeeded(
+                    selectedModeID: modeID,
+                    currentModeID: registry.currentMode.id,
+                    finalizePaused: { await coordinator.finalizePausedForExternalInterruption() },
+                    setCurrent: { registry.setCurrent(id: $0) }
+                )
                 await coordinator.toggle()
             }
         }
@@ -471,6 +475,18 @@ public enum AppComposition {
                 modelService: modelService
             )
         )
+    }
+
+    @MainActor
+    static func selectModeIfNeeded(
+        selectedModeID: String,
+        currentModeID: String,
+        finalizePaused: @escaping @MainActor () async -> Void,
+        setCurrent: @escaping @MainActor (String) -> Void
+    ) async {
+        guard selectedModeID != currentModeID else { return }
+        await finalizePaused()
+        setCurrent(selectedModeID)
     }
 
     /// Keeps `monitor`'s per-mode hotkey table synchronized to the valid
