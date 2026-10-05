@@ -36,6 +36,9 @@ final class SessionCoordinatorHappyPathTests: XCTestCase {
 
         await capture.releaseResumeStart()
         await resume.value
+        let captureState = await capture.state()
+        XCTAssertEqual(captureState.stopCount, 2)
+        XCTAssertFalse(captureState.isRunning)
     }
 
     func testCancelIfActiveCancelsPausedSessionIntoResumableCardState() async throws {
@@ -153,6 +156,8 @@ private actor CoordinatorResumeGatedCapture: AudioCapturer {
     private var streamContinuation: AsyncThrowingStream<PCMBuffer, Error>.Continuation?
     private var resumeStarted = false
     private var resumeReleased = false
+    private var isRunning = false
+    private var stopCount = 0
     private var startWaiters: [CheckedContinuation<Void, Never>] = []
     private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
 
@@ -171,6 +176,7 @@ private actor CoordinatorResumeGatedCapture: AudioCapturer {
                 await withCheckedContinuation { releaseWaiters.append($0) }
             }
         }
+        isRunning = true
         return AsyncThrowingStream { continuation in
             streamContinuation = continuation
             if startCount == 1 {
@@ -180,6 +186,8 @@ private actor CoordinatorResumeGatedCapture: AudioCapturer {
     }
 
     func stop() async {
+        stopCount += 1
+        isRunning = false
         streamContinuation?.finish()
         streamContinuation = nil
     }
@@ -198,6 +206,10 @@ private actor CoordinatorResumeGatedCapture: AudioCapturer {
         let pending = releaseWaiters
         releaseWaiters.removeAll()
         pending.forEach { $0.resume() }
+    }
+
+    func state() -> (stopCount: Int, isRunning: Bool) {
+        (stopCount, isRunning)
     }
 }
 

@@ -55,6 +55,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
     private let pausedRecordingTimeout: @Sendable () -> Duration
     private var pausedTimeoutTask: Task<Void, Never>?
     private var pausedTransitionInFlight = false
+    private var applicationTerminationRequested = false
     private var onPausedAutoFinalized: (@Sendable () async -> Void)?
     /// Bound the live-stream shutdown wait so a misbehaving adapter
     /// cannot wedge stop/cancel forever by never terminating its event
@@ -433,6 +434,10 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
         bufferedAudio.removeAll(keepingCapacity: true)
         do {
             let stream = try await capture.start()
+            if applicationTerminationRequested {
+                await capture.stop()
+                return
+            }
             let levelStream = await capture.audioLevelStream()
             beginLiveStreamingSessionIfNeeded(for: activeSessionRecipe)
 
@@ -458,6 +463,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
                 await self?.consumeCaptureStream(stream)
             }
         } catch {
+            guard !applicationTerminationRequested else { return }
             logger.error("paused_resume_capture_start_failed", error: error)
             if pausedSegments.isEmpty {
                 handleStageFailure(
@@ -488,6 +494,7 @@ public actor SessionPipelineOrchestrator: SessionPipelining {
 
     public func finalizePausedSessionForApplicationTermination() async {
         guard hasPausedSessionForApplicationTermination() else { return }
+        applicationTerminationRequested = true
         pausedTimeoutTask?.cancel()
         pausedTimeoutTask = nil
         await finalizePausedSegments(
