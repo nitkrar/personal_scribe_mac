@@ -376,7 +376,7 @@ public struct PillOverlayView: View {
 
             stopGlyph(diameter: mini ? 22 : 20)
         }
-        .padding(.horizontal, mini ? 7 : 8)
+        .padding(.horizontal, mini ? 7 : 15)
         .frame(width: size.width, height: size.height)
         .modifier(PillChrome(borderStyle: .idle))
         .accessibilityElement()
