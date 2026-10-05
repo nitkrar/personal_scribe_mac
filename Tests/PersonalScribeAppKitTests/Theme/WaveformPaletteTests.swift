@@ -31,4 +31,13 @@ final class WaveformPaletteTests: XCTestCase {
             }
         }
     }
+
+    func testChampagneMainStrandUsesLightPillWaveformTokenAtFullStrength() {
+        let strand = WaveformPalette.champagne.strandRGB(onDarkBackground: false)[0]
+
+        XCTAssertEqual(strand.red, Double(0x33) / 255, accuracy: 0.0001)
+        XCTAssertEqual(strand.green, Double(0x33) / 255, accuracy: 0.0001)
+        XCTAssertEqual(strand.blue, Double(0x38) / 255, accuracy: 0.0001)
+        XCTAssertEqual(WaveformPalette.champagne.strandOpacities[0], 1)
+    }
 }

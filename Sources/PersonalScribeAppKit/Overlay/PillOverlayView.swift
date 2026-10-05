@@ -192,6 +192,11 @@ public struct PillOverlayView: View {
             ? PersonalScribeTheme.Pill.Dark.stop
             : PersonalScribeTheme.Pill.Light.stop
     }
+    private var pausedTextColor: Color {
+        colorScheme == .dark
+            ? PersonalScribeTheme.Pill.Dark.pausedText
+            : PersonalScribeTheme.Pill.Light.pausedText
+    }
 
     public init(model: PillOverlayViewModel) {
         self._model = ObservedObject(wrappedValue: model)
@@ -256,9 +261,13 @@ public struct PillOverlayView: View {
         return Group {
             if model.pillStyle == .mini, model.isHovered {
                 HStack(spacing: 4) {
-                    Image(systemName: "square.grid.2x2")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(fgDim)
+                    Circle()
+                        .fill(fgDim.opacity(colorScheme == .dark ? 0.18 : 0.14))
+                        .overlay(
+                            Image(systemName: "square.grid.2x2")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(fgDim)
+                        )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     Circle()
@@ -320,7 +329,7 @@ public struct PillOverlayView: View {
             if showsControls {
                 controlGlyph(
                     systemName: "pause.fill",
-                    diameter: mini ? 24 : 28
+                    diameter: mini ? 24 : 22
                 )
             }
 
@@ -333,11 +342,11 @@ public struct PillOverlayView: View {
                 onDarkBackground: colorScheme == .dark,
                 renderDate: model.waveformRenderDate
             )
-            .frame(width: mini ? (showsControls ? 98 : 100) : 132,
+            .frame(width: mini ? (showsControls ? 98 : 90) : 132,
                    height: mini ? size.height : 34)
 
             if showsControls {
-                stopGlyph(diameter: mini ? 22 : 24)
+                stopGlyph(diameter: mini ? 22 : 20)
             }
         }
         .padding(.horizontal, mini ? 4 : 8)
@@ -357,17 +366,17 @@ public struct PillOverlayView: View {
         return HStack(spacing: mini ? 6 : 12) {
             controlGlyph(
                 systemName: "play.fill",
-                diameter: mini ? 24 : 28
+                diameter: mini ? 24 : 22
             )
 
             Text("Paused · \(Self.elapsedText(elapsedSeconds))")
                 .font(.system(size: mini ? 11 : 12, weight: .semibold))
-                .foregroundColor(fgDim)
+                .foregroundColor(pausedTextColor)
                 .frame(maxWidth: .infinity)
 
-            stopGlyph(diameter: mini ? 22 : 24)
+            stopGlyph(diameter: mini ? 22 : 20)
         }
-        .padding(.horizontal, mini ? 4 : 8)
+        .padding(.horizontal, mini ? 7 : 8)
         .frame(width: size.width, height: size.height)
         .modifier(PillChrome(borderStyle: .idle))
         .accessibilityElement()

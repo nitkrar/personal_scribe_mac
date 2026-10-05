@@ -380,6 +380,8 @@ public enum PersonalScribeTheme {
             public static let stop = color(hex: "F75138")
             /// #99999E — cancel / secondary glyph on dark pill.
             public static let cancel = color(hex: "99999E")
+            /// #A5A3A0 — paused status text on dark pill.
+            public static let pausedText = color(hex: "A5A3A0")
         }
 
         /// Pill surface for the resolved panel appearance. Light pill
@@ -397,6 +399,8 @@ public enum PersonalScribeTheme {
             public static let stop = color(hex: "F75138")
             /// #808082 — cancel / secondary glyph on light pill.
             public static let cancel = color(hex: "808082")
+            /// #626164 — paused status text on light pill.
+            public static let pausedText = color(hex: "626164")
         }
 
         /// State-dependent border styling (pill UX spec §2 + §4). Each

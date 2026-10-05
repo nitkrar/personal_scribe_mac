@@ -49,13 +49,16 @@ public enum WaveformPalette: String, CaseIterable, Identifiable, Codable, Sendab
         let hexes: [UInt32]
         switch self {
         case .siri: hexes = [0x59D9FF, 0xFF61BD, 0x8F7DFF]
-        case .champagne: hexes = [0xD4D0C8, 0xD4D0C8, 0xD4D0C8]
+        case .champagne:
+            hexes = onDarkBackground
+                ? [0xD4D0C8, 0xD4D0C8, 0xD4D0C8]
+                : [0x333338, 0x333338, 0x333338]
         case .champagneAccents: hexes = [0xD4D0C8, 0x5FB3A8, 0xD98C9A]
         case .aurora: hexes = [0x4ADE80, 0xA3E635, 0xC084FC]
         case .sunset: hexes = [0xFBBF24, 0xFB7185, 0xF472B6]
         case .ocean: hexes = [0x3B82F6, 0x38BDF8, 0x67E8F9]
         }
-        let shade = onDarkBackground ? 1.0 : Self.lightBackgroundShade
+        let shade = onDarkBackground || self == .champagne ? 1.0 : Self.lightBackgroundShade
         return hexes.map { hex in
             RGB(
                 red: Double((hex >> 16) & 0xFF) / 255 * shade,
