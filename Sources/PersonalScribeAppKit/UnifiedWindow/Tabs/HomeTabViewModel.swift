@@ -5,6 +5,9 @@ import PersonalScribeCore
 enum HomeChecklistItem: CaseIterable, Hashable, Sendable {
     case customizeShortcut
     case createMode
+    case grantPermissions
+    case downloadModel
+    case tryShortcut
 
     var completionKey: String {
         switch self {
@@ -12,6 +15,25 @@ enum HomeChecklistItem: CaseIterable, Hashable, Sendable {
             "HomeChecklistCustomizeShortcutComplete"
         case .createMode:
             "HomeChecklistCreateModeComplete"
+        case .grantPermissions:
+            "HomeChecklistGrantPermissionsComplete"
+        case .downloadModel:
+            "HomeChecklistDownloadModelComplete"
+        case .tryShortcut:
+            "HomeChecklistTryShortcutComplete"
+        }
+    }
+
+    var applicationKey: String {
+        "\(completionKey)Applies"
+    }
+
+    var appliesByDefault: Bool {
+        switch self {
+        case .customizeShortcut, .createMode:
+            true
+        case .grantPermissions, .downloadModel, .tryShortcut:
+            false
         }
     }
 
@@ -21,6 +43,12 @@ enum HomeChecklistItem: CaseIterable, Hashable, Sendable {
             "Customize your shortcut"
         case .createMode:
             "Create a mode"
+        case .grantPermissions:
+            "Grant permissions"
+        case .downloadModel:
+            "Download a voice model"
+        case .tryShortcut:
+            "Try your shortcut"
         }
     }
 
@@ -30,6 +58,12 @@ enum HomeChecklistItem: CaseIterable, Hashable, Sendable {
             "Pick a key combo that suits you · Settings → Shortcuts"
         case .createMode:
             "Different formatting per app, e.g. email vs. code · Modes"
+        case .grantPermissions:
+            "Allow microphone recording and automatic paste · Settings"
+        case .downloadModel:
+            "Download an on-device model before your first dictation · Settings"
+        case .tryShortcut:
+            "Make a practice dictation with your configured shortcut"
         }
     }
 
@@ -39,6 +73,10 @@ enum HomeChecklistItem: CaseIterable, Hashable, Sendable {
             "Opens Settings"
         case .createMode:
             "Opens Modes"
+        case .grantPermissions, .downloadModel:
+            "Opens Settings"
+        case .tryShortcut:
+            "Opens shortcut settings"
         }
     }
 }
@@ -46,6 +84,7 @@ enum HomeChecklistItem: CaseIterable, Hashable, Sendable {
 @MainActor
 final class HomeChecklistState: ObservableObject {
     @Published private(set) var completedItems: Set<HomeChecklistItem>
+    @Published private(set) var applicableItems: Set<HomeChecklistItem>
     @Published private(set) var isDismissed: Bool
     @Published private(set) var recordingHotkey: HotkeyPreference
 
@@ -77,6 +116,12 @@ final class HomeChecklistState: ObservableObject {
             ).persist(true)
         }
         self.completedItems = completedItems
+        self.applicableItems = Set(
+            HomeChecklistItem.allCases.filter { item in
+                item.appliesByDefault
+                    || Self.applicationPreference(for: item, defaults: defaults).resolve()
+            }
+        )
         self.isDismissed = dismissedPreference.resolve()
 
         hotkeyObservation = NotificationCenter.default.addObserver(
@@ -96,7 +141,9 @@ final class HomeChecklistState: ObservableObject {
     }
 
     var pendingItems: [HomeChecklistItem] {
-        HomeChecklistItem.allCases.filter { !completedItems.contains($0) }
+        HomeChecklistItem.allCases.filter {
+            applicableItems.contains($0) && !completedItems.contains($0)
+        }
     }
 
     var isVisible: Bool { !isDismissed && !pendingItems.isEmpty }
@@ -136,11 +183,41 @@ final class HomeChecklistState: ObservableObject {
         Self.completionPreference(for: item, defaults: defaults).persist(true)
     }
 
+    func markApplicable(_ item: HomeChecklistItem) {
+        guard applicableItems.insert(item).inserted else {
+            return
+        }
+        Self.applicationPreference(for: item, defaults: defaults).persist(true)
+    }
+
+    func refreshSetupSatisfaction(
+        permissionsGranted: Bool,
+        modelDownloaded: Bool,
+        shortcutTried: Bool
+    ) {
+        if permissionsGranted {
+            complete(.grantPermissions)
+        }
+        if modelDownloaded {
+            complete(.downloadModel)
+        }
+        if shortcutTried {
+            complete(.tryShortcut)
+        }
+    }
+
     private static func completionPreference(
         for item: HomeChecklistItem,
         defaults: UserDefaults
     ) -> Preference<Bool> {
         Preference(key: item.completionKey, default: false, defaults: defaults)
+    }
+
+    private static func applicationPreference(
+        for item: HomeChecklistItem,
+        defaults: UserDefaults
+    ) -> Preference<Bool> {
+        Preference(key: item.applicationKey, default: false, defaults: defaults)
     }
 
     isolated deinit {
@@ -202,6 +279,8 @@ public final class HomeTabViewModel: ObservableObject {
             openShortcuts()
         case .createMode:
             openModes()
+        case .grantPermissions, .downloadModel, .tryShortcut:
+            openShortcuts()
         }
     }
 }

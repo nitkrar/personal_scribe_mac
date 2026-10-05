@@ -45,7 +45,7 @@ final class HomeTabViewModelTests: XCTestCase {
         XCTAssertFalse(checklist.isVisible)
 
         let restored = HomeChecklistState(defaults: defaults)
-        XCTAssertEqual(restored.completedItems, Set(HomeChecklistItem.allCases))
+        XCTAssertEqual(restored.completedItems, [.customizeShortcut, .createMode])
         XCTAssertFalse(restored.isVisible)
     }
 
@@ -75,7 +75,7 @@ final class HomeTabViewModelTests: XCTestCase {
         checklist.startObserving(customModes: modeUpdates)
         let completed = expectation(description: "All checklist signals are observed")
         let completionObservation = checklist.$completedItems
-            .filter { $0 == Set(HomeChecklistItem.allCases) }
+            .filter { $0 == [.customizeShortcut, .createMode] }
             .prefix(1)
             .sink { _ in completed.fulfill() }
 
@@ -85,11 +85,11 @@ final class HomeTabViewModelTests: XCTestCase {
         modeContinuation.yield([])
         await fulfillment(of: [completed], timeout: 1)
 
-        XCTAssertEqual(checklist.completedItems, Set(HomeChecklistItem.allCases))
+        XCTAssertEqual(checklist.completedItems, [.customizeShortcut, .createMode])
         XCTAssertEqual(checklist.recordingHotkey, .default)
         XCTAssertEqual(
             HomeChecklistState(defaults: defaults).completedItems,
-            Set(HomeChecklistItem.allCases)
+            [.customizeShortcut, .createMode]
         )
         withExtendedLifetime(completionObservation) {}
     }
@@ -153,6 +153,38 @@ final class HomeTabViewModelTests: XCTestCase {
         viewModel.performChecklistAction(for: .createMode)
 
         XCTAssertEqual(destinations, [.settings, .modes])
+    }
+
+    func testSetupItemsDoNotAppearUntilMarkedApplicable() {
+        let checklist = HomeChecklistState(defaults: Self.ephemeralDefaults())
+
+        XCTAssertEqual(checklist.pendingItems, [.customizeShortcut, .createMode])
+
+        checklist.markApplicable(.grantPermissions)
+        checklist.markApplicable(.downloadModel)
+        checklist.markApplicable(.tryShortcut)
+
+        XCTAssertEqual(
+            checklist.pendingItems,
+            [.customizeShortcut, .createMode, .grantPermissions, .downloadModel, .tryShortcut]
+        )
+    }
+
+    func testSatisfiedApplicableSetupItemAutoCompletes() {
+        let defaults = Self.ephemeralDefaults()
+        let checklist = HomeChecklistState(defaults: defaults)
+        checklist.markApplicable(.downloadModel)
+
+        checklist.refreshSetupSatisfaction(
+            permissionsGranted: false,
+            modelDownloaded: true,
+            shortcutTried: false
+        )
+
+        XCTAssertFalse(checklist.pendingItems.contains(.downloadModel))
+        XCTAssertTrue(
+            HomeChecklistState(defaults: defaults).completedItems.contains(.downloadModel)
+        )
     }
 
     func testTimeSavedFormatterUsesHourAndMinuteUnits() {
