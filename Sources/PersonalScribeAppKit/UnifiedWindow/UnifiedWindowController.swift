@@ -230,7 +230,7 @@ final class UnifiedWindowController: NSWindowController {
 
         guard let window else { return }
 
-        if let mainScreenVisibleFrame = NSScreen.main?.visibleFrame {
+        if let mainScreenVisibleFrame = NSScreen.screens.first?.visibleFrame {
             let frame = Self.frameForShowing(
                 window.frame,
                 mainScreenVisibleFrame: mainScreenVisibleFrame

@@ -195,14 +195,14 @@ in M3.2–M3.5; this milestone proves the shell + routing + menu-bar entry
   main desktop). Trigger **Home** again from the menu bar. The
   unified window MUST open on the current desktop — NOT warp the user
   back to the former full-screen app's space.
-- [ ] **MV-WINDOW-PIN-2 (main-screen placement)** On a multi-monitor setup,
+- [ ] **MV-WINDOW-PIN-2 (primary-display placement)** On a multi-monitor setup,
   place the unified window fully on a secondary display and close it. Trigger
-  **Home** from the menu bar. The window opens centered on the main screen
-  with its size unchanged. Move it to a position fully inside the main
-  screen's visible area, close it, and trigger **Home** again. The window
-  keeps that position. Move it partly outside the main screen's visible area,
-  close it, and trigger **Home** again. The window is centered on the main
-  screen with its size unchanged.
+  **Home** from the menu bar. The window opens centered on the primary display
+  with its size unchanged. Move it to a position fully inside the primary
+  display's visible area, close it, and trigger **Home** again. The window
+  keeps that position. Move it partly outside the primary display's visible
+  area, close it, and trigger **Home** again. The window is centered on the
+  primary display with its size unchanged.
 - [ ] **MV-WINDOW-PIN-3 (single-space no regression)** Single-display
   setup, no full-screen apps. Open Home from the menu bar. Confirm
   the window opens where expected (last-saved frame within the
