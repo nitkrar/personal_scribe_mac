@@ -2,8 +2,7 @@ import SwiftUI
 
 /// Standardised primary / secondary action button.
 ///
-/// * `.primary` — champagne fill, dark text. The "Continue" / "Save"
-///   button used across onboarding + settings.
+/// * `.primary` — high-contrast filled "Continue" / "Save" action.
 /// * `.secondary` — surface fill, primary-text colour. Used for
 ///   "Cancel" / "Later" actions.
 ///
@@ -16,7 +15,9 @@ public struct ActionButton: View {
         func foregroundColor(for palette: PersonalScribeTheme.Palette) -> Color {
             switch self {
             case .primary:
-                return palette.pillForegroundText
+                return palette.scheme == .dark
+                    ? PersonalScribeTheme.Palette.light.primaryTextBase
+                    : PersonalScribeTheme.Palette.dark.primaryTextBase
             case .secondary:
                 return palette.primaryText
             }
@@ -24,7 +25,8 @@ public struct ActionButton: View {
 
         func backgroundColor(for palette: PersonalScribeTheme.Palette) -> Color {
             switch self {
-            case .primary: return palette.brandChampagne
+            case .primary:
+                return palette.scheme == .dark ? palette.brandChampagne : palette.primaryTextBase
             case .secondary: return palette.elevatedSurface
             }
         }
@@ -32,7 +34,7 @@ public struct ActionButton: View {
         func borderColor(for palette: PersonalScribeTheme.Palette) -> Color {
             switch self {
             case .primary:
-                return palette.brandChampagne.opacity(
+                return backgroundColor(for: palette).opacity(
                     PersonalScribeTheme.Components.ActionButton.primaryBorderOpacity
                 )
             case .secondary:
@@ -76,6 +78,7 @@ public struct ActionButton: View {
                 .padding(.horizontal, PersonalScribeTheme.Components.ActionButton.horizontalPadding)
                 .padding(.vertical, PersonalScribeTheme.Components.ActionButton.verticalPadding)
                 .frame(minWidth: PersonalScribeTheme.Components.ActionButton.minimumWidth)
+                .contentShape(Capsule())
                 .background(
                     Capsule()
                         .fill(variant.backgroundColor(for: palette))
@@ -88,6 +91,7 @@ public struct ActionButton: View {
                         )
                 )
                 .opacity(effectiveOpacity)
+                .clipShape(Capsule())
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)

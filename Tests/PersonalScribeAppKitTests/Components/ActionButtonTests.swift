@@ -25,8 +25,27 @@ final class ActionButtonTests: XCTestCase {
         XCTAssertTrue(button.isEnabled)
     }
 
-    func testPrimaryVariantUsesChampagneFillAndOnColorForeground() {
+    func testPrimaryVariantUsesNearBlackFillInLightMode() {
         let palette = PersonalScribeTheme.Palette.light
+
+        assertColor(
+            ActionButton.Variant.primary.backgroundColor(for: palette),
+            equals: palette.primaryTextBase
+        )
+        assertColor(
+            ActionButton.Variant.primary.foregroundColor(for: palette),
+            equals: PersonalScribeTheme.Palette.dark.primaryTextBase
+        )
+        assertColor(
+            ActionButton.Variant.primary.borderColor(for: palette),
+            equals: palette.primaryTextBase.opacity(
+                PersonalScribeTheme.Components.ActionButton.primaryBorderOpacity
+            )
+        )
+    }
+
+    func testPrimaryVariantUsesChampagneFillAndDarkTextInDarkMode() {
+        let palette = PersonalScribeTheme.Palette.dark
 
         assertColor(
             ActionButton.Variant.primary.backgroundColor(for: palette),
@@ -34,13 +53,7 @@ final class ActionButtonTests: XCTestCase {
         )
         assertColor(
             ActionButton.Variant.primary.foregroundColor(for: palette),
-            equals: palette.pillForegroundText
-        )
-        assertColor(
-            ActionButton.Variant.primary.borderColor(for: palette),
-            equals: palette.brandChampagne.opacity(
-                PersonalScribeTheme.Components.ActionButton.primaryBorderOpacity
-            )
+            equals: PersonalScribeTheme.Palette.light.primaryTextBase
         )
     }
 

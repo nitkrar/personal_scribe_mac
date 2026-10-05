@@ -95,7 +95,6 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
         menuBarVisibilityProvider: @escaping @MainActor () -> Bool = { true },
         menuBarVisibilitySetter: @escaping @MainActor (Bool) -> Void = { _ in },
         openDiagnosticsWindow: @escaping @MainActor () -> Void = {},
-        prepareActiveModel: @escaping @MainActor () async -> Void = {},
         currentSessionSnapshot: @escaping @Sendable () async -> SessionSnapshot = {
             SessionSnapshot()
         },
@@ -170,7 +169,6 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
         )
         self.setupModelViewModel = SetupModelViewModel(
             service: modelService,
-            prepareActiveModel: prepareActiveModel,
             showAllModels: { model.openSettingsModels() }
         )
 
@@ -316,6 +314,11 @@ final class UnifiedWindowController: NSWindowController, NSWindowDelegate {
         }
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
+        if model.isShowingSetup, setupFlow.isOpen, setupFlow.step == .microphone {
+            Task { @MainActor [weak self] in
+                await self?.setupMicrophoneViewModel.appear()
+            }
+        }
         DispatchQueue.main.async { [weak window] in
             window?.collectionBehavior.remove(.moveToActiveSpace)
         }

@@ -55,6 +55,24 @@ final class OnboardingCompletionObserverTests: XCTestCase {
         XCTAssertEqual(OnboardingState.resolve(from: defaults), .completed)
     }
 
+    func testObserverStartsBeforeFlowSoMicrophoneGrantKeepsSetupClosed() {
+        let defaults = isolatedDefaults()
+        let service = FakePermissionService(statuses: [
+            .microphone: .granted,
+            .accessibility: .pending,
+        ])
+        let observer = OnboardingCompletionObserver(
+            permissionService: service,
+            defaults: defaults
+        )
+
+        observer.start()
+        let flow = SetupFlowState(defaults: defaults)
+
+        XCTAssertEqual(OnboardingState.resolve(from: defaults), .completed)
+        XCTAssertFalse(flow.isOpen)
+    }
+
     /// User grants perms during the session — observer reacts and
     /// flips the flag.
     func testObserverFlipsFlagWhenPermissionsTransitionToGranted() async {

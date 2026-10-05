@@ -9,17 +9,14 @@ final class SetupModelViewModel: ObservableObject {
     let models: [ModelDescriptor]
 
     private let service: ActiveModelService
-    private let prepareActiveModel: @MainActor () async -> Void
     private let showAllModelsAction: @MainActor () -> Void
     private var serviceObservation: AnyCancellable?
 
     init(
         service: ActiveModelService,
-        prepareActiveModel: @escaping @MainActor () async -> Void,
         showAllModels: @escaping @MainActor () -> Void
     ) {
         self.service = service
-        self.prepareActiveModel = prepareActiveModel
         self.showAllModelsAction = showAllModels
         self.models = service.visibleModels(kind: .asr)
         self.recommendedModel = service.recommendedDescriptor(for: .asr)
@@ -42,10 +39,8 @@ final class SetupModelViewModel: ObservableObject {
         selectedState?.phase == .ready
     }
 
-    func appear() async {
+    func appear() {
         service.refresh()
-        guard !isReady else { return }
-        await prepareActiveModel()
     }
 
     func showAllModels() {

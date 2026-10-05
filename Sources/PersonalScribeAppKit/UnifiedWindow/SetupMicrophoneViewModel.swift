@@ -9,7 +9,8 @@ final class SetupMicrophoneViewModel: ObservableObject {
     @Published private(set) var selectedDeviceID: String?
     @Published private(set) var level: Float = 0
     @Published private(set) var isMonitoring = false
-    @Published private(set) var sessionSnapshot: SessionSnapshot
+    @Published private(set) var sessionState: SessionState
+    @Published private(set) var recordingElapsedSeconds: Int
 
     private let inputDeviceProvider: any AudioInputDeviceProviding
     private let levelMonitor: any AudioLevelMonitoring
@@ -18,8 +19,10 @@ final class SetupMicrophoneViewModel: ObservableObject {
     private var levelTask: Task<Void, Never>?
     private var sessionTask: Task<Void, Never>?
     private var isVisible = false
+    private var isPracticeVisible = false
     private var isStarting = false
     private var monitorGeneration = 0
+    private var latestSessionSnapshot: SessionSnapshot
 
     init(
         inputDeviceProvider: any AudioInputDeviceProviding,
@@ -37,7 +40,9 @@ final class SetupMicrophoneViewModel: ObservableObject {
     ) {
         self.inputDeviceProvider = inputDeviceProvider
         self.levelMonitor = levelMonitor
-        self.sessionSnapshot = initialSessionSnapshot
+        self.latestSessionSnapshot = initialSessionSnapshot
+        self.sessionState = initialSessionSnapshot.sessionState
+        self.recordingElapsedSeconds = Self.elapsedSeconds(in: initialSessionSnapshot)
         self.currentSessionSnapshot = currentSessionSnapshot
         self.sessionSnapshots = sessionSnapshots
         startSessionObservation()
@@ -53,9 +58,6 @@ final class SetupMicrophoneViewModel: ObservableObject {
         devices = inputDeviceProvider.availableDevices()
         selectedDeviceID = inputDeviceProvider.effectiveDeviceID
         await applySessionSnapshot(await currentSessionSnapshot())
-        if isSessionIdle {
-            await startMonitoring()
-        }
     }
 
     func disappear() async {
@@ -64,9 +66,11 @@ final class SetupMicrophoneViewModel: ObservableObject {
     }
 
     func selectDevice(id: String?) async {
-        await applySessionSnapshot(await currentSessionSnapshot())
-        guard isSessionIdle else {
+        let snapshot = await currentSessionSnapshot()
+        updatePublishedSessionValues(from: snapshot)
+        guard snapshot.sessionState.displayState == .idle else {
             selectedDeviceID = inputDeviceProvider.effectiveDeviceID
+            await stopMonitoring()
             return
         }
         inputDeviceProvider.selectDevice(id: id)
@@ -78,7 +82,7 @@ final class SetupMicrophoneViewModel: ObservableObject {
     }
 
     var isRecording: Bool {
-        switch sessionSnapshot.sessionState.displayState {
+        switch sessionState.displayState {
         case .capturing, .holdRecording:
             true
         case .idle, .paused, .transcribing, .completed, .shortExit, .error:
@@ -86,13 +90,19 @@ final class SetupMicrophoneViewModel: ObservableObject {
         }
     }
 
-    var recordingElapsedSeconds: Int {
-        guard let duration = sessionSnapshot.recordingDuration else { return 0 }
-        return max(0, Int(duration.components.seconds))
+    func setPracticeVisible(_ visible: Bool) {
+        isPracticeVisible = visible
+        if visible, sessionState != latestSessionSnapshot.sessionState {
+            sessionState = latestSessionSnapshot.sessionState
+        }
+        let elapsed = visible ? Self.elapsedSeconds(in: latestSessionSnapshot) : 0
+        if recordingElapsedSeconds != elapsed {
+            recordingElapsedSeconds = elapsed
+        }
     }
 
     private var isSessionIdle: Bool {
-        sessionSnapshot.sessionState.displayState == .idle
+        latestSessionSnapshot.sessionState.displayState == .idle
     }
 
     private func startSessionObservation() {
@@ -107,9 +117,11 @@ final class SetupMicrophoneViewModel: ObservableObject {
 
     private func applySessionSnapshot(_ snapshot: SessionSnapshot) async {
         let wasIdle = isSessionIdle
-        sessionSnapshot = snapshot
+        updatePublishedSessionValues(from: snapshot)
         guard isSessionIdle else {
-            await stopMonitoring()
+            if wasIdle || isMonitoring || isStarting {
+                await stopMonitoring()
+            }
             return
         }
         if !wasIdle {
@@ -126,8 +138,12 @@ final class SetupMicrophoneViewModel: ObservableObject {
         levelTask?.cancel()
         levelTask = nil
         await levelMonitor.stop()
-        isMonitoring = false
-        level = 0
+        if isMonitoring {
+            isMonitoring = false
+        }
+        if level != 0 {
+            level = 0
+        }
     }
 
     private func startMonitoring() async {
@@ -138,7 +154,9 @@ final class SetupMicrophoneViewModel: ObservableObject {
         do {
             let stream = try await levelMonitor.start()
             guard generation == monitorGeneration, isVisible, isSessionIdle else {
-                await levelMonitor.stop()
+                if !isStarting && !isMonitoring {
+                    await levelMonitor.stop()
+                }
                 return
             }
             isStarting = false
@@ -146,7 +164,17 @@ final class SetupMicrophoneViewModel: ObservableObject {
             levelTask = Task { @MainActor [weak self] in
                 for await level in stream {
                     guard !Task.isCancelled else { return }
-                    self?.level = level
+                    guard let self, generation == self.monitorGeneration else { return }
+                    if self.level != level {
+                        self.level = level
+                    }
+                }
+                guard let self, generation == self.monitorGeneration else { return }
+                if self.isMonitoring {
+                    self.isMonitoring = false
+                }
+                if self.level != 0 {
+                    self.level = 0
                 }
             }
         } catch {
@@ -155,5 +183,23 @@ final class SetupMicrophoneViewModel: ObservableObject {
             isMonitoring = false
             level = 0
         }
+    }
+
+    private func updatePublishedSessionValues(from snapshot: SessionSnapshot) {
+        latestSessionSnapshot = snapshot
+        if (isVisible || isPracticeVisible), sessionState != snapshot.sessionState {
+            sessionState = snapshot.sessionState
+        }
+        if isPracticeVisible {
+            let elapsed = Self.elapsedSeconds(in: snapshot)
+            if recordingElapsedSeconds != elapsed {
+                recordingElapsedSeconds = elapsed
+            }
+        }
+    }
+
+    private static func elapsedSeconds(in snapshot: SessionSnapshot) -> Int {
+        guard let duration = snapshot.recordingDuration else { return 0 }
+        return max(0, Int(duration.components.seconds))
     }
 }

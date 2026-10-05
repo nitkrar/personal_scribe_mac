@@ -13,6 +13,13 @@ final class HotkeyRecorderTests: XCTestCase {
         return defaults
     }
 
+    func testOnboardingKeycapsUseCompactSymbols() {
+        XCTAssertEqual(
+            HotkeyShortcutFormatter.onboardingKeycaps(for: .default),
+            ["⌥", "/"]
+        )
+    }
+
     func testCaptureKeypressEventAndUpdatesPreferenceOnConfirm() throws {
         let defaults = isolatedDefaults()
         let model = HotkeyRecorderModel(

@@ -63,16 +63,23 @@ final class SetupViewRenderTests: XCTestCase {
             permissionService: RenderPermissionService()
         )
         let deviceProvider = RenderInputDeviceProvider()
+        let renderSession = scenario == .tryShortcutRecording
+            ? SessionSnapshot(sessionState: .capturing, recordingDuration: .seconds(3))
+            : SessionSnapshot()
         let microphone = SetupMicrophoneViewModel(
             inputDeviceProvider: deviceProvider,
             levelMonitor: RenderAudioLevelMonitor(),
-            initialSessionSnapshot: scenario == .tryShortcutRecording
-                ? SessionSnapshot(sessionState: .capturing, recordingDuration: .seconds(3))
-                : SessionSnapshot()
+            initialSessionSnapshot: renderSession,
+            currentSessionSnapshot: { renderSession },
+            sessionSnapshots: {
+                AsyncStream { continuation in
+                    continuation.yield(renderSession)
+                    continuation.finish()
+                }
+            }
         )
         let model = SetupModelViewModel(
             service: service,
-            prepareActiveModel: {},
             showAllModels: {}
         )
 
@@ -104,6 +111,7 @@ final class SetupViewRenderTests: XCTestCase {
             renderNow = Date(timeIntervalSince1970: 101)
             flow.recordPracticeStopped()
             renderNow = Date(timeIntervalSince1970: 101.8)
+            flow.updatePracticeText("Hello Ninimma, this is my first dictation.")
             flow.recordPracticePaste("Hello Ninimma, this is my first dictation.")
         }
         if scenario == .done {
@@ -134,7 +142,19 @@ final class SetupViewRenderTests: XCTestCase {
                             windowTint: .warm,
                             action: {}
                         )
+                        VStack(alignment: .leading, spacing: 13) {
+                            ForEach(AppTab.sidebarListCases) { tab in
+                                Label(tab.rawValue, systemImage: tab.systemImageName)
+                                    .font(PersonalScribeTheme.Typography.body.font)
+                            }
+                        }
+                        .padding(.horizontal, 10)
                         Spacer()
+                        Label(deviceProvider.device.name, systemImage: "mic")
+                            .font(PersonalScribeTheme.Typography.caption.font)
+                            .lineLimit(1)
+                        Label(AppTab.about.rawValue, systemImage: AppTab.about.systemImageName)
+                            .font(PersonalScribeTheme.Typography.caption.font)
                     }
                     .padding(16)
                     .frame(width: PersonalScribeTheme.Layout.sidebarWidth)

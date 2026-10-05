@@ -308,9 +308,6 @@ struct PersonalScribeAppMain: App {
                     openDiagnosticsWindow: {
                         diagnosticsOverlayController.openWindow()
                     },
-                    prepareActiveModel: {
-                        try? await coordinator.prepareTranscriber()
-                    },
                     currentSessionSnapshot: {
                         await coordinator.snapshot()
                     },

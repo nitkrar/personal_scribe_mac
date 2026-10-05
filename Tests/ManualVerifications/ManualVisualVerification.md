@@ -677,13 +677,15 @@ below once per dogfood cycle:
   the selected sidebar row, and every stepper label remains on one line.
 - [ ] **MV-ONBOARDING-2** On Permissions, confirm pending Microphone
   raises the macOS prompt, denied Microphone opens System Settings,
-  Accessibility opens its privacy pane, and both statuses update live.
+  Accessibility is marked optional with clipboard fallback, opens its
+  privacy pane, and both statuses update live.
 - [ ] **MV-ONBOARDING-3** On Microphone, switch input devices and speak.
   The meter moves; leaving the step or closing the retained window stops
   it. Open this step during active/paused recording and confirm no second
   engine starts and device selection is inert. After stopping, the meter
   resets and restarts while this step remains visible. Confirm the meter
-  uses the same animated waveform as the recording pill.
+  uses the same animated waveform as the recording pill. Close and reopen
+  the retained window on this step and confirm the meter restarts.
 - [ ] **MV-ONBOARDING-4** On Voice model, confirm one compact card shows
   the active model and its real startup-download/ready state. The card is
   not selectable and clicking the step never starts a download. More

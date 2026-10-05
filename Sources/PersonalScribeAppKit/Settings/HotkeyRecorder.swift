@@ -446,12 +446,12 @@ enum HotkeyShortcutFormatter {
     static func onboardingKeycaps(for preference: HotkeyPreference) -> [String] {
         var keycaps: [String] = []
         let modifiers = preference.modifierFlags
-        if modifiers.contains(.command) { keycaps.append("Command") }
-        if modifiers.contains(.option) { keycaps.append("Option") }
-        if modifiers.contains(.control) { keycaps.append("Control") }
-        if modifiers.contains(.shift) { keycaps.append("Shift") }
+        if modifiers.contains(.command) { keycaps.append("⌘") }
+        if modifiers.contains(.option) { keycaps.append("⌥") }
+        if modifiers.contains(.control) { keycaps.append("⌃") }
+        if modifiers.contains(.shift) { keycaps.append("⇧") }
         let rawKey = displayKeyLabels[preference.keyCode] ?? "Key \(preference.keyCode)"
-        keycaps.append(rawKey == "/" ? "Slash" : rawKey)
+        keycaps.append(rawKey)
         return keycaps
     }
 

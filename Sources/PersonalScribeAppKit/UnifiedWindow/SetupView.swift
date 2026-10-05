@@ -10,7 +10,12 @@ struct SetupView: View {
     @ObservedObject var microphone: SetupMicrophoneViewModel
     @ObservedObject var model: SetupModelViewModel
     @ObservedObject var checklist: HomeChecklistState
-    @StateObject private var pillPreview = PillOverlayViewModel(visibility: .recording)
+    @StateObject private var pillPreview: PillOverlayViewModel = {
+        let model = PillOverlayViewModel(visibility: .recording)
+        model.audioLevel = 0.55
+        model.waveformRenderDate = Date(timeIntervalSinceReferenceDate: 1)
+        return model
+    }()
 
     let onOpenShortcuts: @MainActor () -> Void
     let onClose: @MainActor () -> Void
@@ -31,13 +36,15 @@ struct SetupView: View {
     }
 
     private var progressHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        HStack(alignment: .center, spacing: 16) {
             Text("GET STARTED · STEP \(flow.step.rawValue + 1) OF 5")
                 .font(PersonalScribeTheme.Typography.sectionLabel.font)
                 .foregroundStyle(palette.secondaryText)
-            HStack(spacing: 5) {
+                .fixedSize()
+            Spacer(minLength: 8)
+            HStack(spacing: 4) {
                 ForEach(SetupStep.allCases, id: \.rawValue) { step in
-                    HStack(spacing: 5) {
+                    HStack(spacing: 4) {
                         ZStack {
                             if step.rawValue < flow.step.rawValue {
                                 Circle()
@@ -63,12 +70,12 @@ struct SetupView: View {
                         if step != SetupStep.allCases.last {
                             Rectangle()
                                 .fill(palette.secondaryText.opacity(0.35))
-                                .frame(width: 24, height: 0.5)
+                                .frame(width: 18, height: 1)
+                                .fixedSize()
                         }
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
@@ -90,24 +97,37 @@ struct SetupView: View {
 
     private var permissionsStep: some View {
         VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
-            title("Two permissions to get started", subtitle: "Ninimma records only while you use the shortcut. Audio is transcribed on this Mac.")
-            Text("REQUIRED PERMISSIONS")
+            title("Microphone access to get started", subtitle: "Ninimma records only while you use the shortcut. Audio is transcribed on this Mac.")
+            Text("REQUIRED")
                 .font(PersonalScribeTheme.Typography.sectionLabel.font)
                 .foregroundStyle(palette.secondaryText)
             setupPermissionRow(.microphone, title: "Microphone", icon: "mic.fill")
-            setupPermissionRow(.accessibility, title: "Accessibility", icon: "accessibility.fill")
-            Label("Status updates live when you return. You can also grant later in Settings → Permissions.", systemImage: "info.circle")
+            Text("OPTIONAL")
+                .font(PersonalScribeTheme.Typography.sectionLabel.font)
+                .foregroundStyle(palette.secondaryText)
+            setupPermissionRow(
+                .accessibility,
+                title: "Accessibility",
+                icon: "accessibility.fill",
+                subtitle: "Auto-pastes text; without it, text is left on the clipboard."
+            )
+            Label("Accessibility can also be granted later in Settings → Permissions.", systemImage: "info.circle")
                 .font(PersonalScribeTheme.Typography.caption.font)
                 .foregroundStyle(palette.secondaryText)
         }
     }
 
-    private func setupPermissionRow(_ permission: Permission, title: String, icon: String) -> some View {
+    private func setupPermissionRow(
+        _ permission: Permission,
+        title: String,
+        icon: String,
+        subtitle: String? = nil
+    ) -> some View {
         HStack(spacing: PersonalScribeTheme.Spacing.md) {
             Image(systemName: icon).frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(PersonalScribeTheme.Typography.headline.font)
-                Text(permissions.subtitle(for: permission))
+                Text(subtitle ?? permissions.subtitle(for: permission))
                     .font(PersonalScribeTheme.Typography.caption.font)
                     .foregroundStyle(palette.secondaryText)
             }
@@ -116,7 +136,7 @@ struct SetupView: View {
                 Circle()
                     .fill(permissionStatusColor(permission))
                     .frame(width: 8, height: 8)
-                Text(permissions.statusLabel(for: permission))
+                Text(permissionStatusLabel(permission))
             }
             .font(PersonalScribeTheme.Typography.caption.font)
             .foregroundStyle(permissionStatusColor(permission))
@@ -141,17 +161,31 @@ struct SetupView: View {
                 HStack(spacing: PersonalScribeTheme.Spacing.sm) {
                     Image(systemName: "mic.fill")
                         .foregroundStyle(palette.secondaryText)
-                    Picker("Input device", selection: Binding(
-                        get: { microphone.selectedDeviceID },
-                        set: { id in Task { await microphone.selectDevice(id: id) } }
-                    )) {
+                    Menu {
                         ForEach(microphone.devices) { device in
-                            Text(device.name).tag(Optional(device.id))
+                            Button(device.name) {
+                                Task { await microphone.selectDevice(id: device.id) }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: PersonalScribeTheme.Spacing.sm) {
+                            Text(selectedMicrophoneName)
+                                .foregroundStyle(palette.primaryTextBase)
+                                .lineLimit(1)
+                            Spacer()
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(palette.secondaryText)
                         }
                     }
-                    .labelsHidden()
-                    .frame(width: 340)
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .frame(maxWidth: .infinity)
                 }
+                .padding(.horizontal, PersonalScribeTheme.Spacing.md)
+                .frame(width: 380)
+                .frame(minHeight: 40)
+                .setupCard(palette: palette)
             }
             VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.md) {
                 HStack {
@@ -162,9 +196,11 @@ struct SetupView: View {
                             .foregroundStyle(palette.secondaryText)
                     }
                     Spacer()
-                    Label("Hearing you", systemImage: "circle.fill")
-                        .font(PersonalScribeTheme.Typography.caption.font)
-                        .foregroundStyle(PersonalScribeTheme.Status.success)
+                    if microphone.level > 0.02 {
+                        Label("Hearing you", systemImage: "circle.fill")
+                            .font(PersonalScribeTheme.Typography.caption.font)
+                            .foregroundStyle(PersonalScribeTheme.Status.success)
+                    }
                 }
                 SineWaveView(
                     audioLevel: Double(microphone.level),
@@ -217,7 +253,7 @@ struct SetupView: View {
                     .foregroundStyle(palette.secondaryText)
             }
         }
-        .task { await model.appear() }
+        .onAppear { model.appear() }
     }
 
     @ViewBuilder
@@ -249,7 +285,7 @@ struct SetupView: View {
                 Label("Ready", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(PersonalScribeTheme.Status.success)
             case .notDownloaded:
-                Text("Waiting to download…").font(PersonalScribeTheme.Typography.caption.font)
+                Text("Not downloaded").font(PersonalScribeTheme.Typography.caption.font)
             case .failed(let message):
                 Text(message).font(PersonalScribeTheme.Typography.caption.font)
                     .foregroundStyle(PersonalScribeTheme.Status.error)
@@ -274,8 +310,6 @@ struct SetupView: View {
                             .setupCard(palette: palette)
                     }
                 }
-                Text(hotkeyKeycaps.joined(separator: " + "))
-                    .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
                 Button("Change in Settings → Shortcuts") { onOpenShortcuts() }
                     .buttonStyle(.link)
             }
@@ -309,11 +343,13 @@ struct SetupView: View {
                         flow.beginPractice()
                     }
                 }
-                .onChange(of: microphone.sessionSnapshot.sessionState) { oldState, newState in
+                .onChange(of: microphone.sessionState) { oldState, newState in
                     if isCaptureInProgress(oldState) && !isCaptureInProgress(newState) {
                         flow.recordPracticeStopped()
                     }
                 }
+                .onAppear { microphone.setPracticeVisible(true) }
+                .onDisappear { microphone.setPracticeVisible(false) }
                 if microphone.isRecording {
                     Text("Recording · \(formattedElapsed)")
                         .font(PersonalScribeTheme.Typography.caption.font.weight(.semibold))
@@ -341,13 +377,14 @@ struct SetupView: View {
                             .strokeBorder(PersonalScribeTheme.Status.success.opacity(0.8), lineWidth: 1)
                     )
                 }
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .center, spacing: 6) {
                     Text("Pill appears at the bottom of your screen")
                         .font(PersonalScribeTheme.Typography.caption.font)
                         .foregroundStyle(palette.secondaryText)
                     PillOverlayView(model: pillPreview)
                         .frame(width: 220, height: 36)
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
             } else {
                 Label("Waiting for the voice model to finish downloading", systemImage: "clock")
                     .foregroundStyle(palette.secondaryText)
@@ -403,6 +440,19 @@ struct SetupView: View {
             : PersonalScribeTheme.Status.warning
     }
 
+    private func permissionStatusLabel(_ permission: Permission) -> String {
+        if permission == .accessibility,
+           permissions.status(for: permission) != .granted {
+            return "Optional"
+        }
+        return permissions.statusLabel(for: permission)
+    }
+
+    private var selectedMicrophoneName: String {
+        microphone.devices.first { $0.id == microphone.selectedDeviceID }?.name
+            ?? "System default"
+    }
+
     private func modelDetails(for descriptor: ModelDescriptor) -> String {
         let size = ByteCountFormatter.string(
             fromByteCount: descriptor.approximateSizeBytes,
@@ -417,15 +467,6 @@ struct SetupView: View {
         let receivedLabel = ByteCountFormatter.string(fromByteCount: received, countStyle: .file)
         let totalLabel = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
         return "Downloading · \(receivedLabel) of \(totalLabel) · \(Int(state.fractionCompleted * 100))%"
-    }
-
-    private func isRecording(_ state: SessionState) -> Bool {
-        switch state.displayState {
-        case .capturing, .holdRecording:
-            true
-        case .idle, .paused, .transcribing, .completed, .shortExit, .error:
-            false
-        }
     }
 
     private func isCaptureInProgress(_ state: SessionState) -> Bool {
@@ -532,7 +573,8 @@ private final class PasteAwareTextView: NSTextView {
     var onPaste: (@MainActor (String) -> Void)?
 
     override func paste(_ sender: Any?) {
+        let pastedText = NSPasteboard.general.string(forType: .string) ?? ""
         super.paste(sender)
-        onPaste?(string)
+        onPaste?(pastedText)
     }
 }

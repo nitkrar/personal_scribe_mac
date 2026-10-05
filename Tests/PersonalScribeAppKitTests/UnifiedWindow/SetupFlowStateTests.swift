@@ -26,19 +26,6 @@ final class SetupFlowStateTests: XCTestCase {
         XCTAssertFalse(SetupFlowState(defaults: defaults).isOpen)
     }
 
-    func testMicrophoneGrantCompletesBoundaryWithAccessibilityStillPending() {
-        let defaults = Self.ephemeralDefaults()
-        let statuses: [Permission: PermissionStatus] = [
-            .microphone: .granted,
-            .accessibility: .pending,
-        ]
-
-        XCTAssertTrue(OnboardingCompletionPolicy.shouldMarkComplete(statuses: statuses))
-        OnboardingState.completed.persist(to: defaults)
-
-        XCTAssertFalse(SetupFlowState(defaults: defaults).isOpen)
-    }
-
     func testSkipWithMicrophoneMissingLeavesFutureSetupOpen() {
         let defaults = Self.ephemeralDefaults()
         let flow = SetupFlowState(defaults: defaults)
@@ -148,12 +135,40 @@ final class SetupFlowStateTests: XCTestCase {
         flow.recordPracticeStopped()
         now = Date(timeIntervalSince1970: 111.25)
 
-        flow.recordPracticePaste("Hello Ninimma, this worked")
+        flow.updatePracticeText("Typed prefix Hello Ninimma")
+        flow.recordPracticePaste("Hello Ninimma")
 
-        XCTAssertEqual(flow.practiceResult?.wordCount, 4)
+        XCTAssertEqual(flow.practiceResult?.wordCount, 2)
         XCTAssertEqual(flow.practiceResult?.elapsedSeconds, 1.25)
         XCTAssertTrue(flow.satisfaction.shortcutTried)
         XCTAssertFalse(checklist.pendingItems.contains(.tryShortcut))
+    }
+
+    func testPasteWithoutRecordingStopDoesNotCompletePractice() {
+        let defaults = Self.ephemeralDefaults()
+        let checklist = HomeChecklistState(defaults: defaults)
+        checklist.markApplicable(.tryShortcut)
+        let flow = SetupFlowState(defaults: defaults, checklist: checklist)
+
+        flow.beginPractice()
+        flow.updatePracticeText("Manually pasted text")
+        flow.recordPracticePaste("Manually pasted text")
+
+        XCTAssertNil(flow.practiceResult)
+        XCTAssertFalse(flow.satisfaction.shortcutTried)
+        XCTAssertTrue(checklist.pendingItems.contains(.tryShortcut))
+    }
+
+    func testRecordingStopCanCompleteOnlyOnePaste() {
+        let defaults = Self.ephemeralDefaults()
+        let flow = SetupFlowState(defaults: defaults)
+        flow.beginPractice()
+        flow.recordPracticeStopped()
+
+        flow.recordPracticePaste("")
+        flow.recordPracticePaste("Later manual paste")
+
+        XCTAssertNil(flow.practiceResult)
     }
 
     func testTypingInPracticeEditorDoesNotCountAsShortcutTry() {

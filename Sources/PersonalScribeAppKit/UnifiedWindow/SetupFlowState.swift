@@ -124,12 +124,13 @@ final class SetupFlowState: ObservableObject {
         practiceStoppedAt = now()
     }
 
-    func recordPracticePaste(_ text: String) {
-        practiceText = text
+    func recordPracticePaste(_ pastedText: String) {
         guard practiceResult == nil else { return }
-        let words = text.split(whereSeparator: \Character.isWhitespace)
+        guard let practiceStoppedAt else { return }
+        self.practiceStoppedAt = nil
+        let words = pastedText.split(whereSeparator: \Character.isWhitespace)
         guard !words.isEmpty else { return }
-        let elapsed = max(0, now().timeIntervalSince(practiceStoppedAt ?? now()))
+        let elapsed = max(0, now().timeIntervalSince(practiceStoppedAt))
         practiceResult = SetupPracticeResult(
             wordCount: words.count,
             elapsedSeconds: elapsed

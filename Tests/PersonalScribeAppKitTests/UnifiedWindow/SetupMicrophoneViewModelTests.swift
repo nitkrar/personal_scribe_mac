@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import XCTest
 import PersonalScribeAudio
 import PersonalScribeCore
@@ -139,6 +140,55 @@ final class SetupMicrophoneViewModelTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(stopCount, 1)
     }
 
+    func testStaleStartDoesNotStopNewerMonitor() async {
+        let monitor = RestartRaceAudioLevelMonitor()
+        let viewModel = SetupMicrophoneViewModel(
+            inputDeviceProvider: StubSetupInputDeviceProvider(),
+            levelMonitor: monitor
+        )
+
+        let firstAppear = Task { await viewModel.appear() }
+        await waitUntil { await monitor.startCount == 1 }
+        await viewModel.disappear()
+
+        await viewModel.appear()
+        await waitUntil { await monitor.startCount == 2 }
+        XCTAssertTrue(viewModel.isMonitoring)
+        let stopCountBeforeStaleStartReturns = await monitor.stopCount
+
+        await monitor.resumeFirstStart()
+        await firstAppear.value
+
+        XCTAssertTrue(viewModel.isMonitoring)
+        let finalStopCount = await monitor.stopCount
+        XCTAssertEqual(finalStopCount, stopCountBeforeStaleStartReturns)
+    }
+
+    func testSessionSnapshotsPublishOnlyWhenSetupUsesThem() async {
+        let source = StubSetupSessionSource(state: .idle)
+        let viewModel = SetupMicrophoneViewModel(
+            inputDeviceProvider: StubSetupInputDeviceProvider(),
+            levelMonitor: StubAudioLevelMonitor(),
+            currentSessionSnapshot: { await source.current() },
+            sessionSnapshots: { await source.stream() }
+        )
+        var publicationCount = 0
+        let cancellable = viewModel.objectWillChange.sink { publicationCount += 1 }
+
+        await source.send(
+            SessionSnapshot(sessionState: .capturing, recordingDuration: .seconds(1))
+        )
+        try? await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertEqual(publicationCount, 0)
+        XCTAssertEqual(viewModel.sessionState.displayState, .idle)
+
+        viewModel.setPracticeVisible(true)
+        XCTAssertEqual(viewModel.sessionState.displayState, .capturing)
+        XCTAssertEqual(viewModel.recordingElapsedSeconds, 1)
+        _ = cancellable
+    }
+
     private func waitUntil(
         timeout: Duration = .seconds(1),
         condition: @escaping @Sendable () async -> Bool
@@ -236,5 +286,30 @@ private actor SuspendedStartAudioLevelMonitor: AudioLevelMonitoring {
     func resumeStart() {
         startContinuation?.resume()
         startContinuation = nil
+    }
+}
+
+private actor RestartRaceAudioLevelMonitor: AudioLevelMonitoring {
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+    private var firstStartContinuation: CheckedContinuation<Void, Never>?
+
+    func start() async throws -> AsyncStream<Float> {
+        startCount += 1
+        if startCount == 1 {
+            await withCheckedContinuation { continuation in
+                firstStartContinuation = continuation
+            }
+        }
+        return AsyncStream { _ in }
+    }
+
+    func stop() async {
+        stopCount += 1
+    }
+
+    func resumeFirstStart() {
+        firstStartContinuation?.resume()
+        firstStartContinuation = nil
     }
 }

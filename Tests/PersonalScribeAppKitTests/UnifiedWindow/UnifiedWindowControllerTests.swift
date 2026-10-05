@@ -160,6 +160,31 @@ final class UnifiedWindowControllerTests: XCTestCase {
         XCTAssertEqual(stopCount, 1)
     }
 
+    func testReopeningRetainedWindowOnMicrophoneStepRestartsMonitor() async {
+        let defaults = Self.ephemeralDefaults()
+        let setupFlow = SetupFlowState(defaults: defaults)
+        setupFlow.advance(satisfaction: .allSatisfied)
+        let monitor = CloseTrackingAudioLevelMonitor()
+        let controller = Self.makeController(
+            defaults: defaults,
+            setupFlow: setupFlow,
+            setupLevelMonitor: monitor
+        )
+
+        controller.showSetup()
+        await waitUntil { await monitor.startCount >= 1 }
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        await waitUntil { await monitor.stopCount >= 1 }
+        let startsBeforeReopen = await monitor.startCount
+
+        controller.showWindow(nil)
+        await waitUntil { await monitor.startCount > startsBeforeReopen }
+
+        let startsAfterReopen = await monitor.startCount
+        XCTAssertGreaterThan(startsAfterReopen, startsBeforeReopen)
+        controller.window?.close()
+    }
+
     // MARK: - Main-screen placement
 
     func testFrameForShowingReturnsSameFrameWhenFullyInsideMainScreen() {
@@ -206,9 +231,11 @@ final class UnifiedWindowControllerTests: XCTestCase {
 
     @MainActor
     private static func makeController(
+        defaults: UserDefaults? = nil,
+        setupFlow: SetupFlowState? = nil,
         setupLevelMonitor: (any AudioLevelMonitoring)? = nil
     ) -> UnifiedWindowController {
-        let defaults = ephemeralDefaults()
+        let defaults = defaults ?? ephemeralDefaults()
         let modelService = ActiveModelService(
             activeIDsPreference: Preference<[ModelKind: String]>(
                 key: ActiveModelService.preferenceKey,
@@ -225,11 +252,25 @@ final class UnifiedWindowControllerTests: XCTestCase {
                 reader: StubMetricsReader(),
                 logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.ui)
             ),
+            setupFlow: setupFlow,
             permissionService: StubPermissionService(),
             inputDeviceProvider: NoOpAudioInputDeviceProvider(),
             setupLevelMonitor: setupLevelMonitor,
             modelService: modelService
         )
+    }
+
+    private func waitUntil(
+        timeout: Duration = .seconds(1),
+        condition: @escaping @Sendable () async -> Bool
+    ) async {
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
+        while clock.now < deadline {
+            if await condition() { return }
+            await Task.yield()
+        }
+        XCTFail("Timed out waiting for condition")
     }
 
     private static func ephemeralDefaults() -> UserDefaults {
@@ -241,10 +282,12 @@ final class UnifiedWindowControllerTests: XCTestCase {
 }
 
 private actor CloseTrackingAudioLevelMonitor: AudioLevelMonitoring {
+    private(set) var startCount = 0
     private(set) var stopCount = 0
 
     func start() async throws -> AsyncStream<Float> {
-        AsyncStream { _ in }
+        startCount += 1
+        return AsyncStream<Float> { _ in }
     }
 
     func stop() async {
