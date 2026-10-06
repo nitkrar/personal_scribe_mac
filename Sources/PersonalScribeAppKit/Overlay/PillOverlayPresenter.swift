@@ -475,6 +475,8 @@ public final class PillOverlayPresenter {
     /// Visible screen area for a given pill frame; every pill frame is
     /// clamped into it (see `OverlayPlacement`).
     private let screenBounds: @MainActor (NSRect) -> NSRect
+    /// Visible frame of the screen the pill first appears on.
+    private let activeScreenBounds: @MainActor () -> NSRect
     private static let clipboardOnlyNoticeText = "Copied to clipboard · ⌘V to paste"
     private static let needsAccessibilityNoticeText = "Copied · enable Accessibility to auto-paste"
     private static let clipboardOnlyNoticeDismissAfter: TimeInterval = 3.0
@@ -531,7 +533,8 @@ public final class PillOverlayPresenter {
         diagnosticLogger: PersonalScribeLogger = PersonalScribeLogger.testing(
             category: PersonalScribeLogCategory.ui
         ),
-        screenBounds: @escaping @MainActor (NSRect) -> NSRect = OverlayPlacement.visibleFrame(containing:)
+        screenBounds: @escaping @MainActor (NSRect) -> NSRect = OverlayPlacement.visibleFrame(containing:),
+        activeScreenBounds: @escaping @MainActor () -> NSRect = { NSScreen.main?.visibleFrame ?? .zero }
     ) {
         self.model = model
         self.onTap = onTap
@@ -540,6 +543,7 @@ public final class PillOverlayPresenter {
         self.streamCardBuilder = streamCardBuilder
         self.diagnosticLogger = diagnosticLogger
         self.screenBounds = screenBounds
+        self.activeScreenBounds = activeScreenBounds
         visibilityCancellable = model.$visibility.sink { [weak self] visibility in
             guard let self else {
                 return
@@ -942,7 +946,7 @@ public final class PillOverlayPresenter {
     }
 
     private func updatePanelPosition(_ panel: any PillOverlayPaneling) {
-        let screenFrame = NSScreen.main?.visibleFrame ?? .zero
+        let screenFrame = activeScreenBounds()
         let x = screenFrame.midX - panel.frame.width / 2
         let y = screenFrame.minY + 64
 

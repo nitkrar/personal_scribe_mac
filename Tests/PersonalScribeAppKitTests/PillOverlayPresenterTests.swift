@@ -685,6 +685,25 @@ final class PillOverlayPresenterTests: XCTestCase {
         XCTAssertEqual(recordingFrame.size, PillOverlayView.size(for: .recording, style: .classic))
     }
 
+    /// First show sits bottom-center on the active screen, whatever
+    /// display the test machine has focused.
+    func testFirstShowPlacesPillBottomCenterOnActiveScreen() {
+        let screen = NSRect(x: 2000, y: 500, width: 1000, height: 800)
+        let viewModel = PillOverlayViewModel(visibility: .idle, visibilityMode: .alwaysOn)
+        let panelBuilder = RecordingPanelBuilder()
+        let presenter = PillOverlayPresenter(
+            model: viewModel,
+            panelBuilder: panelBuilder,
+            screenBounds: { _ in screen },
+            activeScreenBounds: { screen }
+        )
+        _ = presenter
+
+        let frame = panelBuilder.panel.frame
+        XCTAssertEqual(frame.midX, screen.midX, accuracy: 0.5)
+        XCTAssertEqual(frame.minY, screen.minY + 64)
+    }
+
     /// A pill parked at the right screen edge that grows (idle →
     /// recording) must be shifted back on-screen, not spill past it.
     func testPillGrowingAtScreenEdgeStaysOnScreen() {
@@ -694,7 +713,8 @@ final class PillOverlayPresenterTests: XCTestCase {
         let presenter = PillOverlayPresenter(
             model: viewModel,
             panelBuilder: panelBuilder,
-            screenBounds: { _ in screen }
+            screenBounds: { _ in screen },
+            activeScreenBounds: { screen }
         )
         _ = presenter
         let idle = panelBuilder.panel.frame
@@ -717,7 +737,8 @@ final class PillOverlayPresenterTests: XCTestCase {
         let presenter = PillOverlayPresenter(
             model: viewModel,
             panelBuilder: panelBuilder,
-            screenBounds: { _ in screen }
+            screenBounds: { _ in screen },
+            activeScreenBounds: { screen }
         )
         _ = presenter
         panelBuilder.panel.frame.origin.x = screen.maxX - panelBuilder.panel.frame.width - OverlayPlacement.screenMargin
@@ -826,7 +847,8 @@ final class PillOverlayPresenterTests: XCTestCase {
         let presenter = PillOverlayPresenter(
             model: viewModel,
             panelBuilder: panelBuilder,
-            screenBounds: { _ in screen }
+            screenBounds: { _ in screen },
+            activeScreenBounds: { screen }
         )
         panelBuilder.panel.frame.origin.x = 30
         presenter.userDidMovePanel()
