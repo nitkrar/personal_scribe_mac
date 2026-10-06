@@ -107,7 +107,14 @@ public struct TranscriptRepository: Sendable, TranscriptReading, TranscriptDelet
                     sql: "DELETE FROM transcripts WHERE id = ?",
                     arguments: [id.uuidString]
                 )
-                return filename
+                // Absolute paths are the user's own files; shared names belong to other rows too.
+                guard let filename, !filename.hasPrefix("/") else { return nil }
+                let stillReferenced = try Bool.fetchOne(
+                    db,
+                    sql: "SELECT EXISTS(SELECT 1 FROM transcripts WHERE audio_filename = ?)",
+                    arguments: [filename]
+                ) ?? false
+                return stillReferenced ? nil : filename
             }
 
             if let audioFilename {

@@ -170,6 +170,50 @@ final class TranscriptRepositoryTests: XCTestCase {
         XCTAssertEqual(remover.calls(), ["20260519_113345.wav"])
     }
 
+    func testDeleteLeavesAbsoluteSourceFileAlone() async throws {
+        let remover = AudioFileRemoverSpy()
+        let harness = try makeHarness(audioFileRemover: remover.remove)
+        defer { cleanup(harness.base) }
+
+        let entry = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 100),
+            text: "offline import",
+            audioFilename: "/Users/someone/Downloads/meeting.m4a"
+        )
+        try await harness.repository.append(entry)
+
+        try await harness.repository.delete(id: entry.id)
+
+        XCTAssertTrue(remover.calls().isEmpty)
+        let remaining = await harness.repository.all()
+        XCTAssertTrue(remaining.isEmpty)
+    }
+
+    func testDeleteKeepsAudioStillReferencedByAnotherTranscript() async throws {
+        let remover = AudioFileRemoverSpy()
+        let harness = try makeHarness(audioFileRemover: remover.remove)
+        defer { cleanup(harness.base) }
+
+        let original = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 100),
+            text: "dictation",
+            audioFilename: "20260519_113345.wav"
+        )
+        let retranscribed = makeEntry(
+            timestamp: Date(timeIntervalSince1970: 200),
+            text: "re-transcribed",
+            audioFilename: "20260519_113345.wav"
+        )
+        try await harness.repository.append(original)
+        try await harness.repository.append(retranscribed)
+
+        try await harness.repository.delete(id: retranscribed.id)
+        XCTAssertTrue(remover.calls().isEmpty)
+
+        try await harness.repository.delete(id: original.id)
+        XCTAssertEqual(remover.calls(), ["20260519_113345.wav"])
+    }
+
     func testDeleteSkipsRemoverWhenAudioFilenameNil() async throws {
         let remover = AudioFileRemoverSpy()
         let harness = try makeHarness(audioFileRemover: remover.remove)
