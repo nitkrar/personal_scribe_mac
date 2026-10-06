@@ -1,15 +1,16 @@
 import Foundation
 
 enum DiagnosticsLineRenderer {
-    private static func makeTimestampFormatter() -> ISO8601DateFormatter {
+    /// Local time with its UTC offset, e.g. `2026-10-06T00:09:45.961+01:00`.
+    private static func makeTimestampFormatter(timeZone: TimeZone) -> ISO8601DateFormatter {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.timeZone = timeZone
         return formatter
     }
 
-    static func render(_ event: RedactedDiagnosticsEvent) -> String {
-        let timestampFormatter = makeTimestampFormatter()
+    static func render(_ event: RedactedDiagnosticsEvent, timeZone: TimeZone = .current) -> String {
+        let timestampFormatter = makeTimestampFormatter(timeZone: timeZone)
         var fields: [String] = [
             timestampFormatter.string(from: event.timestamp),
             "level=\(event.level.rawValue)",

@@ -51,7 +51,12 @@ final class DiagnosticsReporterTests: XCTestCase {
             .appendingPathComponent("errors.log")
         let contents = try await waitForLogContents(at: logURL)
 
-        XCTAssertTrue(contents.contains("2026-05-03T03:09:37.123Z"))
+        let localTimestamp = ISO8601DateFormatter.string(
+            from: fixedDate,
+            timeZone: .current,
+            formatOptions: [.withInternetDateTime, .withFractionalSeconds]
+        )
+        XCTAssertTrue(contents.contains(localTimestamp), contents)
         XCTAssertTrue(contents.contains("level=\"error\"") || contents.contains("level=error"))
         XCTAssertTrue(contents.contains("category=\"session\""))
         XCTAssertTrue(contents.contains("mappedError=\"transcriptionFailure\""))

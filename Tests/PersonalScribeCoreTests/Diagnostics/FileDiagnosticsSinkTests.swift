@@ -154,6 +154,13 @@ final class FileDiagnosticsSinkTests: XCTestCase {
         return try XCTUnwrap(attributes[.systemFileNumber] as? Int)
     }
 
+    func testLineTimestampUsesLocalTimeWithOffset() throws {
+        let london = try XCTUnwrap(TimeZone(identifier: "Europe/London"))
+        let line = DiagnosticsLineRenderer.render(makeEvent(level: .info, message: "x"), timeZone: london)
+
+        XCTAssertTrue(line.hasPrefix("2026-05-03T04:09:37.123+01:00 "), line)
+    }
+
     private func makeEvent(level: DiagnosticsLevel, message: String) -> RedactedDiagnosticsEvent {
         RedactedDiagnosticsEvent(
             level: level,

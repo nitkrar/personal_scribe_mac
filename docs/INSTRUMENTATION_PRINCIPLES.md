@@ -26,7 +26,7 @@
 | `diagnostics.log` | `.info` + `.notice` (NOT debug) | 14 days | Same as above |
 | `debug.log` | `.debug` only | 3 days | Same as above |
 
-Lines are appended; a file is never rewritten. Rotation renames the active file to `<base>.<yyyy-MM-dd>.log`, then `<base>.<yyyy-MM-dd>.<n>.log` for further archives the same day, and starts a new active file.
+Lines are appended; a file is never rewritten. Each line starts with a local timestamp and its UTC offset (`2026-10-06T00:09:45.961+01:00`). Rotation renames the active file to `<base>.<yyyy-MM-dd>.log`, then `<base>.<yyyy-MM-dd>.<n>.log` for further archives the same day, and starts a new active file.
 
 Pruning (`DiagnosticsLogMaintenanceService`) runs at launch, at local midnight, and after every size rollover. Per log it keeps archives from the most recent N archive dates (`Settings → Advanced → Log retention`, 14 by default; `debug.log` is fixed at 3), then at most M files, newest first (`Max log files`, 30 by default). 0 disables either limit.
 
