@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 
 import PackageDescription
 
@@ -40,7 +40,9 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/FluidInference/FluidAudio.git",
-            exact: "0.17.5"
+            exact: "0.17.5",
+            // ASR and diarization only: skip the ~8 MB NeMo text-normalization engine.
+            traits: []
         ),
         .package(
             url: "https://github.com/argmaxinc/argmax-oss-swift.git",
