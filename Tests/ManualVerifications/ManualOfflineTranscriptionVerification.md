@@ -40,3 +40,4 @@ if you changed it in `Settings → Advanced`, use that location instead.
   the same source file.
 
 - [x] **MV-OFFLINE-QUEUE-1** Queue two long files in the Offline tab, quit while the first is transcribing, and relaunch. Both files reappear as queued and transcribe; completed jobs from before the quit are still listed but do not run again. The queue lives in `<base>/db/offline-jobs.json`.
+- [ ] **MV-OFFLINE-QUEUE-2** With a completed, a failed and a queued job in the Offline tab, click **Clear finished**. Only the queued job remains; the completed transcript is still in History. After relaunch the cleared jobs stay gone. With no finished jobs, the button is disabled.

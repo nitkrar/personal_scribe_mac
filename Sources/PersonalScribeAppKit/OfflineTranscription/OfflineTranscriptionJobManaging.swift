@@ -6,6 +6,7 @@ protocol OfflineTranscriptionJobManaging: Sendable {
     func reTranscribe(sourceFilename: String) async -> UUID
     func cancelJob(id: UUID) async
     func dequeueJob(id: UUID) async
+    func clearFinishedJobs() async
     func snapshot() async -> [OfflineTranscriptionCoordinator.Job]
     func snapshotStream() async -> AsyncStream<[OfflineTranscriptionCoordinator.Job]>
 }

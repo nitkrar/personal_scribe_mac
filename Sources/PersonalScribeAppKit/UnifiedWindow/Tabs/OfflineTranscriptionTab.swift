@@ -168,8 +168,19 @@ struct OfflineTranscriptionTab: View {
     private var queueCard: some View {
         SettingsCard(padding: SettingsLayout.compactCardPadding) {
             VStack(alignment: .leading, spacing: SettingsLayout.itemSpacing) {
-                Text("Queue")
-                    .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+                HStack {
+                    Text("Queue")
+                        .font(PersonalScribeTheme.Typography.body.font.weight(.semibold))
+                    Spacer()
+                    Button("Clear finished") {
+                        Task {
+                            await viewModel.clearFinishedJobs()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!viewModel.hasFinishedJobs)
+                }
 
                 List(viewModel.jobs, id: \.id) { job in
                     HStack(spacing: SettingsLayout.itemSpacing) {

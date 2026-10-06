@@ -118,6 +118,14 @@ final class OfflineTranscriptionTabViewModel: ObservableObject {
         await coordinator.dequeueJob(id: id)
     }
 
+    var hasFinishedJobs: Bool {
+        jobs.contains { !$0.status.isQueuedOrInFlight }
+    }
+
+    func clearFinishedJobs() async {
+        await coordinator?.clearFinishedJobs()
+    }
+
     func selectCompletedJob(id: UUID) async {
         guard let job = jobs.first(where: { $0.id == id }) else {
             return

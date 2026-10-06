@@ -166,6 +166,8 @@ private actor FakeOfflineTranscriptionCoordinator: OfflineTranscriptionJobManagi
 
     func dequeueJob(id: UUID) async {}
 
+    func clearFinishedJobs() async {}
+
     func snapshot() async -> [OfflineTranscriptionCoordinator.Job] {
         jobs
     }

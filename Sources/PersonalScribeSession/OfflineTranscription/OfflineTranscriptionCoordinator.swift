@@ -151,7 +151,7 @@ public actor OfflineTranscriptionCoordinator {
         self.diarizationSensitivity = diarizationSensitivity
         self.jobStore = jobStore
         self.logger = logger
-        // Jobs interrupted by quit or crash start over; finished ones stay as history.
+        // Jobs interrupted by quit or crash start over; finished ones stay until cleared.
         self.jobs = (jobStore?.load() ?? []).map { job in
             switch job.status {
             case .queued, .inFlight:
@@ -270,6 +270,12 @@ public actor OfflineTranscriptionCoordinator {
             return
         }
         jobs.remove(at: index)
+        publishSnapshot()
+    }
+
+    /// Removes completed, failed and cancelled jobs; their transcripts stay in History.
+    public func clearFinishedJobs() {
+        jobs.removeAll { !$0.status.isQueuedOrInFlight }
         publishSnapshot()
     }
 
@@ -721,7 +727,7 @@ private extension OfflineTranscriptionCoordinator {
     }
 }
 
-private extension OfflineTranscriptionCoordinator.JobStatus {
+public extension OfflineTranscriptionCoordinator.JobStatus {
     var isQueuedOrInFlight: Bool {
         switch self {
         case .queued, .inFlight:

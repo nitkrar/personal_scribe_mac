@@ -40,6 +40,25 @@ final class OfflineTranscriptionCoordinatorTests: XCTestCase {
         XCTAssertTrue(saved.prefix(2).allSatisfy { if case .completed = $0 { return true } else { return false } })
     }
 
+    func testClearFinishedRemovesOnlyFinishedJobsAndPersists() async throws {
+        func job(_ status: OfflineTranscriptionCoordinator.JobStatus) -> OfflineTranscriptionCoordinator.Job {
+            .init(id: UUID(), url: URL(fileURLWithPath: "/tmp/a.wav"), sourceFilename: "a.wav", descriptorID: "d",
+                  diarize: false, recipeOverride: nil, enqueuedAt: Date(timeIntervalSince1970: 1), status: status)
+        }
+        let waiting = job(.queued)
+        let store = InMemoryOfflineJobStore(jobs: [
+            job(.completed(transcriptID: UUID())), waiting, job(.failed(reason: .noSpeech)), job(.cancelled),
+        ])
+        let harness = try makeHarness(initialSessionState: .capturing, jobStore: store)
+        defer { cleanup(harness.baseDirectory) }
+
+        await harness.coordinator.clearFinishedJobs()
+
+        let remaining = await harness.coordinator.snapshot()
+        XCTAssertEqual(remaining.map(\.id), [waiting.id])
+        XCTAssertEqual(store.jobs.map(\.id), [waiting.id])
+    }
+
     func testFileJobStoreRoundTrips() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { cleanup(directory) }
