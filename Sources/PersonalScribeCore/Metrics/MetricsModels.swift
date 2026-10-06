@@ -49,10 +49,22 @@ public enum MetricsRange: String, CaseIterable, Codable, Identifiable, Sendable 
     }
 }
 
+public struct AppUsage: Sendable, Equatable {
+    public let name: String
+    public let count: Int
+
+    public init(name: String, count: Int) {
+        self.name = name
+        self.count = count
+    }
+}
+
 public struct MetricsRollups: Sendable, Equatable {
     public let recordings: Int
     /// Distinct apps transcripts were pasted into (#117).
     public let appsUsed: Int
+    /// Most-pasted-into apps, most first, at most five.
+    public let topApps: [AppUsage]
     public let words: Int
     public let minutesSaved: Double
     public let averageWPM: Double
@@ -63,6 +75,7 @@ public struct MetricsRollups: Sendable, Equatable {
     public init(
         recordings: Int,
         appsUsed: Int = 0,
+        topApps: [AppUsage] = [],
         words: Int,
         minutesSaved: Double,
         averageWPM: Double,
@@ -72,6 +85,7 @@ public struct MetricsRollups: Sendable, Equatable {
     ) {
         self.recordings = recordings
         self.appsUsed = appsUsed
+        self.topApps = topApps
         self.words = words
         self.minutesSaved = minutesSaved
         self.averageWPM = averageWPM

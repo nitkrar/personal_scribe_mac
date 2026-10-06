@@ -407,6 +407,52 @@ final class SQLiteMetricsServiceAppDatabaseInitTests: XCTestCase {
         XCTAssertEqual(snapshot.rollups.appsUsed, 2)
     }
 
+    func testTopAppsRanksByCountThenNameAndKeepsFive() async throws {
+        let context = try makeMetricsAppDatabaseContext()
+        defer { cleanupMetricsAppDatabaseContext(context) }
+
+        let referenceDate = Date(timeIntervalSince1970: 4_000_000)
+        let destinations: [String?] = [
+            "Slack", "Slack", "Slack",
+            "Notes", "Notes",
+            "Mail", "Mail",
+            "Zed", "Arc", "Xcode",
+            "Clipboard", "Clipboard", "Clipboard", "Clipboard",
+            "File", nil,
+        ]
+        for destination in destinations {
+            try await context.repository.append(
+                TranscriptEntry(
+                    id: UUID(),
+                    timestamp: referenceDate.addingTimeInterval(-60),
+                    text: "hello",
+                    audioDuration: 1,
+                    processingDuration: 0.1,
+                    destinationApp: destination
+                )
+            )
+        }
+        let service = SQLiteMetricsService(
+            appDatabase: context.database,
+            logger: PersonalScribeLogger.testing(category: PersonalScribeLogCategory.app),
+            referenceDateProvider: { referenceDate }
+        )
+
+        let snapshot = try await service.loadSnapshot(
+            window: MetricsRange.allTime.window(anchoredAt: referenceDate, calendar: makeMetricsTestCalendar()),
+            recentLimit: 0
+        )
+
+        XCTAssertEqual(snapshot.rollups.appsUsed, 6)
+        XCTAssertEqual(snapshot.rollups.topApps, [
+            AppUsage(name: "Slack", count: 3),
+            AppUsage(name: "Mail", count: 2),
+            AppUsage(name: "Notes", count: 2),
+            AppUsage(name: "Arc", count: 1),
+            AppUsage(name: "Xcode", count: 1),
+        ])
+    }
+
     func testSnapshotRollupsUseOnlyEntriesInsideRequestedWindow() async throws {
         let context = try makeMetricsAppDatabaseContext()
         defer { cleanupMetricsAppDatabaseContext(context) }

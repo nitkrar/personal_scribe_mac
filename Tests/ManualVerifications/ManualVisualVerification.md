@@ -2,7 +2,7 @@
 
 ## Home refresh (#116)
 
-- [ ] **MV-HOME-2 (appearance and content)** Open Home in light and dark appearances. Confirm the Your Dictation card is one horizontal card ordered Words per minute avg, Words, Recordings, Time saved; time uses hour/minute units; no Apps used or What's new content appears.
+- [ ] **MV-HOME-2 (appearance and content)** Open Home in light and dark appearances. Confirm the Your Dictation card is one horizontal card ordered Words per minute avg, Words, Apps used, Time saved; time uses hour/minute units; no What's new content appears.
 - [ ] **MV-HOME-3 (range picker)** Choose Last 7 days, Last 30 days, and All time. Confirm the four values refresh for each range, recent transcriptions remain the three newest entries regardless of range, and the chosen range survives relaunch.
 - [ ] **MV-HOME-4 (pending setup items)** With neither setup item complete, confirm Get started contains only Customize your shortcut and Create a mode in one compact divided card. Click each open circle in turn and confirm its row disappears immediately; after the last row disappears, confirm the card disappears and stays gone after relaunch.
 - [ ] **MV-HOME-5 (automatic completion, navigation, and dismissal)** Confirm saving a non-default shortcut removes Customize your shortcut, creating a custom mode removes Create a mode, and keeping the default shortcut still allows manual completion. Confirm clicking each row outside its circle opens Settings → Shortcuts or Modes. Click × while items remain and confirm the card stays dismissed after relaunch.
@@ -10,6 +10,7 @@
 - [ ] **MV-HOME-7 (long titles)** With a recent transcription whose title fills the row, shrink the window to 760×520 and confirm the title truncates while the relative time (e.g. "12 min ago") stays whole.
 - [ ] **MV-HOME-8 (launch load)** With transcript history, relaunch with Home open. Confirm the metric values show "—" until data arrives and the "No transcriptions yet" empty state never flashes before the recent list.
 - [ ] **MV-HOME-9 (apps used)** Dictate into two different apps, then once with Ninimma focused on a non-text area (clipboard only). Confirm Home's "Apps used" tile goes up by 2, not 3, and refreshes without reopening the window.
+- [ ] **MV-HOME-10 (top apps info)** Click the info icon next to "Apps used". Confirm a popover lists up to five apps as "Name: count", most-used first, without "Clipboard" or "File", and follows the range picker. With no pasted-into apps, confirm no info icon appears.
 
 SwiftUI views cannot be runtime-verified via XCTest. Every foundation
 component ships with a `#Preview` in its source file. The checklist

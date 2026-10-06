@@ -98,7 +98,11 @@ struct HomeTab: View {
                 metricDivider
                 metricCell(label: "Words", value: loadedValue(formattedWords))
                 metricDivider
-                metricCell(label: "Apps used", value: loadedValue(formattedAppsUsed))
+                metricCell(
+                    label: "Apps used",
+                    value: loadedValue(formattedAppsUsed),
+                    info: appsUsedInfo
+                )
                 metricDivider
                 metricCell(
                     label: "Time saved",
@@ -298,13 +302,19 @@ struct HomeTab: View {
         label: String,
         value: String,
         suffix: String? = nil,
+        info: String? = nil,
         leadingPadding: CGFloat = PersonalScribeTheme.Spacing.lg
     ) -> some View {
         VStack(alignment: .leading, spacing: PersonalScribeTheme.Spacing.sm) {
-            Text(label)
-                .font(PersonalScribeTheme.Typography.body.font)
-                .foregroundStyle(palette.secondaryText)
-                .lineLimit(1)
+            HStack(spacing: PersonalScribeTheme.Spacing.xs) {
+                Text(label)
+                    .font(PersonalScribeTheme.Typography.body.font)
+                    .foregroundStyle(palette.secondaryText)
+                    .lineLimit(1)
+                if let info, !info.isEmpty {
+                    MetricInfoButton(label: label, text: info)
+                }
+            }
 
             HStack(alignment: .firstTextBaseline, spacing: PersonalScribeTheme.Spacing.xs) {
                 Text(value)
@@ -383,6 +393,10 @@ struct HomeTab: View {
     private var formattedWords: String {
         Self.integerFormatter.string(from: NSNumber(value: metrics.rollups.words))
             ?? "\(metrics.rollups.words)"
+    }
+
+    private var appsUsedInfo: String {
+        metrics.rollups.topApps.map { "\($0.name): \($0.count)" }.joined(separator: "\n")
     }
 
     private var formattedAppsUsed: String {
@@ -466,5 +480,27 @@ private extension View {
             )
             .strokeBorder(border, lineWidth: 0.5)
         )
+    }
+}
+
+/// Info icon that shows `text` in a popover on click.
+private struct MetricInfoButton: View {
+    let label: String
+    let text: String
+    @State private var isPresented = false
+
+    var body: some View {
+        Button(action: { isPresented.toggle() }) {
+            Image(systemName: "info.circle")
+                .font(PersonalScribeTheme.Typography.caption.font)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(label) details")
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            Text(text)
+                .font(PersonalScribeTheme.Typography.body.font)
+                .padding()
+        }
     }
 }

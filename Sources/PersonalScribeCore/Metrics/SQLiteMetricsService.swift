@@ -72,14 +72,20 @@ public final class SQLiteMetricsService: MetricsService, MetricsReading, @unchec
             TranscriptEntry.clipboardDestination,
             TranscriptEntry.fileDestination,
         ]
-        let appsUsed = Set(windowEntries.compactMap(\.destinationApp))
-            .subtracting(placeholderDestinations)
-            .count
+        let appCounts = windowEntries
+            .compactMap(\.destinationApp)
+            .filter { !placeholderDestinations.contains($0) }
+            .reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
+        let topApps = appCounts
+            .map { AppUsage(name: $0.key, count: $0.value) }
+            .sorted { ($0.count, $1.name) > ($1.count, $0.name) }
+            .prefix(5)
 
         return MetricsSnapshot(
             rollups: MetricsRollups(
                 recordings: windowEntries.count,
-                appsUsed: appsUsed,
+                appsUsed: appCounts.count,
+                topApps: Array(topApps),
                 words: words,
                 minutesSaved: minutesSaved,
                 averageWPM: averageWPM,
