@@ -310,7 +310,7 @@ final class UnifiedWindowControllerTests: XCTestCase {
             isDownloaded: { _ in false },
             download: { _, _ in }
         )
-        return UnifiedWindowController(
+        let controller = UnifiedWindowController(
             defaults: defaults,
             notificationCenter: notificationCenter,
             transcriptReader: StubTranscriptReader(),
@@ -324,6 +324,9 @@ final class UnifiedWindowControllerTests: XCTestCase {
             setupLevelMonitor: setupLevelMonitor,
             modelService: modelService
         )
+        // Tests that show the window keep it invisible on screen.
+        controller.window?.alphaValue = 0
+        return controller
     }
 
     private func waitUntil(
