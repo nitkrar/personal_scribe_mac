@@ -6,10 +6,6 @@ public enum TranscriptionEngine: Sendable, Equatable {
     /// chunked encoder). Different manager class
     /// (`StreamingEouAsrManager`).
     case parakeetEOU
-    /// Qwen3 0.6B ASR — multilingual transformer-based ASR. Different
-    /// manager class (`Qwen3AsrManager`). Catalog includes both f32
-    /// and int8 precision variants.
-    case qwen3ASR
     /// Whisper via WhisperKit. CoreML bundle + tokenizer are staged
     /// into Ninimma's models directory and loaded by `WhisperKitAdapter`
     /// for both batch and streaming transcription.

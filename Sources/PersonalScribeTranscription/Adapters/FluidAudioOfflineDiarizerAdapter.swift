@@ -118,7 +118,7 @@ public final class FluidAudioOfflineDiarizerAdapter: @unchecked Sendable, Speake
 
         progressBroadcaster.emit(.downloading)
         let broadcaster = progressBroadcaster
-        let progressHandler: DownloadUtils.ProgressHandler = { snapshot in
+        let progressHandler: ProgressHandler = { snapshot in
             broadcaster.emit(snapshot)
         }
         do {
@@ -335,7 +335,7 @@ protocol FluidAudioOfflineDiarizerManaging: Sendable {
     func prepareModels(directory: URL?) async throws
     func downloadIfNeeded(
         to directory: URL,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws
     func process(audio: [Float]) async throws -> DiarizationResult
     func cleanup() async
@@ -374,9 +374,9 @@ private final class PrivateFluidAudioOfflineDiarizerManager:
 
     func downloadIfNeeded(
         to directory: URL,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws {
-        try await DownloadUtils.downloadRepo(
+        try await ModelHub.download(
             .diarizer,
             to: directory,
             variant: "offline",

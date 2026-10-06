@@ -6,8 +6,7 @@ import Foundation
 /// declares which optional `TranscriptionResult` metadata the
 /// adapter populates.
 ///
-/// Conformers: `FluidAudioParakeetTranscriberAdapter` and
-/// `FluidAudioQwenTranscriberAdapter` in `PersonalScribeTranscription`.
+/// Conformers live in `PersonalScribeTranscription`.
 public protocol Transcriber: ModelLifecycle, Sendable {
     /// What this transcriber surfaces on the optional metadata
     /// fields of `TranscriptionResult`. Features query this before

@@ -278,7 +278,7 @@ extension FluidAudioParakeetTranscriberAdapter {
         let progressBroadcaster = self.progressBroadcaster
 
         do {
-            // `DownloadUtils.downloadRepo` queries the remote repository
+            // `ModelHub.download` queries the remote repository
             // before checking existing files, so complete local artifacts
             // must bypass it to support offline preparation.
             if !ModelArtifactValidation.areValid(in: modelDirectory, descriptor: descriptor) {
@@ -400,23 +400,23 @@ protocol FluidAudioParakeetManaging: Sendable {
     func downloadIfNeeded(
         to directory: URL,
         version: AsrModelVersion,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws
 
     /// Pull a sibling repo into `directory` (e.g. the CTC head for the
-    /// 110m hybrid). Idempotent — `DownloadUtils.downloadRepo` skips
+    /// 110m hybrid). Idempotent — `ModelHub.download` skips
     /// per-file when the destination already has the model files.
     func downloadAuxiliary(
         _ aux: ParakeetAuxiliaryRepo,
         to directory: URL,
         requiredSubdirectories: [String],
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws
 
     func loadModel(
         from directory: URL,
         version: AsrModelVersion,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws
 
     func transcribe(samples: [Float]) async throws -> FluidAudioParakeetManagerResult
@@ -464,26 +464,27 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
     func downloadIfNeeded(
         to directory: URL,
         version: AsrModelVersion,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws {
         // Bypass `AsrModels.download(to:)` — its internal
         // `targetDir.deletingLastPathComponent()` dance does not match
         // the path our descriptor's `repoFolderName` resolves to.
-        // `DownloadUtils.downloadRepo` cleanly appends `repo.folderName`
+        // `ModelHub.download` cleanly appends `repo.folderName`
         // to `to:`, landing files at the same leaf our descriptor uses.
         // (`AsrModelVersion.repo` is internal in FluidAudio, so we
         // mirror the mapping here.)
         let repo: Repo
         switch version {
         case .v2: repo = .parakeetV2
-        case .v3: repo = .parakeet
+        case .v3: repo = .parakeetV3
+        case .redux: repo = .parakeetRedux
+        case .ultra: repo = .parakeetUltra
+        case .phonon2: repo = .phonon2
         case .tdtCtc110m: repo = .parakeetTdtCtc110m
-        case .ctcZhCn: repo = .parakeetCtcZhCn
-        case .ctcJa: repo = .parakeetCtcJa
-        case .tdtJa: repo = .parakeetCtcJa  // mirrors FluidAudio's mapping (TDT v2 uploaded to CTC repo)
-        @unknown default: repo = .parakeet
+        case .tdtJa: repo = .parakeetJa
+        @unknown default: repo = .parakeetV3
         }
-        try await DownloadUtils.downloadRepo(
+        try await ModelHub.download(
             repo,
             to: directory,
             progressHandler: progressHandler
@@ -494,13 +495,13 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
         _ aux: ParakeetAuxiliaryRepo,
         to directory: URL,
         requiredSubdirectories: [String],
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws {
         let repo: Repo
         switch aux {
         case .ctc110m: repo = .parakeetCtc110m
         }
-        try await DownloadUtils.downloadRepo(
+        try await ModelHub.download(
             repo,
             to: directory,
             progressHandler: progressHandler
@@ -509,7 +510,7 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
         for subdirectory in requiredSubdirectories where !FileManager.default.fileExists(
             atPath: repoDirectory.appendingPathComponent(subdirectory).appendingPathComponent("coremldata.bin").path
         ) {
-            try await DownloadUtils.downloadSubdirectory(
+            try await ModelHub.download(
                 repo,
                 subdirectory: subdirectory,
                 to: repoDirectory
@@ -520,7 +521,7 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
     func loadModel(
         from directory: URL,
         version: AsrModelVersion,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws {
         let models = try await AsrModels.load(
             from: directory,
@@ -531,7 +532,10 @@ internal actor LiveFluidAudioParakeetManager: FluidAudioParakeetManaging {
     }
 
     func transcribe(samples: [Float]) async throws -> FluidAudioParakeetManagerResult {
-        let result = try await resolvedManager().transcribe(samples, source: .microphone)
+        let manager = resolvedManager()
+        // Fresh state per call: each recording is an independent utterance.
+        var decoderState = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
+        let result = try await manager.transcribe(samples, decoderState: &decoderState)
         return FluidAudioParakeetResultExtractor.extract(from: result)
     }
 

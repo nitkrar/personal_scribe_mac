@@ -263,7 +263,7 @@ private actor StubOfflineDiarizerManager: FluidAudioOfflineDiarizerManaging {
 
     func downloadIfNeeded(
         to directory: URL,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws {
         downloadDirectoriesStorage.append(directory.standardizedFileURL)
     }

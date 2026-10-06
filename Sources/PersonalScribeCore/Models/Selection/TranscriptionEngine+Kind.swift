@@ -8,8 +8,6 @@ extension TranscriptionEngine {
         switch self {
         case .parakeetTDT:
             return [.asr]
-        case .qwen3ASR:
-            return [.asr]
         case .whisperKit:
             return [.asr, .streamingASR]
         case .whisperCpp:

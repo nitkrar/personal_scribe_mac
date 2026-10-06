@@ -9,6 +9,15 @@ public enum BuiltInModelCatalog {
         "parakeet_vocab.json",
     ]
 
+    /// v3 loads the top-K joint (`JointDecisionv3`) instead of `JointDecision`.
+    private static let v3RequiredPaths = [
+        "Preprocessor.mlmodelc/coremldata.bin",
+        "Encoder.mlmodelc/coremldata.bin",
+        "Decoder.mlmodelc/coremldata.bin",
+        "JointDecisionv3.mlmodelc/coremldata.bin",
+        "parakeet_vocab.json",
+    ]
+
     private static let fusedFrontendRequiredPaths = [
         "Preprocessor.mlmodelc/coremldata.bin",
         "Decoder.mlmodelc/coremldata.bin",
@@ -114,7 +123,7 @@ public enum BuiltInModelCatalog {
         // Pinned to the current HuggingFace `main` HEAD (2026-04-25).
         // Was previously `"main"` (drift risk).
         revision: "775be920d492d20e9e522ee0a969414fd6e6e0f7",
-        requiredRelativePaths: splitFrontendRequiredPaths,
+        requiredRelativePaths: v3RequiredPaths,
         // Sum of required `.mlmodelc` + vocab per HF tree API at the
         // pinned revision (2026-04-25). Prior 700M estimate was high.
         approximateSizeBytes: 483_103_089,
@@ -340,9 +349,7 @@ public enum BuiltInModelCatalog {
     // variants (160ms, 320ms, 1280ms) under one HuggingFace repo,
     // `parakeet-realtime-eou-120m-coreml`, with FluidAudio's `subPath`
     // selecting the variant. Drives `StreamingEouAsrManager` (separate
-    // from `AsrManager`) — adapter not yet wired in
-    // PersonalScribeTranscription, so downloads via this descriptor
-    // currently fail with `unknownVoiceModelID` (interim).
+    // from `AsrManager`).
     private static let parakeetEouRequiredPaths = [
         "streaming_encoder.mlmodelc/coremldata.bin",
         "decoder.mlmodelc/coremldata.bin",
@@ -401,62 +408,11 @@ public enum BuiltInModelCatalog {
         license: "CC-BY-4.0"
     )
 
-    // MARK: - Qwen3 ASR (Alibaba transformer ASR)
-    //
-    // 30-language multilingual transformer-based ASR. One
-    // HuggingFace repo `qwen3-asr-0.6b-coreml` with two precision
-    // variants under `f32/` and `int8/` subPaths. Drives
-    // `Qwen3AsrManager` (separate from `AsrManager`).
-    private static let qwen3AsrRequiredPaths = [
-        "qwen3_asr_audio_encoder_v2.mlmodelc/coremldata.bin",
-        "qwen3_asr_decoder_stateful.mlmodelc/coremldata.bin",
-        "qwen3_asr_embeddings.bin",
-        "vocab.json",
-    ]
-
-    public static let qwen3AsrF32 = ModelDescriptor(
-        id: "qwen3-asr-0.6b-f32",
-        displayName: "Qwen3 ASR 0.6B (f32)",
-        repoFolderName: "qwen3-asr-0.6b/f32",
-        shortDescription: "Multilingual ASR (16 languages) — full precision.",
-        architecture: "Qwen3 transformer ASR",
-        repository: "FluidInference/qwen3-asr-0.6b-coreml",
-        revision: "c081689ec58bcf29c2ef7c474ef78a164bda672b",
-        requiredRelativePaths: qwen3AsrRequiredPaths,
-        approximateSizeBytes: 1_569_667_932,
-        isEnabled: false,
-        engine: .qwen3ASR,
-        madeBy: "Alibaba Qwen team · FluidInference",
-        worksWith: "30 languages (multilingual)",
-        goodFor: "Multilingual dictation, non-English content",
-        license: "Apache 2.0",
-        supportedLanguages: Qwen3Languages.codes
-    )
-
-    public static let qwen3AsrInt8 = ModelDescriptor(
-        id: "qwen3-asr-0.6b-int8",
-        displayName: "Qwen3 ASR 0.6B (int8)",
-        repoFolderName: "qwen3-asr-0.6b/int8",
-        shortDescription: "Multilingual ASR (16 languages) — int8 quantized.",
-        architecture: "Qwen3 transformer ASR (int8)",
-        repository: "FluidInference/qwen3-asr-0.6b-coreml",
-        revision: "c081689ec58bcf29c2ef7c474ef78a164bda672b",
-        requiredRelativePaths: qwen3AsrRequiredPaths,
-        approximateSizeBytes: 974_722_368,
-        isEnabled: false,
-        engine: .qwen3ASR,
-        madeBy: "Alibaba Qwen team · FluidInference",
-        worksWith: "30 languages (multilingual)",
-        goodFor: "Multilingual dictation on lower-RAM devices",
-        license: "Apache 2.0",
-        supportedLanguages: Qwen3Languages.codes
-    )
-
     // MARK: - Speaker diarization
     //
     // FluidAudio's *offline* diarizer (`OfflineDiarizerManager`) — VBx
     // clustering pipeline with four CoreML stages plus a PLDA params
-    // JSON. The adapter calls `DownloadUtils.downloadRepo(.diarizer,
+    // JSON. The adapter calls `ModelHub.download(.diarizer,
     // variant: "offline", ...)`; that variant produces the file set
     // below, NOT pyannote/wespeaker (which is the online diarizer
     // shape). Source of truth for the path list is FluidAudio's
@@ -502,8 +458,6 @@ public enum BuiltInModelCatalog {
         parakeetEou160ms,
         parakeetEou320ms,
         parakeetEou1280ms,
-        qwen3AsrF32,
-        qwen3AsrInt8,
         speakerDiarization,
     ]
 }

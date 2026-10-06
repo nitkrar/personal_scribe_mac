@@ -4,7 +4,6 @@ extension TranscriptionEngine: Codable {
     private enum CodableValue: String, Codable {
         case parakeetTDT
         case parakeetEOU
-        case qwen3ASR
         case whisperKit
         case whisperCpp
         case diarization
@@ -19,8 +18,6 @@ extension TranscriptionEngine: Codable {
             self = .parakeetTDT
         case .parakeetEOU:
             self = .parakeetEOU
-        case .qwen3ASR:
-            self = .qwen3ASR
         case .whisperKit:
             self = .whisperKit
         case .whisperCpp:
@@ -38,8 +35,6 @@ extension TranscriptionEngine: Codable {
             try container.encode(CodableValue.parakeetTDT)
         case .parakeetEOU:
             try container.encode(CodableValue.parakeetEOU)
-        case .qwen3ASR:
-            try container.encode(CodableValue.qwen3ASR)
         case .whisperKit:
             try container.encode(CodableValue.whisperKit)
         case .whisperCpp:

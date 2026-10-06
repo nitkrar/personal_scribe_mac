@@ -3,7 +3,7 @@ import Foundation
 import PersonalScribeCore
 
 /// Single source of truth for translating FluidAudio's
-/// `DownloadUtils.DownloadProgress` into our chip-driving
+/// `DownloadProgress` into our chip-driving
 /// `ModelDownloadProgress`. Adapters MUST emit through
 /// `FluidAudioDownloadProgressBroadcaster.emit(_ raw:)` rather than
 /// constructing `ModelDownloadProgress` themselves — consolidating the
@@ -19,7 +19,7 @@ import PersonalScribeCore
 /// is a future change once the underlying delegate fires more often
 /// (or we route through a custom delegate).
 enum FluidAudioProgressMapper {
-    static func map(_ raw: DownloadUtils.DownloadProgress) -> ModelDownloadProgress {
+    static func map(_ raw: DownloadProgress) -> ModelDownloadProgress {
         switch raw.phase {
         case .listing:
             return ModelDownloadProgress(
@@ -30,7 +30,7 @@ enum FluidAudioProgressMapper {
             )
         case .downloading(_, let totalFiles) where totalFiles == 0:
             // `loadModelsOnce`'s cache-hit shortcut emits this signature
-            // (DownloadUtils.swift:202-204) when files are already on
+            // (`ProgressReporter.cachedModelsAvailable`) when files are already on
             // disk — `totalFiles == 0` is impossible during a real
             // download. Map to `.loading` so the chip says "Warming up…"
             // instead of momentarily flashing "Downloading…" before the
@@ -93,7 +93,7 @@ public final class FluidAudioDownloadProgressBroadcaster: @unchecked Sendable {
 
     /// Emit a FluidAudio progress snapshot. The shared mapper applies
     /// before yielding — there is no path for an adapter to bypass it.
-    func emit(_ raw: DownloadUtils.DownloadProgress) {
+    func emit(_ raw: DownloadProgress) {
         emit(FluidAudioProgressMapper.map(raw))
     }
 

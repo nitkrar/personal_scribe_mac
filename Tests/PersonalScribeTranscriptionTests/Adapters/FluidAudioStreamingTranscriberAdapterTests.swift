@@ -101,7 +101,7 @@ final class FluidAudioStreamingTranscriberAdapterTests: XCTestCase {
         XCTAssertEqual(loadCount, 0)
 
         // Adapter passes the models root to the manager — FluidAudio's
-        // `DownloadUtils.downloadRepo` then appends `repo.folderName`
+        // `ModelHub.download` then appends `repo.folderName`
         // to land files at the leaf path (= descriptor.repoFolderName).
         let modelsRoot = storageLocator
             .url(for: .models)
@@ -408,12 +408,12 @@ private actor StubFluidAudioStreamingManager: FluidAudioStreamingEouManaging {
 
     func downloadIfNeeded(
         to directory: URL,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws {
         downloadDirectoriesStorage.append(directory)
     }
 
-    func loadModels(modelDir: URL) async throws {
+    func loadModels(from modelDir: URL) async throws {
         loadModelCallCountStorage += 1
         loadedDirectoriesStorage.append(modelDir)
     }

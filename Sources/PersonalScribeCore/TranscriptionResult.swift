@@ -25,7 +25,7 @@ public struct TranscriptionResult: Sendable, Equatable {
     // field defaults to `nil`.
 
     /// Overall confidence in `[0, 1]`. `nil` when the adapter
-    /// doesn't surface confidence (e.g. Qwen3 ASR).
+    /// doesn't surface confidence.
     public let confidence: Float?
 
     /// Per-token timings. `nil` when the adapter doesn't surface

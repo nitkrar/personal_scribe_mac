@@ -108,7 +108,7 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
         let task = Task {
             self.progressBroadcaster.emit(.loading)
             try await manager.downloadIfNeeded(to: modelsRoot, progressHandler: nil)
-            try await manager.loadModels(modelDir: modelDirectory)
+            try await manager.loadModels(from: modelDirectory)
         }
         prepareTask = task
 
@@ -131,7 +131,7 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
 
         progressBroadcaster.emit(.downloading)
         let broadcaster = progressBroadcaster
-        let progressHandler: DownloadUtils.ProgressHandler = { snapshot in
+        let progressHandler: ProgressHandler = { snapshot in
             broadcaster.emit(snapshot)
         }
         do {
@@ -197,7 +197,7 @@ public actor FluidAudioStreamingTranscriberAdapter: StreamingTranscriber {
 extension StreamingEouAsrManager: FluidAudioStreamingEouManaging {
     func downloadIfNeeded(
         to directory: URL,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws {
         let repo: Repo
         switch chunkSize {
@@ -205,15 +205,15 @@ extension StreamingEouAsrManager: FluidAudioStreamingEouManaging {
         case .ms320: repo = .parakeetEou320
         case .ms1280: repo = .parakeetEou1280
         }
-        try await DownloadUtils.downloadRepo(repo, to: directory, progressHandler: progressHandler)
+        try await ModelHub.download(repo, to: directory, progressHandler: progressHandler)
     }
 }
 
 protocol FluidAudioStreamingEouManaging: Actor, Sendable {
-    func loadModels(modelDir: URL) async throws
+    func loadModels(from directory: URL) async throws
     func downloadIfNeeded(
         to directory: URL,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws
     func setEouCallback(_ callback: @escaping EouCallback)
     func setPartialCallback(_ callback: @escaping PartialCallback)

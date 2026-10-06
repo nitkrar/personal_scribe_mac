@@ -17,18 +17,6 @@ final class BuiltInModelCatalogTests: XCTestCase {
         )
     }
 
-    func testQwenDescriptorsUseFluidAudioTwoModelArtifactLayout() {
-        let expectedPaths = [
-            "qwen3_asr_audio_encoder_v2.mlmodelc/coremldata.bin",
-            "qwen3_asr_decoder_stateful.mlmodelc/coremldata.bin",
-            "qwen3_asr_embeddings.bin",
-            "vocab.json",
-        ]
-
-        XCTAssertEqual(BuiltInModelCatalog.qwen3AsrF32.requiredRelativePaths, expectedPaths)
-        XCTAssertEqual(BuiltInModelCatalog.qwen3AsrInt8.requiredRelativePaths, expectedPaths)
-    }
-
     // MARK: - #007 — descriptive metadata for Settings AI Models tab
 
     /// Every registered model must carry a non-empty one-line
@@ -63,9 +51,7 @@ final class BuiltInModelCatalogTests: XCTestCase {
     /// without benchmarks today; they don't surface in the AI Models
     /// tab so the popover never reads their metrics.
     func testAllEnabledModelsCarryPublishedBenchmarks() {
-        // Scope: parakeet TDT descriptors only. Qwen3 stays in the
-        // registry and still ships without the benchmark metadata this
-        // popover ranking consumes.
+        // Scope: parakeet TDT descriptors only.
         let parakeetDescriptors = BuiltInModelCatalog.registeredModels
             .filter { $0.engine == .parakeetTDT }
         XCTAssertFalse(parakeetDescriptors.isEmpty)
@@ -309,10 +295,6 @@ final class BuiltInModelCatalogTests: XCTestCase {
             BuiltInModelCatalog.whisperCppSmallQ51.id,
             BuiltInModelCatalog.whisperCppLargeV3TurboQ50.id,
         ]
-        let qwen3DescriptorIDs: Set<String> = [
-            BuiltInModelCatalog.qwen3AsrF32.id,
-            BuiltInModelCatalog.qwen3AsrInt8.id,
-        ]
 
         for descriptor in BuiltInModelCatalog.registeredModels {
             if whisperFamilyDescriptorIDs.contains(descriptor.id) {
@@ -320,12 +302,6 @@ final class BuiltInModelCatalogTests: XCTestCase {
                     descriptor.supportedLanguages,
                     WhisperFamilyLanguages.codes,
                     "\(descriptor.id) should expose the shared Whisper-family language list"
-                )
-            } else if qwen3DescriptorIDs.contains(descriptor.id) {
-                XCTAssertEqual(
-                    descriptor.supportedLanguages,
-                    Qwen3Languages.codes,
-                    "\(descriptor.id) should expose the Qwen3 language list"
                 )
             } else {
                 XCTAssertNil(

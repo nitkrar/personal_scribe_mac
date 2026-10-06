@@ -6,9 +6,8 @@ import Foundation
 /// Per #078 L11 + synthesis decision #1: features that depend on
 /// optional metadata (token timings, confidence numbers, performance
 /// metrics, custom-vocabulary CTC marker arrays) query an adapter's
-/// capabilities **before** exposing the corresponding UI. Today's
-/// Parakeet adapter populates all four; Qwen3's plain-`String` shape
-/// populates none.
+/// capabilities **before** exposing the corresponding UI. The
+/// Parakeet adapter populates all four.
 ///
 /// Speaker turns are deliberately NOT a capability here — they belong
 /// on `SpeakerDiarizer`, not on a transcriber. (See L9: three role

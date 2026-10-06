@@ -477,7 +477,7 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
     func downloadIfNeeded(
         to directory: URL,
         version: AsrModelVersion,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws {
         _ = progressHandler
         downloadIfNeededCallCountStorage += 1
@@ -488,7 +488,7 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
         _ aux: ParakeetAuxiliaryRepo,
         to directory: URL,
         requiredSubdirectories: [String],
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws {
         _ = progressHandler
         auxiliaryDownloadCallsStorage.append((
@@ -509,7 +509,7 @@ private actor StubFluidAudioParakeetManager: FluidAudioParakeetManaging {
     func loadModel(
         from directory: URL,
         version: AsrModelVersion,
-        progressHandler: DownloadUtils.ProgressHandler?
+        progressHandler: ProgressHandler?
     ) async throws {
         _ = progressHandler
         loadCallCountStorage += 1

@@ -66,7 +66,7 @@ public extension ModelLifecycle {
     /// Backstop default — falls back to `prepare()` for callers that
     /// haven't yet split download from load. Each adapter overrides
     /// this with a disk-only implementation (FluidAudio's `download`
-    /// or `DownloadUtils.downloadRepo`) so the AI Models "Download"
+    /// or `ModelHub.download`) so the AI Models "Download"
     /// button doesn't load the model into RAM.
     ///
     /// Once every adapter overrides, this default becomes unreachable

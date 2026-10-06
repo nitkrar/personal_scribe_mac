@@ -335,20 +335,21 @@ final class ModeDetailViewModelTests: XCTestCase {
             store: InMemoryWorkflowModeStore(
                 initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
             ),
-            availableKindsProvider: { [.asr] }
+            availableKindsProvider: { [.asr] },
+            registeredDescriptorsProvider: { BuiltInModelCatalog.registeredModels + [Self.japaneseOnlyModel] }
         )
         let viewModel = ModeDetailViewModel(
             mode: custom,
             registry: registry,
             registeredDescriptors: [
                 BuiltInModelCatalog.whisperKitTiny,
-                BuiltInModelCatalog.qwen3AsrF32,
+                Self.japaneseOnlyModel,
             ]
         )
 
-        viewModel.setVoiceModelPin(BuiltInModelCatalog.qwen3AsrF32.id)
+        viewModel.setVoiceModelPin(Self.japaneseOnlyModel.id)
 
-        XCTAssertEqual(viewModel.voiceModelPinID, BuiltInModelCatalog.qwen3AsrF32.id)
+        XCTAssertEqual(viewModel.voiceModelPinID, Self.japaneseOnlyModel.id)
         XCTAssertNil(viewModel.selectedLanguage)
         XCTAssertNil(
             registry.customModes.first { $0.id == "lang-switch-clear" }?.language
@@ -374,20 +375,21 @@ final class ModeDetailViewModelTests: XCTestCase {
             store: InMemoryWorkflowModeStore(
                 initial: WorkflowModeDocument(defaultModeID: nil, customModes: [custom])
             ),
-            availableKindsProvider: { [.asr] }
+            availableKindsProvider: { [.asr] },
+            registeredDescriptorsProvider: { BuiltInModelCatalog.registeredModels + [Self.japaneseOnlyModel] }
         )
         let viewModel = ModeDetailViewModel(
             mode: custom,
             registry: registry,
             registeredDescriptors: [
                 BuiltInModelCatalog.whisperKitTiny,
-                BuiltInModelCatalog.qwen3AsrF32,
+                Self.japaneseOnlyModel,
             ]
         )
 
-        viewModel.setVoiceModelPin(BuiltInModelCatalog.qwen3AsrF32.id)
+        viewModel.setVoiceModelPin(Self.japaneseOnlyModel.id)
 
-        XCTAssertEqual(viewModel.voiceModelPinID, BuiltInModelCatalog.qwen3AsrF32.id)
+        XCTAssertEqual(viewModel.voiceModelPinID, Self.japaneseOnlyModel.id)
         XCTAssertEqual(viewModel.selectedLanguage, "ja")
         XCTAssertEqual(
             registry.customModes.first { $0.id == "lang-switch-keep" }?.language,
@@ -491,4 +493,20 @@ final class ModeDetailViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.liveCursorStreamingSuppressed)
         XCTAssertNil(viewModel.liveCursorStreamingSuppressedReason)
     }
+}
+
+private extension ModeDetailViewModelTests {
+    /// Supports "ja" but not "ga", for language-switch tests.
+    nonisolated static let japaneseOnlyModel = ModelDescriptor(
+        id: "test-ja-only",
+        displayName: "Japanese Only",
+        shortDescription: "Test fixture",
+        architecture: "Test",
+        repository: "test/ja-only",
+        revision: "0",
+        requiredRelativePaths: [],
+        approximateSizeBytes: 0,
+        engine: .whisperKit,
+        supportedLanguages: ["ja"]
+    )
 }

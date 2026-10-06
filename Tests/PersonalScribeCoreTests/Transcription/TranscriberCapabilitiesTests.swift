@@ -3,8 +3,7 @@ import XCTest
 
 /// #078.2 — `TranscriberCapabilities` is the four-field Bool struct
 /// adapters declare per L11 / synthesis decision #1. Tests pin the
-/// field set, the all-`false` default, and the two anchor profiles
-/// (Parakeet = all four, Qwen3 = none).
+/// field set, the all-`false` default, and the Parakeet profile.
 final class TranscriberCapabilitiesTests: XCTestCase {
     func testAllFieldsDefaultFalse() {
         // Default initializer means: an adapter that wraps a barebones
@@ -35,21 +34,5 @@ final class TranscriberCapabilitiesTests: XCTestCase {
         XCTAssertTrue(capabilities.providesConfidence)
         XCTAssertTrue(capabilities.providesPerformanceMetrics)
         XCTAssertTrue(capabilities.providesCustomVocabulary)
-    }
-
-    func testQwenCapabilitiesAreTextOnly() {
-        // Qwen3 ASR returns plain `String` — no metadata, no custom
-        // vocab. Default-init produces the correct shape.
-        let capabilities = TranscriberCapabilities()
-
-        XCTAssertEqual(
-            capabilities,
-            TranscriberCapabilities(
-                providesTokenTimings: false,
-                providesConfidence: false,
-                providesPerformanceMetrics: false,
-                providesCustomVocabulary: false
-            )
-        )
     }
 }

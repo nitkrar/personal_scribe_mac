@@ -10,10 +10,6 @@ final class TranscriptionEngineCapabilitiesTests: XCTestCase {
         XCTAssertEqual(TranscriptionEngine.parakeetEOU.capabilities, [.streamingASR])
     }
 
-    func testQwen3ASRHasASRCapability() {
-        XCTAssertEqual(TranscriptionEngine.qwen3ASR.capabilities, [.asr])
-    }
-
     func testWhisperKitHasBatchAndStreamingCapabilities() {
         XCTAssertEqual(TranscriptionEngine.whisperKit.capabilities, [.asr, .streamingASR])
     }

@@ -45,7 +45,7 @@ public extension TranscriptionEngine {
         switch self {
         case .whisperKit, .whisperCpp:
             return true
-        case .parakeetTDT, .parakeetEOU, .qwen3ASR, .diarization:
+        case .parakeetTDT, .parakeetEOU, .diarization:
             return false
         }
     }

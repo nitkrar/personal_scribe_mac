@@ -29,15 +29,6 @@ public final class ModelBoundProcessorProvider: ModelBoundProcessorProviding, @u
                         logger: logger
                     )
                 )
-            case .qwen3ASR:
-                return AdapterRecord(
-                    descriptorID: descriptor.id,
-                    transcriber: FluidAudioQwenTranscriberAdapter(
-                        descriptor: descriptor,
-                        storageLocator: storageLocator,
-                        logger: logger
-                    )
-                )
             case .whisperKit:
                 let adapter = WhisperKitAdapter(
                     descriptor: descriptor,

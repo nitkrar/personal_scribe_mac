@@ -82,8 +82,10 @@ Recording follows input device switches (headset connecting, disconnecting, prof
 
 ### #114 — Deleting an offline transcript logs a false "file removal failed"
 
-`bug` · `P3` · `open` · `area: history, offline`
-*Updated 2026-10-05* · Follow up after #102.
+`bug` · `P3` · `done` · `area: history, offline`
+*Updated 2026-10-06* · Follow up after #102.
+
+**Done 2026-10-06 (102.142):** delete skips absolute paths (the user's own files) and recordings another transcript still references.
 
 Offline transcripts store an absolute source path, but `TranscriptRepository.delete` joins it onto the recordings directory, so the removal targets a path that doesn't exist and logs a failure. Delete should use the stored path as-is when it's absolute (and must never delete the user's original source file — check what an offline transcript owns before fixing).
 
@@ -91,48 +93,12 @@ Offline transcripts store an absolute source path, but `TranscriptRepository.del
 
 ### #115 — Finished offline jobs never leave the Offline list
 
-`bug` · `P3` · `open` · `area: offline`
-*Updated 2026-10-05* · Follow up after #102.
+`bug` · `P3` · `done` · `area: offline`
+*Updated 2026-10-06* · Follow up after #102.
+
+**Done 2026-10-06 (102.143):** "Clear finished" in the Offline queue header removes completed, failed and cancelled jobs.
 
 Completed jobs stay in `offline-jobs.json` and the Offline tab forever, with no way to remove them. Completed jobs should leave the queue (their result is in History), or the tab needs a remove/clear action.
-
----
-
-### #104 — Whisper.cpp streaming dedup tracker
-
-`bug` · `P3` · `open` · `stage: design` · `area: transcription, streaming`
-*Updated 2026-10-02*
-
-`WhisperCppStableSegmentTracker.merge()` produces parallel confirmation lanes when whisper.cpp re-decodes overlapping audio with jittered word boundaries. Same segment text appears under two slightly different normalized forms, both cross the `confirmationThreshold` independently, both flush. Manifests as duplicated phrases in the live card during whisper.cpp streaming dictation.
-
-**Cosmetic only:** live cursor EoU paste is gated off for whisper.cpp via `11c0f99` (RecipeBuilder force) and stop-time second-pass uses a batch decode that doesn't go through this tracker. So the bug never reaches the user's text field. The visible damage is confined to the live card visualization during recording.
-
-**Design options** (from codex audit req-0066, hermes verdict on file):
-1. Frozen prefix + canonical tail — split tracker into `frozenPrefix` (settled text) + `mutableTail` (latest decode wins). Easier mental model, risk on freeze-boundary heuristic.
-2. Overlap-run confirmations — keep confirmation model but use time-overlap as segment identity (instead of exact normalized text). Lowest runtime cost, highest algorithmic complexity.
-3. Decouple preview from authoritative per-EoU redraw — bypass tracker for preview entirely; on `.speechEnded`, run fresh whisper.cpp decode over post-boundary audio. Cleanest design, extra CPU + ~100-300ms EoU latency.
-
-Hermes recommendation: option 3 unless EoU latency is unacceptable.
-
-**Deferred:** revisit when product UX requires clean live card during whisper.cpp speech. Two earlier attempts at "replace-on-ingest" hit hermes review blockers (long-utterance truncation past 8.25s window; empty-decode wipes); those approaches are off the table.
-
-**Reference:** `Sources/PersonalScribeTranscription/Adapters/WhisperCppStableSegmentTracker.swift` (trunk version, post-revert).
-
-**Reproduced 2026-10-02** (whispercpp-tiny, two `say` clips, 12 runs; output byte-identical across runs and pacing — deterministic, not jitter). Rerun: `WhisperCppStreamingDuplicationBenchmarkTests` (opt-in, env `NINIMMA_WHISPERCPP_BENCH_WAV` / `_TEXT` / `_OUT` / `_RUNS` / `_PACE` / `_MODEL`; clips + per-decode timelines were in `/tmp/ws104/`).
-
-**Root cause** (`WhisperCppStableSegmentTracker.merge()`):
-- Segment identity is exact normalized text (`segmentsMatch`). When whisper.cpp re-segments the same audio across window shifts ("Okay, so … the logs." 0–3000 ms vs "Okay so … every server," 0–4720 ms), the new shape is a separate lane, reaches the confirmation threshold on its own, and the already-confirmed old shape is carried forward (`existingIndex == merged.count → merged.append`). Both flush on the next EoU → duplicated phrase in the EoU chunk, live card, and streaming final text.
-- `dropCommittedPrefixOverlap` only checks flushed text, not confirmed-but-unflushed segments.
-- Live card has a second duplication path: after an EoU, a re-decode that renders the same audio differently ("So I bought" vs "by Bought") fails the normalized-prefix overlap check and the whole tail returns as a partial for ~4 s.
-
-**Related defects in the same tracker** (same fix should cover them):
-- Lost speech: segments that slide out of the 8.25 s window before reaching 2 confirmations are dropped (~15 s missing from one clip); a confirmed segment is also dropped when `existingIndex != merged.count`.
-- Flicker: the partial is only the unconfirmed tail, so confirmed-unflushed text disappears from the card until the EoU.
-- Bogus timestamps: some segments end 30 s after they start (e.g. 36510–66510 ms), defeating any time-overlap check.
-
-Scope: live card + streaming final text for whisper.cpp only; paste uses the batch second pass (not tested). Only `tiny` tested. Suggests design option 2 (time-overlap identity) or 3 (bypass tracker) above.
-
-**Legacy:** `plans/BACKLOG.md` #039 (ID already used in `BACKLOG_ARCHIVE.md`; renumbered 2026-10-02)
 
 ---
 
@@ -373,8 +339,10 @@ Stage A shipped (`bf28dd3`): the menu-bar Mode submenu switches the next session
 
 ### #069 — Persist audio recordings on disk
 
-`feature` · `P2` · `open` · `phase: 3` · `area: audio, storage, session`
-*Updated 2026-10-02*
+`feature` · `P2` · `done` · `phase: 3` · `area: audio, storage, session`
+*Updated 2026-10-06*
+
+**Closed 2026-10-06:** recording, delete cascade, toggle and retention cover the need; the disk-usage readout and "Delete all recordings" are dropped.
 
 **Shipped so far:** `ffadbca` — the orchestrator writes WAV sidecars, the database stores `audio_filename`, transcript deletion cascades to audio, and Advanced settings plus `RecordingRetentionSweeper` implement enable/retention controls. The proposed disk-usage readout and Delete All Recordings action remain unimplemented.
 
@@ -454,8 +422,10 @@ Transcriptions tab today is a flat scrolling list with per-row delete (`#011` do
 
 ### #094 — Offline file transcription (tab + menu-bar shortcut)
 
-`feature` · `P2` · `open` · `stage: followup` · `area: ui, transcription, dictation, diarization, menu-bar`
-*Updated 2026-10-02*
+`feature` · `P2` · `done` · `stage: followup` · `area: ui, transcription, dictation, diarization, menu-bar`
+*Updated 2026-10-06*
+
+**Closed 2026-10-06:** the Offline tab, queue, re-transcribe and Clear finished cover the need; the Stage B wishlist is dropped until something concrete comes up.
 
 **Shipped so far:** `e683ea3` — the Offline tab, serial file queue, persisted preferences, row-level re-transcribe, and menu-bar Retranscribe Last Recording are implemented; the listed Stage B import, progress, playback, and bulk workflows remain open.
 
@@ -547,8 +517,10 @@ The one ticket for the floating pill. Absorbs #070 (pause), #068 Stage B (in-pil
 
 ### #088 — Narrow FluidAudio model download to runtime-needed files
 
-`refactor` · `P2` · `open` · `area: transcription, models, downloads`
-*Updated 2026-04-29 (Filed 2026-04-28)*
+`refactor` · `P2` · `done` · `area: transcription, models, downloads`
+*Updated 2026-10-06*
+
+**Closed 2026-10-06 (102.147):** fixed upstream in FluidAudio #826 and shipped in 0.17.5; required and non-required `.mlmodelc`/`.mlpackage` bundles are now matched whole. Existing installs keep their leftover duplicates until the model is deleted and downloaded again.
 
 `DownloadUtils.downloadRepo` (FluidAudio) over-pulls when a repo's
 subPath contains sibling directories or duplicate model formats.
@@ -640,6 +612,46 @@ State ownership kept fragmenting: the same concept lived in several places coupl
 
 ## Parked
 
+### #104 — Whisper.cpp streaming dedup tracker
+
+`bug` · `P3` · `parked` · `stage: design` · `area: transcription, streaming`
+*Updated 2026-10-06*
+
+**Parked 2026-10-06:** the user dictates with WhisperKit and Parakeet, not whisper.cpp. What it costs: on whisper.cpp, paste-on-pause stays off (gate in `RecipeBuilder`), and the live card stutters briefly at a pause. The card shows one line of about 12 words. Decodes run every 0.5 s over the last 8.25 s of audio. If whisper.cpp needs full support, build design option 3: one decode per pause gives one clean chunk, then lift the paste gate.
+
+`WhisperCppStableSegmentTracker.merge()` produces parallel confirmation lanes when whisper.cpp re-decodes overlapping audio with jittered word boundaries. Same segment text appears under two slightly different normalized forms, both cross the `confirmationThreshold` independently, both flush. Manifests as duplicated phrases in the live card during whisper.cpp streaming dictation.
+
+**Cosmetic only:** live cursor EoU paste is gated off for whisper.cpp via `11c0f99` (RecipeBuilder force) and stop-time second-pass uses a batch decode that doesn't go through this tracker. So the bug never reaches the user's text field. The visible damage is confined to the live card visualization during recording.
+
+**Design options** (from codex audit req-0066, hermes verdict on file):
+1. Frozen prefix + canonical tail — split tracker into `frozenPrefix` (settled text) + `mutableTail` (latest decode wins). Easier mental model, risk on freeze-boundary heuristic.
+2. Overlap-run confirmations — keep confirmation model but use time-overlap as segment identity (instead of exact normalized text). Lowest runtime cost, highest algorithmic complexity.
+3. Decouple preview from authoritative per-EoU redraw — bypass tracker for preview entirely; on `.speechEnded`, run fresh whisper.cpp decode over post-boundary audio. Cleanest design, extra CPU + ~100-300ms EoU latency.
+
+Hermes recommendation: option 3 unless EoU latency is unacceptable.
+
+**Deferred:** revisit when product UX requires clean live card during whisper.cpp speech. Two earlier attempts at "replace-on-ingest" hit hermes review blockers (long-utterance truncation past 8.25s window; empty-decode wipes); those approaches are off the table.
+
+**Reference:** `Sources/PersonalScribeTranscription/Adapters/WhisperCppStableSegmentTracker.swift` (trunk version, post-revert).
+
+**Reproduced 2026-10-02** (whispercpp-tiny, two `say` clips, 12 runs; output byte-identical across runs and pacing — deterministic, not jitter). Rerun: `WhisperCppStreamingDuplicationBenchmarkTests` (opt-in, env `NINIMMA_WHISPERCPP_BENCH_WAV` / `_TEXT` / `_OUT` / `_RUNS` / `_PACE` / `_MODEL`; clips + per-decode timelines were in `/tmp/ws104/`).
+
+**Root cause** (`WhisperCppStableSegmentTracker.merge()`):
+- Segment identity is exact normalized text (`segmentsMatch`). When whisper.cpp re-segments the same audio across window shifts ("Okay, so … the logs." 0–3000 ms vs "Okay so … every server," 0–4720 ms), the new shape is a separate lane, reaches the confirmation threshold on its own, and the already-confirmed old shape is carried forward (`existingIndex == merged.count → merged.append`). Both flush on the next EoU → duplicated phrase in the EoU chunk, live card, and streaming final text.
+- `dropCommittedPrefixOverlap` only checks flushed text, not confirmed-but-unflushed segments.
+- Live card has a second duplication path: after an EoU, a re-decode that renders the same audio differently ("So I bought" vs "by Bought") fails the normalized-prefix overlap check and the whole tail returns as a partial for ~4 s.
+
+**Related defects in the same tracker** (same fix should cover them):
+- Lost speech: segments that slide out of the 8.25 s window before reaching 2 confirmations are dropped (~15 s missing from one clip); a confirmed segment is also dropped when `existingIndex != merged.count`.
+- Flicker: the partial is only the unconfirmed tail, so confirmed-unflushed text disappears from the card until the EoU.
+- Bogus timestamps: some segments end 30 s after they start (e.g. 36510–66510 ms), defeating any time-overlap check.
+
+Scope: live card + streaming final text for whisper.cpp only; paste uses the batch second pass (not tested). Only `tiny` tested. Suggests design option 2 (time-overlap identity) or 3 (bypass tracker) above.
+
+**Legacy:** `plans/BACKLOG.md` #039 (ID already used in `BACKLOG_ARCHIVE.md`; renumbered 2026-10-02)
+
+---
+
 ### #049 — Me-vs-other speaker verification *(superseded by #060)*
 
 `feature` · `P3` · `parked` · `area: session, dictation, meeting`
@@ -713,8 +725,10 @@ Second `SettingsSection` below Voice models; seeds once Phase 4 lands an LLM dow
 
 ### #112 — Onboarding inside the main window
 
-`feature` · `P2` · `open` · `phase: 3` · `area: onboarding, unified-window`
-*Updated 2026-10-05*
+`feature` · `P2` · `done` · `phase: 3` · `area: onboarding, unified-window`
+*Updated 2026-10-06*
+
+**Closed 2026-10-06:** built in 102.116–102.134.
 
 Replaces the separate onboarding window (#015) with setup inside the main window; the sidebar stays usable and menu-bar items are never gated. Mockups: `plans/backlog/onboarding-home/` B* (V-* is the Vocabulary page for #045).
 
